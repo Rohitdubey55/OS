@@ -243,24 +243,39 @@ function renderTasks(filter = '') {
       </div>
 
       <!-- ── STATS STRIP ── -->
-      <div style="display:flex; gap:8px; margin-bottom:12px; overflow-x:auto; scrollbar-width:none;">
+      <div style="display:flex; gap:12px; margin-bottom:16px; overflow-x:auto; scrollbar-width:none; padding-bottom:4px;">
         <div class="stat-pill">
-          <div style="font-size:18px; font-weight:700; color:var(--danger);">${p1Count}</div>
-          <div style="font-size:10px; color:var(--text-muted);">Urgent</div>
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+             <div style="width:8px; height:8px; border-radius:50%; background:var(--danger)"></div>
+             <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Urgent</span>
+          </div>
+          <div style="font-size:24px; font-weight:800; color:var(--text-1); line-height:1;">${p1Count}</div>
         </div>
         <div class="stat-pill">
-          <div style="font-size:18px; font-weight:700; color:var(--primary);">${totalPending}</div>
-          <div style="font-size:10px; color:var(--text-muted);">Active</div>
-        </div>
-        <div class="stat-pill" style="flex:2;">
-          <div style="display:flex; justify-content:space-between; width:100%; margin-bottom:4px;">
-            <span style="font-size:10px; color:var(--text-muted);">Progress</span>
-            <span style="font-size:10px; font-weight:600;">${pctDone}%</span>
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+             <div style="width:8px; height:8px; border-radius:50%; background:var(--primary)"></div>
+             <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Active</span>
           </div>
-          <div style="width:100%; height:5px; background:var(--border-color); border-radius:3px; overflow:hidden;">
-            <div style="width:${pctDone}%; height:100%; background:linear-gradient(90deg, var(--primary), var(--success)); border-radius:3px; transition:width 0.5s;"></div>
+          <div style="font-size:24px; font-weight:800; color:var(--text-1); line-height:1;">${totalPending}</div>
+        </div>
+        <div class="stat-pill" style="flex:1.5;">
+          <div style="display:flex; justify-content:space-between; width:100%; margin-bottom:10px; align-items:center;">
+             <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Progress</span>
+             <span style="font-size:12px; font-weight:700; color:var(--primary);">${pctDone}%</span>
+          </div>
+          <div style="width:100%; height:8px; background:var(--surface-2, rgba(0,0,0,0.05)); border-radius:4px; overflow:hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
+            <div style="width:${pctDone}%; height:100%; background:linear-gradient(90deg, var(--primary), var(--success)); border-radius:4px; transition:width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);"></div>
           </div>
         </div>
+      </div>
+
+      <!-- ── SEARCH ── -->
+      <div style="position:relative; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.02); border-radius:12px;">
+        <i data-lucide="search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;color:var(--text-muted);pointer-events:none;"></i>
+        <input class="input task-search" placeholder="Search tasks..."
+          style="padding-left:36px;margin:0;height:44px;font-size:14px;width:100%;box-sizing:border-box;border-radius:12px;border:1px solid var(--border-color);background:var(--surface-1);transition:box-shadow 0.2s;"
+          onfocus="this.style.boxShadow='0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent)'" onblur="this.style.boxShadow='none'"
+          oninput="renderTasks(this.value)" value="${filter}">
       </div>
 
       <!-- ── FILTERS ── -->
