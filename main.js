@@ -819,19 +819,24 @@ document.addEventListener('click', async (e) => {
         const cat = document.getElementById('mHabitCat').value;
         const freq = document.getElementById('mHabitFreq').value;
         const days = typeof getSelectedDays === 'function' ? getSelectedDays('mHabitDays') : '';
-        const time = document.getElementById('mHabitTime').value;
+        const timeEl = document.getElementById('mHabitTime');
+        const time = timeEl ? timeEl.value : '';
         const emoji = document.getElementById('mHabitEmoji')?.value || '✨';
+
+        console.log('[Habit Save] reminder_time input:', timeEl, 'value:', time);
 
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Creating habit...");
-        await apiCall('create', 'habits', {
+        const habitPayload = {
             habit_name: name, category: cat, frequency: freq,
             days: freq === 'weekly' ? days : '',
             reminder_time: time,
             emoji: emoji,
             created_at: new Date().toISOString()
-        });
+        };
+        console.log('[Habit Save] Sending payload:', habitPayload);
+        await apiCall('create', 'habits', habitPayload);
         await refreshData('habits');
     }
 
@@ -1011,18 +1016,23 @@ document.addEventListener('click', async (e) => {
         const cat = document.getElementById('mHabitCat').value;
         const freq = document.getElementById('mHabitFreq').value;
         const days = typeof getSelectedDays === 'function' ? getSelectedDays('mHabitDays') : '';
-        const time = document.getElementById('mHabitTime').value;
+        const timeEl = document.getElementById('mHabitTime');
+        const time = timeEl ? timeEl.value : '';
         const emoji = document.getElementById('mHabitEmoji')?.value || '✨';
+
+        console.log('[Habit Update] reminder_time input:', timeEl, 'value:', time);
 
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Updating habit...");
-        await apiCall('update', 'habits', {
+        const updatePayload = {
             habit_name: name, category: cat, frequency: freq,
             days: freq === 'weekly' ? days : '',
             reminder_time: time,
             emoji: emoji
-        }, editId);
+        };
+        console.log('[Habit Update] Sending payload:', updatePayload);
+        await apiCall('update', 'habits', updatePayload, editId);
         await refreshData('habits');
     }
 

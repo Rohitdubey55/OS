@@ -397,6 +397,20 @@ window.openHabitModal = function () {
   modal.classList.remove('hidden');
 }
 
+// Helper to parse reminder_time from various formats to HH:mm
+function parseReminderTimeToHHMM(val) {
+  if (!val) return '';
+  const s = String(val);
+  if (s.startsWith('1899') || s === '') return '';
+  if (s.includes('T')) {
+    const dt = new Date(s);
+    if (isNaN(dt.getTime())) return '';
+    return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
+  }
+  // Already HH:mm or HH:mm:ss
+  return s.slice(0, 5);
+}
+
 window.openEditHabit = function (id) {
   const h = (state.data.habits || []).find(x => String(x.id) === String(id));
   if (!h) return;
@@ -404,6 +418,7 @@ window.openEditHabit = function (id) {
   const box = modal.querySelector('.modal-box');
   const isWeekly = h.frequency === 'weekly';
   const categories = ['Health', 'Fitness', 'Learning', 'Productivity', 'Spiritual', 'Other'];
+  const reminderTimeValue = parseReminderTimeToHHMM(h.reminder_time);
 
   box.innerHTML = `
     <h3>Edit Habit</h3>
@@ -430,7 +445,7 @@ window.openEditHabit = function (id) {
         <option value="daily" ${h.frequency === 'daily' ? 'selected' : ''}>Daily</option>
         <option value="weekly" ${h.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
       </select>
-      <input type="time" class="input" id="mHabitTime" value="${h.reminder_time || ''}">
+      <input type="time" class="input" id="mHabitTime" value="${reminderTimeValue}">
     </div>
     <div id="dayPickerWrap" style="display:${isWeekly ? 'block' : 'none'}">
       <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:8px; display:block;">Which days?</label>
