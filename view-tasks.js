@@ -116,28 +116,47 @@ function renderTasks(filter = '') {
     <style>
       /* Bento animations */
       @keyframes bentoIn {
-        from { opacity:0; transform:translateY(12px) scale(0.98); }
+        from { opacity:0; transform:translateY(15px) scale(0.97); }
         to   { opacity:1; transform:translateY(0)    scale(1);    }
       }
       @keyframes taskSlideIn {
-        from { opacity:0; transform:translateX(-8px); }
+        from { opacity:0; transform:translateX(-10px); }
         to   { opacity:1; transform:translateX(0); }
       }
+
+      /* Masonry Layout */
+      .bento-masonry {
+        column-count: 2;
+        column-gap: 12px;
+        margin-top: 10px;
+      }
+      @media (max-width: 650px) {
+        .bento-masonry { column-count: 1; }
+      }
+
       .bento-card {
         background: var(--surface-1);
         border: 1px solid var(--border-color);
-        border-radius: 16px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+        border-radius: 18px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.03);
         overflow: hidden;
-        transition: box-shadow 0.2s, transform 0.2s;
-        animation: bentoIn 0.3s ease both;
+        transition: box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        animation: bentoIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        break-inside: avoid;
+        margin-bottom: 12px;
+        display: inline-block;
+        width: 100%;
       }
-      .bento-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+      .bento-card:hover { 
+        box-shadow: 0 10px 32px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05); 
+        transform: translateY(-2px);
+      }
+      
       .task-bento-row {
         display: flex; align-items: flex-start; gap: 10px;
-        padding: 9px 12px; border-bottom: 1px solid var(--border-color);
-        cursor: pointer; transition: background 0.15s;
-        animation: taskSlideIn 0.2s ease both;
+        padding: 10px 14px; border-bottom: 1px solid var(--border-color);
+        cursor: pointer; transition: background 0.2s;
+        animation: taskSlideIn 0.3s ease both;
       }
       .task-bento-row:last-child { border-bottom: none; }
       .task-bento-row:hover { background: var(--surface-2, rgba(0,0,0,0.02)); }
@@ -299,9 +318,11 @@ function renderTasks(filter = '') {
           <div style="font-weight:600;color:var(--text-2);margin-bottom:4px;">All clear!</div>
           <div style="font-size:12px;color:var(--text-muted);">No active tasks right now.</div>
         </div>
-      ` : Object.keys(pendingByCat).sort().map(cat =>
-      renderBentoSection(cat, cat, pendingByCat[cat], false, true)
-    ).join('')}
+      ` : `<div class="bento-masonry">` + Object.keys(pendingByCat).sort().map((cat, idx) => {
+      // Wrap in a temporary span just to set animation delay based on index
+      const bentoHtml = renderBentoSection(cat, cat, pendingByCat[cat], false, true);
+      return bentoHtml.replace('class="bento-card"', `class="bento-card" style="animation-delay:${idx * 0.05}s;"`);
+    }).join('') + `</div>`}
 
       <!-- ── COMPLETED ── -->
       ${_showCompletedTasks && completed.length > 0 ? renderBentoSection('__completed__',
