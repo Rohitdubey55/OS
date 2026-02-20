@@ -1,0 +1,45 @@
+/* Settings FAB - Top Right Floating Button */
+.settings-fab {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 56px;
+    height: 56px;
+    background: var(--primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.settings-fab:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.settings-fab:active {
+    transform: scale(0.95);
+}
+
+.settings-fab svg {
+    color: white;
+    stroke: white;
+}
+
+@media (max-width: 2000px) {
+    .settings-fab {
+        top: 12px;
+        right: 12px;
+        width: 48px;
+        height: 48px;
+    }
+
+    .settings-fab svg {
+        width: 20px;
+        height: 20px;
+    }
+}

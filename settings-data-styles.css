@@ -1,0 +1,50 @@
+/* Settings page additions */
+
+.section-description {
+    font-size: var(--text-sm);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-4);
+    margin-top: calc(var(--space-2) * -1);
+}
+
+.data-management-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.data-management-actions button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-4) var(--space-6);
+    font-size: var(--text-base);
+}
+
+@media (min-width: 640px) {
+    .data-management-actions {
+        flex-direction: row;
+    }
+
+    .data-management-actions button {
+        flex: 1;
+    }
+}
+
+/* AI Model Chips */
+.model-chip {
+    display: inline-block;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-right: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.model-chip:hover {
+    background: var(--primary-soft);
+    color: var(--primary);
+    border-color: var(--primary);
+}

@@ -1,0 +1,424 @@
+/* Vision Board Multi-View Styles */
+
+/* Mini Stats */
+.vision-mini-stats {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+/* Stats Dashboard */
+.vision-stats-dashboard {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+    margin: var(--space-6) 0;
+}
+
+.vision-stat-card {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+}
+
+.vision-stat-card:nth-child(1) {
+    border-left: 4px solid var(--primary);
+}
+
+.vision-stat-card:nth-child(2) {
+    border-left: 4px solid var(--success);
+}
+
+.vision-stat-card:nth-child(3) {
+    border-left: 4px solid var(--accent);
+}
+
+.stat-number {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-bottom: 2px;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 600;
+}
+
+/* View Tabs */
+.vision-view-tabs {
+    display: flex;
+    gap: var(--space-2);
+    background: var(--surface-3);
+    padding: 4px;
+    border-radius: var(--radius-lg);
+    width: fit-content;
+    margin: var(--space-6) 0 var(--space-4) 0;
+}
+
+.vision-tab {
+    padding: 10px 16px;
+    border: none;
+    background: transparent;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.vision-tab.active {
+    background: var(--surface-1);
+    color: var(--primary);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.vision-tab:hover:not(.active) {
+    color: var(--text-main);
+}
+
+/* Grid View */
+.vision-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: var(--space-4);
+}
+
+.vision-card {
+    position: relative;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    aspect-ratio: auto;
+    min-height: 200px;
+}
+
+.vision-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+    border-color: var(--primary);
+}
+
+.vision-card-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-size: cover;
+    background-position: center;
+    transition: transform 0.3s ease;
+}
+
+.vision-card:hover .vision-card-bg {
+    transform: scale(1.05);
+}
+
+.vision-card-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.6) 100%);
+}
+
+.vision-card-content {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: var(--space-4);
+    color: white;
+    overflow: hidden;
+}
+
+.vision-card-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--primary);
+    color: white;
+    margin-bottom: var(--space-2);
+    white-space: nowrap;
+}
+
+.vision-card-badge.achieved {
+    background: var(--success);
+}
+
+.vision-card-badge.expired {
+    background: var(--danger);
+}
+
+.vision-card-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    line-height: 1.3;
+}
+
+.vision-card-category {
+    font-size: 13px;
+    opacity: 0.85;
+    margin-bottom: var(--space-2);
+}
+
+.vision-card-progress {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.vision-card-progress-bar {
+    height: 100%;
+    background: white;
+    border-radius: 2px;
+}
+
+/* Controls Section */
+.vision-controls {
+    margin-bottom: var(--space-6);
+}
+
+
+
+/* List View */
+.vision-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.vision-list-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.vision-list-item:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateX(4px);
+}
+
+.vision-list-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+}
+
+.vision-list-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.vision-list-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vision-list-date {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.vision-list-badge {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.vision-list-badge.active {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.vision-list-badge.past {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+/* Timeline View */
+.vision-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+}
+
+.timeline-year-section {
+    position: relative;
+}
+
+.timeline-year-header {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.timeline-items {
+    position: relative;
+    padding-left: 32px;
+}
+
+.timeline-items::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: var(--space-4);
+    cursor: pointer;
+}
+
+.timeline-item:last-child {
+    padding-bottom: 0;
+}
+
+.timeline-dot {
+    position: absolute;
+    left: -26px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--surface-1);
+    border: 3px solid var(--primary);
+    z-index: 1;
+}
+
+.timeline-content {
+    background: var(--surface-1);
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: all 0.2s ease;
+}
+
+.timeline-item:hover .timeline-content {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateX(4px);
+}
+
+.timeline-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 4px;
+}
+
+.timeline-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* Load More */
+.load-more-section {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--space-6);
+    padding-bottom: var(--space-4);
+}
+
+.load-more-section .btn {
+    min-width: 200px;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 2000px) {
+    .vision-stats-dashboard {
+        gap: var(--space-3);
+    }
+
+    .vision-stat-card {
+        padding: var(--space-3);
+    }
+
+    .stat-number {
+        font-size: 24px;
+    }
+
+    .stat-label {
+        font-size: 10px;
+    }
+
+    .vision-controls-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .vision-view-tabs {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .vision-tab {
+        flex: 1;
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+
+    .vision-sort-select {
+        width: 100%;
+    }
+
+    .vision-list-item {
+        padding: var(--space-3);
+    }
+
+    .vision-list-icon {
+        font-size: 24px;
+    }
+
+    .vision-list-title {
+        font-size: 15px;
+    }
+
+    .timeline-year-header {
+        font-size: 16px;
+    }
+
+    .timeline-items {
+        padding-left: 28px;
+    }
+}
