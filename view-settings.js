@@ -1,0 +1,396 @@
+/* view-settings.js - Frontend Aligned with User's Backend Schema */
+
+function renderSettings() {
+  // Map backend keys to frontend variables
+  // Backend relies on: ai_api_key, view_mode
+  const s = state.data.settings?.[0] || {};
+
+  const settings = {
+    weekly_budget: s.weekly_budget || 0,
+    monthly_budget: s.monthly_budget || 0,
+    theme_color: s.theme_color || '#4F46E5',
+    theme_mode: s.theme_mode || 'light',
+    // Map 'view_mode' from sheet to 'density' for UI
+    density: s.view_mode || 'comfortable',
+    hidden_tabs: s.hidden_tabs || '',
+    // Map 'ai_api_key' from sheet to 'gemini_api_key' for UI
+    gemini_api_key: s.ai_api_key || '',
+    ai_model: s.ai_model || 'gemini-1.5-flash',
+    category_budgets: s.category_budgets || '{}'
+  };
+
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <div class="settings-wrapper">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px">
+        <h2 class="page-title" style="margin:0">Settings</h2>
+      </div>
+
+      <!-- 1. BUDGET -->
+      <div class="settings-section">
+        <h3 class="section-title">Budget Settings</h3>
+        <p class="section-description">Manage your financial tracking limits.</p>
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px">
+           <div>
+             <label class="setting-label">Weekly Budget</label>
+             <input type="number" class="input" id="weeklyBudget" value="${settings.weekly_budget}" placeholder="0">
+           </div>
+           <div>
+             <label class="setting-label">Monthly Budget</label>
+             <input type="number" class="input" id="monthlyBudget" value="${settings.monthly_budget}" placeholder="0">
+           </div>
+        </div>
+        
+        <label class="setting-label">Category Limits</label>
+        <div id="categoryBudgetList"></div>
+        <button class="btn small" style="margin-top:12px" onclick="addCategoryRow()">+ Add Category</button>
+      </div>
+
+      <!-- 2. APPEARANCE -->
+      <div class="settings-section">
+        <h3 class="section-title">Appearance</h3>
+        <p class="section-description">Customize the look and feel of your OS.</p>
+        
+        <!-- Accents -->
+        <div class="setting-item">
+            <label class="setting-label">Accent Color</label>
+            <div class="theme-colors">
+                ${renderColorOption('#4F46E5', settings.theme_color)} <!-- Indigo -->
+                ${renderColorOption('#2563EB', settings.theme_color)} <!-- Blue -->
+                ${renderColorOption('#059669', settings.theme_color)} <!-- Emerald -->
+                ${renderColorOption('#7C3AED', settings.theme_color)} <!-- Violet -->
+                ${renderColorOption('#DB2777', settings.theme_color)} <!-- Pink -->
+                ${renderColorOption('#DC2626', settings.theme_color)} <!-- Red -->
+                ${renderColorOption('#D97706', settings.theme_color)} <!-- Amber -->
+                ${renderColorOption('#0891B2', settings.theme_color)} <!-- Cyan -->
+            </div>
+            <input type="hidden" id="sColor" value="${settings.theme_color}">
+        </div>
+
+        <!-- Density -->
+        <div class="setting-item">
+            <label class="setting-label">Density</label>
+            <div class="density-options">
+                <button class="density-btn ${settings.density === 'compact' ? 'active' : ''}" onclick="selectDensity('compact')">Compact</button>
+                <button class="density-btn ${settings.density === 'comfortable' ? 'active' : ''}" onclick="selectDensity('comfortable')">Comfortable</button>
+                <button class="density-btn ${settings.density === 'spacious' ? 'active' : ''}" onclick="selectDensity('spacious')">Spacious</button>
+            </div>
+        </div>
+
+        <!-- Theme Mode -->
+        <div class="setting-item">
+            <label class="setting-label">Theme Mode</label>
+            <div class="density-options" id="themeModeOptions">
+                <button class="density-btn ${settings.theme_mode === 'light' ? 'active' : ''}" onclick="selectThemeMode('light')">Light</button>
+                <button class="density-btn ${settings.theme_mode === 'dark' ? 'active' : ''}" onclick="selectThemeMode('dark')">Dark</button>
+                <button class="density-btn ${settings.theme_mode === 'forest' ? 'active' : ''}" onclick="selectThemeMode('forest')">Forest</button>
+                <button class="density-btn ${settings.theme_mode === 'midnight' ? 'active' : ''}" onclick="selectThemeMode('midnight')">Midnight</button>
+            </div>
+        </div>
+      </div>
+
+      <!-- 3. AI CONFIG -->
+      <div class="settings-section">
+        <h3 class="section-title">AI Configuration</h3>
+        <p class="section-description">Power your dashboard with Google Gemini.</p>
+        
+        <div class="setting-item">
+            <label class="setting-label">Gemini API Key</label>
+            <div style="display:flex; gap:10px">
+                <input type="password" class="input" id="sApiKey" value="${settings.gemini_api_key}" placeholder="AIzaSy...">
+                <button class="btn secondary" onclick="testGeminiAPI()">Test</button>
+            </div>
+        </div>
+        <div class="setting-item">
+            <label class="setting-label">AI Model ID</label>
+            <input type="text" class="input" id="sModel" value="${settings.ai_model}" placeholder="gemini-1.5-flash">
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px">
+                Presets: 
+                <span class="model-chip" onclick="setModel('gemini-1.5-flash')">Flash</span>
+                <span class="model-chip" onclick="setModel('gemini-2.0-flash')">2.0 Flash</span>
+                <span class="model-chip" onclick="setModel('gemini-1.5-pro')">Pro</span>
+            </div>
+        </div>
+      </div>
+
+      <!-- 4. TAB VISIBILITY -->
+      <div class="settings-section">
+        <h3 class="section-title">Tab Visibility</h3>
+        <p class="section-description">Toggle modules on or off.</p>
+        
+        <div class="tab-toggles">
+           ${renderTabToggle('Calendar', 'calendar', settings.hidden_tabs)}
+           ${renderTabToggle('Tasks', 'tasks', settings.hidden_tabs)}
+           ${renderTabToggle('Finance', 'finance', settings.hidden_tabs)}
+           ${renderTabToggle('Habits', 'habits', settings.hidden_tabs)}
+           ${renderTabToggle('Diary', 'diary', settings.hidden_tabs)}
+           ${renderTabToggle('Vision', 'vision', settings.hidden_tabs)}
+           ${renderTabToggle('People', 'people', settings.hidden_tabs)}
+        </div>
+      </div>
+
+      <!-- 5. DATA MANAGEMENT -->
+      <div class="settings-section">
+        <h3 class="section-title">Data Management</h3>
+        <p class="section-description">View raw data or reset the application.</p>
+        
+        <div class="data-management-actions">
+           <button class="btn secondary" onclick="openGoogleSheet()"><i data-lucide="table" style="width:16px; margin-right:8px"></i> Open Google Sheet</button>
+           <button class="btn danger" onclick="confirmDeleteAllData()"><i data-lucide="trash-2" style="width:16px; margin-right:8px"></i> Delete All Data</button>
+        </div>
+      </div>
+
+      <!-- SAVE SECTION -->
+      <div class="settings-actions">
+         <button class="btn primary large" onclick="saveAllSettings()" style="width:100%; justify-content:center">Save Settings</button>
+      </div>
+
+    </div>
+  `;
+
+  // Init Colors
+  document.querySelectorAll('.color-option').forEach(el => {
+    el.addEventListener('click', function () {
+      const color = this.dataset.color;
+      document.querySelectorAll('.color-option').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      document.getElementById('sColor').value = color;
+      document.documentElement.style.setProperty('--primary', color);
+    });
+  });
+
+  initCategoryRows(settings.category_budgets);
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+// Helpers
+function renderColorOption(color, activeColor) {
+  const isActive = (activeColor || '#4F46E5').toLowerCase() === color.toLowerCase();
+  return `<div class="color-option ${isActive ? 'active' : ''}" style="background-color: ${color}" data-color="${color}"></div>`;
+}
+
+function renderTabToggle(label, key, hiddenStr) {
+  const isHidden = (hiddenStr || '').includes(key);
+  return `
+      <label class="tab-toggle-item">
+         <div class="toggle-label">
+            <input type="checkbox" class="tab-checkbox" value="${key}" ${!isHidden ? 'checked' : ''}>
+            <span class="toggle-name">${label}</span>
+         </div>
+         <div style="font-size:12px; color:var(--text-muted); margin-top:4px">Show ${label} tab</div>
+      </label>
+    `;
+}
+
+// --- HELPER: Set Model from Chip ---
+window.setModel = function (modelId) {
+  const input = document.getElementById('sModel');
+  if (input) {
+    input.value = modelId;
+    // visual feedback
+    input.style.borderColor = 'var(--primary)';
+    setTimeout(() => input.style.borderColor = '', 300);
+  }
+}
+
+// --- HELPER: Update Tab Visibility (Instant) ---
+window.updateTabVisibility = function () {
+  const settings = state.data.settings?.[0];
+  if (!settings) return;
+
+  const hiddenStr = settings.hidden_tabs || '';
+  const hiddenList = hiddenStr.split(',').map(s => s.trim());
+
+  // 1. Sidebar Items
+  document.querySelectorAll('.nav-item').forEach(el => {
+    const target = el.dataset.target;
+    if (hiddenList.includes(target)) el.style.display = 'none';
+    else el.style.display = 'flex';
+  });
+
+  // 2. Mobile Nav Items
+  document.querySelectorAll('.mob-item').forEach(el => {
+    const target = el.dataset.target;
+    if (hiddenList.includes(target)) el.style.display = 'none';
+    else el.style.display = 'flex';
+  });
+}
+
+// --- APPLY SETTINGS (Unified Logic) ---
+window.applySettings = function () {
+  const settings = state.data.settings?.[0];
+  if (!settings) return;
+
+  // 1. Theme Color
+  const color = settings.theme_color || '#4F46E5';
+  document.documentElement.style.setProperty('--primary', color);
+
+  // 2. Theme Mode (Light/Dark/Forest/Midnight)
+  const mode = settings.theme_mode || 'light';
+  document.documentElement.setAttribute('data-theme', mode);
+
+  // 3. Density (Mapped from 'view_mode')
+  // Sheet has 'view_mode', App uses density classes
+  const density = settings.view_mode || 'comfortable';
+  document.body.className = density;
+
+  // 4. Tabs
+  updateTabVisibility();
+
+  // 5. Update UI State if on Settings Page
+  if (state.view === 'settings') {
+    // Update Color Pickers
+    document.querySelectorAll('.color-option').forEach(el => {
+      el.classList.toggle('active', el.dataset.color === color);
+    });
+    // Update Density Buttons
+    document.querySelectorAll('.density-options:not(#themeModeOptions) .density-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.toLowerCase() === density || (density === 'comfortable' && btn.textContent === 'Comfortable'));
+    });
+    // Update Theme Mode Buttons
+    document.querySelectorAll('#themeModeOptions .density-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.toLowerCase() === mode);
+    });
+  }
+};
+
+// Interactive Logic
+window.selectDensity = function (mode) {
+  const parent = event.target.parentElement;
+  parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
+  event.target.classList.add('active');
+  document.body.className = mode;
+};
+
+window.selectThemeMode = function (mode) {
+  const parent = document.getElementById('themeModeOptions');
+  parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
+  event.target.classList.add('active');
+  document.documentElement.setAttribute('data-theme', mode);
+}
+
+function initCategoryRows(jsonStr) {
+  const container = document.getElementById('categoryBudgetList');
+  container.innerHTML = '';
+  const data = safeJsonParse(jsonStr);
+  if (Object.keys(data).length === 0) {
+    addCategoryRow();
+  } else {
+    Object.entries(data).forEach(([cat, amt]) => addCategoryRow(cat, amt));
+  }
+}
+
+function safeJsonParse(str) {
+  if (!str) return {};
+  if (typeof str === 'object') return str;
+  try { return JSON.parse(str); } catch (e) { return {}; }
+}
+
+window.addCategoryRow = function (cat = '', amt = '') {
+  const div = document.createElement('div');
+  div.style.display = 'flex';
+  div.style.gap = '10px';
+  div.style.marginBottom = '10px';
+  div.className = 'cat-budget-row';
+  div.innerHTML = `
+      <input type="text" class="input cat-name" placeholder="Category" value="${cat}" style="flex:1">
+      <input type="number" class="input cat-amt" placeholder="Limit" value="${amt}" style="flex:1">
+      <button class="btn danger small" onclick="this.parentElement.remove()">X</button>
+    `;
+  document.getElementById('categoryBudgetList').appendChild(div);
+};
+
+// --- DATA SYNC LOGIC (Aligned with User Backend) ---
+window.saveAllSettings = async function () {
+  const weekly = document.getElementById('weeklyBudget').value;
+  const monthly = document.getElementById('monthlyBudget').value;
+  const color = document.getElementById('sColor').value;
+  const apiKey = document.getElementById('sApiKey').value;
+  const model = document.getElementById('sModel').value; // NOW AN INPUT
+
+  // Mode & Density
+  let themeMode = 'light';
+  const modeBtn = document.querySelector('#themeModeOptions .density-btn.active');
+  if (modeBtn) themeMode = modeBtn.textContent.toLowerCase();
+
+  let density = 'comfortable';
+  const densityWrapper = document.querySelector('.density-options:not(#themeModeOptions)');
+  const denBtn = densityWrapper?.querySelector('.density-btn.active');
+  if (denBtn) density = denBtn.textContent.toLowerCase();
+
+  // Tabs
+  const allTabs = ['calendar', 'tasks', 'finance', 'habits', 'diary', 'vision', 'people'];
+  const checkedTabs = Array.from(document.querySelectorAll('.tab-checkbox:checked')).map(cb => cb.value);
+  const hidden = allTabs.filter(t => !checkedTabs.includes(t)).join(',');
+
+  // Categories
+  const cats = {};
+  document.querySelectorAll('.cat-budget-row').forEach(row => {
+    const c = row.querySelector('.cat-name').value.trim();
+    const a = row.querySelector('.cat-amt').value;
+    if (c && a) cats[c] = Number(a);
+  });
+
+  // Construct Payload using SHEET COLUMN NAMES
+  // Sheet Header -> JS Value
+  const newSettings = {
+    weekly_budget: Number(weekly),
+    monthly_budget: Number(monthly),
+    theme_color: color,
+    theme_mode: themeMode,
+
+    // Mapped: 'density' in UI -> 'view_mode' in Sheet
+    view_mode: density,
+
+    // Mapped: 'gemini_api_key' in UI -> 'ai_api_key' in Sheet
+    ai_api_key: apiKey,
+
+    ai_model: model,
+    hidden_tabs: hidden,
+    category_budgets: JSON.stringify(cats)
+  };
+
+  showToast('Saving settings...');
+
+  // Optimistic Update
+  if (state.data.settings?.[0]) {
+    Object.assign(state.data.settings[0], newSettings);
+    applySettings(); // Instant Apply
+  }
+
+  const existingId = state.data.settings?.[0]?.id;
+
+  if (existingId) {
+    await apiCall('update', 'settings', newSettings, existingId);
+  } else {
+    // If no settings exist, Create
+    await apiCall('create', 'settings', newSettings);
+    await refreshData('settings');
+  }
+
+  showToast('Settings Saved!');
+};
+
+window.testGeminiAPI = async function () {
+  const key = document.getElementById('sApiKey').value;
+  if (!key) { showToast('Enter API Key', 'error'); return; }
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+      method: 'POST',
+      body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] })
+    });
+    if (res.ok) showToast('API Key Valid! ✅');
+    else showToast('Invalid Key ❌', 'error');
+  } catch (e) { showToast('Connection Error', 'error'); }
+};
+
+window.openGoogleSheet = function () {
+  window.open('https://docs.google.com/spreadsheets', '_blank');
+};
+
+window.confirmDeleteAllData = function () {
+  if (confirm("Delete ALL Data? This cannot be undone.")) {
+    showToast('Data reset initiated...', 'error');
+  }
+};

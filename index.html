@@ -1,0 +1,462 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8" />
+
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+    <title>PersonalOS</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="styles/design-system.css" />
+
+    <link rel="stylesheet" href="styles/components.css" />
+
+    <link rel="stylesheet" href="loader.css" />
+
+    <link rel="stylesheet" href="style.css" />
+
+    <link rel="stylesheet" href="settings-styles.css" />
+
+    <link rel="stylesheet" href="settings-data-styles.css" />
+
+    <link rel="stylesheet" href="settings-fab.css" />
+
+    <link rel="stylesheet" href="fab-menu-styles.css" />
+
+    <link rel="stylesheet" href="diary-views.css" />
+
+    <link rel="stylesheet" href="finance-transactions.css" />
+
+    <link rel="stylesheet" href="ui-polish.css" />
+
+    <link rel="stylesheet" href="vision-views.css" />
+
+    <link rel="stylesheet" href="saas-polish.css" />
+    <link rel="stylesheet" href="command-palette.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script src="components/empty-state.js"></script>
+
+    <script src="fab-menu.js"></script>
+
+    <script src="ai-service.js"></script>
+
+</head>
+
+<body>
+
+    <!-- Loading Screen -->
+    <div id="appLoader" class="app-loader">
+        <div class="loader-content">
+            <div class="loader-logo">
+                <span class="logo-icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" class="lucide lucide-target">
+                        <circle cx="12" cy="12" r="10" />
+                        <circle cx="12" cy="12" r="6" />
+                        <circle cx="12" cy="12" r="2" />
+                    </svg></span>
+                PersonalOS
+            </div>
+
+            <div class="loader-progress-container">
+                <div class="loader-progress-bar"></div>
+            </div>
+
+            <div class="loader-status">Loading your data...</div>
+        </div>
+    </div>
+
+
+
+    <div class="app">
+
+
+        <aside class="sidebar">
+
+            <div class="brand">
+
+                <div style="width:24px;height:24px;background:var(--primary);border-radius:6px;"></div>
+
+                PersonalOS
+
+            </div>
+
+            <nav>
+
+                <div class="nav-item active" onclick="routeTo('dashboard')" data-target="dashboard">Dashboard</div>
+
+                <div class="nav-item" onclick="routeTo('calendar')" data-target="calendar">Planner</div>
+
+                <div class="nav-item" onclick="routeTo('tasks')" data-target="tasks">Tasks</div>
+
+                <div class="nav-item" onclick="routeTo('finance')" data-target="finance">Finance</div>
+
+                <div class="nav-item" onclick="routeTo('habits')" data-target="habits">Habits</div>
+
+                <div class="nav-item" onclick="routeTo('diary')" data-target="diary">Diary</div>
+
+                <div class="nav-item" onclick="routeTo('vision')" data-target="vision">
+                    Vision
+                </div>
+
+                <div class="nav-item" onclick="routeTo('people')" data-target="people">People</div>
+
+            </nav>
+
+        </aside>
+
+
+
+        <main class="main-content">
+
+
+            <div class="main-header-bar">
+
+                <button class="menu-toggle-btn" onclick="toggleSidebar()" title="Toggle Menu">
+
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+
+                    </svg>
+
+                </button>
+
+
+
+            </div>
+
+            <div id="main"></div>
+
+
+        </main>
+
+
+
+        <nav class="mobile-nav">
+
+            <div class="mob-item active" onclick="routeTo('dashboard')" data-target="dashboard">
+
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6">
+                    </path>
+                </svg>
+
+                Home
+
+            </div>
+
+            <div class="mob-item" onclick="routeTo('calendar')" data-target="calendar">
+
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                    </path>
+                </svg>
+
+                Plan
+
+            </div>
+
+            <div class="mob-item" onclick="routeTo('tasks')" data-target="tasks">
+
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+
+                Tasks
+
+            </div>
+
+            <div class="mob-item" onclick="routeTo('finance')" data-target="finance">
+
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                    </path>
+                </svg>
+
+                Money
+
+            </div>
+
+            <div class="mob-item" onclick="routeTo('habits')" data-target="habits">
+
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+
+                Habits
+
+            </div>
+
+            <div class="mob-item" onclick="routeTo('diary')" data-target="diary">
+
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253">
+                    </path>
+                </svg>
+
+                Diary
+
+            </div>
+
+            <div class="mob-item" onclick="routeTo('vision')" data-target="vision">
+
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z">
+                    </path>
+                </svg>
+
+                Vision
+
+            </div>
+
+            <div class="mob-item" onclick="routeTo('people')" data-target="people">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z">
+                    </path>
+                </svg>
+                People
+            </div>
+
+        </nav>
+
+
+
+        <div id="toast"
+            style="position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#333; color:white; padding:10px 20px; border-radius:30px; opacity:0; pointer-events:none; transition:opacity 0.3s; font-size:14px; z-index:200">
+            Action Saved</div>
+
+
+        <!-- FAB Menu Overlay -->
+        <div id="fabOverlay" class="fab-overlay" onclick="closeFABMenu()"></div>
+
+        <!-- FAB Speed Dial Menu -->
+        <div id="fabMenu" class="fab-menu">
+
+            <!-- Stage 1: Main Actions -->
+            <div id="fabStage1" class="fab-stage">
+                <div class="fab-menu-item" onclick="routeTo('settings'); closeFABMenu()">
+                    <span class="fab-menu-label">Settings</span>
+                    <button class="fab-menu-button settings"><i data-lucide="settings"
+                            style="width:20px;height:20px;"></i></button>
+                </div>
+                <div class="fab-menu-item" onclick="window.location.reload()">
+                    <span class="fab-menu-label">Refresh</span>
+                    <button class="fab-menu-button refresh"><i data-lucide="refresh-cw"
+                            style="width:20px;height:20px;"></i></button>
+                </div>
+                <div class="fab-menu-item" onclick="showFabStage2()">
+                    <span class="fab-menu-label">Add New</span>
+                    <button class="fab-menu-button add"><i data-lucide="plus"
+                            style="width:20px;height:20px;"></i></button>
+                </div>
+            </div>
+
+            <!-- Stage 2: Create Items (Initially Hidden) -->
+            <div id="fabStage2" class="fab-stage hidden">
+                <div class="fab-menu-item" onclick="window.openEventModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Event</span>
+                    <button class="fab-menu-button plan">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+                            <line x1="16" y1="2" x2="16" y2="6" />
+                            <line x1="8" y1="2" x2="8" y2="6" />
+                            <line x1="3" y1="10" x2="21" y2="10" />
+                            <path d="M8 14h.01" />
+                            <path d="M12 14h.01" />
+                            <path d="M16 14h.01" />
+                            <path d="M8 18h.01" />
+                            <path d="M12 18h.01" />
+                            <path d="M16 18h.01" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openTaskModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Task</span>
+                    <button class="fab-menu-button task">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="m9 12 2 2 4-4" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openFinanceAction(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Transaction</span>
+                    <button class="fab-menu-button money">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openHabitModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Habit</span>
+                    <button class="fab-menu-button habit">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openDiaryModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Diary</span>
+                    <button class="fab-menu-button diary">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openVisionModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Vision</span>
+                    <button class="fab-menu-button vision">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z" />
+                        </svg>
+                    </button>
+                </div>
+                <!-- Back Button -->
+                <div class="fab-menu-item" onclick="showFabStage1()">
+                    <span class="fab-menu-label">Back</span>
+                    <button class="fab-menu-button back">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m12 19-7-7 7-7" />
+                            <path d="M19 12H5" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Main FAB Button -->
+        <div class="fab" onclick="toggleFABMenu()"><i data-lucide="layout-grid"
+                style="width:28px;height:28px;stroke-width:3;"></i></div>
+
+
+
+        <div id="universalModal" class="modal-overlay hidden"
+            onclick="if(event.target === this) this.classList.add('hidden')">
+
+            <div class="modal-box">
+                <!-- Content injected dynamically -->
+            </div>
+
+        </div>
+
+
+
+    </div>
+
+
+
+    <!-- Floating AI Button -->
+    <div class="ai-fab" onclick="openAIModal()">
+        <i data-lucide="sparkles"></i>
+    </div>
+
+    <!-- Floating Search Button (Mobile) -->
+    <div class="mobile-search-fab" onclick="toggleCommandPalette()">
+        <i data-lucide="search"></i>
+    </div>
+
+    <!-- AI Insight Modal -->
+    <div id="aiModal" class="ai-modal-overlay" onclick="if(event.target === this) closeAIModal()">
+        <div class="ai-modal-card">
+            <div class="ai-header">
+                <div class="ai-title">
+                    <i data-lucide="sparkles" style="width:24px; margin-right:8px; display:inline-block"></i>
+                    AI Insight
+                </div>
+                <button class="btn icon" onclick="closeAIModal()"><i data-lucide="x"></i></button>
+            </div>
+
+            <div id="aiModalContent">
+                <!-- Content injected via JS -->
+                <div style="text-align:center; padding:40px; color:var(--text-muted)">
+                    <i data-lucide="loader" class="spin" style="width:32px; height:32px; margin-bottom:16px"></i>
+                    <div>Analyzing your data...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+
+    <script src="view-dashboard.js"></script>
+
+    <script src="view-calendar.js"></script>
+
+    <script src="view-tasks.js"></script>
+
+    <script src="view-finance.js"></script>
+
+    <script src="view-habits.js?v=2"></script>
+
+    <script src="view-diary.js"></script>
+
+    <script src="view-vision.js"></script>
+
+    <script src="view-people.js"></script>
+
+
+    <script src="view-settings.js"></script>
+    <script src="command-palette.js"></script>
+
+    <div id="commandPalette" class="hidden" onclick="if(event.target === this) closeCommandPalette()">
+        <div class="cmd-modal">
+            <div class="cmd-header">
+                <i data-lucide="search" style="width:20px; color:var(--text-muted); margin-right:8px"></i>
+                <input id="cmdInput" placeholder="Type a command or search..." autocomplete="off">
+                <span
+                    style="font-size:10px; background:var(--surface-base); padding:2px 6px; border-radius:4px; color:var(--text-muted)">ESC</span>
+            </div>
+            <div id="cmdResults">
+                <!-- Results -->
+            </div>
+        </div>
+    </div>
+
+    <script>window.addEventListener('load', async function () {
+            await initApp();
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+        });</script>
+
+    <audio id="alarmSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+        preload="auto"></audio>
+</body>
+
+</html>
