@@ -1209,6 +1209,22 @@ function toggleSidebar() {
 
 }
 
+// Refresh all data and re-render current view
+window.refreshAll = async function () {
+    showToast('Refreshing...');
+    await loadAllData();
+    // Re-render current view
+    if (state.view === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+    else if (state.view === 'calendar' && typeof renderCalendar === 'function') renderCalendar();
+    else if (state.view === 'tasks' && typeof renderTasks === 'function') renderTasks();
+    else if (state.view === 'finance' && typeof renderFinance === 'function') renderFinance();
+    else if (state.view === 'habits' && typeof renderHabits === 'function') renderHabits();
+    else if (state.view === 'diary' && typeof renderDiary === 'function') renderDiary();
+    else if (state.view === 'vision' && typeof renderVision === 'function') renderVision();
+    else if (state.view === 'people' && typeof renderPeople === 'function') renderPeople();
+    showToast('Data refreshed!');
+};
+
 /* --- NOTIFICATIONS & ALARMS --- */
 let notifiedItems = JSON.parse(localStorage.getItem('notifiedItems') || '[]');
 
