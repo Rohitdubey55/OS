@@ -967,6 +967,79 @@ body.spacious {
     scroll-behavior: smooth;
   }
 
+  .month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+
+  .month-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .day-label {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 4px;
+  }
+
+  .day-cell {
+    min-height: 80px;
+    padding: 4px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .day-cell:hover {
+    background: var(--surface-1);
+  }
+
+  .day-cell.today {
+    background: var(--primary);
+    color: white;
+  }
+
+  .day-cell.faded {
+    opacity: 0.4;
+  }
+
+  /* Week view styles */
+  .week-header {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .time-gutter-header {
+    width: 60px;
+    flex-shrink: 0;
+  }
+
+  .day-col-header {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    padding: 8px;
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .day-col-header.today {
+    background: var(--primary);
+    color: white;
+  }
+
+  .date-num {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
 
 
   .day-num {
@@ -1033,6 +1106,7 @@ body.spacious {
 
   .day-col {
     flex: 1;
+    min-width: 0;
     border-right: 1px solid var(--border);
     position: relative;
     background-image: linear-gradient(#f3f4f6 1px, transparent 1px);

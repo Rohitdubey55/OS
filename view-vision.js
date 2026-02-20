@@ -226,8 +226,14 @@ function renderTimelineItem(g) {
 
 // Grid Card - unique images per category/title
 function renderVisionCard(g, isAchieved = false) {
-  // Safe handling of images
-  const bg = g.image_url ? `background-image: url('${g.image_url}');` : `background-image: url('${getDefaultImage(g)}');`;
+  // Safe handling of images - convert http to https and handle errors
+  const safeImgUrl = (url) => {
+    if (!url) return getDefaultImage(g);
+    // Convert http to https to avoid mixed content errors
+    let safeUrl = url.replace(/^http:\/\//i, 'https://');
+    return safeUrl;
+  };
+  const bg = g.image_url ? `background-image: url('${safeImgUrl(g.image_url)}');` : `background-image: url('${getDefaultImage(g)}');`;
 
   // Calculate days left
   const days = g.target_date ? Math.ceil((new Date(g.target_date) - new Date()) / (1000 * 60 * 60 * 24)) : null;
@@ -417,7 +423,11 @@ window.openVisionDetail = function (id) {
 
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  const imgUrl = g.image_url || getDefaultImage(g);
+  const safeImgUrl = (url) => {
+    if (!url) return getDefaultImage(g);
+    return url.replace(/^http:\/\//i, 'https://');
+  };
+  const imgUrl = g.image_url ? safeImgUrl(g.image_url) : getDefaultImage(g);
 
   let daysBadge = '';
   if (g.target_date) {

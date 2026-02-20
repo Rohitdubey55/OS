@@ -46,3 +46,40 @@ self.addEventListener('activate', (event) => {
         })
     );
 });
+
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+        const title = event.data.title;
+        const options = {
+            body: event.data.body,
+            icon: './icon-192.png',
+            badge: './icon-192.png',
+            vibrate: [200, 100, 200, 100, 200, 100, 200],
+            tag: event.data.tag || 'pos-alarm',
+            requireInteraction: true
+        };
+        event.waitUntil(
+            self.registration.showNotification(title, options)
+        );
+    }
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+            if (windowClients.length > 0) {
+                let client = windowClients[0];
+                for (let i = 0; i < windowClients.length; i++) {
+                    if ('focus' in windowClients[i]) {
+                        client = windowClients[i];
+                        break;
+                    }
+                }
+                return client.focus();
+            } else {
+                return clients.openWindow('/');
+            }
+        })
+    );
+});

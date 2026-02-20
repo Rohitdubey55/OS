@@ -269,15 +269,6 @@ function renderTasks(filter = '') {
         </div>
       </div>
 
-      <!-- ── SEARCH ── -->
-      <div style="position:relative; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.02); border-radius:12px;">
-        <i data-lucide="search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;color:var(--text-muted);pointer-events:none;"></i>
-        <input class="input task-search" placeholder="Search tasks..."
-          style="padding-left:36px;margin:0;height:44px;font-size:14px;width:100%;box-sizing:border-box;border-radius:12px;border:1px solid var(--border-color);background:var(--surface-1);transition:box-shadow 0.2s;"
-          onfocus="this.style.boxShadow='0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent)'" onblur="this.style.boxShadow='none'"
-          oninput="renderTasks(this.value)" value="${filter}">
-      </div>
-
       <!-- ── FILTERS ── -->
       <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
         <!-- Status -->

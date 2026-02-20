@@ -1489,9 +1489,20 @@ function triggerAlarm(title, body, uniqueId) {
     // 1. Audio
     playAlarmSound();
 
-    // 2. Browser Notification
-    if ("Notification" in window && Notification.permission === "granted") {
-        new Notification(title, { body: body, icon: 'favicon.ico' });
+    // 2. Browser / ServiceWorker Notification
+    if ('serviceWorker' in navigator && "Notification" in window && Notification.permission === "granted") {
+        navigator.serviceWorker.ready.then(reg => {
+            reg.showNotification(title, {
+                body: body,
+                icon: './icon-192.png',
+                badge: './icon-192.png',
+                vibrate: [200, 100, 200],
+                tag: uniqueId,
+                requireInteraction: true
+            });
+        });
+    } else if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, { body: body, icon: './icon-192.png' });
     }
 
     // 3. In-App Modal

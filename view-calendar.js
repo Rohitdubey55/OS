@@ -134,6 +134,7 @@ window.openEventModal = function (dateIso = null, startTime = "09:00") {
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <button class="btn" style="flex:1;" onclick="closeModal()">Cancel</button>
               <button class="btn primary" style="flex:1;" data-action="save-event">Save Event</button>
+              <button id="evtDelete" class="btn hidden" style="flex:0; background:var(--danger); color:white; border:none; padding:8px;" onclick="deleteEventFromModal()"><i data-lucide="trash-2" style="width:18px;height:18px;"></i></button>
             </div>
           </div>
         </div>
@@ -181,9 +182,30 @@ window.openEventModal = function (dateIso = null, startTime = "09:00") {
     saveBtn.textContent = 'Save Event';
   }
 
+  // Hide delete button in create mode
+  const deleteBtn = document.getElementById('evtDelete');
+  if (deleteBtn) deleteBtn.classList.add('hidden');
+
   document.getElementById('eventModal').classList.remove('hidden');
   document.getElementById('evtTitle').focus();
 }
+
+window.deleteEventFromModal = async function () {
+  const editId = document.querySelector('[data-action="update-event-modal"]')?.dataset?.editId;
+  if (!editId) return;
+
+  if (!confirm('Delete this event?')) return;
+
+  try {
+    await apiCall('delete', 'planner_events', null, editId);
+    await refreshData('planner_events');
+    closeModal();
+    if (typeof renderCalendar === 'function') renderCalendar();
+    showToast('Event deleted');
+  } catch (e) {
+    showToast('Failed to delete event');
+  }
+};
 
 window.closeModal = function () {
   document.getElementById('eventModal').classList.add('hidden');
@@ -227,21 +249,25 @@ function renderMonthGrid() {
   const gridStart = new Date(firstDay);
   gridStart.setDate(gridStart.getDate() - startDay);
 
-  let html = `<div class="month-header">
-      ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<div class="day-label">${d}</div>`).join('')}
-    </div><div class="month-grid">`;
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  let html = `<div class="month-container" style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px;">`;
+
+  // Day headers
+  html += days.map(d => `<div class="day-label" style="text-align:center; font-size:12px; font-weight:600; color:var(--text-muted); padding:8px 0;">${d}</div>`).join('');
+
+  // Day cells
   for (let i = 0; i < 42; i++) {
     const curr = new Date(gridStart);
     curr.setDate(curr.getDate() + i);
     const isToday = isSameDate(curr, new Date());
     const isCurrMonth = curr.getMonth() === month;
-    const iso = curr.toISOString().split('T')[0];
+    const iso = curr.getFullYear() + '-' + String(curr.getMonth() + 1).padStart(2, '0') + '-' + String(curr.getDate()).padStart(2, '0');
     const dayEvents = (state.data.planner || []).filter(e => {
       if (!e.start_datetime) return false;
       try {
-        const eventDate = new Date(e.start_datetime).toISOString().split('T')[0];
-        return eventDate === iso;
+        const sd = extractDatetime(e.start_datetime);
+        return sd.date === iso;
       } catch (err) {
         return false;
       }
@@ -253,14 +279,14 @@ function renderMonthGrid() {
             <div class="date-num">${curr.getDate()}</div>
             ${dayEvents.slice(0, 4).map(e => `
               <div class="month-event-chip" onclick="event.stopPropagation(); openEditEvent('${e.id}')" 
-                   style="background:color-mix(in srgb, ${CATEGORY_COLORS[e.category] || CATEGORY_COLORS['Other']} 15%, transparent); color:${CATEGORY_COLORS[e.category] || CATEGORY_COLORS['Other']}; font-size:10px; font-weight:600; padding:2px 4px; border-radius:4px; margin-bottom:4px; border:1px solid ${CATEGORY_COLORS[e.category] || CATEGORY_COLORS['Other']}40; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                   style="background:${CATEGORY_COLORS[e.category] || CATEGORY_COLORS['Other']}; color:white; font-size:10px; font-weight:600; padding:2px 4px; border-radius:4px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                 ${e.title}
               </div>
             `).join('')}
             ${dayEvents.length > 4 ? `<div style="font-size:10px; color:var(--text-muted)">+${dayEvents.length - 4} more</div>` : ''}
         </div>`;
   }
-  return html + '</div>';
+  return html + '</div></div>';
 }
 
 function renderTimeGrid() {
@@ -291,7 +317,7 @@ function renderTimeGrid() {
   for (let i = 0; i < daysToShow; i++) {
     const d = new Date(startDate);
     d.setDate(d.getDate() + i);
-    const iso = d.toISOString().split('T')[0];
+    const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     // Match events whose start date equals this day (robust: check both T and space variants)
     const dayEvents = (state.data.planner || []).filter(e => {
       const sd = extractDatetime(e.start_datetime);
@@ -311,9 +337,9 @@ function renderTimeGrid() {
       const bgColor = CATEGORY_COLORS[e.category] || CATEGORY_COLORS['Other'];
 
       return `<div class="event-block" data-id="${e.id}"
-                   style="top:${top}px; height:${height}px; background:color-mix(in srgb, ${bgColor} 15%, transparent); color:${bgColor}; font-weight:600; border-left:4px solid ${bgColor}; border-radius:4px;"
+                   style="top:${top}px; height:${height}px; background:${bgColor}; color:white; font-weight:600; border-radius:4px;"
                    onclick="event.stopPropagation(); openEditEvent('${e.id}')">
-          <span class="event-time" style="color:${bgColor}; opacity:0.8;">${startT}</span> ${e.title}
+          <span class="event-time" style="color:white; opacity:0.9;">${startT}</span> ${e.title}
         </div>`;
     }).join('');
 
@@ -326,7 +352,7 @@ function renderTimeGrid() {
 
 window.updateCurrentTimeLine = function () {
   const now = new Date();
-  const todayIso = now.toISOString().split('T')[0];
+  const todayIso = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
   const minutes = now.getHours() * 60 + now.getMinutes();
   const col = document.getElementById(`day-col-${todayIso}`);
 
@@ -362,7 +388,13 @@ function extractDatetime(dtStr) {
   if (typeof dtStr === 'number' || (/^\d+$/.test(String(dtStr).trim()))) {
     const date = new Date(Number(dtStr));
     if (!isNaN(date.getTime())) {
-      return { date: date.toISOString().split('T')[0], time: date.toTimeString().slice(0, 5) };
+      // Use local time instead of UTC to avoid timezone offset issues
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return { date: `${year}-${month}-${day}`, time: `${hours}:${minutes}` };
     }
   }
 
@@ -429,6 +461,11 @@ window.openEditEvent = function (id) {
     saveBtn.setAttribute('data-edit-id', e.id);
     saveBtn.textContent = 'Update Event';
   }
+
+  // Show delete button in edit mode
+  const deleteBtn = document.getElementById('evtDelete');
+  if (deleteBtn) deleteBtn.classList.remove('hidden');
+
   document.getElementById('evtTitle').focus();
 }
 
@@ -488,7 +525,7 @@ async function _endDrag() {
     // Convert epoch milliseconds to Date for parsing
     const startDate = new Date(eventObj.start_datetime);
     const endDate = new Date(eventObj.end_datetime);
-    const datePart = startDate.toISOString().split('T')[0];
+    const datePart = startDate.getFullYear() + '-' + String(startDate.getMonth() + 1).padStart(2, '0') + '-' + String(startDate.getDate()).padStart(2, '0');
     const oldStart = startDate.toTimeString().slice(0, 5);
     const [oh, om] = oldStart.split(':').map(Number);
     const oldTop = oh * 60 + om;
