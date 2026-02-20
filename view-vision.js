@@ -233,7 +233,9 @@ function renderVisionCard(g, isAchieved = false) {
     let safeUrl = url.replace(/^http:\/\//i, 'https://');
     return safeUrl;
   };
-  const bg = g.image_url ? `background-image: url('${safeImgUrl(g.image_url)}');` : `background-image: url('${getDefaultImage(g)}');`;
+  const bg = g.image_url
+    ? `background-image: url('${safeImgUrl(g.image_url)}'); background-color: var(--surface-1);`
+    : `background-image: url('${getDefaultImage(g)}');`;
 
   // Calculate days left
   const days = g.target_date ? Math.ceil((new Date(g.target_date) - new Date()) / (1000 * 60 * 60 * 24)) : null;
