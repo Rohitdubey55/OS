@@ -204,10 +204,12 @@ function renderTasks(filter = '') {
       }
       .subtask-mini-check.done { background: var(--primary); border-color: var(--primary); }
       .stat-pill {
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        background: var(--surface-2, rgba(0,0,0,0.03)); border-radius: 12px; padding: 10px 14px;
-        border: 1px solid var(--border-color); flex: 1; min-width: 0;
+        display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+        background: var(--surface-1); border-radius: 16px; padding: 14px 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid var(--border-color); 
+        flex: 1; min-width: 0; transition: transform 0.2s, box-shadow 0.2s;
       }
+      .stat-pill:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.06); }
       .filter-dot-btn {
         width: 18px; height: 18px; border-radius: 50%; border: 3px solid transparent;
         cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; flex-shrink: 0;
