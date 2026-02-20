@@ -238,8 +238,13 @@ function renderMonthGrid() {
     const isCurrMonth = curr.getMonth() === month;
     const iso = curr.toISOString().split('T')[0];
     const dayEvents = (state.data.planner || []).filter(e => {
-      const eventDate = new Date(e.start_datetime).toISOString().split('T')[0];
-      return eventDate === iso;
+      if (!e.start_datetime) return false;
+      try {
+        const eventDate = new Date(e.start_datetime).toISOString().split('T')[0];
+        return eventDate === iso;
+      } catch (err) {
+        return false;
+      }
     });
 
     // Allow clicking day cell to add event (default 9am)
