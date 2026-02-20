@@ -12,8 +12,8 @@ let _taskCategory = 'All';
 let _taskPriorityFilter = 'All';
 let _showCompletedTasks = false;
 
-// Priority palette (border color only — no text labels in list)
-const PRIORITY_COLOR = { P1: '#EF4444', P2: '#F59E0B', P3: '#10B981' };
+// Priority palette - use CSS variables for theme support
+const PRIORITY_COLOR = { P1: 'var(--danger, #EF4444)', P2: 'var(--warning, #F59E0B)', P3: 'var(--success, #10B981)' };
 const PRIORITY_LABEL = { P1: 'High', P2: 'Medium', P3: 'Low' };
 
 function getTaskTodayDayName() {
@@ -221,25 +221,11 @@ function renderTasks(filter = '') {
     <div class="task-wrapper">
 
       <!-- ── TOP HEADER ── -->
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div class="header-row" style="margin-bottom:12px;">
         <div>
-          <h2 style="margin:0; font-size:20px; font-weight:700; letter-spacing:-0.3px;">Tasks</h2>
-          <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">
-            ${totalPending} active · ${overdueCount > 0 ? `<span style="color:var(--danger)">⚠ ${overdueCount} overdue</span>` : `${pctDone}% complete`}
-          </div>
+          <h2 class="page-title">Tasks</h2>
         </div>
-        <div style="display:flex; gap:6px; align-items:center;">
-          ${_itemSelectionMode ? `
-            <button class="btn small" style="background:var(--danger);color:white;font-size:11px;" onclick="deleteSelectedTasks()">
-              <i data-lucide="trash-2" style="width:12px;margin-right:3px;"></i>Delete (${_selectedTaskIds.size})
-            </button>
-            <button class="btn small secondary" style="font-size:11px;" onclick="toggleTaskSelectionMode()">Cancel</button>
-          ` : `
-            <button class="btn icon" onclick="toggleTaskSelectionMode()" title="Select tasks" style="width:32px;height:32px;">
-              <i data-lucide="check-square" style="width:15px;"></i>
-            </button>
-          `}
-        </div>
+        <button class="btn primary" onclick="openTaskModal()">+ Add Task</button>
       </div>
 
       <!-- ── STATS STRIP ── -->

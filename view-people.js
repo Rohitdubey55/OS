@@ -71,7 +71,7 @@ function renderPersonCard(p) {
 
        ${p.notes ? `<div style="margin-top:10px; font-size:12px; background:var(--bg-main); padding:8px; border-radius:6px; font-style:italic">"${p.notes}"</div>` : ''}
 
-       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px; border-top:1px solid #eee; padding-top:10px">
+       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px; border-top:1px solid var(--border-color); padding-top:10px">
            <button class="btn small primary" onclick="logContact('${p.id}')">Log Interaction</button>
            <button class="btn icon" onclick="openEditPerson('${p.id}')"><i data-lucide="pencil" style="width:14px"></i></button>
            <button class="btn icon" data-action="delete" data-sheet="people" data-id="${p.id}"><i data-lucide="trash-2" style="width:14px"></i></button>

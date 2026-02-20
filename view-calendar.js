@@ -362,9 +362,9 @@ window.updateCurrentTimeLine = function () {
   if (col) {
     const line = document.createElement('div');
     line.className = 'time-now-line';
-    line.style.cssText = 'position:absolute; left:0; right:0; height:2px; background:var(--danger,#EF4444); z-index:50; pointer-events:none; border-radius:1px';
+    line.style.cssText = 'position:absolute; left:0; right:0; height:2px; background:var(--danger); z-index:50; pointer-events:none; border-radius:1px';
     const dot = document.createElement('div');
-    dot.style.cssText = 'position:absolute; left:-4px; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger,#EF4444)';
+    dot.style.cssText = 'position:absolute; left:-4px; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger)';
     line.appendChild(dot);
     col.style.position = 'relative';
     col.appendChild(line);

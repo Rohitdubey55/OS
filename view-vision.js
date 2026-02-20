@@ -17,60 +17,22 @@ function renderVision() {
   filtered = sortVisions(filtered);
   const stats = calculateVisionStats(goals);
 
-  const isExpanded = visionState.controlsExpanded;
-  const activeFilters = [];
-  if (visionState.filter !== 'all') activeFilters.push(visionState.filter);
-  if (visionState.search) activeFilters.push('"' + visionState.search + '"');
-  if (visionState.sort !== 'newest') activeFilters.push(visionState.sort);
-  const filterSummary = activeFilters.length > 0
-    ? '<span class="filter-summary">' + activeFilters.join(' • ') + '</span>'
-    : '';
-
   document.getElementById('main').innerHTML = `
     <div class="vision-wrapper">
       <div class="header-row">
         <div>
           <h2 class="page-title">Vision Board</h2>
-          <div class="vision-mini-stats">${stats.total} goals • ${stats.thisYear} this year</div>
         </div>
         <button class="btn primary" onclick="openVisionModal()">+ Add Goal</button>
       </div>
 
       ${renderVisionStats(stats)}
 
-      <!-- Collapsible Controls Toggle -->
-      <div class="vision-controls-toggle" onclick="toggleVisionControls()">
-        <div class="controls-toggle-left">
-          <span class="controls-toggle-icon">${isExpanded ? '▼' : '▶'}</span>
-          <span class="controls-toggle-label">Filters & Views</span>
-          ${filterSummary}
-        </div>
-        <span class="controls-toggle-count">${filtered.length} of ${goals.length}</span>
-      </div>
-
-      <!-- Collapsible Controls Section -->
-      <div class="vision-controls-section ${isExpanded ? 'expanded' : 'collapsed'}">
-        <div class="vision-view-tabs">
-          <button class="vision-tab ${visionState.view === 'grid' ? 'active' : ''}" onclick="switchVisionView('grid')"><i data-lucide="layout-grid" style="width:16px; margin-right:6px"></i> Grid</button>
-          <button class="vision-tab ${visionState.view === 'list' ? 'active' : ''}" onclick="switchVisionView('list')"><i data-lucide="list" style="width:16px; margin-right:6px"></i> List</button>
-          <button class="vision-tab ${visionState.view === 'timeline' ? 'active' : ''}" onclick="switchVisionView('timeline')"><i data-lucide="calendar" style="width:16px; margin-right:6px"></i> Timeline</button>
-        </div>
-
-        <div class="category-pills">
-          ${renderCategoryPills(goals)}
-        </div>
-
-        <div class="vision-search-bar">
-          <input type="text" class="vision-search-input" placeholder="Search goals..."
-                 value="${visionState.search}" oninput="handleVisionSearch(this.value)">
-          <select class="vision-sort-select" onchange="handleVisionSort(this.value)">
-            <option value="newest" ${visionState.sort === 'newest' ? 'selected' : ''}>Newest First</option>
-            <option value="oldest" ${visionState.sort === 'oldest' ? 'selected' : ''}>Oldest First</option>
-            <option value="closest" ${visionState.sort === 'closest' ? 'selected' : ''}>Closest Deadline</option>
-            <option value="furthest" ${visionState.sort === 'furthest' ? 'selected' : ''}>Furthest Deadline</option>
-            <option value="az" ${visionState.sort === 'az' ? 'selected' : ''}>A-Z</option>
-          </select>
-        </div>
+      <!-- View Tabs -->
+      <div class="vision-view-tabs">
+        <button class="vision-tab ${visionState.view === 'grid' ? 'active' : ''}" onclick="switchVisionView('grid')" title="Grid View"><i data-lucide="layout-grid" style="width:18px"></i></button>
+        <button class="vision-tab ${visionState.view === 'list' ? 'active' : ''}" onclick="switchVisionView('list')" title="List View"><i data-lucide="list" style="width:18px"></i></button>
+        <button class="vision-tab ${visionState.view === 'timeline' ? 'active' : ''}" onclick="switchVisionView('timeline')" title="Timeline View"><i data-lucide="calendar" style="width:18px"></i></button>
       </div>
 
       ${visionState.view === 'grid' ? renderVisionGrid(filtered) : ''}
@@ -80,12 +42,6 @@ function renderVision() {
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
-
-// Toggle controls
-window.toggleVisionControls = function () {
-  visionState.controlsExpanded = !visionState.controlsExpanded;
-  renderVision();
-};
 
 function calculateVisionStats(goals) {
   const now = new Date();
@@ -120,15 +76,6 @@ function renderVisionStats(stats) {
   `;
 }
 
-function renderCategoryPills(goals) {
-  const categories = ['all', ...new Set(goals.map(g => g.category).filter(c => c))];
-  return categories.map(cat => {
-    const isActive = visionState.filter === cat;
-    const displayName = cat === 'all' ? 'All' : cat;
-    return `<button class="category-pill ${isActive ? 'active' : ''}" onclick="handleCategoryFilter('${cat}')">${displayName}</button>`;
-  }).join('');
-}
-
 // Grid View (extracted from original renderVision)
 function renderVisionGrid(goals) {
   const paginated = goals.slice(0, visionState.page * visionState.itemsPerPage); // Keep pagination logic if needed, or simple
@@ -144,7 +91,7 @@ function renderVisionGrid(goals) {
     </div>
 
     ${achieved.length > 0 ? `
-      <div style="margin-top:40px; border-top:1px solid #eee; padding-top:20px;">
+      <div style="margin-top:40px; border-top:1px solid var(--border-color); padding-top:20px;">
           <h3 style="font-size:16px; color:var(--text-muted); margin-bottom:15px">🏆 Achieved Goals</h3>
           <div class="vision-grid" style="opacity:0.8">
               ${achieved.map(g => renderVisionCard(g, true)).join('')}
@@ -224,37 +171,34 @@ function renderTimelineItem(g) {
   `;
 }
 
-// Grid Card - unique images per category/title
+// Grid Card - improved design
 function renderVisionCard(g, isAchieved = false) {
   // Safe handling of images - convert http to https and handle errors
   const safeImgUrl = (url) => {
     if (!url) return getDefaultImage(g);
-    // Convert http to https to avoid mixed content errors
     let safeUrl = url.replace(/^http:\/\//i, 'https://');
     return safeUrl;
   };
-  const bg = g.image_url
-    ? `background-image: url('${safeImgUrl(g.image_url)}'); background-color: var(--surface-1);`
-    : `background-image: url('${getDefaultImage(g)}');`;
+  const bgUrl = g.image_url ? safeImgUrl(g.image_url) : getDefaultImage(g);
 
   // Calculate days left
   const days = g.target_date ? Math.ceil((new Date(g.target_date) - new Date()) / (1000 * 60 * 60 * 24)) : null;
-  const badgeClass = days === null ? '' : (days < 0 ? 'v-badge-expired' : (days < 30 ? 'v-badge-urgent' : 'v-badge-normal'));
-  const badgeText = days === null ? '' : (days < 0 ? 'Ended' : `${days} days left`);
+  const badgeClass = days === null ? '' : (days < 0 ? 'expired' : (days < 30 ? 'urgent' : 'normal'));
+  const badgeText = days === null ? '' : (days < 0 ? 'Ended' : `${days}d left`);
 
-  const opacity = isAchieved ? 'opacity:0.7; filter:grayscale(0.5);' : '';
+  const opacity = isAchieved ? 'opacity:0.8; filter:grayscale(0.3);' : '';
 
   return `
-    <div class="vision-card animate-enter" style="${bg} ${opacity}" onclick="openVisionDetail('${g.id}')">
-      <div class="v-overlay"></div>
-      <div class="v-content">
-        ${badgeText && !isAchieved ? `<div class="v-badge ${badgeClass}">${badgeText}</div>` : ''}
-        ${isAchieved ? '<div class="v-badge achieved">Achieved</div>' : ''}
-        <div class="v-title">${g.title}</div>
-        <div class="v-category">${g.category}</div>
-        <!-- Progress Bar -->
-        <div style="background:rgba(255,255,255,0.2); height:4px; border-radius:2px; margin-top:8px; overflow:hidden;">
-            <div style="width:${g.progress || 0}%; height:100%; background:white;"></div>
+    <div class="vision-card animate-enter" style="${opacity}" onclick="openVisionDetail('${g.id}')">
+      <div class="vision-card-bg" style="background-image: url('${bgUrl}');"></div>
+      <div class="vision-card-overlay"></div>
+      <div class="vision-card-content">
+        ${badgeText && !isAchieved ? `<div class="vision-card-badge ${badgeClass}">${badgeText}</div>` : ''}
+        ${isAchieved ? '<div class="vision-card-badge achieved">✓ Achieved</div>' : ''}
+        <div class="vision-card-title">${g.title}</div>
+        <div class="vision-card-category">${g.category || 'Personal'}</div>
+        <div class="vision-card-progress">
+            <div class="vision-card-progress-bar" style="width:${g.progress || 0}%;"></div>
         </div>
       </div>
     </div>
@@ -396,12 +340,6 @@ window.switchVisionView = function (view) {
   renderVision();
 };
 
-window.handleCategoryFilter = function (category) {
-  visionState.filter = category;
-  visionState.page = 1;
-  renderVision();
-};
-
 window.handleVisionSearch = function (query) {
   visionState.search = query;
   visionState.page = 1;
@@ -434,7 +372,7 @@ window.openVisionDetail = function (id) {
   let daysBadge = '';
   if (g.target_date) {
     const d = getDaysLeft(g.target_date);
-    const color = d < 0 ? '#EF4444' : '#10B981';
+    const color = d < 0 ? 'var(--danger, #EF4444)' : 'var(--success, #10B981)';
     daysBadge = `<span style="background:${color}; color:white; padding:4px 8px; border-radius:6px; font-size:12px; font-weight:bold">${d < 0 ? 'Goal Date Passed' : d + ' Days Remaining'}</span>`;
   }
 
@@ -449,16 +387,16 @@ window.openVisionDetail = function (id) {
        <div class="pill">${g.category || 'General'}</div>
        ${daysBadge}
     </div>
-    <div style="background:#F9FAFB; padding:16px; border-radius:12px; font-size:14px; line-height:1.6; color:var(--text-main); margin-bottom:20px; max-height:150px; overflow-y:auto">
-       ${g.notes || '<span style="color:#999">No notes added.</span>'}
+    <div style="background:var(--surface-2); padding:16px; border-radius:12px; font-size:14px; line-height:1.6; color:var(--text-main); margin-bottom:20px; max-height:150px; overflow-y:auto">
+       ${g.notes || '<span style="color:var(--text-muted)">No notes added.</span>'}}
     </div>
-    <div style="font-size:12px; color:#999; margin-bottom:20px">
+    <div style="font-size:12px; color:var(--text-muted); margin-bottom:20px">
        Target Date: ${g.target_date || 'N/A'}
     </div>
     <div style="display:flex; justify-content:flex-end; gap:10px;">
         <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Close</button>
         <button class="btn" style="color:var(--primary); border-color:var(--primary)" onclick="openEditVision('${g.id}')"><i data-lucide="pencil" style="width:16px; margin-right:6px"></i> Edit Goal</button>
-        <button class="btn" style="color:#EF4444; border-color:#EF4444" onclick="deleteVision('${g.id}')"><i data-lucide="trash-2" style="width:16px; margin-right:6px"></i> Delete Goal</button>
+        <button class="btn" style="color:var(--danger); border-color:var(--danger)" onclick="deleteVision('${g.id}')"><i data-lucide="trash-2" style="width:16px; margin-right:6px"></i> Delete Goal</button>
     </div>
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();

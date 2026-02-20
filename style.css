@@ -42,12 +42,30 @@
   /* Indigo 600 */
   --primary-glow: rgba(79, 70, 229, 0.4);
   --primary-soft: rgba(79, 70, 229, 0.08);
+  --primary-light: #818CF8;
+  --primary-dark: #4F46E5;
   --accent: #8B5CF6;
+
+  /* Neutral Grays */
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;
 
   /* Status */
   --success: #059669;
+  --success-soft: rgba(5, 150, 105, 0.1);
+  --success-dark: #047857;
   --warning: #D97706;
+  --warning-soft: rgba(217, 119, 6, 0.15);
+  --warning-bg: rgba(217, 119, 6, 0.1);
+  --warning-border: rgba(217, 119, 6, 0.3);
+  --warning-dark: #B45309;
   --danger: #DC2626;
+  --danger-soft: rgba(220, 38, 38, 0.15);
+  --danger-dark: #B91C1C;
   --info: #0EA5E9;
 
   /* Shadows */
@@ -91,6 +109,17 @@
   /* Indigo 400 */
   --primary-glow: rgba(129, 140, 248, 0.25);
   --primary-soft: rgba(129, 140, 248, 0.15);
+  --primary-light: #A5B4FC;
+  --primary-dark: #6366F1;
+  --accent: #A78BFA;
+
+  /* Neutral Grays */
+  --gray-50: #1F2937;
+  --gray-100: #374151;
+  --gray-200: #4B5563;
+  --gray-300: #6B7280;
+  --gray-400: #9CA3AF;
+  --gray-500: #D1D5DB;
 
   /* Depth */
   --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -99,6 +128,29 @@
   --glow-shadow: 0 0 20px rgba(129, 140, 248, 0.15);
 
   --backdrop: rgba(9, 9, 11, 0.85);
+
+  /* Status Colors */
+  --success: #10B981;
+  --success-soft: rgba(16, 185, 129, 0.15);
+  --success-dark: #059669;
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, 0.15);
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-border: rgba(245, 158, 11, 0.3);
+  --warning-dark: #D97706;
+  --danger: #EF4444;
+  --danger-soft: rgba(239, 68, 68, 0.15);
+  --danger-dark: #DC2626;
+  --info: #38BDF8;
+
+  /* Aliases */
+  --bg: var(--surface-base);
+  --card-bg: var(--surface-1);
+  --text-main: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --border: var(--border-color);
+  --input-bg: var(--surface-2);
 }
 
 /* --- 3. MIDNIGHT THEME (Cosmic Navy) --- */
@@ -119,9 +171,43 @@
   /* Sky Blue */
   --primary-glow: rgba(56, 189, 248, 0.3);
   --primary-soft: rgba(56, 189, 248, 0.15);
+  --primary-light: #7DD3FC;
+  --primary-dark: #0284C7;
+  --accent: #A78BFA;
+
+  /* Neutral Grays */
+  --gray-50: #1E293B;
+  --gray-100: #334155;
+  --gray-200: #475569;
+  --gray-300: #64748B;
+  --gray-400: #94A3B8;
+  --gray-500: #CBD5E1;
 
   --glow-shadow: 0 0 25px rgba(56, 189, 248, 0.15);
   --backdrop: rgba(2, 6, 23, 0.85);
+
+  /* Status Colors */
+  --success: #10B981;
+  --success-soft: rgba(16, 185, 129, 0.15);
+  --success-dark: #059669;
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, 0.15);
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-border: rgba(245, 158, 11, 0.3);
+  --warning-dark: #D97706;
+  --danger: #EF4444;
+  --danger-soft: rgba(239, 68, 68, 0.15);
+  --danger-dark: #DC2626;
+  --info: #38BDF8;
+
+  /* Aliases */
+  --bg: var(--surface-base);
+  --card-bg: var(--surface-1);
+  --text-main: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --border: var(--border-color);
+  --input-bg: var(--surface-2);
 }
 
 /* --- 4. FOREST THEME (Alpine) --- */
@@ -144,9 +230,43 @@
   /* Emerald */
   --primary-glow: rgba(52, 211, 153, 0.3);
   --primary-soft: rgba(52, 211, 153, 0.15);
+  --primary-light: #6EE7B7;
+  --primary-dark: #059669;
+  --accent: #A78BFA;
+
+  /* Neutral Grays */
+  --gray-50: #064E3B;
+  --gray-100: #065F46;
+  --gray-200: #047857;
+  --gray-300: #059669;
+  --gray-400: #6EE7B7;
+  --gray-500: #A7F3D0;
 
   --glow-shadow: 0 0 25px rgba(52, 211, 153, 0.15);
   --backdrop: rgba(2, 44, 34, 0.85);
+
+  /* Status Colors */
+  --success: #10B981;
+  --success-soft: rgba(16, 185, 129, 0.15);
+  --success-dark: #059669;
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, 0.15);
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-border: rgba(245, 158, 11, 0.3);
+  --warning-dark: #D97706;
+  --danger: #EF4444;
+  --danger-soft: rgba(239, 68, 68, 0.15);
+  --danger-dark: #DC2626;
+  --info: #38BDF8;
+
+  /* Aliases */
+  --bg: var(--surface-base);
+  --card-bg: var(--surface-1);
+  --text-main: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --border: var(--border-color);
+  --input-bg: var(--surface-2);
 }
 
 * {
@@ -815,13 +935,13 @@ body.spacious {
   }
 
   .trend-up {
-    background: rgba(5, 150, 105, 0.1);
-    color: #059669;
+    background: var(--success-soft);
+    color: var(--success);
   }
 
   .trend-down {
-    background: rgba(220, 38, 38, 0.1);
-    color: #DC2626;
+    background: var(--danger-soft);
+    color: var(--danger);
   }
 
   .progress-container {
@@ -873,14 +993,14 @@ body.spacious {
     align-items: center;
     justify-content: space-between;
     padding: 10px 0;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--surface-3);
   }
 
   .habit-check {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    border: 2px solid #E5E7EB;
+    border: 2px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1002,7 +1122,7 @@ body.spacious {
 
   .day-cell.today {
     background: var(--primary);
-    color: white;
+    color: var(--text-inverse);
   }
 
   .day-cell.faded {
@@ -1059,7 +1179,7 @@ body.spacious {
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
-    background: white;
+    background: var(--surface-1);
     z-index: 5;
   }
 
@@ -1092,7 +1212,7 @@ body.spacious {
     width: 60px;
     flex-shrink: 0;
     border-right: 1px solid var(--border);
-    background: #fafafa;
+    background: var(--surface-1);
   }
 
   .time-label {
@@ -1109,7 +1229,7 @@ body.spacious {
     min-width: 0;
     border-right: 1px solid var(--border);
     position: relative;
-    background-image: linear-gradient(#f3f4f6 1px, transparent 1px);
+    background-image: linear-gradient(var(--surface-3) 1px, transparent 1px);
     background-size: 100% 60px;
   }
 
@@ -1275,7 +1395,7 @@ body.spacious {
     border-radius: 12px;
     border: 1px solid var(--border);
     margin-bottom: 8px;
-    background: white;
+    background: var(--surface-1);
     transition: all 0.2s;
   }
 
@@ -1286,7 +1406,7 @@ body.spacious {
 
   .task-row.done {
     opacity: 0.6;
-    background: #f9fafb;
+    background: var(--surface-2);
   }
 
   .task-content {
@@ -1330,7 +1450,7 @@ body.spacious {
   .cat-icon-bg {
     width: 42px;
     height: 42px;
-    background: #F3F4F6;
+    background: var(--surface-3);
     border-radius: 12px;
     display: flex;
     align-items: center;
@@ -1340,7 +1460,7 @@ body.spacious {
   }
 
   .quick-add-card {
-    background: linear-gradient(135deg, var(--primary), #6366F1);
+    background: linear-gradient(135deg, var(--primary), var(--accent));
     color: white;
     border: none;
   }
@@ -1356,7 +1476,7 @@ body.spacious {
   }
 
   .quick-add-card .btn {
-    background: white;
+    background: var(--surface-1);
     color: var(--primary);
     border: none;
     font-weight: 600;
@@ -1402,7 +1522,7 @@ body.spacious {
   }
 
   .modal-box {
-    background: white;
+    background: var(--surface-1);
     width: 90%;
     max-width: 450px;
     padding: 24px;
@@ -1441,7 +1561,7 @@ body.spacious {
   .fin-nav {
     display: flex;
     gap: 4px;
-    background: #F3F4F6;
+    background: var(--surface-3);
     padding: 4px;
     border-radius: 10px;
     margin-bottom: 20px;
@@ -1461,7 +1581,7 @@ body.spacious {
   }
 
   .fin-tab.active {
-    background: white;
+    background: var(--surface-1);
     color: var(--primary);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   }
@@ -1474,7 +1594,7 @@ body.spacious {
     padding: 16px;
     border: 1px solid var(--border);
     border-radius: 12px;
-    background: white;
+    background: var(--surface-1);
     margin-bottom: 12px;
   }
 
@@ -1487,7 +1607,7 @@ body.spacious {
 
   .fund-progress-bg {
     height: 8px;
-    background: #F3F4F6;
+    background: var(--surface-3);
     border-radius: 99px;
     overflow: hidden;
     margin-top: 8px;
@@ -1509,7 +1629,7 @@ body.spacious {
     justify-content: space-between;
     align-items: center;
     padding: 14px;
-    background: white;
+    background: var(--surface-1);
     border-bottom: 1px solid var(--border);
   }
 
@@ -1526,8 +1646,8 @@ body.spacious {
   }
 
   .net-worth-card {
-    background: linear-gradient(135deg, #111827, #374151);
-    color: white;
+    background: linear-gradient(135deg, var(--surface-base), var(--surface-2));
+    color: var(--text-1);
     border: none;
   }
 
@@ -1559,7 +1679,7 @@ body.spacious {
 
   .range-btn.active {
 
-    background: white;
+    background: var(--surface-1);
 
     color: var(--text-main);
 
@@ -1600,7 +1720,7 @@ body.spacious {
 
   .habit-card {
 
-    background: white;
+    background: var(--surface-1);
 
     border-radius: 16px;
 
@@ -1667,8 +1787,8 @@ body.spacious {
     align-items: center;
     gap: 4px;
 
-    background: #FEF3C7;
-    color: #D97706;
+    background: var(--warning-soft);
+    color: var(--warning-dark);
 
     padding: 4px 10px;
     border-radius: 99px;
@@ -1726,7 +1846,7 @@ body.spacious {
     height: 8px;
     border-radius: 4px;
 
-    background: #F3F4F6;
+    background: var(--surface-3);
 
     position: relative;
 
@@ -1783,7 +1903,7 @@ body.spacious {
     transition: 0.2s;
 
     border: 1px solid var(--border);
-    background: white;
+    background: var(--surface-1);
     color: var(--text-muted);
 
   }
@@ -1791,7 +1911,7 @@ body.spacious {
   .check-btn:hover {
     border-color: var(--success);
     color: var(--success);
-    background: #ECFDF5;
+    background: var(--success-soft);
   }
 
   .check-btn.done {
@@ -1838,7 +1958,7 @@ body.spacious {
 
   .mood-stat-card {
 
-    background: white;
+    background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 20px;
@@ -1853,7 +1973,7 @@ body.spacious {
 
   .mood-chart-card {
 
-    background: white;
+    background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 20px;
@@ -1869,7 +1989,7 @@ body.spacious {
 
   .diary-card {
 
-    background: white;
+    background: var(--surface-1);
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 20px;
@@ -1899,7 +2019,7 @@ body.spacious {
 
     width: 60px;
     height: 60px;
-    background: #F3F4F6;
+    background: var(--surface-3);
     border-radius: 12px;
     flex-shrink: 0;
 
@@ -1945,7 +2065,7 @@ body.spacious {
   .tag-pill {
     font-size: 11px;
     padding: 2px 8px;
-    background: #EEF2FF;
+    background: var(--primary-soft);
     color: var(--primary);
     border-radius: 99px;
     font-weight: 500;
@@ -1963,22 +2083,22 @@ body.spacious {
   }
 
   .mood-high {
-    background: #DCFCE7;
-    color: #166534;
+    background: var(--success-soft);
+    color: var(--success-dark);
   }
 
   /* Green */
 
   .mood-mid {
-    background: #FEF9C3;
-    color: #854D0E;
+    background: var(--warning-soft);
+    color: var(--warning-dark);
   }
 
   /* Yellow */
 
   .mood-low {
-    background: #FEE2E2;
-    color: #991B1B;
+    background: var(--danger-soft);
+    color: var(--danger-dark);
   }
 
   /* Red */
@@ -1993,7 +2113,7 @@ body.spacious {
     -webkit-appearance: none;
     height: 8px;
     border-radius: 5px;
-    background: #e5e7eb;
+    background: var(--surface-3);
     outline: none;
     margin: 10px 0;
 
@@ -2050,7 +2170,7 @@ body.spacious {
 
     overflow: hidden;
 
-    background: white;
+    background: var(--surface-1);
 
     box-shadow: var(--shadow-sm);
 
@@ -2666,7 +2786,7 @@ body.spacious {
   }
 
   .alarm-modal-box {
-    background: white;
+    background: var(--surface-1);
     padding: 30px;
     border-radius: 20px;
     width: 90%;
@@ -2700,8 +2820,8 @@ body.spacious {
 
   /* --- AI INTEGRATION UI --- */
   .ai-suggestion-panel {
-    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: linear-gradient(135deg, var(--surface-1), var(--surface-2));
+    border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 16px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -2723,11 +2843,11 @@ body.spacious {
     left: 0;
     width: 100%;
     height: 4px;
-    background: linear-gradient(90deg, #6366F1, #8B5CF6, #EC4899);
+    background: linear-gradient(90deg, var(--primary), var(--accent), var(--primary));
   }
 
   .ai-suggestion-panel .btn-secondary {
-    background: white;
+    background: var(--surface-1);
     border: 1px solid var(--primary-soft);
     color: var(--primary);
     font-weight: 600;
@@ -2782,7 +2902,7 @@ body.spacious {
   }
 
   .dash-drag-item:hover {
-    background-color: white !important;
+    background-color: var(--surface-1) !important;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
     border-color: var(--border) !important;
   }
@@ -2807,7 +2927,7 @@ body.spacious {
 
   /* --- DRAG ITEM REFINEMENT --- */
   .dash-sort-item {
-    background: white !important;
+    background: var(--surface-1) !important;
     border: 1px solid rgba(0, 0, 0, 0.05) !important;
     box-shadow: var(--shadow-sm);
     transition: all 0.2s;
@@ -2833,7 +2953,7 @@ body.spacious {
     width: 48px;
     height: 48px;
     z-index: 2000;
-    background: linear-gradient(135deg, #6366F1, #EC4899);
+    background: linear-gradient(135deg, var(--primary), var(--accent));
     border-radius: 14px;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
     display: flex;
@@ -3034,11 +3154,11 @@ body.spacious {
 }
 
 .ai-widget .widget-title {
-  color: white !important;
+  color: var(--text-1) !important;
   background: none !important;
-  -webkit-text-fill-color: white !important;
+  -webkit-text-fill-color: var(--text-1) !important;
   font-weight: 800;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  text-shadow: none;
 }
 
 /* =========================================

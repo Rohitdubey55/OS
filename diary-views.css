@@ -3,7 +3,7 @@
     display: flex;
     gap: var(--space-2);
     margin-bottom: var(--space-6);
-    border-bottom: 2px solid var(--gray-200);
+    border-bottom: 2px solid var(--border-color);
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -23,7 +23,7 @@
 
 .diary-tab:hover {
     color: var(--primary);
-    background: var(--gray-50);
+    background: var(--surface-2);
     border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
@@ -34,7 +34,7 @@
 
 /* Weekly Calendar */
 .weekly-calendar {
-    background: white;
+    background: var(--surface-1);
     border-radius: var(--radius-lg);
     padding: var(--space-6);
     box-shadow: var(--shadow-sm);
@@ -48,7 +48,7 @@
 }
 
 .week-nav-btn {
-    background: var(--gray-100);
+    background: var(--surface-2);
     border: none;
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-md);
@@ -69,7 +69,7 @@
 }
 
 .week-day {
-    border: 2px solid var(--gray-200);
+    border: 2px solid var(--border-color);
     border-radius: var(--radius-md);
     padding: var(--space-3);
     min-height: 120px;
@@ -99,7 +99,7 @@
 .week-day-date {
     font-size: var(--text-xl);
     font-weight: 700;
-    color: var(--text-main);
+    color: var(--text-1);
     margin-bottom: var(--space-2);
 }
 
@@ -115,7 +115,7 @@
 
 /* Monthly Calendar */
 .monthly-calendar {
-    background: white;
+    background: var(--surface-1);
     border-radius: var(--radius-lg);
     padding: var(--space-6);
     box-shadow: var(--shadow-sm);
@@ -130,7 +130,7 @@
 }
 
 .month-nav-btn {
-    background: var(--gray-100);
+    background: var(--surface-2);
     border: none;
     padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-md);
@@ -170,7 +170,7 @@
 
 .month-day {
     aspect-ratio: 1;
-    border: 1px solid var(--gray-200);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     padding: var(--space-2);
     display: flex;
@@ -184,7 +184,7 @@
 
 .month-day:hover {
     border-color: var(--primary);
-    background: var(--gray-50);
+    background: var(--surface-2);
 }
 
 .month-day.other-month {
@@ -193,8 +193,8 @@
 }
 
 .month-day.has-entry {
-    background: linear-gradient(135deg, var(--primary), #8B5CF6);
-    color: white;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: var(--text-inverse);
     border-color: var(--primary);
 }
 
@@ -217,7 +217,7 @@
 
 /* Yearly Heatmap */
 .yearly-heatmap {
-    background: white;
+    background: var(--surface-1);
     border-radius: var(--radius-lg);
     padding: var(--space-6);
     box-shadow: var(--shadow-sm);
@@ -258,7 +258,7 @@
     width: 12px;
     height: 12px;
     border-radius: 2px;
-    background: var(--gray-200);
+    background: var(--surface-3);
     cursor: pointer;
     transition: all var(--transition-fast);
     position: relative;
@@ -270,23 +270,23 @@
 }
 
 .heatmap-day.level-1 {
-    background: #C7D2FE;
+    background: var(--primary-soft);
 }
 
 .heatmap-day.level-2 {
-    background: #A5B4FC;
+    background: var(--primary);
 }
 
 .heatmap-day.level-3 {
-    background: #818CF8;
+    background: var(--primary);
 }
 
 .heatmap-day.level-4 {
-    background: #6366F1;
+    background: var(--primary-dark);
 }
 
 .heatmap-day.level-5 {
-    background: #4F46E5;
+    background: var(--accent);
 }
 
 .heatmap-legend {
@@ -356,7 +356,7 @@
 
     /* Yearly Dashboard (New Responsive) */
     .yearly-dashboard {
-        background: white;
+        background: var(--surface-1);
         border-radius: var(--radius-lg);
         padding: var(--space-6);
         box-shadow: var(--shadow-sm);
@@ -370,7 +370,7 @@
     }
 
     .year-month-card {
-        border: 1px solid var(--gray-200);
+        border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
         padding: 6px;
         transition: all var(--transition-base);
@@ -396,7 +396,7 @@
 
     .mini-day {
         aspect-ratio: 1;
-        background: var(--gray-100);
+        background: var(--surface-2);
         border-radius: 2px;
         cursor: pointer;
         transition: all 0.1s;
@@ -410,27 +410,27 @@
     }
 
     .mini-day.level-1 {
-        background: #C7D2FE;
+        background: var(--primary-soft);
     }
 
     .mini-day.level-2 {
-        background: #A5B4FC;
+        background: var(--primary);
     }
 
     .mini-day.level-3 {
-        background: #818CF8;
+        background: var(--primary);
     }
 
     .mini-day.level-4 {
-        background: #6366F1;
+        background: var(--primary);
     }
 
     .mini-day.level-5 {
-        background: #4F46E5;
+        background: var(--accent);
     }
 
     .mini-day.today-indicator {
-        border: 1px solid var(--text-main);
+        border: 1px solid var(--text-1);
     }
 
     /* Yearly Mobile optimizations - MOVED TO END TO OVERRIDE DEFAULTS */
@@ -459,4 +459,6 @@
         .mini-day {
             border-radius: 0.5px;
         }
+
     }
+}

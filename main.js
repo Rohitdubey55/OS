@@ -1176,6 +1176,9 @@ async function loadAllData() {
 
     console.log("Data Loaded:", state.data);
 
+    // Apply theme settings on load
+    applyThemeOnLoad();
+
     // Apply settings immediately after loading
     if (state.data.settings && state.data.settings.length > 0) {
         if (typeof applySettings === 'function') {
@@ -1207,6 +1210,38 @@ function toggleSidebar() {
 
     if (sidebar) sidebar.classList.toggle('collapsed');
 
+}
+
+// Apply theme settings when app loads
+function applyThemeOnLoad() {
+    const settings = state.data.settings?.[0];
+    if (!settings) return;
+
+    // Apply theme color
+    const color = settings.theme_color || '#4F46E5';
+    document.documentElement.style.setProperty('--primary', color);
+
+    // Apply theme mode (light/dark/forest/midnight)
+    const mode = settings.theme_mode || 'light';
+    document.documentElement.setAttribute('data-theme', mode);
+
+    console.log('Theme applied:', mode, color);
+}
+
+// Apply settings after saving in Settings view
+function applySettings() {
+    const settings = state.data.settings?.[0];
+    if (!settings) return;
+
+    // Apply theme color
+    const color = settings.theme_color || '#4F46E5';
+    document.documentElement.style.setProperty('--primary', color);
+
+    // Apply theme mode (light/dark/forest/midnight)
+    const mode = settings.theme_mode || 'light';
+    document.documentElement.setAttribute('data-theme', mode);
+
+    console.log('Theme applied:', mode, color);
 }
 
 // Refresh all data and re-render current view

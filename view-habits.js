@@ -132,7 +132,7 @@ function renderHabits() {
                 <div style="display:flex; gap:4px; margin:8px 0; flex-wrap:wrap;">
                   ${DAY_NAMES.map(d => `
                     <span style="font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600;
-                      background:${daysList.includes(d) ? (d === todayDay ? 'var(--primary)' : 'var(--primary-soft)') : 'var(--gray-100, #f3f4f6)'};
+                      background:${daysList.includes(d) ? (d === todayDay ? 'var(--primary)' : 'var(--primary-soft)') : 'var(--surface-2)'}};
                       color:${daysList.includes(d) ? (d === todayDay ? 'white' : 'var(--primary)') : 'var(--text-muted)'};">
                       ${d}
                     </span>

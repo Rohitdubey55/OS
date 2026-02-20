@@ -176,7 +176,7 @@ function renderFinExpenses(container) {
   // Render
   container.innerHTML = `
     <div style="display:flex; justify-content:center; margin-bottom:24px;">
-      <div style="background:#E5E7EB; padding:4px; border-radius:10px; display:flex; gap:2px;">
+      <div style="background:var(--surface-3); padding:4px; border-radius:10px; display:flex; gap:2px;">
         <button class="range-btn ${finRange === 'week' ? 'active' : ''}" onclick="switchFinRange('week')">Weekly View</button>
         <button class="range-btn ${finRange === 'month' ? 'active' : ''}" onclick="switchFinRange('month')">Monthly View</button>
         <button class="range-btn ${finRange === 'year' ? 'active' : ''}" onclick="switchFinRange('year')">Yearly View</button>
@@ -191,7 +191,7 @@ function renderFinExpenses(container) {
 
     <!-- Transactions List -->
     <div class="transactions-list">
-      <h3 style="margin-bottom: var(--space-4);">Recent Transactions</h3>
+      <h3 style="margin-bottom: var(--space-4); color:var(--text-main);">Recent Transactions</h3>
       ${expenseItems.length === 0 ? '<div class="empty-state">No transactions found</div>' : ''}
       ${expenseItems.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 15).map(renderTransactionCard).join('')}
     </div>
@@ -222,7 +222,7 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
                 <span>${c}</span>
                 <span>${spent} ${climit ? '/ ' + climit : ''}</span>
             </div>
-            <div style="height:4px; background:#eee; border-radius:2px; overflow:hidden">
+            <div style="height:4px; background:var(--surface-3); border-radius:2px; overflow:hidden">
                 <div style="height:100%; width:${cpct}%; background:${ccolor}"></div>
             </div>
         </div>`;
@@ -239,7 +239,7 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
              <div class="progress-fill" style="width:${pct}%; background:${color}"></div>
         </div>
 
-        <div style="margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+        <div style="margin-top:10px; border-top:1px solid var(--border-color); padding-top:10px;">
              <div style="font-size:12px; font-weight:600; margin-bottom:10px; color:var(--text-muted)">CATEGORY BREAKDOWN</div>
              <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:15px;">
                  ${catHtml}
@@ -293,7 +293,7 @@ function renderFinIncome(container) {
 
   container.innerHTML = `
     <div style="display:flex; justify-content:center; margin-bottom:24px;">
-        <div style="background:#E5E7EB; padding:4px; border-radius:10px; display:flex; gap:2px;">
+        <div style="background:var(--surface-3); padding:4px; border-radius:10px; display:flex; gap:2px;">
         <button class="range-btn ${finRange === 'week' ? 'active' : ''}" onclick="switchFinRange('week')">Week</button>
         <button class="range-btn ${finRange === 'month' ? 'active' : ''}" onclick="switchFinRange('month')">Month</button>
         <button class="range-btn ${finRange === 'year' ? 'active' : ''}" onclick="switchFinRange('year')">Year</button>
@@ -387,8 +387,8 @@ function renderFinAssets(container) {
   const total = assets.reduce((s, a) => s + Number(a.value), 0);
   container.innerHTML = `
     <div class="dash-card net-worth-card" style="margin-bottom:20px">
-      <div class="stat-label" style="color:rgba(255,255,255,0.7)">Total Net Worth</div>
-      <div class="stat-val" style="color:white">₹${total.toLocaleString()}</div>
+      <div class="stat-label" style="color:var(--text-inverse); opacity:0.7">Total Net Worth</div>
+      <div class="stat-val" style="color:var(--text-inverse)">₹${total.toLocaleString()}</div>
     </div>
     <div class="card" style="padding:0; overflow:hidden">
       ${assets.map(a => `

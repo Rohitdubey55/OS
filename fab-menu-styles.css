@@ -151,11 +151,11 @@
 
 /* Styling specific buttons */
 .fab-menu-button.settings {
-    color: #64748b;
+    color: var(--text-3, #64748b);
 }
 
 .fab-menu-button.refresh {
-    color: #0ea5e9;
+    color: var(--info, #0ea5e9);
 }
 
 .fab-menu-button.add {
@@ -164,28 +164,28 @@
 }
 
 .fab-menu-button.back {
-    background: #fee2e2;
-    color: #ef4444;
+    background: var(--danger-soft, #fee2e2);
+    color: var(--danger, #ef4444);
 }
 
 .fab-menu-button.plan {
-    color: #3b82f6;
+    color: var(--info, #3b82f6);
 }
 
 .fab-menu-button.task {
-    color: #10b981;
+    color: var(--success, #10b981);
 }
 
 .fab-menu-button.money {
-    color: #f59e0b;
+    color: var(--warning, #f59e0b);
 }
 
 .fab-menu-button.habit {
-    color: #ef4444;
+    color: var(--danger, #ef4444);
 }
 
 .fab-menu-button.diary {
-    color: #8b5cf6;
+    color: var(--accent, #8b5cf6);
 }
 
 .fab-menu-button.vision {

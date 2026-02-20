@@ -218,7 +218,7 @@ function renderDashboard() {
 
         <div class="kpi-card" style="flex:1; min-width:130px; cursor:pointer;" onclick="routeTo('finance')">
            <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="background:var(--danger-soft, #fee2e2); color:var(--danger); width:32px; height:32px;"><i data-lucide="trending-down" style="width:16px;"></i></div>
+             <div class="kpi-icon" style="background:var(--danger-soft); color:var(--danger); width:32px; height:32px;"><i data-lucide="trending-down" style="width:16px;"></i></div>
              <div style="width:50px; height:24px;"><canvas id="sparkSpend"></canvas></div>
            </div>
            <div style="margin-top:12px;">
@@ -328,10 +328,10 @@ function renderDashboard() {
          <div class="widget-body">
              <div style="display:flex; flex-direction:column; gap:12px;">
                 ${birthdays.map(p => `
-                  <div style="display:flex; align-items:center; gap:10px; padding:10px; background:linear-gradient(to right, #FFF7ED, #FFEDD5); border-radius:8px; border:1px solid #FED7AA">
+                  <div style="display:flex; align-items:center; gap:10px; padding:10px; background:linear-gradient(to right, var(--warning-soft, #FFF7ED), var(--warning-bg, #FFEDD5)); border-radius:8px; border:1px solid var(--warning-border, #FED7AA)">
                     <div style="font-size:16px">🎂</div>
-                    <div style="flex:1; font-weight:600; color:#9A3412; font-size:13px">It's ${p.name}'s birthday!</div>
-                    <button class="btn small" style="background:#F97316; color:white; border:none; padding:4px 10px" onclick="openPersonModal('${p.id}')">View</button>
+                    <div style="flex:1; font-weight:600; color:var(--warning-dark, #9A3412); font-size:13px">It's ${p.name}'s birthday!</div>
+                    <button class="btn small" style="background:var(--warning, #F97316); color:white; border:none; padding:4px 10px" onclick="openPersonModal('${p.id}')">View</button>
                   </div>
                 `).join('')}
 
@@ -527,10 +527,10 @@ function _renderDashConfigModal() {
     <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Drag handle to reorder. Toggle ON/OFF.</p>
     <div id="dashConfigList">
       ${config.map((sec, i) => `
-        <div class="dash-sort-item" data-id="${sec.id}" style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--gray-100, #f3f4f6); border-radius:10px; margin-bottom:8px; touch-action:none;">
+        <div class="dash-sort-item" data-id="${sec.id}" style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface-2); border-radius:10px; margin-bottom:8px; touch-action:none;">
           <div class="dash-handle" style="cursor:grab; padding:4px; color:var(--text-muted);"><i data-lucide="grip-vertical"></i></div>
           <div style="flex:1; font-weight:600; font-size:15px; padding:0 8px;">${sec.label}</div>
-          <button class="btn" style="min-width:60px; font-size:12px; padding:6px 12px; border-radius:20px; background:${sec.visible ? 'var(--primary, #6366F1)' : '#ccc'}; color:white; border:none; cursor:pointer;"
+          <button class="btn" style="min-width:60px; font-size:12px; padding:6px 12px; border-radius:20px; background:${sec.visible ? 'var(--primary)' : 'var(--surface-3)'}; color:white; border:none; cursor:pointer;"
                   onclick="toggleDashSection(${i})">
             ${sec.visible ? 'ON' : 'OFF'}
           </button>
@@ -538,7 +538,7 @@ function _renderDashConfigModal() {
       `).join('')}
     </div>
     <div style="display:flex; justify-content:space-between; gap:10px; margin-top:16px;">
-      <button class="btn" style="color:var(--danger, #EF4444);" onclick="resetDashConfig()">Reset</button>
+      <button class="btn" style="color:var(--danger);" onclick="resetDashConfig()">Reset</button>
       <div style="display:flex; gap:10px;">
         <button class="btn" onclick="cancelDashCustomize()">Cancel</button>
         <button class="btn primary" onclick="saveDashCustomize()">Save Layout</button>
