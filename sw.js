@@ -1,28 +1,44 @@
-const CACHE_NAME = 'personal-os-v4';
+const CACHE_NAME = 'personal-os-v5';
+
+// Get the base path for GitHub Pages compatibility
+const BASE_PATH = self.location.pathname.replace('/sw.js', '');
+
 const ASSETS_TO_CACHE = [
-    './',
-    './index.html',
-    './style.css',
-    './main.js',
-    './view-dashboard.js',
-    './view-tasks.js',
-    './view-habits.js',
-    './view-calendar.js',
-    './view-finance.js',
-    './view-diary.js',
-    './view-vision.js',
-    './view-settings.js',
-    './view-reminders.js',
-    './notification-service.js',
-    './view-people.js',
-    './manifest.json',
-    './sw.js'
+    `${BASE_PATH}/`,
+    `${BASE_PATH}/index.html`,
+    `${BASE_PATH}/style.css`,
+    `${BASE_PATH}/main.js`,
+    `${BASE_PATH}/view-dashboard.js`,
+    `${BASE_PATH}/view-tasks.js`,
+    `${BASE_PATH}/view-habits.js`,
+    `${BASE_PATH}/view-calendar.js`,
+    `${BASE_PATH}/view-finance.js`,
+    `${BASE_PATH}/view-diary.js`,
+    `${BASE_PATH}/view-vision.js`,
+    `${BASE_PATH}/view-settings.js`,
+    `${BASE_PATH}/view-reminders.js`,
+    `${BASE_PATH}/notification-service.js`,
+    `${BASE_PATH}/view-people.js`,
+    `${BASE_PATH}/manifest.json`,
+    `${BASE_PATH}/sw.js`
 ];
 
 self.addEventListener('install', (event) => {
+    console.log('[SW] Installing service worker...');
+    console.log('[SW] Base path:', BASE_PATH);
+    console.log('[SW] Assets to cache:', ASSETS_TO_CACHE);
+    
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
+            console.log('[SW] Caching assets...');
             return cache.addAll(ASSETS_TO_CACHE);
+        }).then(() => {
+            console.log('[SW] All assets cached successfully');
+            return self.skipWaiting();
+        }).catch((error) => {
+            console.error('[SW] Failed to cache assets:', error);
+            // Continue even if caching fails - allows app to work
+            return self.skipWaiting();
         })
     );
 });
