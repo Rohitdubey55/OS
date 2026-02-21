@@ -1,4 +1,4 @@
-const CACHE_NAME = 'personal-os-v7';
+const CACHE_NAME = 'personal-os-v8';
 
 // Get the base path for GitHub Pages compatibility
 const BASE_PATH = self.location.pathname.replace('/sw.js', '');
@@ -10,6 +10,10 @@ const ASSETS_TO_CACHE = [
     `${BASE_PATH}/style.css`,
     `${BASE_PATH}/main.js`,
     `${BASE_PATH}/manifest.json`,
+    // Icons
+    `${BASE_PATH}/icon-192.png`,
+    `${BASE_PATH}/icon-512.png`,
+    `${BASE_PATH}/favicon.svg`,
     // Views
     `${BASE_PATH}/view-dashboard.js`,
     `${BASE_PATH}/view-tasks.js`,
@@ -44,26 +48,26 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
-    console.log('[SW v7] Installing service worker...');
-    console.log('[SW v7] Base path:', BASE_PATH);
-    console.log('[SW v7] Full sw location:', self.location.href);
+    console.log('[SW v8] Installing service worker...');
+    console.log('[SW v8] Base path:', BASE_PATH);
+    console.log('[SW v8] Full sw location:', self.location.href);
     
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[SW v7] Caching assets individually...');
+            console.log('[SW v8] Caching assets individually...');
             
             // Cache assets one by one to identify failures
             return Promise.all(
                 ASSETS_TO_CACHE.map((url) => {
                     return cache.add(url).then(() => {
-                        console.log('[SW v7] ✓ Cached:', url);
+                        console.log('[SW v8] ✓ Cached:', url);
                     }).catch((err) => {
-                        console.error('[SW v7] ✗ Failed to cache:', url, err);
+                        console.error('[SW v8] ✗ Failed to cache:', url, err);
                     });
                 })
             );
         }).then(() => {
-            console.log('[SW v7] Cache operation complete');
+            console.log('[SW v8] Cache operation complete');
             return self.skipWaiting();
         })
     );
@@ -78,19 +82,19 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-    console.log('[SW v7] Activating service worker...');
+    console.log('[SW v8] Activating service worker...');
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((cacheName) => {
                     if (cacheName !== CACHE_NAME) {
-                        console.log('[SW v7] Deleting old cache:', cacheName);
+                        console.log('[SW v8] Deleting old cache:', cacheName);
                         return caches.delete(cacheName);
                     }
                 })
             );
         }).then(() => {
-            console.log('[SW v7] Claiming clients...');
+            console.log('[SW v8] Claiming clients...');
             return self.clients.claim();
         })
     );
