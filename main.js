@@ -241,6 +241,17 @@ async function initApp() {
     }
 
     console.log('initApp: Starting...');
+    
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+        try {
+            const registration = await navigator.serviceWorker.register('./sw.js');
+            console.log('Service Worker registered:', registration);
+        } catch (error) {
+            console.error('Service Worker registration failed:', error);
+        }
+    }
+    
     await loadAllData();
     console.log('initApp: Data loaded.');
 
