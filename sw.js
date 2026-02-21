@@ -111,6 +111,61 @@ self.addEventListener('message', (event) => {
     }
 });
 
+// Push event listener for push notifications from push service
+self.addEventListener('push', (event) => {
+    console.log('[SW v7] Push received:', event);
+    
+    let data = {
+        title: 'PersonalOS',
+        body: 'You have a new notification',
+        tag: 'pos-notification'
+    };
+    
+    // Parse push data if available
+    if (event.data) {
+        try {
+            data = event.data.json();
+        } catch (e) {
+            data.body = event.data.text();
+        }
+    }
+    
+    const options = {
+        body: data.body,
+        icon: data.icon || '/icon-192.png',
+        badge: '/badge-72.png',
+        vibrate: [200, 100, 200, 100, 200, 100, 200],
+        tag: data.tag || 'pos-notification',
+        requireInteraction: data.requireInteraction || false,
+        data: data.data || {}
+    };
+    
+    event.waitUntil(
+        self.registration.showNotification(data.title, options)
+    );
+});
+
+// Push subscription change listener
+self.addEventListener('pushsubscriptionchange', (event) => {
+    console.log('[SW v7] Push subscription changed');
+    
+    event.waitUntil(
+        // Notify the app about subscription change
+        self.registration.pushManager.subscribe({ userVisibleOnly: true })
+            .then((subscription) => {
+                // Send new subscription to server
+                return fetch('/api/push-subscription', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(subscription)
+                });
+            })
+            .catch((error) => {
+                console.error('[SW v7] Failed to resubscribe:', error);
+            })
+    );
+});
+
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     
@@ -137,7 +192,8 @@ self.addEventListener('notificationclick', (event) => {
                 }
                 return client.focus();
             } else {
-                return clients.openWindow('/');
+                // Use BASE_PATH for GitHub Pages compatibility
+                return clients.openWindow(BASE_PATH + '/');
             }
         })
     );
