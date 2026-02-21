@@ -1315,6 +1315,14 @@ function applySettings() {
     const mode = settings.theme_mode || 'light';
     document.documentElement.setAttribute('data-theme', mode);
 
+    // Apply orientation lock
+    const orientation = settings.orientation_lock || 'auto';
+    if (orientation !== 'auto' && screen.orientation) {
+        screen.orientation.lock(orientation + '-primary').catch(e => console.log('Orientation lock failed:', e));
+    } else if (orientation === 'auto' && screen.orientation) {
+        screen.orientation.unlock();
+    }
+
     console.log('Theme applied:', mode, color);
 }
 

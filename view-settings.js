@@ -16,7 +16,9 @@ function renderSettings() {
     // Map 'ai_api_key' from sheet to 'gemini_api_key' for UI
     gemini_api_key: s.ai_api_key || '',
     ai_model: s.ai_model || 'gemini-1.5-flash',
-    category_budgets: s.category_budgets || '{}'
+    category_budgets: s.category_budgets || '{}',
+    // Orientation lock setting
+    orientation_lock: s.orientation_lock || 'auto'
   };
 
   const main = document.getElementById('main');
@@ -87,6 +89,17 @@ function renderSettings() {
                 <button class="density-btn ${settings.theme_mode === 'forest' ? 'active' : ''}" onclick="selectThemeMode('forest')">Forest</button>
                 <button class="density-btn ${settings.theme_mode === 'midnight' ? 'active' : ''}" onclick="selectThemeMode('midnight')">Midnight</button>
             </div>
+        </div>
+
+        <!-- Orientation Lock -->
+        <div class="setting-item">
+            <label class="setting-label">Screen Orientation</label>
+            <div class="density-options" id="orientationOptions">
+                <button class="density-btn ${(settings.orientation_lock || 'auto') === 'auto' ? 'active' : ''}" onclick="selectOrientation('auto')">Auto</button>
+                <button class="density-btn ${settings.orientation_lock === 'portrait' ? 'active' : ''}" onclick="selectOrientation('portrait')">Portrait</button>
+                <button class="density-btn ${settings.orientation_lock === 'landscape' ? 'active' : ''}" onclick="selectOrientation('landscape')">Landscape</button>
+            </div>
+            <input type="hidden" id="sOrientation" value="${settings.orientation_lock || 'auto'}">
         </div>
       </div>
 
@@ -322,6 +335,56 @@ window.selectThemeMode = function (mode) {
   document.documentElement.setAttribute('data-theme', mode);
 }
 
+window.selectOrientation = function (orientation) {
+  const parent = document.getElementById('orientationOptions');
+  parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('sOrientation').value = orientation;
+  
+  // Apply orientation lock
+  applyOrientationLock(orientation);
+}
+
+// Apply orientation lock
+function applyOrientationLock(orientation) {
+  console.log('Applying orientation lock:', orientation);
+  
+  // Try Screen Orientation API first
+  if (screen.orientation) {
+    if (orientation === 'auto') {
+      screen.orientation.unlock().catch(e => console.log('Orientation unlock failed:', e));
+    } else if (orientation === 'portrait') {
+      screen.orientation.lock('portrait').catch(e => {
+        console.log('Portrait lock failed, trying portrait-primary:', e);
+        screen.orientation.lock('portrait-primary').catch(e2 => console.log('Orientation lock failed:', e2));
+      });
+    } else if (orientation === 'landscape') {
+      screen.orientation.lock('landscape').catch(e => {
+        console.log('Landscape lock failed, trying landscape-primary:', e);
+        screen.orientation.lock('landscape-primary').catch(e2 => console.log('Orientation lock failed:', e2));
+      });
+    }
+  } else {
+    console.log('Screen Orientation API not supported - using CSS fallback');
+    // Fallback: Apply CSS transform for visual effect (won't actually lock device)
+    applyOrientationCSS(orientation);
+  }
+}
+
+// CSS fallback for orientation (visual only)
+function applyOrientationCSS(orientation) {
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  
+  if (orientation === 'portrait') {
+    meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+  } else if (orientation === 'landscape') {
+    meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+  } else {
+    meta.setAttribute('content', 'width=device-width, initial-scale=1');
+  }
+}
+
 function initCategoryRows(jsonStr) {
   const container = document.getElementById('categoryBudgetList');
   container.innerHTML = '';
@@ -367,9 +430,14 @@ window.saveAllSettings = async function () {
   if (modeBtn) themeMode = modeBtn.textContent.toLowerCase();
 
   let density = 'comfortable';
-  const densityWrapper = document.querySelector('.density-options:not(#themeModeOptions)');
+  const densityWrapper = document.querySelector('.density-options:not(#themeModeOptions):not(#orientationOptions)');
   const denBtn = densityWrapper?.querySelector('.density-btn.active');
   if (denBtn) density = denBtn.textContent.toLowerCase();
+
+  // Orientation
+  const orientationEl = document.getElementById('sOrientation');
+  console.log('Orientation element:', orientationEl, 'value:', orientationEl?.value);
+  const orientation = orientationEl?.value || 'auto';
 
   // Tabs
   const allTabs = ['calendar', 'tasks', 'finance', 'habits', 'diary', 'vision', 'people'];
@@ -400,7 +468,8 @@ window.saveAllSettings = async function () {
 
     ai_model: model,
     hidden_tabs: hidden,
-    category_budgets: JSON.stringify(cats)
+    category_budgets: JSON.stringify(cats),
+    orientation_lock: orientation
   };
 
   showToast('Saving settings...');
