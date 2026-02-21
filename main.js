@@ -245,11 +245,26 @@ async function initApp() {
     // Register Service Worker
     if ('serviceWorker' in navigator) {
         try {
-            const registration = await navigator.serviceWorker.register('./sw.js');
-            console.log('Service Worker registered:', registration);
+            // DEBUG: Log current location for GitHub Pages subpath diagnosis
+            console.log('[SW Debug] Current location:', window.location.href);
+            console.log('[SW Debug] Base URL:', window.location.origin);
+            console.log('[SW Debug] Pathname:', window.location.pathname);
+            
+            // Use absolute path for GitHub Pages compatibility
+            const swPath = `${window.location.pathname.replace(/\/$/, '')}/sw.js`;
+            console.log('[SW Debug] Attempting to register SW at:', swPath);
+            
+            const registration = await navigator.serviceWorker.register(swPath, {
+                scope: `${window.location.pathname.replace(/\/$/, '')}/`
+            });
+            console.log('[SW Debug] Service Worker registered successfully:', registration);
+            console.log('[SW Debug] Scope:', registration.scope);
         } catch (error) {
-            console.error('Service Worker registration failed:', error);
+            console.error('[SW Debug] Service Worker registration failed:', error);
+            console.error('[SW Debug] Error details:', error.message);
         }
+    } else {
+        console.warn('[SW Debug] Service Worker not supported in this browser');
     }
     
     await loadAllData();
