@@ -76,7 +76,19 @@ function saveNotificationSettings() {
 
 // Request browser notification permission
 async function requestNotificationPermission() {
+    // Check if running in MIT App Inventor or similar WebView
+    const isAppInventor = typeof Android !== 'undefined' || typeof window.AppInventor !== 'undefined';
+    
     if (!('Notification' in window)) {
+        // No browser Notification API - check if we can use App Inventor
+        if (isAppInventor) {
+            // In App Inventor WebView - enable notifications via bridge
+            notificationState.permission = 'granted';
+            notificationState.enabled = true;
+            saveNotificationSettings();
+            showToast('Notifications enabled via App Inventor!', 'success');
+            return true;
+        }
         showToast('This browser does not support notifications', 'error');
         return false;
     }
@@ -89,6 +101,14 @@ async function requestNotificationPermission() {
             showToast('Notifications enabled!', 'success');
             return true;
         } else if (permission === 'denied') {
+            // Even if browser notifications are denied, try App Inventor
+            if (isAppInventor) {
+                notificationState.permission = 'granted';
+                notificationState.enabled = true;
+                saveNotificationSettings();
+                showToast('Notifications enabled via App Inventor!', 'success');
+                return true;
+            }
             showToast('Notifications blocked. Please enable in browser settings.', 'error');
             return false;
         }
@@ -491,23 +511,72 @@ function scheduleNotification(reminder) {
 function sendToAppInventor(reminder) {
     try {
         // Check if running in WebView (MIT App Inventor)
-        if (typeof Android !== 'undefined' && Android.setWebViewString) {
-            // Format: ALARM|hour|minute|message
-            const reminderTime = new Date(reminder.reminder_datetime);
-            const hour = reminderTime.getHours();
-            const minute = reminderTime.getMinutes();
-            const message = encodeURIComponent(reminder.title + (reminder.description ? ' - ' + reminder.description : ''));
-            
-            const webViewString = `ALARM|${hour}|${minute}|${message}`;
-            Android.setWebViewString(webViewString);
-            console.log('Sent alarm to Android:', webViewString);
-        } else if (typeof window.AppInventor !== 'undefined') {
-            // Alternative: using window.AppInventor
-            const reminderTime = new Date(reminder.reminder_datetime);
-            window.AppInventor.setWebViewString(`ALARM|${reminderTime.getHours()}|${reminderTime.getMinutes()}|${encodeURIComponent(reminder.title)}`);
-        } else {
+        const isAndroid = typeof Android !== 'undefined' && Android.setWebViewString;
+        const isAppInventor = typeof window.AppInventor !== 'undefined';
+        
+        if (!isAndroid && !isAppInventor) {
             console.log('Not running in App Inventor WebView - using browser notifications instead');
+            return;
         }
+        
+        let hour, minute, message;
+        
+        // For habits, use the reminder_time; for tasks, use due_time; for reminders, use reminder_datetime
+        if (reminder.habit_name) {
+            // It's a habit - use reminder_time
+            const timeStr = String(reminder.reminder_time || '');
+            if (timeStr.startsWith('1899-12-30T')) {
+                hour = parseInt(timeStr.slice(11, 13), 10);
+                minute = parseInt(timeStr.slice(14, 16), 10);
+            } else if (timeStr.includes('T')) {
+                const dt = new Date(timeStr);
+                hour = dt.getHours();
+                minute = dt.getMinutes();
+            } else {
+                const parts = timeStr.split(':');
+                hour = parseInt(parts[0], 10);
+                minute = parseInt(parts[1], 10);
+            }
+            message = encodeURIComponent((reminder.emoji || '✨') + ' ' + reminder.habit_name);
+        } else if (reminder.title) {
+            // It's a task - use due_time
+            const timeStr = String(reminder.due_time || '');
+            if (timeStr.startsWith('1899-12-30T')) {
+                hour = parseInt(timeStr.slice(11, 13), 10);
+                minute = parseInt(timeStr.slice(14, 16), 10);
+            } else if (timeStr.includes('T')) {
+                const dt = new Date(timeStr);
+                hour = dt.getHours();
+                minute = dt.getMinutes();
+            } else {
+                const parts = timeStr.split(':');
+                hour = parseInt(parts[0], 10);
+                minute = parseInt(parts[1], 10);
+            }
+            message = encodeURIComponent('📋 ' + reminder.title);
+        } else {
+            // Generic reminder
+            const reminderTime = new Date(reminder.reminder_datetime);
+            hour = reminderTime.getHours();
+            minute = reminderTime.getMinutes();
+            message = encodeURIComponent(reminder.title + (reminder.description ? ' - ' + reminder.description : ''));
+        }
+        
+        if (isNaN(hour) || isNaN(minute)) {
+            console.log('Invalid time for App Inventor notification');
+            return;
+        }
+        
+        // Format: ALARM|hour|minute|message
+        const webViewString = `ALARM|${hour}|${String(minute).padStart(2, '0')}|${message}`;
+        
+        if (isAndroid) {
+            Android.setWebViewString(webViewString);
+        } else if (isAppInventor) {
+            window.AppInventor.setWebViewString(webViewString);
+        }
+        
+        console.log('Sent alarm to App Inventor:', webViewString);
     } catch (e) {
         console.error('Error sending to App Inventor:', e);
     }
