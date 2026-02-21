@@ -269,6 +269,170 @@
   --input-bg: var(--surface-2);
 }
 
+/* --- 5. SUNSET THEME (Warm Orange) --- */
+[data-theme="sunset"] {
+  --surface-base: #FFF7ED;
+  --surface-1: #FFEDD5;
+  --surface-2: #FED7AA;
+  --surface-3: #FDBA74;
+  --text-1: #7C2D12;
+  --text-2: #9A3412;
+  --text-3: #C2410C;
+  --border-color: #FED7AA;
+  --inner-border: 1px solid rgba(0, 0, 0, 0.1);
+  --primary: #F97316;
+  --primary-glow: rgba(249, 115, 22, 0.3);
+  --primary-soft: rgba(249, 115, 22, 0.15);
+  --primary-light: #FB923C;
+  --primary-dark: #EA580C;
+  --accent: #EC4899;
+  --gray-50: #FFF7ED;
+  --gray-100: #FFEDD5;
+  --gray-200: #FED7AA;
+  --gray-300: #FDBA74;
+  --gray-400: #FB923C;
+  --gray-500: #F97316;
+  --glow-shadow: 0 0 25px rgba(249, 115, 22, 0.15);
+  --backdrop: rgba(255, 247, 237, 0.85);
+  --success: #10B981;
+  --success-soft: rgba(16, 185, 129, 0.15);
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, 0.15);
+  --danger: #EF4444;
+  --danger-soft: rgba(239, 68, 68, 0.15);
+  --info: #0EA5E9;
+  --bg: var(--surface-base);
+  --card-bg: var(--surface-1);
+  --text-main: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --border: var(--border-color);
+  --input-bg: var(--surface-2);
+}
+
+/* --- 6. OCEAN THEME (Deep Blue) --- */
+[data-theme="ocean"] {
+  --surface-base: #0F172A;
+  --surface-1: #1E293B;
+  --surface-2: #334155;
+  --surface-3: #475569;
+  --text-1: #F1F5F9;
+  --text-2: #CBD5E1;
+  --text-3: #94A3B8;
+  --border-color: #334155;
+  --inner-border: 1px solid rgba(255, 255, 255, 0.1);
+  --primary: #0EA5E9;
+  --primary-glow: rgba(14, 165, 233, 0.3);
+  --primary-soft: rgba(14, 165, 233, 0.15);
+  --primary-light: #38BDF8;
+  --primary-dark: #0284C7;
+  --accent: #22D3EE;
+  --gray-50: #0F172A;
+  --gray-100: #1E293B;
+  --gray-200: #334155;
+  --gray-300: #475569;
+  --gray-400: #64748B;
+  --gray-500: #94A3B8;
+  --glow-shadow: 0 0 25px rgba(14, 165, 233, 0.15);
+  --backdrop: rgba(15, 23, 42, 0.85);
+  --success: #10B981;
+  --success-soft: rgba(16, 185, 129, 0.15);
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, 0.15);
+  --danger: #EF4444;
+  --danger-soft: rgba(239, 68, 68, 0.15);
+  --info: #06B6D4;
+  --bg: var(--surface-base);
+  --card-bg: var(--surface-1);
+  --text-main: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --border: var(--border-color);
+  --input-bg: var(--surface-2);
+}
+
+/* --- 7. LAVENDER THEME (Soft Purple) --- */
+[data-theme="lavender"] {
+  --surface-base: #FAF5FF;
+  --surface-1: #F3E8FF;
+  --surface-2: #E9D5FF;
+  --surface-3: #DDD6FE;
+  --text-1: #5B21B6;
+  --text-2: #6D28D9;
+  --text-3: #7C3AED;
+  --border-color: #E9D5FF;
+  --inner-border: 1px solid rgba(0, 0, 0, 0.1);
+  --primary: #8B5CF6;
+  --primary-glow: rgba(139, 92, 246, 0.3);
+  --primary-soft: rgba(139, 92, 246, 0.15);
+  --primary-light: #A78BFA;
+  --primary-dark: #7C3AED;
+  --accent: #EC4899;
+  --gray-50: #FAF5FF;
+  --gray-100: #F3E8FF;
+  --gray-200: #E9D5FF;
+  --gray-300: #DDD6FE;
+  --gray-400: #C4B5FD;
+  --gray-500: #A78BFA;
+  --glow-shadow: 0 0 25px rgba(139, 92, 246, 0.15);
+  --backdrop: rgba(250, 245, 255, 0.85);
+  --success: #10B981;
+  --success-soft: rgba(16, 185, 129, 0.15);
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, 0.15);
+  --danger: #EF4444;
+  --danger-soft: rgba(239, 68, 68, 0.15);
+  --info: #6366F1;
+  --bg: var(--surface-base);
+  --card-bg: var(--surface-1);
+  --text-main: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --border: var(--border-color);
+  --input-bg: var(--surface-2);
+}
+
+/* --- 8. ROSE THEME (Pink Romance) --- */
+[data-theme="rose"] {
+  --surface-base: #FFF1F2;
+  --surface-1: #FFE4E6;
+  --surface-2: #FECDD3;
+  --surface-3: #FDA4AF;
+  --text-1: #881337;
+  --text-2: #9F1239;
+  --text-3: #BE123C;
+  --border-color: #FECDD3;
+  --inner-border: 1px solid rgba(0, 0, 0, 0.1);
+  --primary: #F43F5E;
+  --primary-glow: rgba(244, 63, 94, 0.3);
+  --primary-soft: rgba(244, 63, 94, 0.15);
+  --primary-light: #FB7185;
+  --primary-dark: #E11D48;
+  --accent: #8B5CF6;
+  --gray-50: #FFF1F2;
+  --gray-100: #FFE4E6;
+  --gray-200: #FECDD3;
+  --gray-300: #FDA4AF;
+  --gray-400: #FB7185;
+  --gray-500: #F43F5E;
+  --glow-shadow: 0 0 25px rgba(244, 63, 94, 0.15);
+  --backdrop: rgba(255, 241, 242, 0.85);
+  --success: #10B981;
+  --success-soft: rgba(16, 185, 129, 0.15);
+  --warning: #F59E0B;
+  --warning-soft: rgba(245, 158, 11, 0.15);
+  --danger: #EF4444;
+  --danger-soft: rgba(239, 68, 68, 0.15);
+  --info: #EC4899;
+  --bg: var(--surface-base);
+  --card-bg: var(--surface-1);
+  --text-main: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --border: var(--border-color);
+  --input-bg: var(--surface-2);
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;

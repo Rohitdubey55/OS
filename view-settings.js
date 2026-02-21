@@ -10,8 +10,6 @@ function renderSettings() {
     monthly_budget: s.monthly_budget || 0,
     theme_color: s.theme_color || '#4F46E5',
     theme_mode: s.theme_mode || 'light',
-    // Map 'view_mode' from sheet to 'density' for UI
-    density: s.view_mode || 'comfortable',
     hidden_tabs: s.hidden_tabs || '',
     // Map 'ai_api_key' from sheet to 'gemini_api_key' for UI
     gemini_api_key: s.ai_api_key || '',
@@ -58,26 +56,20 @@ function renderSettings() {
         <div class="setting-item">
             <label class="setting-label">Accent Color</label>
             <div class="theme-colors">
-                ${renderColorOption('#4F46E5', settings.theme_color)} <!-- Indigo -->
-                ${renderColorOption('#2563EB', settings.theme_color)} <!-- Blue -->
-                ${renderColorOption('#059669', settings.theme_color)} <!-- Emerald -->
-                ${renderColorOption('#7C3AED', settings.theme_color)} <!-- Violet -->
-                ${renderColorOption('#DB2777', settings.theme_color)} <!-- Pink -->
-                ${renderColorOption('#DC2626', settings.theme_color)} <!-- Red -->
-                ${renderColorOption('#D97706', settings.theme_color)} <!-- Amber -->
-                ${renderColorOption('#0891B2', settings.theme_color)} <!-- Cyan -->
+                ${renderColorOption('#6366F1', settings.theme_color)} <!-- Indigo -->
+                ${renderColorOption('#3B82F6', settings.theme_color)} <!-- Blue -->
+                ${renderColorOption('#10B981', settings.theme_color)} <!-- Emerald -->
+                ${renderColorOption('#8B5CF6', settings.theme_color)} <!-- Violet -->
+                ${renderColorOption('#EC4899', settings.theme_color)} <!-- Pink -->
+                ${renderColorOption('#EF4444', settings.theme_color)} <!-- Red -->
+                ${renderColorOption('#F59E0B', settings.theme_color)} <!-- Amber -->
+                ${renderColorOption('#14B8A6', settings.theme_color)} <!-- Teal -->
+                ${renderColorOption('#F97316', settings.theme_color)} <!-- Orange -->
+                ${renderColorOption('#06B6D4', settings.theme_color)} <!-- Cyan -->
+                ${renderColorOption('#84CC16', settings.theme_color)} <!-- Lime -->
+                ${renderColorOption('#A855F7', settings.theme_color)} <!-- Purple -->
             </div>
             <input type="hidden" id="sColor" value="${settings.theme_color}">
-        </div>
-
-        <!-- Density -->
-        <div class="setting-item">
-            <label class="setting-label">Density</label>
-            <div class="density-options">
-                <button class="density-btn ${settings.density === 'compact' ? 'active' : ''}" onclick="selectDensity('compact')">Compact</button>
-                <button class="density-btn ${settings.density === 'comfortable' ? 'active' : ''}" onclick="selectDensity('comfortable')">Comfortable</button>
-                <button class="density-btn ${settings.density === 'spacious' ? 'active' : ''}" onclick="selectDensity('spacious')">Spacious</button>
-            </div>
         </div>
 
         <!-- Theme Mode -->
@@ -88,6 +80,10 @@ function renderSettings() {
                 <button class="density-btn ${settings.theme_mode === 'dark' ? 'active' : ''}" onclick="selectThemeMode('dark')">Dark</button>
                 <button class="density-btn ${settings.theme_mode === 'forest' ? 'active' : ''}" onclick="selectThemeMode('forest')">Forest</button>
                 <button class="density-btn ${settings.theme_mode === 'midnight' ? 'active' : ''}" onclick="selectThemeMode('midnight')">Midnight</button>
+                <button class="density-btn ${settings.theme_mode === 'sunset' ? 'active' : ''}" onclick="selectThemeMode('sunset')">Sunset</button>
+                <button class="density-btn ${settings.theme_mode === 'ocean' ? 'active' : ''}" onclick="selectThemeMode('ocean')">Ocean</button>
+                <button class="density-btn ${settings.theme_mode === 'lavender' ? 'active' : ''}" onclick="selectThemeMode('lavender')">Lavender</button>
+                <button class="density-btn ${settings.theme_mode === 'rose' ? 'active' : ''}" onclick="selectThemeMode('rose')">Rose</button>
             </div>
         </div>
 
@@ -291,16 +287,11 @@ window.applySettings = function () {
   const color = settings.theme_color || '#4F46E5';
   document.documentElement.style.setProperty('--primary', color);
 
-  // 2. Theme Mode (Light/Dark/Forest/Midnight)
+  // 2. Theme Mode (Light/Dark/Forest/Midnight/Sunset/Ocean/Lavender/Rose)
   const mode = settings.theme_mode || 'light';
   document.documentElement.setAttribute('data-theme', mode);
 
-  // 3. Density (Mapped from 'view_mode')
-  // Sheet has 'view_mode', App uses density classes
-  const density = settings.view_mode || 'comfortable';
-  document.body.className = density;
-
-  // 4. Tabs
+  // 3. Tabs
   updateTabVisibility();
 
   // 5. Update UI State if on Settings Page
@@ -308,10 +299,6 @@ window.applySettings = function () {
     // Update Color Pickers
     document.querySelectorAll('.color-option').forEach(el => {
       el.classList.toggle('active', el.dataset.color === color);
-    });
-    // Update Density Buttons
-    document.querySelectorAll('.density-options:not(#themeModeOptions) .density-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.textContent.toLowerCase() === density || (density === 'comfortable' && btn.textContent === 'Comfortable'));
     });
     // Update Theme Mode Buttons
     document.querySelectorAll('#themeModeOptions .density-btn').forEach(btn => {
@@ -321,13 +308,6 @@ window.applySettings = function () {
 };
 
 // Interactive Logic
-window.selectDensity = function (mode) {
-  const parent = event.target.parentElement;
-  parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
-  event.target.classList.add('active');
-  document.body.className = mode;
-};
-
 window.selectThemeMode = function (mode) {
   const parent = document.getElementById('themeModeOptions');
   parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
@@ -429,11 +409,6 @@ window.saveAllSettings = async function () {
   const modeBtn = document.querySelector('#themeModeOptions .density-btn.active');
   if (modeBtn) themeMode = modeBtn.textContent.toLowerCase();
 
-  let density = 'comfortable';
-  const densityWrapper = document.querySelector('.density-options:not(#themeModeOptions):not(#orientationOptions)');
-  const denBtn = densityWrapper?.querySelector('.density-btn.active');
-  if (denBtn) density = denBtn.textContent.toLowerCase();
-
   // Orientation
   const orientationEl = document.getElementById('sOrientation');
   console.log('Orientation element:', orientationEl, 'value:', orientationEl?.value);
@@ -459,9 +434,6 @@ window.saveAllSettings = async function () {
     monthly_budget: Number(monthly),
     theme_color: color,
     theme_mode: themeMode,
-
-    // Mapped: 'density' in UI -> 'view_mode' in Sheet
-    view_mode: density,
 
     // Mapped: 'gemini_api_key' in UI -> 'ai_api_key' in Sheet
     ai_api_key: apiKey,
