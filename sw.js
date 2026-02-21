@@ -1,4 +1,4 @@
-const CACHE_NAME = 'personal-os-v3';
+const CACHE_NAME = 'personal-os-v4';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -16,8 +16,7 @@ const ASSETS_TO_CACHE = [
     './notification-service.js',
     './view-people.js',
     './manifest.json',
-    './icon-192.png',
-    './icon-512.png'
+    './sw.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -55,8 +54,6 @@ self.addEventListener('message', (event) => {
         const title = event.data.title;
         const options = {
             body: event.data.body,
-            icon: './icon-192.png',
-            badge: './icon-192.png',
             vibrate: [200, 100, 200, 100, 200, 100, 200],
             tag: event.data.tag || 'pos-alarm',
             requireInteraction: true
