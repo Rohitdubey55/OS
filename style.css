@@ -2499,7 +2499,7 @@ body.spacious {
     flex-direction: column;
     justify-content: space-between;
 
-    box-shadow: var(--shadow-md);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.04), 0 16px 32px rgba(0,0,0,0.02);
     transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
     position: relative;
     overflow: hidden;
@@ -2532,7 +2532,7 @@ body.spacious {
 
   .kpi-card:hover {
     transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.06), 0 8px 16px rgba(0,0,0,0.06), 0 16px 32px rgba(0,0,0,0.06), 0 32px 64px rgba(0,0,0,0.04);
     border-color: var(--primary-soft);
   }
 

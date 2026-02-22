@@ -327,11 +327,8 @@ function renderHabits() {
                   ` : ''}
 
                   <!-- Back Date Picker inside card -->
-                  <div class="back-date-picker-inline" style="margin-bottom:12px; padding:10px; background:var(--surface-2); border-radius:8px;">
-                    <label style="font-size:12px; font-weight:600; color:var(--text-muted); display:flex; align-items:center; gap:8px;">
-                      <input type="checkbox" ${_backDateMode ? 'checked' : ''} onchange="_backDateMode=this.checked; renderHabits()" style="width:16px; height:16px;">
-                      Mark Past Dates
-                    </label>
+                  <div style="margin-bottom:12px; padding:10px; background:var(--surface-2); border-radius:8px; display:none;">
+                    
                     ${_backDateMode ? `
                     <input type="date" class="input" id="backDateInput" value="${_selectedBackDate}" max="${today}" 
                            onchange="_selectedBackDate=this.value; renderHabits()" style="flex:1; max-width:200px; margin-top:8px;">
