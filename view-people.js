@@ -317,9 +317,6 @@ function renderPeople() {
       </div>
     `;
     if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-    document.querySelectorAll(".people-wrapper .person-card div[data-toggle-id]").forEach(el => {
-        el.onclick = function() { togglePersonCard(this.getAttribute("data-toggle-id")); };
-    });
 }
 
 window.switchPeopleView = function(view) {
@@ -434,8 +431,8 @@ function renderPersonCard(p, isExpanded = false) {
     const balanceClass = balance > 0 ? 'balance-positive' : (balance < 0 ? 'balance-negative' : 'balance-zero');
 
     return `
-    <div class="card person-card" style="position:relative">
-       div data-toggle-id='${p.id}'('${p.id}')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding:4px;">
+    <div class="card person-card person-card-${isExpanded ? 'expanded' : 'collapsed'}" style="position:relative; border:1px solid var(--border-color); border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+       <div class="person-card-header" onclick="togglePersonCard('${p.id}')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding:16px; background:var(--surface-1); border-radius:13px 13px 0 0; transition:background 0.2s;">
            <div style="display:flex; gap:12px; align-items:center">
                <div class="avatar" style="width:40px; height:40px; border-radius:50%; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center; font-weight:bold">
                    ${(p.name || '?').charAt(0).toUpperCase()}
@@ -445,12 +442,16 @@ function renderPersonCard(p, isExpanded = false) {
                    <div style="font-size:12px; color:var(--text-muted)">${p.relationship || 'Contact'}</div>
                </div>
            </div>
-           <button class="btn icon" onclick="event.stopPropagation(); toggleFavoritePerson('${p.id}', ${!isFav})">
-               <i data-lucide="star" style="width:16px; ${isFav ? 'fill:var(--warning); color:var(--warning)' : 'color:var(--text-muted)'}"></i>
+           <div style="display:flex; align-items:center; gap:8px;">
+                <button class="btn icon" onclick="event.stopPropagation(); toggleFavoritePerson('${p.id}', ${!isFav})" title="${isFav ? 'Remove from favorites' : 'Add to favorites'}">
+                    <i data-lucide="star" style="width:18px; ${isFav ? 'fill:var(--warning); color:var(--warning)' : 'color:var(--text-muted)'}"></i>
+                </button>
+                <i data-lucide="chevron-down" class="person-expand-icon" style="width:20px;"></i>
+            </div>"></i>
            </button>
        </div>
        
-       <div style="${isExpanded ? 'display:block;' : 'display:none;'} margin-top:12px; font-size:13px; color:var(--text-secondary)">
+       <div class="person-card-body" style="${isExpanded ? 'max-height:500px; opacity:1;' : 'max-height:0; opacity:0;'} overflow:hidden; transition:all 0.3s ease; margin-top:12px; font-size:13px; color:var(--text-secondary)">
            <div style="display:flex; gap:6px; align-items:center; margin-bottom:4px">
                <i data-lucide="clock" style="width:12px"></i> Last: ${lastContact}
            </div>
@@ -658,7 +659,7 @@ window.saveDebt = async function(personId) {
 };
 
 window.logContact = function (id) {
-    const p = state.data.people.find(x => String(x.id) === String(id));
+    const p = (state.data.people || []).find(x => String(x.id) === String(id));
     if (!p) return;
 
     const modal = document.getElementById('universalModal');
@@ -680,23 +681,23 @@ window.confirmLogContact = async function (id) {
     const today = new Date().toISOString();
     const dateStr = new Date().toLocaleDateString();
 
-    const p = state.data.people.find(x => String(x.id) === String(id));
+    const p = (state.data.people || []).find(x => String(x.id) === String(id));
     if (p) {
         p.last_contact = today;
         const logEntry = `[${dateStr}] Interaction logged.`;
         p.notes = p.notes ? p.notes + '\n' + logEntry : logEntry;
-    }
 
-    await apiCall('update', 'people', {
-        last_contact: today,
-        notes: p.notes
-    }, id);
-    showToast(`Logged interaction with ${p.name}`);
+        await apiCall('update', 'people', {
+            last_contact: today,
+            notes: p.notes
+        }, id);
+        showToast(`Logged interaction with ${p.name}`);
+    }
     renderPeople();
 };
 
 window.toggleFavoritePerson = async function (id, isFav) {
-    const p = state.data.people.find(x => String(x.id) === String(id));
+    const p = (state.data.people || []).find(x => String(x.id) === String(id));
     if (p) p.is_favorite = isFav;
     renderPeople();
 
