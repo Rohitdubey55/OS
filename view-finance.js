@@ -11,9 +11,6 @@ function renderFinance() {
       <div class="header-row">
         <h2 class="page-title">Finance</h2>
         <div style="display:flex;gap:8px;">
-          <button class="btn secondary" onclick="openFinanceCategoryManager()">
-            <i data-lucide="folder" style="width:14px;margin-right:4px;"></i>Categories
-          </button>
           <button class="btn primary" onclick="openFinanceAction()">+ Add New</button>
         </div>
       </div>
@@ -63,9 +60,13 @@ window.openFinanceAction = function () {
     // 1. TRANSACTION FORM
     const defaultType = finState === 'expenses' ? 'expense' : 'income';
 
-    // Categories - use dynamic categories from settings
-    const cats = getFinanceCategories();
-    const allCats = getAllFinanceCategories();
+    // Get categories ONLY from Budget Settings (single source)
+    const settings = state.data.settings?.[0] || {};
+    let budgetCats = {};
+    try {
+      if (settings.category_budgets) budgetCats = JSON.parse(settings.category_budgets);
+    } catch (e) {}
+    const allCats = Object.keys(budgetCats);
 
     box.innerHTML = `
       <h3>New Transaction</h3>
@@ -208,14 +209,14 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
   const pct = limit > 0 ? Math.min(100, (totalExp / limit) * 100) : 0;
   const color = pct > 100 ? 'var(--danger)' : (pct > 80 ? 'var(--warning)' : 'var(--success)');
 
-  // Sort categories by spend or limit
-  const definedCats = Object.keys(catLimits);
-  const spentCats = Object.keys(catSpent);
+  // Get all categories from both limits and spending
+  const definedCats = Object.keys(catLimits || {});
+  const spentCats = Object.keys(catSpent || {});
   const allCats = [...new Set([...definedCats, ...spentCats])];
 
   const catHtml = allCats.map(c => {
-    const spent = catSpent[c] || 0;
-    const climit = catLimits[c] || 0;
+    const spent = catSpent?.[c] || 0;
+    const climit = catLimits?.[c] || 0;
     if (spent === 0 && climit === 0) return '';
 
     const cpct = climit > 0 ? Math.min(100, (spent / climit) * 100) : (spent > 0 ? 100 : 0);
@@ -225,31 +226,32 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
         <div style="margin-bottom:8px;">
             <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px">
                 <span>${c}</span>
-                <span>${spent} ${climit ? '/ ' + climit : ''}</span>
+                <span>₹${spent} ${climit ? '/ ₹' + climit : ''}</span>
             </div>
-            <div style="height:4px; background:var(--surface-3); border-radius:2px; overflow:hidden">
-                <div style="height:100%; width:${cpct}%; background:${ccolor}"></div>
+            <div style="height:6px; background:var(--surface-3); border-radius:3px; overflow:hidden">
+                <div style="height:100%; width:${cpct}%; background:${ccolor}; transition: width 0.3s"></div>
             </div>
         </div>`;
   }).join('');
 
   return `
-    <div class="dash-card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
+    <div class="dash-card" style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
              <div class="stat-label"><i data-lucide="calendar" style="width:14px; margin-right:6px; display:inline-block"></i> Monthly Overview</div>
-             <div class="stat-val" style="font-size:1.2em">₹${totalExp} <span style="font-size:0.6em; color:var(--text-muted)">/ ${limit}</span></div>
+             <div class="stat-val" style="font-size:1.2em">₹${totalExp} <span style="font-size:0.6em; color:var(--text-muted)">/ ₹${limit || 0}</span></div>
         </div>
         
-        <div class="progress-bg" style="height:8px; margin-bottom:16px">
-             <div class="progress-fill" style="width:${pct}%; background:${color}"></div>
+        <div class="progress-bg" style="height:10px; margin-bottom:16px; background:var(--surface-3); border-radius:5px; overflow:hidden">
+             <div class="progress-fill" style="width:${pct}%; background:${color}; transition: width 0.3s"></div>
         </div>
 
-        <div style="margin-top:10px; border-top:1px solid var(--border-color); padding-top:10px;">
-             <div style="font-size:12px; font-weight:600; margin-bottom:10px; color:var(--text-muted)">CATEGORY BREAKDOWN</div>
-             <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:15px;">
+        ${catHtml ? `
+        <div style="margin-top:16px; border-top:1px solid var(--border-color); padding-top:12px;">
+             <div style="font-size:11px; font-weight:700; margin-bottom:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px">Category Breakdown</div>
+             <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:16px;">
                  ${catHtml}
              </div>
-        </div>
+        </div>` : ''}
     </div>`;
 }
 
@@ -335,22 +337,15 @@ function renderTransactionCard(tx) {
   const isIncome = tx.type === 'income';
 
   return `
-    <div class="transaction-card" onclick="openEditTransaction('${tx.id}')" style="cursor:pointer;">
+    <div class="transaction-card" onclick="openEditTransaction('${tx.id}')">
       <div class="transaction-date">${dateStr}</div>
       <div class="transaction-details">
         <div class="transaction-category">${tx.category || 'Uncategorized'}</div>
-        <div style="font-size:10px; color:var(--text-muted)">${tx.source ? tx.source.toUpperCase() : (isIncome ? 'INCOME' : 'EXPENSE')}</div>
-        ${tx.notes ? `<div style="font-size:11px; color:var(--text-2); margin-top:4px; font-style:italic;">${tx.notes}</div>` : ''}
+        <div class="transaction-source">${tx.payment_mode ? tx.payment_mode + ' • ' : ''}${tx.source ? tx.source.toUpperCase() : (isIncome ? 'INCOME' : 'EXPENSE')}</div>
+        ${tx.notes ? `<div class="transaction-notes">${tx.notes}</div>` : ''}
       </div>
-      <div style="text-align:right">
-          <div class="transaction-amount" style="color: ${isIncome ? 'var(--success)' : 'var(--danger)'}">
-            ${isIncome ? '+' : '-'}₹${Number(tx.amount).toLocaleString()}
-          </div>
-      </div>
-      
-      <div style="display:flex; margin-left:10px" onclick="event.stopPropagation()">
-        <button class="btn icon" onclick="openEditTransaction('${tx.id}')" title="Edit"><i data-lucide="pencil" style="width:14px"></i></button>
-        <button class="btn icon" data-action="delete" data-sheet="expenses" data-id="${tx.id}"><i data-lucide="trash-2" style="width:14px"></i></button>
+      <div class="transaction-amount" style="color: ${isIncome ? 'var(--success)' : 'var(--danger)'}">
+        ${isIncome ? '+' : '-'}₹${Number(tx.amount).toLocaleString()}
       </div>
     </div>
   `;
@@ -420,8 +415,6 @@ window.openEditTransaction = function (id) {
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
   const categories = getAllFinanceCategories();
-  const expenseCats = categories.filter(c => !['Salary', 'Freelance', 'Business', 'Gift', 'Investment'].includes(c));
-  const incomeCats = categories.filter(c => ['Salary', 'Freelance', 'Business', 'Gift', 'Investment', 'Other'].includes(c));
   
   box.innerHTML = `
     <h3>Edit Transaction</h3>
@@ -438,20 +431,49 @@ window.openEditTransaction = function (id) {
         <datalist id="editCatOptions">
             ${categories.map(c => `<option value="${c}">`).join('')}
         </datalist>
-        <select class="input" id="mTxSource" style="display:${tx.type === 'expense' ? 'block' : 'none'}">
-              <option value="weekly" ${tx.source === 'weekly' ? 'selected' : ''}>Weekly Budget</option>
-              <option value="monthly" ${tx.source === 'monthly' ? 'selected' : ''}>Monthly Bill</option>
-              <option value="savings" ${tx.source === 'savings' ? 'selected' : ''}>Savings / One-off</option>
-        </select>
+        <input class="input" id="mTxPaymentMode" placeholder="Payment Mode" list="paymentModeEdit" value="${(tx.payment_mode || '').replace(/"/g, '&quot;')}">
+        <datalist id="paymentModeEdit">
+          <option value="Cash">
+          <option value="UPI">
+          <option value="Card">
+          <option value="Bank Transfer">
+          <option value="Other">
+        </datalist>
     </div>
-    <input class="input" id="mTxNote" placeholder="Note (optional)" value="${(tx.notes || '').replace(/"/g, '&quot;')}">
+    <input class="input" id="mTxNote" placeholder="Notes (optional)" value="${(tx.notes || '').replace(/"/g, '&quot;')}">
+    <input class="input" id="mTxSource" placeholder="Source (weekly/monthly/savings)" value="${(tx.source || '').replace(/"/g, '&quot;')}">
 
-    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
-      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-      <button class="btn primary" data-action="update-tx-modal" data-edit-id="${tx.id}">Update</button>
+    <div style="display:flex; justify-content:space-between; gap:10px; margin-top:16px;">
+      <button class="btn danger" onclick="deleteTransaction('${tx.id}')">Delete</button>
+      <div style="display:flex; gap:10px;">
+        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+        <button class="btn primary" data-action="update-tx-modal" data-edit-id="${tx.id}">Update</button>
+      </div>
     </div>
   `;
   modal.classList.remove('hidden');
+}
+
+window.deleteTransaction = async function(id) {
+  if (!confirm('Are you sure you want to delete this transaction?')) return;
+  
+  const btn = document.querySelector('button[data-action="delete-tx"][data-id="' + id + '"]');
+  if (btn) btn.disabled = true;
+  
+  try {
+    const url = SCRIPT_URL + '?action=deleteRow&sheet=expenses&id=' + encodeURIComponent(id);
+    const resp = await fetch(url);
+    const result = await resp.json();
+    if (result.status === 'success') {
+      document.getElementById('universalModal').classList.add('hidden');
+      state.data.expenses = (state.data.expenses || []).filter(x => String(x.id) !== String(id));
+      renderFinExpenses();
+    } else {
+      alert('Error: ' + (result.error || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Delete failed: ' + e.message);
+  }
 }
 
 window.openEditFund = function (id) {
@@ -530,12 +552,6 @@ function exportFinanceCSV() {
 // Finance Category CRUD Functions - Stored in Settings Sheet
 // ─────────────────────────────────────────────────────────
 
-// Default finance categories
-const DEFAULT_FINANCE_CATEGORIES = {
-  expense: ['Food', 'Transport', 'Rent', 'Utilities', 'Entertainment', 'Health', 'Shopping', 'Other'],
-  income: ['Salary', 'Freelance', 'Business', 'Gift', 'Investment', 'Other']
-};
-
 // Get categories from settings (synced with Google Sheets)
 function getFinanceCategories() {
   const settings = state.data.settings?.[0] || {};
@@ -544,7 +560,8 @@ function getFinanceCategories() {
       return JSON.parse(settings.finance_categories);
     } catch (e) {}
   }
-  return { ...DEFAULT_FINANCE_CATEGORIES };
+  // No defaults - return empty categories (must come from sheet)
+  return { expense: [], income: [] };
 }
 
 // Save categories to settings (synced with Google Sheets)

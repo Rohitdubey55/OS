@@ -463,9 +463,17 @@ function renderFinanceView() {
     <div class="card">
       <h3>Expenses</h3>
       <div style="display:flex;gap:12px;flex-wrap:wrap">
-        <input id="expAmount" type="number" placeholder="Amount" class="input" />
-        <input id="expCategory" placeholder="Category" class="input" />
-        <input id="expFund" placeholder="Fund (optional)" class="input" />
+        <input id="expAmount" type="number" placeholder="Amount" class="input" style="width:100px" />
+        <input id="expCategory" placeholder="Category" class="input" style="width:120px" />
+        <input id="expPaymentMode" placeholder="Payment Mode" class="input" style="width:120px" list="paymentModeOptions" />
+        <datalist id="paymentModeOptions">
+          <option value="Cash">
+          <option value="UPI">
+          <option value="Card">
+          <option value="Bank Transfer">
+          <option value="Other">
+        </datalist>
+        <input id="expNotes" placeholder="Notes (optional)" class="input" style="width:150px" />
         <button class="btn primary" data-action="addExpenseGlobal">Add Expense</button>
       </div>
     </div>
@@ -833,17 +841,21 @@ async function handleDeleteTask(id) {
 async function handleAddExpense() {
   const a = document.getElementById("expAmount");
   const c = document.getElementById("expCategory");
+  const p = document.getElementById("expPaymentMode");
+  const n = document.getElementById("expNotes");
   const f = document.getElementById("expFund");
   if (!a || !c) return;
   const amount = parseFloat(a.value || 0);
   const category = c.value || 'General';
+  const payment_mode = p ? p.value : '';
+  const notes = n ? n.value : '';
   const fund = f ? f.value : '';
 
   if (!amount) { toast("Enter amount"); return; }
 
   try {
-    a.value = ''; c.value = '';
-    await apiPost({ action: "create", sheet: SHEETS.expenses, payload: { amount, category, date: isoDateStr(new Date()), fund_type: fund } });
+    a.value = ''; c.value = ''; if (p) p.value = ''; if (n) n.value = '';
+    await apiPost({ action: "create", sheet: SHEETS.expenses, payload: { amount, category, date: isoDateStr(new Date()), fund_type: fund, payment_mode, notes } });
     toast("Expense added");
     await refreshAll();
   } catch (e) { toast("Failed"); console.error(e); }

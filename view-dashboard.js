@@ -121,34 +121,35 @@ function renderDashboard() {
     morning: () => {
       const h = new Date().getHours();
       const greeting = h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening';
-      // Try to get name from settings or people, fallback to 'Friend'
       const settings = state.data.settings?.[0] || {};
-      // If we have a 'me' person, use that? For now, let's use a generic approach or settings name if available
-      // Assuming settings has a username field or we just default.
-      // Let's check if there is a person marked as 'Me' in people? No standard way yet.
-      // We will just use "Good [Time]" for now, or "User" if we found it in main.js line 367
-      // effectively main.js line 367 says "Hello, User". Let's stick to that pattern or just greeting.
-
-      const name = "Rohit"; // User specific as requested in prompt "think from perspective of a human" -> User knows who they are.
+      const name = settings.name || settings.user_name || "User";
+      
+      // Get custom messages or use defaults
+      let message;
+      if (h < 12) {
+        message = settings.morning_message || "Review your plan for the day.";
+      } else if (h < 18) {
+        message = settings.afternoon_message || "Stay focused on your goals.";
+      } else {
+        message = settings.evening_message || "Great work today!";
+      }
 
       return `
-        <div class="morning-hero" style="min-height:120px; display:flex; flex-direction:column; justify-content:center; padding:var(--space-md) var(--space-lg); background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border-radius:24px; margin-bottom:var(--space-md); border:1px solid var(--border-color); position:relative; overflow:hidden;">
+        <div class="morning-hero" style="min-height:100px; display:flex; flex-direction:column; justify-content:center; padding:20px 24px; background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border-radius:20px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.04), 0 24px 48px rgba(0,0,0,0.02);">
             <div style="position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                  <h1 class="fade-in" style="font-size:clamp(24px, 3vw, 32px); margin:0; letter-spacing:-0.5px; background: linear-gradient(90deg, var(--text-1), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${greeting}, ${name}.</h1>
-                  <p class="fade-in stagger-1" style="font-size:13px; color:var(--text-3); margin:4px 0 0 0;">
-                      ${h < 12 ? "Review your plan for the day." : "Stay focused on your goals."}
-                  </p>
+                  <h1 class="fade-in" style="font-size:clamp(22px, 3vw, 30px); margin:0; letter-spacing:-0.5px; background: linear-gradient(90deg, var(--text-1), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${greeting}, ${name}.</h1>
+                  <p class="fade-in stagger-1" style="font-size:13px; color:var(--text-3); margin:6px 0 0 0; opacity: 0.85;">${message}</p>
                 </div>
                  <!-- Contextual Focus Mini-Card -->
                 ${h < 12 ? `
-                <div class="glass-panel fade-in stagger-2" style="padding:8px 16px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); display:inline-flex; align-items:center; gap:10px; cursor:pointer;" onclick="routeTo('tasks')">
-                    <div style="width:32px; height:32px; border-radius:8px; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; color:var(--primary);">
-                        <i data-lucide="target" style="width:16px;"></i>
+                <div class="glass-panel fade-in stagger-2" style="padding:12px 20px; border-radius:16px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); display:inline-flex; align-items:center; gap:12px; cursor:pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.04);" onclick="routeTo('tasks')">
+                    <div style="width:36px; height:36px; border-radius:10px; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; color:var(--primary);">
+                        <i data-lucide="target" style="width:18px;"></i>
                     </div>
                     <div class="hide-mobile">
                         <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-3); font-weight:700;">Focus</div>
-                        <div style="font-size:13px; font-weight:600;">P1 Tasks</div>
+                        <div style="font-size:14px; font-weight:600;">P1 Tasks</div>
                     </div>
                 </div>
                 ` : ''}
@@ -158,84 +159,134 @@ function renderDashboard() {
 
 
             <!-- Background Decoration -->
-            <div style="position:absolute; top:-50%; right:-10%; width:200px; height:200px; background:var(--primary); filter:blur(80px); opacity:0.1; border-radius:50%; pointer-events:none;"></div>
+            <div style="position:absolute; top:-50%; right:-10%; width:240px; height:240px; background:var(--primary); filter:blur(100px); opacity:0.12; border-radius:50%; pointer-events:none;"></div>
+            <div style="position:absolute; bottom:-30%; left:-5%; width:180px; height:180px; background:var(--secondary); filter:blur(80px); opacity:0.08; border-radius:50%; pointer-events:none;"></div>
         </div>
       `;
     },
 
     vision: () => nextGoal ? `
-      <div class="vision-banner" style="background-image: url('${nextGoal.image_url || 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=80'}')">
-         <div class="vb-content">
-            <div style="font-size:12px; font-weight:700; text-transform:uppercase; color:rgba(255,255,255,0.8)">Primary Focus</div>
-            <div style="font-size:24px; font-weight:700; margin:4px 0">${nextGoal.title}</div>
-            <div style="font-size:14px; opacity:0.9">Target: ${nextGoal.target_date || 'Someday'}</div>
+      <div class="vision-banner" style="background-image: url('${nextGoal.image_url || 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&q=80'}'); box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 12px 40px rgba(0,0,0,0.1); border-radius: 20px; overflow: hidden; margin-bottom: 16px;">
+         <div class="vb-content" style="padding: 20px;">
+            <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:rgba(255,255,255,0.8); letter-spacing: 1px;">Primary Focus</div>
+            <div style="font-size:22px; font-weight:700; margin:4px 0 6px 0;">${nextGoal.title}</div>
+            <div style="font-size:13px; opacity:0.9">Target: ${nextGoal.target_date || 'Someday'}</div>
          </div>
       </div>` : '',
 
     aiBriefing: () => {
-      const isCollapsed = window.dashWidgetStates['aiBriefing'] === 'collapsed'; // default expanded? No, default collapsed in HTML usually
-      // Actually current code defaults to 'collapsed' class in HTML string.
-      // Let's assume default is collapsed unless state says 'expanded'
+      const isCollapsed = window.dashWidgetStates['aiBriefing'] === 'collapsed';
       const stateClass = window.dashWidgetStates['aiBriefing'] === 'expanded' ? '' : 'collapsed';
 
       return `
-      <div class="widget-card ai-widget ${stateClass}" id="aiBriefingCard" data-widget-id="aiBriefing">
+      <div class="widget-card ai-widget ${stateClass}" id="aiBriefingCard" data-widget-id="aiBriefing" style="position:relative; overflow:hidden;">
+         <!-- Animated Border -->
+         <div style="position:absolute; inset:0; border-radius:inherit; padding:1px; background:linear-gradient(135deg, var(--primary), #818cf8, #c084fc, var(--primary)); background-size:300% 300%; animation: aiBorderFlow 3s ease infinite; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events:none;"></div>
+         
+         <!-- AI Glow Effect -->
+         <div style="position:absolute; top:-50px; right:-50px; width:150px; height:150px; background:radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%); border-radius:50%; pointer-events:none; animation: aiPulse 4s ease-in-out infinite;"></div>
+         
          <div class="widget-header" onclick="toggleWidget(this)">
-            <div class="widget-title"><i data-lucide="sparkles" style="width:18px; margin-right:6px; color:var(--primary)"></i> Daily Briefing</div>
-            <div style="display:flex; align-items:center; gap:10px">
-                <button class="btn icon" onclick="event.stopPropagation(); generateDashboardInsight()" title="Refresh Insight"><i data-lucide="refresh-cw" style="width:14px"></i></button>
+            <div class="widget-title">
+                <span style="position:relative;">
+                    <i data-lucide="sparkles" style="width:20px; margin-right:8px; color:var(--primary); animation: aiSparkle 2s ease-in-out infinite;"></i>
+                    <span style="position:absolute; top:0; left:0; width:100%; height:100%; background:var(--primary); filter:blur(8px); opacity:0.3; animation: aiGlow 2s ease-in-out infinite alternate;"></span>
+                </span>
+                Daily Briefing
+            </div>
+            <div style="display:flex; align-items:center; gap:12px">
+                <button class="btn icon" onclick="event.stopPropagation(); generateDashboardInsight()" title="Refresh Insight" style="transition:transform 0.3s;"><i data-lucide="refresh-cw" style="width:14px"></i></button>
                 <i class="widget-chevron" data-lucide="chevron-down" style="width:20px"></i>
             </div>
          </div>
-         <div class="widget-body">
-             <div id="aiContent" style="font-size:14px; line-height:1.6; color:var(--text-secondary)">
-                <div style="display:flex; flex-direction:column; gap:10px; align-items:center; padding:20px 0;">
-                   <p style="text-align:center; color:var(--text-muted)">Ready for your daily analysis?</p>
-                   <button class="btn primary" onclick="generateDashboardInsight()"><i data-lucide="zap" style="width:16px; margin-right:6px"></i> Generate Insight</button>
+         <div class="widget-body" style="padding-top: 8px;">
+             <div id="aiContent" style="font-size:14px; line-height:1.7; color:var(--text-secondary)">
+                <div style="display:flex; flex-direction:column; gap:12px; align-items:center; padding:24px 0;">
+                   <div style="position:relative;">
+                       <p style="text-align:center; color:var(--text-muted);">Ready for your daily analysis?</p>
+                   </div>
+                   <button class="btn primary" onclick="generateDashboardInsight()" style="padding: 14px 28px; border-radius: 14px; background: linear-gradient(135deg, var(--primary), #818cf8); box-shadow: 0 4px 15px rgba(99,102,241,0.4), 0 2px 4px rgba(0,0,0,0.1); position:relative; overflow:hidden; animation: aiFloat 3s ease-in-out infinite;">
+                       <span style="position:relative; z-index:1; display:flex; align-items:center; gap:8px;">
+                           <i data-lucide="zap" style="width:18px; animation: aiBolt 1.5s ease-in-out infinite;"></i> 
+                           Generate Insight
+                       </span>
+                       <span style="position:absolute; top:0; left:-100%; width:200%; height:100%; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent); animation: aiShine 3s ease-in-out infinite;"></span>
+                   </button>
                 </div>
              </div>
          </div>
-      </div>`;
+      </div>
+      <style>
+        @keyframes aiBorderFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        @keyframes aiPulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+        }
+        @keyframes aiSparkle {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.1) rotate(10deg); }
+        }
+        @keyframes aiGlow {
+            0% { opacity: 0.2; }
+            100% { opacity: 0.5; }
+        }
+        @keyframes aiFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+        @keyframes aiBolt {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        @keyframes aiShine {
+            0% { left: -100%; }
+            50%, 100% { left: 100%; }
+        }
+      </style>`;
     },
 
     kpis: () => {
       return `
-      <div class="kpi-grid kpi-scroll" style="display:flex; flex-direction:row; gap:16px; overflow-x:auto; padding:4px 4px 16px 4px; margin: 0 0 8px 0; scrollbar-width:none; -ms-overflow-style:none;">
+      <div class="kpi-grid kpi-scroll" style="display:flex; flex-direction:row; gap:16px; overflow-x:auto; padding:6px 6px 16px 6px; margin: 0 0 8px 0; scrollbar-width:none; -ms-overflow-style:none;">
         <style>
           .kpi-scroll::-webkit-scrollbar { display: none; }
-          .kpi-scroll .kpi-card:hover { transform: translateY(-2px); transition: transform 0.2s ease; box-shadow: var(--shadow-md); }
+          .kpi-scroll .kpi-card:hover { transform: translateY(-6px); transition: transform 0.3s ease; }
         </style>
         
-        <div class="kpi-card" style="flex:1; min-width:130px; cursor:pointer;" onclick="routeTo('finance')">
+        <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('finance')">
            <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="background:var(--primary-soft); color:var(--primary); width:32px; height:32px;"><i data-lucide="wallet" style="width:16px;"></i></div>
+             <div class="kpi-icon" style="background:var(--primary-soft); color:var(--primary); width:36px; height:36px; border-radius: 12px;"><i data-lucide="wallet" style="width:18px;"></i></div>
            </div>
-           <div style="margin-top:12px;">
-             <div class="kpi-value" style="font-size:18px;">₹${netWorth.toLocaleString()}</div>
-             <div class="kpi-label" style="font-size:11px;">Net Worth</div>
+           <div style="margin-top:16px;">
+             <div class="kpi-value" style="font-size:20px; font-weight: 700;">₹${netWorth.toLocaleString()}</div>
+             <div class="kpi-label" style="font-size:12px; margin-top: 4px;">Net Worth</div>
            </div>
         </div>
 
-        <div class="kpi-card" style="flex:1; min-width:130px; cursor:pointer;" onclick="routeTo('finance')">
+        <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('finance')">
            <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="background:var(--danger-soft); color:var(--danger); width:32px; height:32px;"><i data-lucide="trending-down" style="width:16px;"></i></div>
+             <div class="kpi-icon" style="background:var(--danger-soft); color:var(--danger); width:36px; height:36px; border-radius: 12px;"><i data-lucide="trending-down" style="width:18px;"></i></div>
              <div style="width:50px; height:24px;"><canvas id="sparkSpend"></canvas></div>
            </div>
-           <div style="margin-top:12px;">
-             <div class="kpi-value" style="font-size:18px;">₹${monthExp.toLocaleString()}</div>
-             <div class="kpi-label" style="font-size:11px;">Month Spend</div>
+           <div style="margin-top:16px;">
+             <div class="kpi-value" style="font-size:20px; font-weight: 700;">₹${monthExp.toLocaleString()}</div>
+             <div class="kpi-label" style="font-size:12px; margin-top: 4px;">Month Spend</div>
            </div>
         </div>
 
-        <div class="kpi-card" style="flex:1; min-width:130px; cursor:pointer;" onclick="routeTo('tasks')">
+        <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('tasks')">
            <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="width:32px; height:32px;"><i data-lucide="check-circle" style="width:16px;"></i></div>
+             <div class="kpi-icon" style="width:36px; height:36px; border-radius: 12px;"><i data-lucide="check-circle" style="width:18px;"></i></div>
            </div>
-           <div style="margin-top:12px;">
-             <div class="kpi-value" style="font-size:18px;">${completionRate}%</div>
-             <div class="kpi-label" style="font-size:11px;">Tasks Done</div>
-             <div class="progress-container" style="margin-top:8px; height:4px;">
-               <div class="progress-fill" style="width:${completionRate}%"></div>
+           <div style="margin-top:16px;">
+             <div class="kpi-value" style="font-size:20px; font-weight: 700;">${completionRate}%</div>
+             <div class="kpi-label" style="font-size:12px; margin-top: 4px;">Tasks Done</div>
+             <div class="progress-container" style="margin-top:12px; height:6px; border-radius: 3px; background: rgba(0,0,0,0.08);">
+               <div class="progress-fill" style="width:${completionRate}%; height: 100%; border-radius: 3px;"></div>
              </div>
            </div>
         </div>
@@ -433,11 +484,11 @@ function renderDashboard() {
   main.innerHTML = `
     <div class="dash-wrapper">
       
-      <div class="quick-actions" style="margin: 16px 0 20px 0; display:flex; justify-content:flex-start; gap:16px; padding:0 4px;">
-        <button class="qa-btn round-icon" onclick="openTaskModal()" title="Add Task" style="width:56px; height:56px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.02); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.08), 0 16px 32px rgba(0,0,0,0.04)'" onmouseout="this.style.boxShadow='0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.02)'"><i data-lucide="zap" style="width:24px;"></i></button>
-        <button class="qa-btn round-icon" onclick="openFinanceAction()" title="Add Expense" style="width:56px; height:56px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.02); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.08), 0 16px 32px rgba(0,0,0,0.04)'" onmouseout="this.style.boxShadow='0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.02)'"><i data-lucide="wallet" style="width:24px;"></i></button>
-        <button class="qa-btn round-icon" onclick="routeTo('calendar'); setTimeout(()=>openEventModal(),500)" title="New Event" style="width:56px; height:56px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.02); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.08), 0 16px 32px rgba(0,0,0,0.04)'" onmouseout="this.style.boxShadow='0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.02)'"><i data-lucide="calendar" style="width:24px;"></i></button>
-        <button class="qa-btn round-icon" onclick="openHabitModal()" title="New Habit" style="width:56px; height:56px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid var(--border-color); box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.02); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.08), 0 16px 32px rgba(0,0,0,0.04)'" onmouseout="this.style.boxShadow='0 2px 4px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.02)'"><i data-lucide="flame" style="width:24px;"></i></button>
+      <div class="quick-actions" style="margin: 12px 0 16px 0; display:flex; justify-content:space-between; gap:12px; padding:4px 4px; overflow:visible;">
+        <button class="qa-btn round-icon" onclick="openTaskModal()" title="Add Task" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'"><i data-lucide="zap" style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"></i></button>
+        <button class="qa-btn round-icon" onclick="openFinanceAction()" title="Add Expense" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'"><i data-lucide="wallet" style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"></i></button>
+        <button class="qa-btn round-icon" onclick="routeTo('calendar'); setTimeout(()=>openEventModal(),500)" title="New Event" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'"><i data-lucide="calendar" style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"></i></button>
+        <button class="qa-btn round-icon" onclick="openHabitModal()" title="New Habit" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'"><i data-lucide="flame" style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"></i></button>
       </div>
 
       <div class="dash-grid">

@@ -72,6 +72,12 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  /* Enhanced multi-layer shadows for dashboard */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.06), 0 12px 24px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 2px 8px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.08), 0 24px 48px rgba(0, 0, 0, 0.06);
+  --shadow-kpi: 0 2px 4px rgba(0, 0, 0, 0.03), 0 6px 16px rgba(0, 0, 0, 0.05), 0 16px 32px rgba(0, 0, 0, 0.03);
+  --shadow-kpi-hover: 0 4px 12px rgba(0, 0, 0, 0.05), 0 12px 32px rgba(0, 0, 0, 0.08), 0 32px 64px rgba(0, 0, 0, 0.05);
   --glow-shadow: none;
 
   /* Aliases for Legacy Code Compatibility */
@@ -652,13 +658,14 @@ body.spacious {
     width: 100%;
     background: var(--surface-1);
     /* Nav stays on Surface 1 */
-    border-top: 1px solid var(--border-color);
-    padding: 10px 0;
-    justify-content: space-around;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 12px 8px;
+    justify-content: space-evenly;
     gap: 0;
     z-index: 50;
     box-sizing: border-box;
-    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
 
     /* Mobile Glass Effect */
     backdrop-filter: blur(12px);
@@ -675,22 +682,40 @@ body.spacious {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    font-size: 10px;
+    justify-content: center;
+    gap: 6px;
+    font-size: 11px;
     color: var(--text-3);
     cursor: pointer;
     min-width: 0;
-    padding: 0 2px;
+    padding: 8px 4px;
+    border-radius: 12px;
+    transition: all 0.3s ease;
   }
 
   .mob-item svg {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     stroke-width: 2;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.15));
+    transition: all 0.3s ease;
   }
 
   .mob-item.active {
     color: var(--primary);
+  }
+
+  .mob-item.active svg {
+    filter: drop-shadow(0 2px 6px rgba(99, 102, 241, 0.4));
+  }
+
+  .mob-item:hover {
+    background: var(--surface-2);
+  }
+
+  .mob-item:hover svg {
+    transform: scale(1.1);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
   }
 
   .main-content {
@@ -1003,15 +1028,24 @@ body.spacious {
     align-items: center;
     justify-content: center;
     font-size: 28px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), var(--glow-shadow);
+    /* Multi-layer shadow */
+    box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.1),
+        0 6px 16px rgba(0, 0, 0, 0.15),
+        0 12px 32px rgba(0, 0, 0, 0.1),
+        var(--glow-shadow);
     cursor: pointer;
     z-index: 100;
     transition: transform 0.2s, box-shadow 0.2s;
   }
 
   .fab:hover {
-    transform: scale(1.05);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25), var(--glow-shadow);
+    transform: scale(1.08);
+    box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.12),
+        0 12px 24px rgba(0, 0, 0, 0.18),
+        0 24px 48px rgba(0, 0, 0, 0.12),
+        var(--glow-shadow);
   }
 
   @media (min-width: 2000px) {
@@ -2491,21 +2525,35 @@ body.spacious {
 
   .kpi-card {
     background: var(--surface-1);
-    padding: 24px;
-    border-radius: 24px;
-    border: 1px solid var(--border-color);
+    padding: 20px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 
     display: flex;
     flex-direction: column;
     justify-content: space-between;
 
-    box-shadow: 0 2px 4px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.04), 0 8px 16px rgba(0,0,0,0.04), 0 16px 32px rgba(0,0,0,0.02);
+    /* Multi-layer shadow for depth */
+    box-shadow: var(--shadow-kpi);
+    
     transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
     position: relative;
     overflow: hidden;
 
     opacity: 0;
     animation: bentoReveal 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+
+  /* Subtle gradient overlay for depth */
+  .kpi-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    pointer-events: none;
   }
 
   /* Depth Engine */
@@ -2531,8 +2579,8 @@ body.spacious {
   }
 
   .kpi-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.06), 0 8px 16px rgba(0,0,0,0.06), 0 16px 32px rgba(0,0,0,0.06), 0 32px 64px rgba(0,0,0,0.04);
+    transform: translateY(-6px);
+    box-shadow: var(--shadow-kpi-hover);
     border-color: var(--primary-soft);
   }
 
@@ -2540,9 +2588,9 @@ body.spacious {
 
   .kpi-icon {
 
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
 
     background: var(--primary-soft);
     color: var(--primary);
@@ -2552,7 +2600,9 @@ body.spacious {
     justify-content: center;
 
     font-size: 20px;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
+
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 
   }
 
@@ -2678,21 +2728,36 @@ body.spacious {
     background: var(--card-bg);
     border-radius: 20px;
     border: 1px solid rgba(229, 231, 235, 0.5);
-    /* Subtle glass border */
-
-    /* Deep Elevation Shadow */
-    box-shadow: var(--shadow-md);
+    
+    /* Enhanced multi-layer shadow for depth */
+    box-shadow: var(--shadow-card);
 
     transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
     /* Fluid easing */
     display: flex !important;
     flex-direction: column;
     height: 100%;
-    padding: 24px;
+    padding: 20px;
+
+    /* Subtle inner glow at top */
+    position: relative;
+    overflow: hidden;
 
     /* Animation Init */
     opacity: 0;
     animation: bentoReveal 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+
+  /* Top highlight for premium feel */
+  .widget-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    pointer-events: none;
   }
 
   /* Stagger Delays for Fluid Entry */
@@ -2721,10 +2786,10 @@ body.spacious {
   }
 
   .widget-card:hover {
-    transform: translateY(-4px) scale(1.005);
-    box-shadow: var(--shadow-xl);
+    transform: translateY(-6px) scale(1.005);
+    box-shadow: var(--shadow-card-hover);
     /* Deep lift */
-    border-color: rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.3);
     /* Subtle primary hint */
   }
 
@@ -2734,15 +2799,18 @@ body.spacious {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }
 
   .widget-title {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    color: var(--text-1);
   }
 
 
@@ -2754,8 +2822,9 @@ body.spacious {
     background-size: cover;
     background-position: center;
 
-    border-radius: 16px;
-    padding: 24px;
+    border-radius: 24px;
+    padding: 28px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 12px 40px rgba(0,0,0,0.1);
 
     color: white;
     position: relative;
@@ -3358,6 +3427,80 @@ body.spacious {
   }
 }
 
+/* Quick Actions Bar - Horizontal toolbar for create actions */
+.quick-actions-bar {
+  display: flex;
+  background: var(--surface-1);
+  padding: 16px;
+  gap: 12px;
+  margin-bottom: var(--space-lg);
+  border-radius: 20px;
+  /* Subtle border */
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.quick-action-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border-radius: 16px;
+  background: var(--card-bg);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Multi-layer shadow */
+  box-shadow: 
+      0 1px 3px rgba(0, 0, 0, 0.04),
+      0 4px 8px rgba(0, 0, 0, 0.06),
+      0 12px 24px rgba(0, 0, 0, 0.04);
+}
+
+.quick-action-btn:hover {
+  transform: translateY(-3px) scale(1.02);
+  /* Enhanced multi-layer shadow on hover */
+  box-shadow: 
+      0 2px 6px rgba(0, 0, 0, 0.06),
+      0 8px 20px rgba(0, 0, 0, 0.08),
+      0 20px 40px rgba(0, 0, 0, 0.06);
+  border-color: var(--primary-soft);
+}
+
+.quick-action-btn:active {
+  transform: translateY(-1px) scale(0.98);
+  box-shadow: 
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 2px 6px rgba(0, 0, 0, 0.05),
+      0 6px 12px rgba(0, 0, 0, 0.04);
+}
+
+.quick-action-btn svg {
+  width: 24px;
+  height: 24px;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.15));
+  transition: all 0.3s ease;
+}
+
+.quick-action-btn:hover svg {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+  transform: scale(1.1);
+}
+
+.quick-action-btn span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.3px;
+}
+
+.quick-action-btn.plan { border-left: 3px solid var(--info); }
+.quick-action-btn.task { border-left: 3px solid var(--success); }
+.quick-action-btn.money { border-left: 3px solid var(--warning); }
+.quick-action-btn.habit { border-left: 3px solid var(--danger); }
+
 /* =========================================
    REMINDERS & NOTIFICATIONS
    ========================================= */
@@ -3661,3 +3804,48 @@ input:checked + .slider {
 input:checked + .slider:before {
   transform: translateX(22px);
 }
+
+/* Settings Collapsible Sections using Details/Summary */
+.settings-details {
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.settings-details > summary {
+  cursor: pointer;
+  padding: 16px 20px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-color);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-details > summary:hover {
+  background: var(--bg-secondary);
+}
+
+.settings-details > summary i[data-lucide="chevron-down"] {
+  transition: transform 0.3s ease;
+}
+
+.settings-details[open] > summary i[data-lucide="chevron-down"] {
+  transform: rotate(180deg);
+}
+
+.settings-details > .widget-body {
+  padding: 20px;
+  background: var(--surface-1);
+}
+
+.settings-section .widget-header:active i[data-lucide="chevron-down"] {
+  transform: rotate(180deg);
+}
+

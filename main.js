@@ -990,11 +990,12 @@ document.addEventListener('click', async (e) => {
         const date = document.getElementById('mTxDate').value;
         const source = document.getElementById('mTxSource')?.value || '';
         const notes = document.getElementById('mTxNote')?.value || '';
+        const payment_mode = document.getElementById('mTxPaymentMode')?.value || '';
 
         if (!amt) return;
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Updating transaction...");
-        await apiCall('update', 'expenses', { amount: amt, category: cat, type: type, date: date, source: source, notes: notes }, editId);
+        await apiCall('update', 'expenses', { amount: amt, category: cat, type: type, date: date, source: source, notes: notes, payment_mode: payment_mode }, editId);
         await refreshData('finance');
     }
 

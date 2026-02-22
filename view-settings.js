@@ -1,6 +1,21 @@
 /* view-settings.js - Frontend Aligned with User's Backend Schema */
 
 function renderSettings() {
+  // Toggle function for collapsible sections
+  window.toggleSection = function(sectionId) {
+    var body = document.getElementById('body-' + sectionId);
+    var icon = document.getElementById('icon-' + sectionId);
+    if (body) {
+      if (body.style.display === 'none') {
+        body.style.display = 'block';
+        if (icon) icon.style.transform = 'rotate(0deg)';
+      } else {
+        body.style.display = 'none';
+        if (icon) icon.style.transform = 'rotate(-90deg)';
+      }
+    }
+  };
+  
   // Map backend keys to frontend variables
   // Backend relies on: ai_api_key, view_mode
   const s = state.data.settings?.[0] || {};
@@ -16,7 +31,13 @@ function renderSettings() {
     ai_model: s.ai_model || 'gemini-1.5-flash',
     category_budgets: s.category_budgets || '{}',
     // Orientation lock setting
-    orientation_lock: s.orientation_lock || 'auto'
+    orientation_lock: s.orientation_lock || 'auto',
+    // User name
+    name: s.name || s.user_name || '',
+    // Custom greeting messages
+    morning_message: s.morning_message || '',
+    afternoon_message: s.afternoon_message || '',
+    evening_message: s.evening_message || ''
   };
 
   const main = document.getElementById('main');
@@ -26,9 +47,49 @@ function renderSettings() {
         <h2 class="page-title" style="margin:0">Settings</h2>
       </div>
 
-      <!-- 1. BUDGET -->
-      <div class="settings-section">
-        <h3 class="section-title">Budget Settings</h3>
+      <!-- 1. PROFILE -->
+      <details class="settings-details" style="margin-bottom:16px; border:1px solid var(--border-color); border-radius:16px; display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title"><i data-lucide="user" style="width:18px; margin-right:8px;"></i> Profile</div>
+            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
+        <p class="section-description">Your personal information.</p>
+        
+        <div style="margin-bottom:16px">
+          <label class="setting-label">Display Name</label>
+          <input type="text" class="input" id="userName" value="${settings.name}" placeholder="Enter your name">
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">This name will appear in your daily greeting.</p>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label class="setting-label">Morning Message</label>
+          <input type="text" class="input" id="morningMessage" value="${settings.morning_message}" placeholder="Review your plan for the day">
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Shown in the morning (before 12 PM)</p>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label class="setting-label">Afternoon Message</label>
+          <input type="text" class="input" id="afternoonMessage" value="${settings.afternoon_message}" placeholder="Stay focused on your goals">
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Shown in the afternoon (12 PM - 6 PM)</p>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label class="setting-label">Evening Message</label>
+          <input type="text" class="input" id="eveningMessage" value="${settings.evening_message}" placeholder="Great work today!">
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Shown in the evening (after 6 PM)</p>
+        </div>
+        <button class="btn primary" onclick="saveAllSettings('profile')">Save Profile</button>
+        </div>
+        </details>
+
+      <!-- 2. BUDGET -->
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title"><i data-lucide="wallet" style="width:18px; margin-right:8px;"></i> Budget Settings</div>
+            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Manage your financial tracking limits.</p>
         
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px; margin-bottom:20px">
@@ -45,11 +106,17 @@ function renderSettings() {
         <label class="setting-label">Category Limits</label>
         <div id="categoryBudgetList"></div>
         <button class="btn small" style="margin-top:12px" onclick="addCategoryRow()">+ Add Category</button>
-      </div>
+        <button class="btn primary" style="margin-top:12px; margin-left:8px;" onclick="saveAllSettings('budget')">Save Budget</button>
+        </div>
+        </details>
 
-      <!-- 2. APPEARANCE -->
-      <div class="settings-section">
-        <h3 class="section-title">Appearance</h3>
+      <!-- 3. APPEARANCE -->
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title"><i data-lucide="palette" style="width:18px; margin-right:8px;"></i> Appearance</div>
+            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Customize the look and feel of your OS.</p>
         
         <!-- Accents -->
@@ -97,11 +164,16 @@ function renderSettings() {
             </div>
             <input type="hidden" id="sOrientation" value="${settings.orientation_lock || 'auto'}">
         </div>
-      </div>
+        <button class="btn primary" onclick="saveAllSettings('appearance')">Save Appearance</button>
+      </details>
 
       <!-- 3. AI CONFIG -->
-      <div class="settings-section">
-        <h3 class="section-title">AI Configuration</h3>
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title"><i data-lucide="cpu" style="width:18px; margin-right:8px;"></i> AI Configuration</div>
+            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Power your dashboard with Google Gemini.</p>
         
         <div class="setting-item">
@@ -121,11 +193,17 @@ function renderSettings() {
                 <span class="model-chip" onclick="setModel('gemini-1.5-pro')">Pro</span>
             </div>
         </div>
-      </div>
+        <button class="btn primary" onclick="saveAllSettings('ai')">Save AI</button>
+        </div>
+      </details>
 
       <!-- 4. TAB VISIBILITY -->
-      <div class="settings-section">
-        <h3 class="section-title">Tab Visibility</h3>
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title"><i data-lucide="layout" style="width:18px; margin-right:8px;"></i> Tab Visibility</div>
+            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Toggle modules on or off.</p>
         
         <div class="tab-toggles">
@@ -137,11 +215,17 @@ function renderSettings() {
            ${renderTabToggle('Vision', 'vision', settings.hidden_tabs)}
            ${renderTabToggle('People', 'people', settings.hidden_tabs)}
         </div>
-      </div>
+        <button class="btn primary" onclick="saveAllSettings('tabs')" style="margin-top:12px">Save Tabs</button>
+        </div>
+      </details>
 
       <!-- 4. NOTIFICATIONS -->
-      <div class="settings-section">
-        <h3 class="section-title">Notifications</h3>
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title"><i data-lucide="bell" style="width:18px; margin-right:8px;"></i> Notifications</div>
+            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Configure reminder and notification preferences.</p>
         
         <div class="setting-item">
@@ -186,24 +270,27 @@ function renderSettings() {
             </div>
             <p class="setting-hint">No notifications during quiet hours (except marked urgent)</p>
         </div>
-      </div>
+        <button class="btn primary" onclick="saveAllSettings('notifications')" style="margin-top:12px">Save Notifications</button>
+        </div>
+      </details>
 
       <!-- 5. DATA MANAGEMENT -->
-      <div class="settings-section">
-        <h3 class="section-title">Data Management</h3>
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title"><i data-lucide="database" style="width:18px; margin-right:8px;"></i> Data Management</div>
+            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">View raw data or reset the application.</p>
         
         <div class="data-management-actions">
            <button class="btn secondary" onclick="openGoogleSheet()"><i data-lucide="table" style="width:16px; margin-right:8px"></i> Open Google Sheet</button>
            <button class="btn danger" onclick="confirmDeleteAllData()"><i data-lucide="trash-2" style="width:16px; margin-right:8px"></i> Delete All Data</button>
         </div>
-      </div>
+        </div>
+      </details>
 
       <!-- SAVE SECTION -->
-      <div class="settings-actions">
-         <button class="btn primary large" onclick="saveAllSettings()" style="width:100%; justify-content:center">Save Settings</button>
-      </div>
-
     </div>
   `;
 
@@ -219,6 +306,18 @@ function renderSettings() {
   });
 
   initCategoryRows(settings.category_budgets);
+  
+  // Add toggle functionality for collapsible sections
+  document.querySelectorAll('.settings-section .widget-header').forEach(header => {
+    const body = header.nextElementSibling;
+    
+    header.addEventListener('click', function() {
+      const isExpanded = !body.classList.contains('hidden');
+      body.classList.toggle('hidden');
+      header.classList.toggle('expanded', !isExpanded);
+    });
+  });
+  
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   
   // Load notification settings from localStorage
@@ -369,10 +468,38 @@ function initCategoryRows(jsonStr) {
   const container = document.getElementById('categoryBudgetList');
   container.innerHTML = '';
   const data = safeJsonParse(jsonStr);
-  if (Object.keys(data).length === 0) {
-    addCategoryRow();
+  
+  // Get unique categories from transactions (Money tab) - only from sheet
+  const txCategories = new Set();
+  if (state.data.expenses) {
+    state.data.expenses.forEach(e => {
+      if (e.category) txCategories.add(e.category);
+    });
+  }
+  
+  // Combine: saved budget categories + transaction categories (NO hardcoded defaults)
+  const allCats = new Set([
+    ...Object.keys(data),
+    ...txCategories
+  ]);
+  
+  if (allCats.size === 0) {
+    // No categories - show one empty row for user to add
+    addCategoryRow('', '');
   } else {
-    Object.entries(data).forEach(([cat, amt]) => addCategoryRow(cat, amt));
+    // Sort: saved budget categories first, then alphabetically
+    const sortedCats = [...allCats].sort((a, b) => {
+      const aHasBudget = data[a] !== undefined && data[a] !== '';
+      const bHasBudget = data[b] !== undefined && data[b] !== '';
+      if (aHasBudget && !bHasBudget) return -1;
+      if (!aHasBudget && bHasBudget) return 1;
+      return a.localeCompare(b);
+    });
+    
+    sortedCats.forEach(cat => {
+      const budget = data[cat] || '';
+      addCategoryRow(cat, budget);
+    });
   }
 }
 
@@ -383,13 +510,24 @@ function safeJsonParse(str) {
 }
 
 window.addCategoryRow = function (cat = '', amt = '') {
+  // Get unique categories from transactions for suggestions (only from sheet)
+  const txCategories = new Set();
+  if (state.data.expenses) {
+    state.data.expenses.forEach(e => {
+      if (e.category) txCategories.add(e.category);
+    });
+  }
+  
   const div = document.createElement('div');
   div.style.display = 'flex';
   div.style.gap = '10px';
   div.style.marginBottom = '10px';
   div.className = 'cat-budget-row';
   div.innerHTML = `
-      <input type="text" class="input cat-name" placeholder="Category" value="${cat}" style="flex:1">
+      <input type="text" class="input cat-name" placeholder="Category" value="${cat}" style="flex:1" list="settingsCatOptions">
+      <datalist id="settingsCatOptions">
+        ${[...txCategories].map(c => `<option value="${c}">`).join('')}
+      </datalist>
       <input type="number" class="input cat-amt" placeholder="Limit" value="${amt}" style="flex:1">
       <button class="btn danger small" onclick="this.parentElement.remove()">X</button>
     `;
@@ -397,62 +535,82 @@ window.addCategoryRow = function (cat = '', amt = '') {
 };
 
 // --- DATA SYNC LOGIC (Aligned with User Backend) ---
-window.saveAllSettings = async function () {
+window.saveAllSettings = async function (section = 'all') {
+  // Profile fields
+  const name = document.getElementById('userName')?.value || '';
+  const morning = document.getElementById('morningMessage')?.value || '';
+  const afternoon = document.getElementById('afternoonMessage')?.value || '';
+  const evening = document.getElementById('eveningMessage')?.value || '';
+  
+  // Budget fields
   const weekly = document.getElementById('weeklyBudget').value;
   const monthly = document.getElementById('monthlyBudget').value;
-  const color = document.getElementById('sColor').value;
-  const apiKey = document.getElementById('sApiKey').value;
-  const model = document.getElementById('sModel').value; // NOW AN INPUT
-
-  // Mode & Density
-  let themeMode = 'light';
-  const modeBtn = document.querySelector('#themeModeOptions .density-btn.active');
-  if (modeBtn) themeMode = modeBtn.textContent.toLowerCase();
-
-  // Orientation
-  const orientationEl = document.getElementById('sOrientation');
-  console.log('Orientation element:', orientationEl, 'value:', orientationEl?.value);
-  const orientation = orientationEl?.value || 'auto';
-
-  // Tabs
-  const allTabs = ['calendar', 'tasks', 'finance', 'habits', 'diary', 'vision', 'people'];
-  const checkedTabs = Array.from(document.querySelectorAll('.tab-checkbox:checked')).map(cb => cb.value);
-  const hidden = allTabs.filter(t => !checkedTabs.includes(t)).join(',');
-
-  // Categories
   const cats = {};
   document.querySelectorAll('.cat-budget-row').forEach(row => {
     const c = row.querySelector('.cat-name').value.trim();
     const a = row.querySelector('.cat-amt').value;
     if (c && a) cats[c] = Number(a);
   });
+  
+  // Appearance fields
+  const color = document.getElementById('sColor').value;
+  let themeMode = 'light';
+  const modeBtn = document.querySelector('#themeModeOptions .density-btn.active');
+  if (modeBtn) themeMode = modeBtn.textContent.toLowerCase();
+  const orientationEl = document.getElementById('sOrientation');
+  const orientation = orientationEl?.value || 'auto';
+  
+  // AI fields
+  const apiKey = document.getElementById('sApiKey').value;
+  const model = document.getElementById('sModel').value;
+  
+  // Tab fields
+  const allTabs = ['calendar', 'tasks', 'finance', 'habits', 'diary', 'vision', 'people'];
+  const checkedTabs = Array.from(document.querySelectorAll('.tab-checkbox:checked')).map(cb => cb.value);
+  const hidden = allTabs.filter(t => !checkedTabs.includes(t)).join(',');
 
-  // Construct Payload using SHEET COLUMN NAMES
-  // Sheet Header -> JS Value
-  const newSettings = {
-    weekly_budget: Number(weekly),
-    monthly_budget: Number(monthly),
-    theme_color: color,
-    theme_mode: themeMode,
+  // Build settings object based on section
+  let newSettings = {};
+  
+  if (section === 'all' || section === 'profile') {
+    newSettings.name = name;
+    newSettings.morning_message = morning;
+    newSettings.afternoon_message = afternoon;
+    newSettings.evening_message = evening;
+  }
+  
+  if (section === 'all' || section === 'budget') {
+    newSettings.weekly_budget = Number(weekly);
+    newSettings.monthly_budget = Number(monthly);
+    newSettings.category_budgets = JSON.stringify(cats);
+  }
+  
+  if (section === 'all' || section === 'appearance') {
+    newSettings.theme_color = color;
+    newSettings.theme_mode = themeMode;
+    newSettings.orientation_lock = orientation;
+  }
+  
+  if (section === 'all' || section === 'ai') {
+    newSettings.ai_api_key = apiKey;
+    newSettings.ai_model = model;
+  }
+  
+  if (section === 'all' || section === 'tabs') {
+    newSettings.hidden_tabs = hidden;
+  }
 
-    // Mapped: 'gemini_api_key' in UI -> 'ai_api_key' in Sheet
-    ai_api_key: apiKey,
+  if (section === 'all' || section === 'notifications') {
+    saveNotificationSettings();
+  }
 
-    ai_model: model,
-    hidden_tabs: hidden,
-    category_budgets: JSON.stringify(cats),
-    orientation_lock: orientation
-  };
-
-  showToast('Saving settings...');
-
-  // Save notification settings to localStorage
-  saveNotificationSettings();
+  const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications' };
+  showToast(section === 'all' ? 'Saving settings...' : `Saving ${sectionNames[section] || 'settings'}...`);
   
   // Optimistic Update
   if (state.data.settings?.[0]) {
     Object.assign(state.data.settings[0], newSettings);
-    applySettings(); // Instant Apply
+    if (section === 'all' || section === 'appearance') applySettings();
   }
 
   const existingId = state.data.settings?.[0]?.id;
@@ -482,7 +640,7 @@ window.testGeminiAPI = async function () {
 };
 
 window.openGoogleSheet = function () {
-  window.open('https://docs.google.com/spreadsheets', '_blank');
+  window.open('https://docs.google.com/spreadsheets/d/1m1r9fZ9cO8izkb-YIs-iz5hZljTpm3p0PzD-LiS0hZM/', '_blank');
 };
 
 window.confirmDeleteAllData = function () {
