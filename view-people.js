@@ -432,7 +432,7 @@ function renderPersonCard(p, isExpanded = false) {
 
     return `
     <div class="card person-card" style="position:relative">
-       <div style="display:flex; justify-content:space-between; align-items:start">
+       <div onclick="togglePersonCard('${p.id}')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding:4px;">
            <div style="display:flex; gap:12px; align-items:center">
                <div class="avatar" style="width:40px; height:40px; border-radius:50%; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center; font-weight:bold">
                    ${(p.name || '?').charAt(0).toUpperCase()}
@@ -447,7 +447,7 @@ function renderPersonCard(p, isExpanded = false) {
            </button>
        </div>
        
-       <div style="margin-top:12px; font-size:13px; color:var(--text-secondary)">
+       <div style="${isExpanded ? 'display:block;' : 'display:none;'} margin-top:12px; font-size:13px; color:var(--text-secondary)">
            <div style="display:flex; gap:6px; align-items:center; margin-bottom:4px">
                <i data-lucide="clock" style="width:12px"></i> Last: ${lastContact}
            </div>
