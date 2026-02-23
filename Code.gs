@@ -240,6 +240,51 @@ function deleteVisionImageFromDrive_(fileId) {
   }
 }
 
+/* -------- DIARY ENHANCEMENT SHEETS -------- */
+
+function initDiarySheets() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  // Create diary_templates sheet if not exists
+  let templatesSheet = ss.getSheetByName('diary_templates');
+  if (!templatesSheet) {
+    templatesSheet = ss.insertSheet('diary_templates');
+    templatesSheet.appendRow(['id', 'title', 'content', 'category', 'is_default', 'sort_order']);
+    // Add default templates
+    templatesSheet.appendRow([1, 'Gratitude', 'I am grateful for:\n1.\n2.\n3.', 'gratitude', true, 1]);
+    templatesSheet.appendRow([2, 'Daily Review', 'Highlights:\nWhat I accomplished:\nWhat I learned:', 'reflection', true, 2]);
+    templatesSheet.appendRow([3, 'Goals', 'Today\'s goals:\n1.\n2.\n3.\n\nTomorrow\'s priorities:', 'goals', true, 3]);
+    templatesSheet.appendRow([4, 'Mood Check', 'How am I feeling? (1-10)\n\nWhy?', 'reflection', true, 4]);
+    templatesSheet.appendRow([5, 'Reflection', 'What went well?\nWhat could be better?\nWhat did I learn?', 'reflection', true, 5]);
+  }
+  
+  // Create diary_tags sheet if not exists
+  let tagsSheet = ss.getSheetByName('diary_tags');
+  if (!tagsSheet) {
+    tagsSheet = ss.insertSheet('diary_tags');
+    tagsSheet.appendRow(['id', 'name', 'color', 'usage_count', 'created_at']);
+  }
+  
+  // Create diary_achievements sheet if not exists
+  let achievementsSheet = ss.getSheetByName('diary_achievements');
+  if (!achievementsSheet) {
+    achievementsSheet = ss.insertSheet('diary_achievements');
+    achievementsSheet.appendRow(['id', 'type', 'name', 'description', 'target_value', 'unlocked_at']);
+    // Add default achievements
+    achievementsSheet.appendRow([1, 'streak', 'Week Warrior', 'Write for 7 days in a row', 7, '']);
+    achievementsSheet.appendRow([2, 'streak', 'Fortnight Focus', 'Write for 14 days in a row', 14, '']);
+    achievementsSheet.appendRow([3, 'streak', 'Monthly Master', 'Write for 30 days in a row', 30, '']);
+    achievementsSheet.appendRow([4, 'entries', 'First Step', 'Write your first entry', 1, '']);
+    achievementsSheet.appendRow([5, 'entries', 'Getting Started', 'Write 10 entries', 10, '']);
+    achievementsSheet.appendRow([6, 'entries', 'Dedicated Writer', 'Write 50 entries', 50, '']);
+    achievementsSheet.appendRow([7, 'entries', 'Journal Enthusiast', 'Write 100 entries', 100, '']);
+    achievementsSheet.appendRow([8, 'mood', 'Mood Booster', 'Have a 8+ mood 5 times', 5, '']);
+    achievementsSheet.appendRow([9, 'mood', 'Consistently Happy', 'Have a 8+ mood 20 times', 20, '']);
+  }
+  
+  return { success: true, message: 'Diary sheets initialized' };
+}
+
 /* -------- REMINDER HELPERS -------- */
 
 function getDueReminders() {

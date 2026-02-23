@@ -60,18 +60,13 @@ window.openFinanceAction = function () {
     // 1. TRANSACTION FORM
     const defaultType = finState === 'expenses' ? 'expense' : 'income';
 
-    // Get categories ONLY from Budget Settings (single source)
-    const settings = state.data.settings?.[0] || {};
-    let budgetCats = {};
-    try {
-      if (settings.category_budgets) budgetCats = JSON.parse(settings.category_budgets);
-    } catch (e) {}
-    const allCats = Object.keys(budgetCats);
+    // Get categories from settings (single source)
+    const categories = getAllFinanceCategories();
 
     box.innerHTML = `
       <h3>New Transaction</h3>
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px">
-         <select class="input" id="mTxType" style="margin:0" onchange="toggleTxSourceVisibility(this.value)">
+         <select class="input" id="mTxType" style="margin:0">
              <option value="expense" ${defaultType === 'expense' ? 'selected' : ''}>Expense</option>
              <option value="income" ${defaultType === 'income' ? 'selected' : ''}>Income</option>
          </select>
@@ -81,19 +76,22 @@ window.openFinanceAction = function () {
       <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)">
       
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-          <input class="input" id="mTxCategory" placeholder="Category" list="catOptions">
-          <datalist id="catOptions">
-              ${allCats.map(c => `<option value="${c}">`).join('')}
-          </datalist>
-
-          <select class="input" id="mTxSource" style="display:${defaultType === 'expense' ? 'block' : 'none'}">
-              <option value="weekly">Weekly Budget</option>
-              <option value="monthly">Monthly Bill</option>
-              <option value="savings">Savings / One-off</option>
+          <select class="input" id="mTxCategory" style="margin:0">
+              <option value="">Select Category</option>
+              ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
           </select>
+
+          <input class="input" id="mTxPaymentMode" placeholder="Payment Mode" list="paymentModeOptions">
+          <datalist id="paymentModeOptions">
+            <option value="Cash">
+            <option value="UPI">
+            <option value="Card">
+            <option value="Bank Transfer">
+            <option value="Other">
+          </datalist>
       </div>
 
-      <input class="input" id="mTxNote" placeholder="Note (optional — e.g. 'Birthday dinner')">
+      <input class="input" id="mTxNote" placeholder="Note (optional — e.g. 'Birthday dinner')" style="margin-top:10px">
 
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
         <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
@@ -135,11 +133,6 @@ window.openFinanceAction = function () {
   modal.classList.remove('hidden');
 }
 
-window.toggleTxSourceVisibility = function (type) {
-  const el = document.getElementById('mTxSource');
-  if (el) el.style.display = type === 'expense' ? 'block' : 'none';
-};
-
 /* --- TAB 1: EXPENSES (Hierarchical View) --- */
 
 // Helper function to get Monday and Sunday of the current week
@@ -163,21 +156,36 @@ function renderFinExpenses(container) {
   const now = new Date();
   const weekBounds = getWeekBounds(now);
 
-  // Parse Budgets
+  // Parse Budgets - use separate fields, not calculated from categories
   const monthlyBudget = Number(settings.monthly_budget) || 0;
   const weeklyBudget = Number(settings.weekly_budget) || 0;
+  
   let categoryBudgets = {};
   try {
     if (settings.category_budgets) categoryBudgets = JSON.parse(settings.category_budgets);
   } catch (e) { console.error("Invalid category budget JSON", e); }
-
+  
   // Filter Logic
   const filtered = allExpenses.filter(e => {
     const d = new Date(e.date);
-    // Weekly View: Only show current week (Monday to Sunday)
+    // Weekly View: Show only weekly expenses from current week (Mon-Sun)
     if (finRange === 'week') {
-      // Only show weekly source items in week view
-      if (e.type === 'expense' && e.source && e.source !== 'weekly') return false;
+      // Check if this category is marked as weekly in settings
+      // Handle both old format (string/number) and new format (object)
+      const catData = categoryBudgets[e.category];
+      let catSource = 'weekly'; // Default to weekly for backward compatibility
+      
+      if (catData !== undefined) {
+        if (typeof catData === 'object' && catData !== null) {
+          catSource = catData.source || 'weekly';
+        } else {
+          // Old format - treat as weekly
+          catSource = 'weekly';
+        }
+      }
+      // If category is not in budget settings at all, show in weekly (backward compat)
+      
+      if (catSource !== 'weekly') return false;
       
       // Filter by current week (Monday-based)
       return d >= weekBounds.start && d <= weekBounds.end;
@@ -233,7 +241,14 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
 
   const catHtml = allCats.map(c => {
     const spent = catSpent?.[c] || 0;
-    const climit = catLimits?.[c] || 0;
+    // Handle both old format (number) and new format (object)
+    const catData = catLimits?.[c];
+    let climit = 0;
+    if (typeof catData === 'object' && catData !== null) {
+      climit = Number(catData.budget) || 0;
+    } else {
+      climit = Number(catData) || 0;
+    }
     if (spent === 0 && climit === 0) return '';
 
     const cpct = climit > 0 ? Math.min(100, (spent / climit) * 100) : (spent > 0 ? 100 : 0);
@@ -361,9 +376,8 @@ function renderTransactionCard(tx) {
     <div class="transaction-card" onclick="openEditTransaction('${tx.id}')">
       <div class="transaction-date">${dateStr}</div>
       <div class="transaction-details">
-        <div class="transaction-category">${tx.category || 'Uncategorized'}</div>
-        <div class="transaction-source">${tx.payment_mode ? tx.payment_mode + ' • ' : ''}${tx.source ? tx.source.toUpperCase() : (isIncome ? 'INCOME' : 'EXPENSE')}</div>
-        ${tx.notes ? `<div class="transaction-notes">${tx.notes}</div>` : ''}
+        ${tx.notes ? `<div class="transaction-notes" style="font-weight:600; margin-bottom:4px;">${tx.notes}</div>` : ''}
+        <div class="transaction-category" style="font-size:12px; color:var(--text-muted)">${tx.category || 'Uncategorized'}</div>
       </div>
       <div class="transaction-amount" style="color: ${isIncome ? 'var(--success)' : 'var(--danger)'}">
         ${isIncome ? '+' : '-'}₹${Number(tx.amount).toLocaleString()}
@@ -436,22 +450,23 @@ window.openEditTransaction = function (id) {
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
   const categories = getAllFinanceCategories();
+  const isExpense = tx.type === 'expense';
   
   box.innerHTML = `
     <h3>Edit Transaction</h3>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px">
-      <select class="input" id="mTxType" style="margin:0" onchange="toggleTxSourceVisibility(this.value)">
+      <select class="input" id="mTxType" style="margin:0">
         <option value="expense" ${tx.type === 'expense' ? 'selected' : ''}>Expense</option>
         <option value="income" ${tx.type === 'income' ? 'selected' : ''}>Income</option>
       </select>
       <input type="date" class="input" id="mTxDate" value="${(tx.date || '').slice(0, 10)}" style="margin:0">
     </div>
-    <input type="number" class="input" id="mTxAmount" placeholder="Amount" value="${tx.amount || ''}">
+    <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)" value="${tx.amount || ''}">
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-        <input class="input" id="mTxCategory" placeholder="Category" list="editCatOptions" value="${(tx.category || '').replace(/"/g, '&quot;')}">
-        <datalist id="editCatOptions">
-            ${categories.map(c => `<option value="${c}">`).join('')}
-        </datalist>
+        <select class="input" id="mTxCategory" style="margin:0">
+            <option value="">Select Category</option>
+            ${categories.map(c => `<option value="${c}" ${tx.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+        </select>
         <input class="input" id="mTxPaymentMode" placeholder="Payment Mode" list="paymentModeEdit" value="${(tx.payment_mode || '').replace(/"/g, '&quot;')}">
         <datalist id="paymentModeEdit">
           <option value="Cash">
@@ -461,8 +476,7 @@ window.openEditTransaction = function (id) {
           <option value="Other">
         </datalist>
     </div>
-    <input class="input" id="mTxNote" placeholder="Notes (optional)" value="${(tx.notes || '').replace(/"/g, '&quot;')}">
-    <input class="input" id="mTxSource" placeholder="Source (weekly/monthly/savings)" value="${(tx.source || '').replace(/"/g, '&quot;')}">
+    <input class="input" id="mTxNote" placeholder="Note (optional)" value="${(tx.notes || '').replace(/"/g, '&quot;')}" style="margin-top:10px">
 
     <div style="display:flex; justify-content:space-between; gap:10px; margin-top:16px;">
       <button class="btn danger" onclick="deleteTransaction('${tx.id}')">Delete</button>
@@ -605,11 +619,17 @@ async function saveFinanceCategoriesToSettings(categories) {
   state.data.settings[0] = newSettings;
 }
 
-// Get all categories (including from existing transactions)
+// Get all categories from settings (single source: category_budgets)
 function getAllFinanceCategories() {
-  const savedCats = getFinanceCategories();
-  const txCats = (state.data.expenses || []).map(e => e.category).filter(Boolean);
-  return [...new Set([...savedCats.expense, ...savedCats.income, ...txCats])];
+  // Get categories from budget settings (single source of truth)
+  const settings = state.data.settings?.[0] || {};
+  let budgetCats = {};
+  try {
+    if (settings.category_budgets) budgetCats = JSON.parse(settings.category_budgets);
+  } catch (e) {}
+  const budgetCatKeys = Object.keys(budgetCats).filter(c => c && c.trim() !== '');
+  
+  return budgetCatKeys.sort();
 }
 
 // Add a new category

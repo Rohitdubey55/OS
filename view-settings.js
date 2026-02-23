@@ -37,7 +37,12 @@ function renderSettings() {
     // Custom greeting messages
     morning_message: s.morning_message || '',
     afternoon_message: s.afternoon_message || '',
-    evening_message: s.evening_message || ''
+    evening_message: s.evening_message || '',
+    // Diary settings
+    diary_default_mood: s.diary_default_mood || '5',
+    diary_show_tasks: s.diary_show_tasks !== false,
+    diary_show_habits: s.diary_show_habits !== false,
+    diary_show_expenses: s.diary_show_expenses !== false
   };
 
   const main = document.getElementById('main');
@@ -220,6 +225,55 @@ function renderSettings() {
            ${renderTabToggle('People', 'people', settings.hidden_tabs)}
         </div>
         <button class="btn primary" onclick="saveAllSettings('tabs')" style="margin-top:12px">Save Tabs</button>
+        </div>
+      </details>
+
+      <!-- 5. DIARY SETTINGS -->
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title"><i data-lucide="book-open" style="width:18px; margin-right:8px;"></i> Diary Settings</div>
+            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
+        <p class="section-description">Customize your diary experience.</p>
+        
+        <div style="margin-bottom:16px">
+          <label class="setting-label">Default Mood</label>
+          <select class="input" id="defaultMood">
+            <option value="5" ${settings.diary_default_mood === '5' ? 'selected' : ''}>😐 Neutral (5)</option>
+            <option value="7" ${settings.diary_default_mood === '7' ? 'selected' : ''}>😊 Good (7)</option>
+            <option value="8" ${settings.diary_default_mood === '8' ? 'selected' : ''}>😄 Great (8)</option>
+            <option value="6" ${settings.diary_default_mood === '6' ? 'selected' : ''}>🙂 Okay (6)</option>
+            <option value="4" ${settings.diary_default_mood === '4' ? 'selected' : ''}>😔 Low (4)</option>
+          </select>
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Default mood for new entries.</p>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label class="setting-label">Show Context</label>
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <label class="toggle-item" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <input type="checkbox" id="showTasksInDiary" ${settings.diary_show_tasks !== false ? 'checked' : ''}> Show Tasks
+            </label>
+            <label class="toggle-item" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <input type="checkbox" id="showHabitsInDiary" ${settings.diary_show_habits !== false ? 'checked' : ''}> Show Habits
+            </label>
+            <label class="toggle-item" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+              <input type="checkbox" id="showExpensesInDiary" ${settings.diary_show_expenses !== false ? 'checked' : ''}> Show Expenses
+            </label>
+          </div>
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Show context data in diary entry modal.</p>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label class="setting-label">Export Diary</label>
+          <button class="btn secondary" onclick="window.exportDiary && window.exportDiary()">
+            <i data-lucide="download"></i> Export All Entries
+          </button>
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Download all your diary entries as a file.</p>
+        </div>
+        
+        <button class="btn primary" onclick="saveAllSettings('diary')">Save Diary Settings</button>
         </div>
       </details>
 
@@ -511,7 +565,7 @@ function initCategoryRows(jsonStr) {
   
   if (allCats.size === 0) {
     // No categories - show one empty row for user to add
-    addCategoryRow('', '');
+    addCategoryRow('', '', 'weekly');
   } else {
     // Sort: saved budget categories first, then alphabetically
     const sortedCats = [...allCats].sort((a, b) => {
@@ -523,8 +577,16 @@ function initCategoryRows(jsonStr) {
     });
     
     sortedCats.forEach(cat => {
-      const budget = data[cat] || '';
-      addCategoryRow(cat, budget);
+      // Handle both old format (number) and new format (object)
+      let budget = '';
+      let source = 'weekly';
+      if (typeof data[cat] === 'object' && data[cat] !== null) {
+        budget = data[cat].budget || '';
+        source = data[cat].source || 'weekly';
+      } else if (typeof data[cat] === 'number' || typeof data[cat] === 'string') {
+        budget = data[cat];
+      }
+      addCategoryRow(cat, budget, source);
     });
   }
   
@@ -538,7 +600,7 @@ function safeJsonParse(str) {
   try { return JSON.parse(str); } catch (e) { return {}; }
 }
 
-window.addCategoryRow = function (cat = '', amt = '') {
+window.addCategoryRow = function (cat = '', amt = '', source = 'weekly') {
   // Get unique categories from transactions for suggestions (only from sheet)
   const txCategories = new Set();
   const catSpent = {};
@@ -546,7 +608,10 @@ window.addCategoryRow = function (cat = '', amt = '') {
     state.data.expenses.forEach(e => {
       if (e.category) {
         txCategories.add(e.category);
-        catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
+        // Track all expense spending per category
+        if (e.type === 'expense') {
+          catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
+        }
       }
     });
   }
@@ -556,14 +621,19 @@ window.addCategoryRow = function (cat = '', amt = '') {
   div.style.display = 'flex';
   div.style.gap = '10px';
   div.style.marginBottom = '10px';
+  div.style.alignItems = 'center';
   div.className = 'cat-budget-row';
   div.innerHTML = `
-      <input type="text" class="input cat-name" placeholder="Category" value="${cat}" style="flex:1" list="settingsCatOptions" onchange="updateCategorySummary()">
+      <input type="text" class="input cat-name" placeholder="Category" value="${cat}" style="flex:1; min-width:100px;" list="settingsCatOptions" onchange="updateCategorySummary()">
       <datalist id="settingsCatOptions">
         ${[...txCategories].map(c => `<option value="${c}">`).join('')}
       </datalist>
-      <input type="number" class="input cat-amt" placeholder="Limit" value="${amt}" style="flex:1" onchange="updateCategorySummary()">
-      ${spent > 0 ? `<span style="align-self:center; font-size:11px; color:var(--text-muted); min-width:60px;">Spent: ₹${spent}</span>` : ''}
+      <select class="input cat-source" style="width:90px; margin:0" onchange="updateCategorySummary()">
+        <option value="weekly" ${source === 'weekly' ? 'selected' : ''}>Weekly</option>
+        <option value="monthly" ${source === 'monthly' ? 'selected' : ''}>Monthly</option>
+      </select>
+      <input type="number" class="input cat-amt" placeholder="Limit" value="${amt}" style="flex:1; min-width:80px;" onchange="updateCategorySummary()">
+      ${spent > 0 ? `<span style="align-self:center; font-size:11px; color:var(--text-muted); min-width:60px;">₹${spent.toLocaleString()}</span>` : ''}
       <button class="btn danger small" onclick="this.parentElement.remove(); updateCategorySummary()">X</button>
     `;
   document.getElementById('categoryBudgetList').appendChild(div);
@@ -587,20 +657,15 @@ window.updateCategorySummary = function() {
     }
   });
   
-  // Calculate total spent from all categories in the list
-  const catSpent = {};
+  // Calculate total spent from ALL categories (not just those with budget)
+  let totalSpent = 0;
   if (state.data.expenses) {
     state.data.expenses.forEach(e => {
-      if (e.category && data[e.category]) {
-        catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
+      if (e.type === 'expense' && e.category) {
+        totalSpent += Number(e.amount || 0);
       }
     });
   }
-  
-  let totalSpent = 0;
-  Object.values(catSpent).forEach(spent => {
-    totalSpent += spent;
-  });
   
   const budgetEl = document.getElementById('totalCatBudget');
   const spentEl = document.getElementById('totalCatSpent');
@@ -623,7 +688,11 @@ window.saveAllSettings = async function (section = 'all') {
   document.querySelectorAll('.cat-budget-row').forEach(row => {
     const c = row.querySelector('.cat-name').value.trim();
     const a = row.querySelector('.cat-amt').value;
-    if (c && a) cats[c] = Number(a);
+    const s = row.querySelector('.cat-source')?.value || 'weekly';
+    if (c && a) {
+      // Store as object with budget and source
+      cats[c] = { budget: Number(a), source: s };
+    }
   });
   
   // Appearance fields
@@ -678,7 +747,18 @@ window.saveAllSettings = async function (section = 'all') {
     saveNotificationSettings();
   }
 
-  const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications' };
+  if (section === 'all' || section === 'diary') {
+    const defaultMood = document.getElementById('defaultMood')?.value || '5';
+    const showTasks = document.getElementById('showTasksInDiary')?.checked;
+    const showHabits = document.getElementById('showHabitsInDiary')?.checked;
+    const showExpenses = document.getElementById('showExpensesInDiary')?.checked;
+    newSettings.diary_default_mood = defaultMood;
+    newSettings.diary_show_tasks = showTasks;
+    newSettings.diary_show_habits = showHabits;
+    newSettings.diary_show_expenses = showExpenses;
+  }
+
+  const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary' };
   showToast(section === 'all' ? 'Saving settings...' : `Saving ${sectionNames[section] || 'settings'}...`);
   
   // Optimistic Update

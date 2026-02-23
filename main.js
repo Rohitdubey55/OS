@@ -2,7 +2,7 @@
 
 // REPLACE THIS URL with your deployed Web App URL
 
-const API_BASE = "https://script.google.com/macros/s/AKfycbzG5PhMb9a2tZl4Z3CDRUhJSLS9foN-vSRMocmD9ZUbNLw05FchyYXuDYNiMiSEURLfPQ/exec";
+const API_BASE = "https://script.google.com/macros/s/AKfycbxIirP2116jaZfKi8_SjAqlKi2c1IZ-9dx_7QHmlYbRhclX0QDtRYoC6u073WjaeXLHKQ/exec";
 const SCRIPT_URL = API_BASE; // Alias for compatibility
 
 
@@ -796,7 +796,9 @@ document.addEventListener('click', async (e) => {
 
     else if (action === 'save-diary-modal') {
 
-        const text = document.getElementById('mDiaryText').value;
+        // Handle rich text editor (contenteditable)
+        const diaryTextEl = document.getElementById('mDiaryText');
+        const text = diaryTextEl ? diaryTextEl.innerText : '';
 
         const mood = document.getElementById('mMoodScore').value;
 
@@ -806,7 +808,7 @@ document.addEventListener('click', async (e) => {
 
 
 
-        if (!text) { alert("Please write something!"); return; }
+        if (!text || !text.trim()) { alert("Please write something!"); return; }
 
 
         document.getElementById('universalModal').classList.add('hidden');
@@ -1039,11 +1041,13 @@ document.addEventListener('click', async (e) => {
 
     else if (action === 'update-diary-modal') {
         const editId = btn.dataset.editId;
-        const text = document.getElementById('mDiaryText').value;
+        // Handle rich text editor (contenteditable)
+        const diaryTextEl = document.getElementById('mDiaryText');
+        const text = diaryTextEl ? diaryTextEl.innerText : '';
         const mood = document.getElementById('mMoodScore').value;
         const tags = document.getElementById('mDiaryTags').value;
         const date = document.getElementById('mDiaryDate').value;
-        if (!text) { alert("Please write something!"); return; }
+        if (!text || !text.trim()) { alert("Please write something!"); return; }
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Updating entry...");
         await apiCall('update', 'diary', { text, mood_score: mood, tags: tags, date: date }, editId);
@@ -1262,9 +1266,9 @@ async function loadAllData() {
     state.loading = true;
     updateLoader(5, 'Connecting...');
 
-    // Include all sheets including settings, funds, and assets
-    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images'];
-    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images'];
+    // Include all sheets including settings, funds, assets, and diary enhancements
+    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images'];
+    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images'];
 
     let loaded = 0;
     const total = sheets.length;
