@@ -106,6 +106,10 @@ function renderSettings() {
         <label class="setting-label">Category Limits</label>
         <div id="categoryBudgetList"></div>
         <button class="btn small" style="margin-top:12px" onclick="addCategoryRow()">+ Add Category</button>
+        <div id="categorySummary" style="margin-top:16px; padding:12px; background:var(--surface-3); border-radius:8px; display:flex; justify-content:space-between; font-size:13px;">
+          <span>Total Budget: <strong id="totalCatBudget">₹0</strong></span>
+          <span>Total Spent: <strong id="totalCatSpent">₹0</strong></span>
+        </div>
         <button class="btn primary" style="margin-top:12px; margin-left:8px;" onclick="saveAllSettings('budget')">Save Budget</button>
         </div>
         </details>
@@ -471,11 +475,33 @@ function initCategoryRows(jsonStr) {
   
   // Get unique categories from transactions (Money tab) - only from sheet
   const txCategories = new Set();
+  const catSpent = {};
+  
   if (state.data.expenses) {
     state.data.expenses.forEach(e => {
-      if (e.category) txCategories.add(e.category);
+      if (e.category) {
+        txCategories.add(e.category);
+        // Track spending per category (all-time)
+        catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
+      }
     });
   }
+  
+  // Calculate sum of all category budgets
+  let totalBudget = 0;
+  let totalSpent = 0;
+  Object.values(data).forEach(budget => {
+    if (budget && budget !== '') {
+      totalBudget += Number(budget);
+    }
+  });
+  Object.values(catSpent).forEach(spent => {
+    totalSpent += spent;
+  });
+  
+  // Store for display
+  window._categorySpentData = catSpent;
+  window._categoryBudgetData = data;
   
   // Combine: saved budget categories + transaction categories (NO hardcoded defaults)
   const allCats = new Set([
@@ -501,6 +527,9 @@ function initCategoryRows(jsonStr) {
       addCategoryRow(cat, budget);
     });
   }
+  
+  // Update summary after initialization
+  setTimeout(updateCategorySummary, 100);
 }
 
 function safeJsonParse(str) {
@@ -512,26 +541,71 @@ function safeJsonParse(str) {
 window.addCategoryRow = function (cat = '', amt = '') {
   // Get unique categories from transactions for suggestions (only from sheet)
   const txCategories = new Set();
+  const catSpent = {};
   if (state.data.expenses) {
     state.data.expenses.forEach(e => {
-      if (e.category) txCategories.add(e.category);
+      if (e.category) {
+        txCategories.add(e.category);
+        catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
+      }
     });
   }
   
+  const spent = catSpent[cat] || 0;
   const div = document.createElement('div');
   div.style.display = 'flex';
   div.style.gap = '10px';
   div.style.marginBottom = '10px';
   div.className = 'cat-budget-row';
   div.innerHTML = `
-      <input type="text" class="input cat-name" placeholder="Category" value="${cat}" style="flex:1" list="settingsCatOptions">
+      <input type="text" class="input cat-name" placeholder="Category" value="${cat}" style="flex:1" list="settingsCatOptions" onchange="updateCategorySummary()">
       <datalist id="settingsCatOptions">
         ${[...txCategories].map(c => `<option value="${c}">`).join('')}
       </datalist>
-      <input type="number" class="input cat-amt" placeholder="Limit" value="${amt}" style="flex:1">
-      <button class="btn danger small" onclick="this.parentElement.remove()">X</button>
+      <input type="number" class="input cat-amt" placeholder="Limit" value="${amt}" style="flex:1" onchange="updateCategorySummary()">
+      ${spent > 0 ? `<span style="align-self:center; font-size:11px; color:var(--text-muted); min-width:60px;">Spent: ₹${spent}</span>` : ''}
+      <button class="btn danger small" onclick="this.parentElement.remove(); updateCategorySummary()">X</button>
     `;
   document.getElementById('categoryBudgetList').appendChild(div);
+  updateCategorySummary();
+};
+
+// Update the category summary totals
+window.updateCategorySummary = function() {
+  const data = {};
+  document.querySelectorAll('.cat-budget-row').forEach(row => {
+    const c = row.querySelector('.cat-name').value.trim();
+    const amt = row.querySelector('.cat-amt').value;
+    if (c && amt) data[c] = amt;
+  });
+  
+  // Calculate total budget
+  let totalBudget = 0;
+  Object.values(data).forEach(budget => {
+    if (budget && budget !== '') {
+      totalBudget += Number(budget);
+    }
+  });
+  
+  // Calculate total spent from all categories in the list
+  const catSpent = {};
+  if (state.data.expenses) {
+    state.data.expenses.forEach(e => {
+      if (e.category && data[e.category]) {
+        catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
+      }
+    });
+  }
+  
+  let totalSpent = 0;
+  Object.values(catSpent).forEach(spent => {
+    totalSpent += spent;
+  });
+  
+  const budgetEl = document.getElementById('totalCatBudget');
+  const spentEl = document.getElementById('totalCatSpent');
+  if (budgetEl) budgetEl.textContent = '₹' + totalBudget.toLocaleString();
+  if (spentEl) spentEl.textContent = '₹' + totalSpent.toLocaleString();
 };
 
 // --- DATA SYNC LOGIC (Aligned with User Backend) ---

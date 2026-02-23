@@ -141,10 +141,27 @@ window.toggleTxSourceVisibility = function (type) {
 };
 
 /* --- TAB 1: EXPENSES (Hierarchical View) --- */
+
+// Helper function to get Monday and Sunday of the current week
+function getWeekBounds(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+  const monday = new Date(d.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  
+  return { start: monday, end: sunday };
+}
+
 function renderFinExpenses(container) {
   const allExpenses = state.data.expenses || [];
   const settings = state.data.settings?.[0] || {};
   const now = new Date();
+  const weekBounds = getWeekBounds(now);
 
   // Parse Budgets
   const monthlyBudget = Number(settings.monthly_budget) || 0;
@@ -157,13 +174,13 @@ function renderFinExpenses(container) {
   // Filter Logic
   const filtered = allExpenses.filter(e => {
     const d = new Date(e.date);
-    // Strict Source Filtering for Weekly View
+    // Weekly View: Only show current week (Monday to Sunday)
     if (finRange === 'week') {
-      if (e.type === 'expense' && e.source && e.source !== 'weekly') return false; // Only show weekly source items in week view
-
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(now.getDate() - 7);
-      return d >= oneWeekAgo && d <= now;
+      // Only show weekly source items in week view
+      if (e.type === 'expense' && e.source && e.source !== 'weekly') return false;
+      
+      // Filter by current week (Monday-based)
+      return d >= weekBounds.start && d <= weekBounds.end;
     }
     else if (finRange === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     else if (finRange === 'year') return d.getFullYear() === now.getFullYear();
@@ -256,13 +273,17 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
 }
 
 function renderWeeklyOverview(totalExp, limit) {
+  const now = new Date();
+  const weekBounds = getWeekBounds(now);
+  const mondayStr = weekBounds.start.toLocaleDateString('default', { month: 'short', day: 'numeric' });
+  const sundayStr = weekBounds.end.toLocaleDateString('default', { month: 'short', day: 'numeric' });
   const pct = limit > 0 ? Math.min(100, (totalExp / limit) * 100) : 0;
   const color = pct > 100 ? 'var(--danger)' : (pct > 80 ? 'var(--warning)' : 'var(--success)');
 
   return `
      <div class="dash-card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-             <div class="stat-label"><i data-lucide="zap" style="width:14px; margin-right:6px; display:inline-block"></i> Weekly Budget (Variable)</div>
+             <div class="stat-label"><i data-lucide="zap" style="width:14px; margin-right:6px; display:inline-block"></i> Weekly Budget (${mondayStr} - ${sundayStr})</div>
              <div class="stat-val" style="font-size:1.2em">₹${totalExp} <span style="font-size:0.6em; color:var(--text-muted)">/ ${limit}</span></div>
         </div>
         
