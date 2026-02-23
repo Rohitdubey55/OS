@@ -25,6 +25,7 @@ function renderSettings() {
     monthly_budget: s.monthly_budget || 0,
     theme_color: s.theme_color || '#4F46E5',
     theme_mode: s.theme_mode || 'light',
+    icon_pack: s.icon_pack || 'emoji',
     hidden_tabs: s.hidden_tabs || '',
     // Map 'ai_api_key' from sheet to 'gemini_api_key' for UI
     gemini_api_key: s.ai_api_key || '',
@@ -172,6 +173,27 @@ function renderSettings() {
                 <button class="density-btn ${settings.orientation_lock === 'landscape' ? 'active' : ''}" onclick="selectOrientation('landscape')">Landscape</button>
             </div>
             <input type="hidden" id="sOrientation" value="${settings.orientation_lock || 'auto'}">
+        </div>
+
+            <label class="setting-label">Icon Pack</label>
+            <div class="icon-pack-grid">
+                <label class="icon-pack-option ${settings.icon_pack === 'lucide' ? 'active' : ''}" onclick="selectIconPack('lucide')">
+                    <input type="radio" name="iconPack" value="lucide" ${settings.icon_pack === 'lucide' ? 'checked' : ''}>
+                    <span class="pack-preview">${renderIcon('home', 'lucide')} ${renderIcon('calendar', 'lucide')} ${renderIcon('achievements', 'lucide')}</span>
+                    <span class="pack-name">Lucide</span>
+                </label>
+                <label class="icon-pack-option ${!settings.icon_pack || settings.icon_pack === 'emoji' ? 'active' : ''}" onclick="selectIconPack('emoji')">
+                    <input type="radio" name="iconPack" value="emoji" ${!settings.icon_pack || settings.icon_pack === 'emoji' ? 'checked' : ''}>
+                    <span class="pack-preview">🏠 📅 🏆</span>
+                    <span class="pack-name">Emoji</span>
+                </label>
+                <label class="icon-pack-option ${settings.icon_pack === 'material' ? 'active' : ''}" onclick="selectIconPack('material')">
+                    <input type="radio" name="iconPack" value="material" ${settings.icon_pack === 'material' ? 'checked' : ''}>
+                    <span class="pack-preview">${renderIcon('home', 'material')} ${renderIcon('calendar', 'material')} ${renderIcon('achievements', 'material')}</span>
+                    <span class="pack-name">Material</span>
+                </label>
+            </div>
+            <input type="hidden" id="sIconPack" value="${settings.icon_pack || 'emoji'}">
         </div>
         <button class="btn primary" onclick="saveAllSettings('appearance')">Save Appearance</button>
       </details>
@@ -448,6 +470,14 @@ window.applySettings = function () {
   const mode = settings.theme_mode || 'light';
   document.documentElement.setAttribute('data-theme', mode);
 
+  // 3. Icon Pack
+  const iconPack = settings.icon_pack || 'emoji';
+  try {
+    const appSettings = JSON.parse(localStorage.getItem('app_settings') || '{}');
+    appSettings.icon_pack = iconPack;
+    localStorage.setItem('app_settings', JSON.stringify(appSettings));
+  } catch (e) { console.warn('Could not save icon pack setting'); }
+
   // 3. Tabs
   updateTabVisibility();
 
@@ -470,6 +500,13 @@ window.selectThemeMode = function (mode) {
   parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
   event.target.classList.add('active');
   document.documentElement.setAttribute('data-theme', mode);
+}
+
+// Icon Pack Selection
+window.selectIconPack = function (pack) {
+  document.querySelectorAll('.icon-pack-option').forEach(el => el.classList.remove('active'));
+  event.target.closest('.icon-pack-option').classList.add('active');
+  document.getElementById('sIconPack').value = pack;
 }
 
 window.selectOrientation = function (orientation) {
@@ -731,6 +768,7 @@ window.saveAllSettings = async function (section = 'all') {
   if (section === 'all' || section === 'appearance') {
     newSettings.theme_color = color;
     newSettings.theme_mode = themeMode;
+    newSettings.icon_pack = document.getElementById('sIconPack')?.value || 'emoji';
     newSettings.orientation_lock = orientation;
   }
   
@@ -788,8 +826,8 @@ window.testGeminiAPI = async function () {
       method: 'POST',
       body: JSON.stringify({ contents: [{ parts: [{ text: "Hi" }] }] })
     });
-    if (res.ok) showToast('API Key Valid! ✅');
-    else showToast('Invalid Key ❌', 'error');
+    if (res.ok) showToast('API Key Valid!');
+    else showToast('Invalid Key', 'error');
   } catch (e) { showToast('Connection Error', 'error'); }
 };
 
@@ -826,9 +864,9 @@ function loadNotificationSettingsUI() {
     if (status && window.notificationState) {
         const perm = window.notificationState.permission;
         if (perm === 'granted') {
-            status.innerHTML = '<span class="permission-granted">✓ Enabled</span>';
+            status.innerHTML = '<span class="permission-granted">Enabled</span>';
         } else if (perm === 'denied') {
-            status.innerHTML = '<span class="permission-denied">✕ Blocked</span>';
+            status.innerHTML = '<span class="permission-denied">Blocked</span>';
         } else {
             status.innerHTML = '<span class="permission-default">Not requested</span>';
         }

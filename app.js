@@ -248,8 +248,8 @@ function renderMiniTasks() {
       <div class="small">${t.due_date || ''} · ${t.priority || ''}</div>
     </div>
     <div class="row">
-      <button class="btn" data-action="toggleTask" data-id="${t.id}">✓</button>
-      <button class="btn" data-action="editTask" data-id="${t.id}">✎</button>
+      <button class="btn" data-action="toggleTask" data-id="${t.id}">${renderIcon('save', null, '')}</button>
+      <button class="btn" data-action="editTask" data-id="${t.id}">${renderIcon('edit', null, '')}</button>
     </div>
   </div>`).join("");
 }
@@ -407,8 +407,8 @@ function showDayEvents(dateStr) {
         <div class="small">${escapeHtml(e.description || '')}</div>
       </div>
       <div>
-        <button class="btn" data-action="editEvent" data-id="${e.id}">✎</button>
-        <button class="btn" data-action="deleteEvent" data-id="${e.id}">🗑</button>
+        <button class="btn" data-action="editEvent" data-id="${e.id}">${renderIcon('edit', null, '')}</button>
+        <button class="btn" data-action="deleteEvent" data-id="${e.id}">${renderIcon('delete', null, '')}</button>
       </div>
     </div>`).join("")}
   `;

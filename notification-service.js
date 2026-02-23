@@ -395,7 +395,7 @@ function checkAndTriggerReminders() {
                 localStorage.setItem(triggeredKey, 'true');
                 triggerReminderNotification({
                     id: 'habit_' + habit.id,
-                    title: (habit.emoji || '✨') + ' ' + (habit.habit_name || 'Habit Reminder'),
+                    title: (habit.emoji || getIcon('default')) + ' ' + (habit.habit_name || 'Habit Reminder'),
                     description: 'Time for your habit: ' + (habit.habit_name || ''),
                     reminder_datetime: now.toISOString()
                 });
@@ -537,7 +537,7 @@ function sendToAppInventor(reminder) {
                 hour = parseInt(parts[0], 10);
                 minute = parseInt(parts[1], 10);
             }
-            message = encodeURIComponent((reminder.emoji || '✨') + ' ' + reminder.habit_name);
+            message = encodeURIComponent((reminder.emoji || getIcon('default')) + ' ' + reminder.habit_name);
         } else if (reminder.title) {
             // It's a task - use due_time
             const timeStr = String(reminder.due_time || '');

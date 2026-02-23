@@ -92,7 +92,7 @@ function renderVisionGrid(goals) {
 
     ${achieved.length > 0 ? `
       <div style="margin-top:40px; border-top:1px solid var(--border-color); padding-top:20px;">
-          <h3 style="font-size:16px; color:var(--text-muted); margin-bottom:15px">🏆 Achieved Goals</h3>
+          <h3 style="font-size:16px; color:var(--text-muted); margin-bottom:15px">${renderIcon('achievements', null, '')} Achieved Goals</h3>
           <div class="vision-grid" style="opacity:0.8">
               ${achieved.map(g => renderVisionCard(g, true)).join('')}
           </div>
@@ -194,7 +194,7 @@ function renderVisionCard(g, isAchieved = false) {
       <div class="vision-card-overlay"></div>
       <div class="vision-card-content">
         ${badgeText && !isAchieved ? `<div class="vision-card-badge ${badgeClass}">${badgeText}</div>` : ''}
-        ${isAchieved ? '<div class="vision-card-badge achieved">✓ Achieved</div>' : ''}
+        ${isAchieved ? `<div class="vision-card-badge achieved">${renderIcon('achieved', null, '')} Achieved</div>` : ''}
         <div class="vision-card-title">${g.title}</div>
         <div class="vision-card-category">${g.category || 'Personal'}</div>
         <div class="vision-card-progress">
@@ -541,10 +541,10 @@ window.openVisionImageSheet = function(visionId) {
     <!-- Tab Navigation -->
     <div class="image-source-tabs" style="display:flex; gap:10px; margin-bottom:20px;">
       <button class="tab-btn btn secondary" id="uploadTabBtn" onclick="switchImageSource('upload')">
-        📁 Upload from Device
+        ${renderIcon('upload', null, '')} Upload from Device
       </button>
       <button class="tab-btn btn" id="urlTabBtn" onclick="switchImageSource('url')">
-        🔗 Add from URL
+        ${renderIcon('url', null, '')} Add from URL
       </button>
     </div>
     

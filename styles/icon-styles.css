@@ -1,0 +1,177 @@
+/* Icon Pack Styles */
+
+/* Base icon styles */
+.lucide-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.lucide-icon.sm {
+  width: 14px;
+  height: 14px;
+}
+
+.lucide-icon.lg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Emoji icon styles */
+.emoji-icon {
+  font-family: inherit;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.emoji-icon.sm {
+  font-size: 14px;
+}
+
+.emoji-icon.lg {
+  font-size: 24px;
+}
+
+/* Material icon styles */
+.material-icon {
+  font-family: 'Material Icons Outlined';
+  font-size: 20px;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.material-icon.sm {
+  font-size: 14px;
+}
+
+.material-icon.lg {
+  font-size: 24px;
+}
+
+/* Nav icon styles */
+.nav-icon.lucide-icon,
+.nav-icon.material-icon,
+.nav-icon.emoji-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+}
+
+/* Stat icon styles */
+.stat-icon.lucide-icon,
+.stat-icon.material-icon,
+.stat-icon.emoji-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 24px;
+}
+
+/* Overview icon styles */
+.overview-icon.lucide-icon,
+.overview-icon.material-icon,
+.overview-icon.emoji-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+}
+
+/* Search icon */
+.search-icon.lucide-icon,
+.search-icon.material-icon,
+.search-icon.emoji-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Action button icons */
+.action-btn.lucide-icon,
+.action-btn.material-icon,
+.action-btn.emoji-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Empty state icons */
+.empty-illustration.lucide-icon,
+.empty-illustration.material-icon,
+.empty-illustration.emoji-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+/* Icon pack selector in settings */
+.icon-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.icon-pack-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 12px;
+  border: 2px solid var(--border-color, #e5e7eb);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--bg-secondary, #fff);
+}
+
+.icon-pack-option:hover {
+  border-color: var(--primary, #4F46E5);
+  background: var(--primary-soft, #f5f3ff);
+}
+
+.icon-pack-option.active {
+  border-color: var(--primary, #4F46E5);
+  background: var(--primary-soft, #f5f3ff);
+}
+
+.icon-pack-option input[type="radio"] {
+  display: none;
+}
+
+.pack-preview {
+  font-size: 20px;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.pack-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary, #1f2937);
+}
+
+.pack-description {
+  font-size: 11px;
+  color: var(--text-muted, #6b7280);
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* Mood emoji styles in selectors */
+.mood-emoji-option {
+  font-size: 20px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.mood-emoji-option:hover {
+  transform: scale(1.2);
+}
+
+/* Quick write icon */
+.quick-write-icon.lucide-icon,
+.quick-write-icon.material-icon,
+.quick-write-icon.emoji-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+}

@@ -2,8 +2,8 @@
 
 // Default dashboard section config
 const DEFAULT_DASH_CONFIG = [
-  { id: 'morning', label: '☀️ Morning Greeting', visible: true },
-  { id: 'aiBriefing', label: '✨ Daily Briefing', visible: true },
+  { id: 'morning', label: 'Morning Greeting', visible: true },
+  { id: 'aiBriefing', label: 'Daily Briefing', visible: true },
   { id: 'vision', label: 'Vision Banner', visible: true },
   { id: 'kpis', label: 'KPI Cards', visible: true },
   { id: 'tasks', label: 'High Priority Tasks', visible: true },
@@ -383,7 +383,7 @@ function renderDashboard() {
              <div style="display:flex; flex-direction:column; gap:12px;">
                 ${birthdays.map(p => `
                   <div style="display:flex; align-items:center; gap:10px; padding:10px; background:linear-gradient(to right, var(--warning-soft, #FFF7ED), var(--warning-bg, #FFEDD5)); border-radius:8px; border:1px solid var(--warning-border, #FED7AA)">
-                    <div style="font-size:16px">🎂</div>
+                    <div style="font-size:16px">${renderIcon('birthday', null, '')}</div>
                     <div style="flex:1; font-weight:600; color:var(--warning-dark, #9A3412); font-size:13px">It's ${p.name}'s birthday!</div>
                     <button class="btn small" style="background:var(--warning, #F97316); color:white; border:none; padding:4px 10px" onclick="openPersonModal('${p.id}')">View</button>
                   </div>
@@ -939,7 +939,7 @@ window.generateDashboardInsight = async function () {
     <div style="animation: fadeIn 0.5s ease-in;">
       ${formatted}
   <div style="font-size:11px; color:var(--text-muted); margin-top:12px; text-align:right;">
-    Just now · Saved to sheet ✓
+    Just now · Saved to sheet ${renderIcon('save', null, '')}
   </div>
       </div>
     `;

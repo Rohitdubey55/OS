@@ -51,8 +51,8 @@ function renderHabits() {
 
   // Common Emoji Map (Fallback if user doesn't select one)
   const categoryEmojis = {
-    'Health': '❤️', 'Fitness': '💪', 'Learning': '📚',
-    'Productivity': '🚀', 'Spiritual': '🧘', 'Other': '✨'
+    'Health': 'health', 'Fitness': 'fitness', 'Learning': 'learning',
+    'Productivity': 'productivity', 'Spiritual': 'spiritual', 'Other': 'default'
   };
 
   document.getElementById('main').innerHTML = `
@@ -271,7 +271,7 @@ function renderHabits() {
     const isDoneToday = hLogs.some(l => (l.date || '').startsWith(today));
     const isDoneSelectedDate = _backDateMode ? hLogs.some(l => (l.date || '').startsWith(_selectedBackDate)) : isDoneToday;
     const scheduledToday = isHabitScheduledToday(h);
-    const emoji = h.emoji || categoryEmojis[h.category] || '✨';
+    const emoji = h.emoji || getIcon(categoryEmojis[h.category]) || '✨';
     const daysList = h.days ? h.days.split(',').map(s => s.trim()) : [];
     const isExpanded = _expandedHabitId === h.id;
 
@@ -465,7 +465,7 @@ window.markAllHabitsDone = async function () {
   });
 
   if (pending.length === 0) {
-    showToast('✅ All habits already completed!');
+    showToast('All habits already completed!');
     return;
   }
 
@@ -474,7 +474,7 @@ window.markAllHabitsDone = async function () {
     state.data.habit_logs.push({ id: 'temp-' + Date.now() + h.id, habit_id: h.id, date: today, completed: true });
   });
   renderHabits();
-  showToast(`🔥 Marked ${pending.length} habit${pending.length > 1 ? 's' : ''} as done!`);
+  showToast(`Marked ${pending.length} habit${pending.length > 1 ? 's' : ''} as done!`);
 
   // Background sync
   await Promise.all(pending.map(h => apiCall('create', 'habit_logs', { habit_id: h.id, date: today, completed: true })));
@@ -590,7 +590,7 @@ function calculateHabitStats(logs, today, habit) {
   }
 
   const showWarning = consecutiveMissed >= 3;
-  const warningMsg = showWarning ? `⚠️ You haven't completed this habit for the last ${consecutiveMissed} scheduled times!` : '';
+  const warningMsg = showWarning ? `You haven't completed this habit for the last ${consecutiveMissed} scheduled times!` : '';
 
   // Completion Rate (last 30 days, only counting scheduled days)
   let scheduledDays = 0;

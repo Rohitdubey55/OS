@@ -706,7 +706,7 @@ window.openDebtModal = function(personId) {
     }
 
     box.innerHTML = `
-    <h3>💰 Money with ${p.name}</h3>
+    <h3>${renderIcon('money', null, '')} Money with ${p.name}</h3>
     <div class="debt-modal-amount">
         <span class="${p._balance > 0 ? 'balance-positive' : (p._balance < 0 ? 'balance-negative' : 'balance-zero')}">
             ${p._balance > 0 ? 'They owe you' : (p._balance < 0 ? 'You owe them' : 'Settled')}

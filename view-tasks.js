@@ -321,8 +321,8 @@ function renderTasks(filter = '') {
         <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
           onchange="_taskSort=this.value;renderTasks(_getSearchValue())">
           <option value="priority" ${_taskSort === 'priority' ? 'selected' : ''}>↑ Priority</option>
-          <option value="date"     ${_taskSort === 'date' ? 'selected' : ''}>📅 Date</option>
-          <option value="category" ${_taskSort === 'category' ? 'selected' : ''}>🏷 Group</option>
+          <option value="date"     ${_taskSort === 'date' ? 'selected' : ''}>${renderIcon('calendar', null, '')} Date</option>
+          <option value="category" ${_taskSort === 'category' ? 'selected' : ''}>${renderIcon('tags', null, '')} Group</option>
           <option value="title"    ${_taskSort === 'title' ? 'selected' : ''}>A–Z</option>
         </select>
       </div>
@@ -386,7 +386,7 @@ function renderBentoSection(key, label, tasks, isRecurring = false, hideCategory
         <div style="width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0;"></div>
         <span style="flex:1;font-size:13px;font-weight:600;color:var(--text-1);">${label}</span>
         ${p1InGroup > 0 ? `<span style="font-size:10px;font-weight:700;color:${PRIORITY_COLOR.P1};background:${PRIORITY_COLOR.P1}18;border-radius:20px;padding:1px 7px;">${p1InGroup} urgent</span>` : ''}
-        ${overdueInGroup > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--danger);background:rgba(239,68,68,0.1);border-radius:20px;padding:1px 7px;">⚠ ${overdueInGroup}</span>` : ''}
+        ${overdueInGroup > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--danger);background:rgba(239,68,68,0.1);border-radius:20px;padding:1px 7px;">${renderIcon('warning', null, '')} ${overdueInGroup}</span>` : ''}
         <span style="font-size:11px;color:var(--text-muted);margin-left:2px;">${count}</span>
         <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" style="width:14px;color:var(--text-muted);flex-shrink:0;"></i>
       </div>
@@ -465,7 +465,7 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
           ${t.due_date ? `
           <span class="task-meta-chip" style="${isOverdue ? 'color:var(--danger);border-color:rgba(239,68,68,0.3);background:rgba(239,68,68,0.07);' : ''}">
             <i data-lucide="${isOverdue ? 'alert-circle' : 'calendar'}" style="width:9px;"></i>
-            ${dateLabel}${isOverdue ? ' ⚠' : ''}
+            ${dateLabel}${isOverdue ? ` ${renderIcon('warning', null, '')}` : ''}
           </span>` : ''}
           ${subtasks.length > 0 ? `
           <span class="task-meta-chip" style="${doneSubCount === subtasks.length && subtasks.length > 0 ? 'color:var(--success);border-color:rgba(16,185,129,0.3);' : ''}">

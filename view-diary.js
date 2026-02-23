@@ -65,11 +65,11 @@ function renderDiary() {
       <!-- Hero Section -->
       <div class="diary-hero">
         <div class="hero-content">
-          <h1 class="hero-greeting">${getGreeting()}, ${state.userName || 'Friend'} ✨</h1>
+          <h1 class="hero-greeting">${getGreeting()}, ${state.userName || 'Friend'} ${renderIcon('default', null, '')}</h1>
           <p class="hero-prompt">"${getDailyPrompt()}"</p>
         </div>
         <button class="quick-write-btn" onclick="openDiaryModal()">
-          <span class="quick-write-icon">✍️</span>
+          ${renderIcon('write', null, 'quick-write-icon')}
           <span class="quick-write-text">Start Writing</span>
         </button>
       </div>
@@ -78,27 +78,27 @@ function renderDiary() {
       <div class="diary-stats-grid">
         <div class="stat-card stat-card-fire ${streak > 0 ? 'active' : ''}">
           <div class="stat-card-glow"></div>
-          <div class="stat-icon">🔥</div>
+          ${renderIcon('streak', null, 'stat-icon')}
           <div class="stat-value">${streak}</div>
           <div class="stat-label">Day Streak</div>
           ${streak > 0 ? `<div class="stat-badge">Keep it up!</div>` : ''}
         </div>
         
         <div class="stat-card stat-card-mood">
-          <div class="stat-icon">😊</div>
+          ${renderIcon('mood', null, 'stat-icon')}
           <div class="stat-value">${avgMood !== '-' ? avgMood : '-'}</div>
           <div class="stat-label">Avg Mood</div>
           ${validMoods.length > 0 ? `<div class="stat-trend ${moodStats.trend === 'up' ? 'up' : moodStats.trend === 'down' ? 'down' : ''}">${moodStats.trend === 'up' ? '↑' : moodStats.trend === 'down' ? '↓' : '→'}</div>` : ''}
         </div>
         
         <div class="stat-card stat-card-entries">
-          <div class="stat-icon">📝</div>
+          ${renderIcon('entries', null, 'stat-icon')}
           <div class="stat-value">${totalEntries}</div>
           <div class="stat-label">Total Entries</div>
         </div>
         
         <div class="stat-card stat-card-badges ${achievements.length > 0 ? 'has-badges' : ''}">
-          <div class="stat-icon">🏆</div>
+          ${renderIcon('achievements', null, 'stat-icon')}
           <div class="stat-value">${achievements.length}</div>
           <div class="stat-label">Achievements</div>
         </div>
@@ -109,7 +109,7 @@ function renderDiary() {
         <!-- This Week Card -->
         <div class="overview-card week-overview">
           <div class="overview-header">
-            <span class="overview-icon">📅</span>
+            ${renderIcon('calendar', null, 'overview-icon')}
             <h3>This Week</h3>
           </div>
           <div class="week-dots">
@@ -139,22 +139,22 @@ function renderDiary() {
       <!-- Navigation Tabs -->
       <div class="diary-nav-tabs">
         <button class="nav-tab ${currentDiaryView === 'home' ? 'active' : ''}" onclick="switchDiaryView('home')">
-          <span class="nav-icon">🏠</span> Home
+          ${renderIcon('home', null, 'nav-icon')} Home
         </button>
         <button class="nav-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')">
-          <span class="nav-icon">📋</span> All Entries
+          ${renderIcon('list', null, 'nav-icon')} All Entries
         </button>
         <button class="nav-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')">
-          <span class="nav-icon">📅</span> Calendar
+          ${renderIcon('calendar', null, 'nav-icon')} Calendar
         </button>
         <button class="nav-tab ${currentDiaryView === 'yearly' ? 'active' : ''}" onclick="switchDiaryView('yearly')">
-          <span class="nav-icon">📆</span> Yearly
+          ${renderIcon('yearly', null, 'nav-icon')} Yearly
         </button>
         <button class="nav-tab ${currentDiaryView === 'insights' ? 'active' : ''}" onclick="switchDiaryView('insights')">
-          <span class="nav-icon">📊</span> Insights
+          ${renderIcon('insights', null, '')} Insights
         </button>
         <button class="nav-tab ${currentDiaryView === 'tags' ? 'active' : ''}" onclick="switchDiaryView('tags')">
-          <span class="nav-icon">🏷️</span> Tags
+          ${renderIcon('tags', null, '')} Tags
         </button>
       </div>
       
@@ -171,7 +171,7 @@ function renderDiary() {
       <!-- Search & Filter Bar (Always Visible) -->
       <div class="diary-search-bar">
         <div class="search-wrapper">
-          <span class="search-icon">🔍</span>
+          ${renderIcon('search', null, 'search-icon')}
           <input type="text" class="search-input" placeholder="Search your journal..." 
                  value="${currentSearchQuery}" oninput="handleDiarySearch(this.value)">
           ${currentSearchQuery ? `<button class="search-clear" onclick="handleDiarySearch('')">×</button>` : ''}
@@ -272,7 +272,7 @@ function renderHomeContent(sorted) {
   if (recentEntries.length === 0) {
     return `
       <div class="empty-home">
-        <div class="empty-illustration">📝</div>
+        ${renderIcon('no-diary', null, 'empty-illustration')}
         <h2>Start Your Journal</h2>
         <p>Your journey begins with a single entry. Take a moment to reflect on your day.</p>
         <button class="btn primary btn-large" onclick="openDiaryModal()">
@@ -285,7 +285,7 @@ function renderHomeContent(sorted) {
   return `
     <div class="recent-entries-section">
       <div class="section-header">
-        <h2>📚 Recent Entries</h2>
+        ${renderIcon('entries', null, '')} Entries
         <button class="view-all-btn" onclick="switchDiaryView('list')">View All →</button>
       </div>
       <div class="entries-list">
@@ -327,15 +327,15 @@ function renderEntryCard(entry) {
           </div>
         ` : ''}
         <div class="entry-meta">
-          <span>📖 ${wordCount} words</span>
+          ${renderIcon('words', null, '')}
         </div>
       </div>
       <div class="entry-actions">
         <button class="action-btn" onclick="event.stopPropagation(); openEditDiary('${entry.id}')">
-          ✏️
+          ${renderIcon('edit', null, '')}
         </button>
         <button class="action-btn" onclick="event.stopPropagation(); deleteEntry('${entry.id}')">
-          🗑️
+          ${renderIcon('delete', null, '')}
         </button>
       </div>
     </div>
@@ -378,26 +378,12 @@ function renderListView(sorted) {
   const streak = calculateStreak(sorted);
   
   return `
-    <!-- Mood Insights Card for List View -->
-    <div class="overview-card mood-insights" style="margin-bottom: 16px;">
-      <div class="overview-header">
-        <span class="overview-icon">🧠</span>
-        <h3>Mood Insights</h3>
-      </div>
-      <div class="mood-sparkline">
-        <canvas id="moodSparkline"></canvas>
-      </div>
-      <div class="mood-insight-text">
-        ${moodStats.peak ? `✨ Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)` : 'Start writing to see insights'}
-      </div>
-    </div>
-    
     <div class="list-view-header">
       <div class="list-stats">
-        <span class="stat-badge">📝 ${sorted.length} entries</span>
+        ${renderIcon('entries', null, 'stat-badge')} entries
         <span class="stat-badge">🔥 ${streak} day streak</span>
         ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10 avg</span>` : ''}
-        ${moodStats.peak ? `<span class="stat-badge">✨ Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)</span>` : ''}
+        ${moodStats.peak ? `${renderIcon('default', null, 'stat-badge')} ${moodStats.peak.day} (${moodStats.peak.mood}/10)</span>` : ''}
       </div>
     </div>
     <div class="entries-list-full">
@@ -457,24 +443,10 @@ function renderCalendarView(entries) {
   
   return `
     <div class="calendar-view">
-      <!-- Mood Insights Card -->
-      <div class="overview-card mood-insights" style="margin-bottom: 16px;">
-        <div class="overview-header">
-          <span class="overview-icon">🧠</span>
-          <h3>Mood Insights</h3>
-        </div>
-        <div class="mood-sparkline">
-          <canvas id="moodSparkline"></canvas>
-        </div>
-        <div class="mood-insight-text">
-          ${moodStats.peak ? `✨ Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)` : 'Start writing to see insights'}
-        </div>
-      </div>
-      
       <div class="calendar-header">
         <h2>${monthName}</h2>
         <div class="calendar-stats">
-          <span class="stat-badge">📝 ${monthEntries.length} this month</span>
+          ${renderIcon('entries', null, 'stat-badge')} this month
           ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10</span>` : ''}
         </div>
       </div>
@@ -554,24 +526,10 @@ function renderYearlyView(entries) {
   
   return `
     <div class="yearly-view">
-      <!-- Mood Insights Card -->
-      <div class="overview-card mood-insights" style="margin-bottom: 16px;">
-        <div class="overview-header">
-          <span class="overview-icon">🧠</span>
-          <h3>Mood Insights</h3>
-        </div>
-        <div class="mood-sparkline">
-          <canvas id="moodSparkline"></canvas>
-        </div>
-        <div class="mood-insight-text">
-          ${moodStats.peak ? `✨ Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)` : 'Start writing to see insights'}
-        </div>
-      </div>
-      
       <div class="yearly-header">
         <h2>${year} Overview</h2>
         <div class="yearly-stats">
-          <span class="stat-badge">📝 ${totalEntries} entries</span>
+          📝 ${totalEntries} entries
           <span class="stat-badge">🔥 ${streak} day streak</span>
           ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10 avg</span>` : ''}
         </div>
@@ -625,19 +583,19 @@ function renderInsightsView(entries) {
       <div class="insights-header">
         <h2>Insights</h2>
         <button class="export-btn" onclick="window.exportDiary()">
-          📤 Export
+          ${renderIcon('export', null, '')} Export
         </button>
       </div>
       <div class="insights-grid">
         <!-- Mood Chart -->
         <div class="insight-card insight-chart">
-          <h3>📈 Mood Over Time</h3>
+          ${renderIcon('chart', null, '')} Mood Over Time
           <canvas id="insightsChart"></canvas>
         </div>
         
         <!-- Writing Frequency -->
         <div class="insight-card">
-          <h3>📅 Writing Frequency</h3>
+          ${renderIcon('calendar', null, '')} Writing Frequency
           <div class="frequency-stat">
             <div class="frequency-value">${thisMonth.length}</div>
             <div class="frequency-label">entries this month</div>
@@ -650,7 +608,7 @@ function renderInsightsView(entries) {
         
         <!-- Achievements -->
         <div class="insight-card achievements-card">
-          <h3>🏆 Achievements</h3>
+          ${renderIcon('achievements', null, '')} Achievements
           <div class="achievements-list">
             ${achievements.map(a => {
               let unlocked = false;
@@ -663,7 +621,7 @@ function renderInsightsView(entries) {
               
               return `
                 <div class="achievement-item ${unlocked ? 'unlocked' : 'locked'}">
-                  <span class="achievement-icon">${unlocked ? '🏆' : '🔒'}</span>
+                  <span class="achievement-icon">Achieved</div>
                   <div class="achievement-info">
                     <span class="achievement-name">${a.name}</span>
                     <span class="achievement-desc">${a.description}</span>
@@ -943,22 +901,8 @@ function renderTagsView() {
   
   return `
     <div class="tags-view">
-      <!-- Mood Insights Card -->
-      <div class="overview-card mood-insights" style="margin-bottom: 16px;">
-        <div class="overview-header">
-          <span class="overview-icon">🧠</span>
-          <h3>Mood Insights</h3>
-        </div>
-        <div class="mood-sparkline">
-          <canvas id="moodSparkline"></canvas>
-        </div>
-        <div class="mood-insight-text">
-          ${moodStats.peak ? `✨ Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)` : 'Start writing to see insights'}
-        </div>
-      </div>
-      
       <div class="tags-header-row">
-        <h2>🏷️ Your Tags</h2>
+        ${renderIcon('tags', null, '')} Your Tags
         <div class="tags-stats">
           <span class="stat-badge">📝 ${entries.length} entries</span>
           <span class="stat-badge">🔥 ${streak} day streak</span>
@@ -985,7 +929,7 @@ function renderTagsView() {
       
       <!-- Templates Section -->
       <div class="templates-section">
-        <h2>📋 Templates</h2>
+        ${renderIcon('template', null, '')} Templates
         <button class="btn" onclick="openTemplateModal()">+ New Template</button>
         ${renderTemplatesList()}
       </div>
@@ -1141,7 +1085,7 @@ window.openDiaryModal = function(dateStr, templateContent = '') {
       <div class="context-quick-view">
         ${showTasks && contextData.tasks?.length ? `<span class="context-item">✓ ${contextData.tasks.length} task(s) done</span>` : ''}
         ${showHabits && contextData.habits?.length ? `<span class="context-item">✓ ${contextData.habits.length} habit(s) logged</span>` : ''}
-        ${showExpenses && contextData.expenses > 0 ? `<span class="context-item">💰 ${Number(contextData.expenses || 0).toFixed(2)} spent</span>` : ''}
+        ${showExpenses && contextData.expenses > 0 ? `<span class="context-item">${renderIcon('money', null, '')}(contextData.expenses || 0).toFixed(2)} spent</span>` : ''}
       </div>
       
       <!-- Mood Selector -->
@@ -1151,7 +1095,7 @@ window.openDiaryModal = function(dateStr, templateContent = '') {
           <input type="range" min="1" max="10" value="${defaultMood}" class="mood-slider" id="mMoodScore"
             oninput="updateMoodDisplay(this.value)">
           <div class="mood-display">
-            <span id="moodEmoji" class="mood-emoji-large">😐</span>
+            ${renderIcon('mood-okay', null, 'mood-emoji-large')}
             <span id="moodVal" class="mood-number">${defaultMood}</span>
           </div>
         </div>
