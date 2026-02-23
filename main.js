@@ -2,8 +2,8 @@
 
 // REPLACE THIS URL with your deployed Web App URL
 
-const API_BASE = "https://script.google.com/macros/s/AKfycbxHmMqsUKHqfmBvNwhzwy1UAap_Wp8vnpvNR-yXBXgtdYxsmmEF3SDsM-dQMCUUuVRIpw/exec";
-
+const API_BASE = "https://script.google.com/macros/s/AKfycbzG5PhMb9a2tZl4Z3CDRUhJSLS9foN-vSRMocmD9ZUbNLw05FchyYXuDYNiMiSEURLfPQ/exec";
+const SCRIPT_URL = API_BASE; // Alias for compatibility
 
 
 window.state = {
