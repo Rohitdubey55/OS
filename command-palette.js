@@ -1,21 +1,21 @@
 /* command-palette.js */
 
 const COMMANDS = [
-    { id: 'nav-dashboard', title: 'Go to Dashboard', icon: 'layout-grid', action: () => routeTo('dashboard'), keywords: 'home dashboard' },
-    { id: 'nav-tasks', title: 'Go to Tasks', icon: 'check-square', action: () => routeTo('tasks'), keywords: 'tasks todo' },
-    { id: 'nav-habits', title: 'Go to Habits', icon: 'flame', action: () => routeTo('habits'), keywords: 'habits tracker' },
-    { id: 'nav-finance', title: 'Go to Finance', icon: 'wallet', action: () => routeTo('finance'), keywords: 'money finance budget' },
-    { id: 'nav-diary', title: 'Go to Diary', icon: 'book', action: () => routeTo('diary'), keywords: 'diary journal' },
-    { id: 'nav-vision', title: 'Go to Vision', icon: 'target', action: () => routeTo('vision'), keywords: 'vision goals' },
-    { id: 'nav-people', title: 'Go to People', icon: 'users', action: () => routeTo('people'), keywords: 'people contacts' },
+    { id: 'nav-dashboard', title: 'Go to Dashboard', icon: 'grid', action: () => routeTo('dashboard'), keywords: 'home dashboard' },
+    { id: 'nav-tasks', title: 'Go to Tasks', icon: 'list', action: () => routeTo('tasks'), keywords: 'tasks todo' },
+    { id: 'nav-habits', title: 'Go to Habits', icon: 'streak', action: () => routeTo('habits'), keywords: 'habits tracker' },
+    { id: 'nav-finance', title: 'Go to Finance', icon: 'money', action: () => routeTo('finance'), keywords: 'money finance budget' },
+    { id: 'nav-diary', title: 'Go to Diary', icon: 'diary', action: () => routeTo('diary'), keywords: 'diary journal' },
+    { id: 'nav-vision', title: 'Go to Vision', icon: 'vision', action: () => routeTo('vision'), keywords: 'vision goals' },
+    { id: 'nav-people', title: 'Go to People', icon: 'people', action: () => routeTo('people'), keywords: 'people contacts' },
     { id: 'nav-settings', title: 'Sidebar Settings', icon: 'settings', action: () => routeTo('settings'), keywords: 'settings config' },
 
-    { id: 'act-new-task', title: 'Create New Task', icon: 'plus', action: () => window.openTaskModal(), keywords: 'new task add' },
+    { id: 'act-new-task', title: 'Create New Task', icon: 'add', action: () => window.openTaskModal(), keywords: 'new task add' },
     { id: 'act-new-habit', title: 'Create New Habit', icon: 'plus-circle', action: () => window.openHabitModal(), keywords: 'new habit add' },
     { id: 'act-new-expense', title: 'Log Expense', icon: 'dollar-sign', action: () => window.openFinanceAction(), keywords: 'new expense cost money' },
-    { id: 'act-new-diary', title: 'Write in Diary', icon: 'pen-tool', action: () => window.openDiaryModal(), keywords: 'new diary entry write' },
+    { id: 'act-new-diary', title: 'Write in Diary', icon: 'write', action: () => window.openDiaryModal(), keywords: 'new diary entry write' },
 
-    { id: 'sys-reload', title: 'Reload App', icon: 'refresh-cw', action: () => window.location.reload(), keywords: 'reload refresh' },
+    { id: 'sys-reload', title: 'Reload App', icon: 'refresh', action: () => window.location.reload(), keywords: 'reload refresh' },
     { id: 'sys-theme-dark', title: 'Switch to Dark Mode', icon: 'moon', action: () => applyThemeMode('dark'), keywords: 'dark mode theme' },
     { id: 'sys-theme-light', title: 'Switch to Light Mode', icon: 'sun', action: () => applyThemeMode('light'), keywords: 'light mode theme' }
 ];
@@ -41,7 +41,9 @@ document.addEventListener('keydown', (e) => {
         renderCommandList();
     } else if (e.key === 'Enter') {
         e.preventDefault();
-        executeCommand(_filteredCommands[_selectedIndex]);
+        if (_filteredCommands.length > 0 && _selectedIndex < _filteredCommands.length) {
+            executeCommand(_filteredCommands[_selectedIndex]);
+        }
     } else if (e.key === 'Escape') {
         closeCommandPalette();
     }
@@ -92,7 +94,7 @@ function renderCommandList() {
         div.className = `cmd-item ${index === _selectedIndex ? 'selected' : ''}`;
         div.onclick = () => executeCommand(cmd);
         div.innerHTML = `
-            <i data-lucide="${cmd.icon}" style="width:18px; margin-right:12px; color:var(--text-muted)"></i>
+            ${renderIcon(cmd.icon, null, 'style="width:18px; margin-right:12px; color:var(--text-muted)"')}
             <span class="cmd-title">${cmd.title}</span>
             ${index === _selectedIndex ? '<span class="cmd-enter">↵</span>' : ''}
         `;
@@ -105,7 +107,7 @@ function renderCommandList() {
         selected.scrollIntoView({ block: 'nearest' });
     }
 
-    if (typeof lucide !== 'undefined') lucide.createIcons();
+
 }
 
 function executeCommand(cmd) {

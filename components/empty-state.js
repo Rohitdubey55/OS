@@ -12,23 +12,10 @@ function createEmptyState(config) {
     const container = document.createElement('div');
     container.className = 'empty-state';
 
-    // Use renderIcon if available, otherwise fall back to emoji
-    let iconHtml;
-    if (typeof renderIcon === 'function') {
-        iconHtml = renderIcon(icon, null, 'empty-illustration');
-    } else {
-        // Fallback to legacy emoji mapping
-        const fallbackIcons = {
-            'inbox-empty': '📭',
-            'no-tasks': '✓',
-            'planner': '📅',
-            'no-expenses': '💰',
-            'no-habits': '🔥',
-            'no-diary': '📔',
-            'no-vision': '👁️'
-        };
-        iconHtml = fallbackIcons[icon] || '📭';
-    }
+    // Use renderIcon if available (from icon-packs.js)
+    const iconHtml = typeof renderIcon === 'function' ?
+        renderIcon(icon, null, 'class="empty-illustration"') :
+        '📭'; // Absolute last resort fallback
 
     container.innerHTML = `
     <div class="empty-state-icon">${iconHtml}</div>

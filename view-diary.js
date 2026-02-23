@@ -35,7 +35,7 @@ function getDailyPrompt() {
 
 function renderDiary() {
   const entries = state.data.diary || [];
-  
+
   let filteredEntries = filterEntries(entries);
   const sorted = [...filteredEntries].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
@@ -46,7 +46,7 @@ function renderDiary() {
   const totalEntries = entries.length;
   const totalWords = entries.reduce((acc, e) => acc + (e.text ? e.text.split(/\s+/).length : 0), 0);
   const achievements = getAchievements(entries);
-  
+
   // Calculate this week's entries
   const today = new Date();
   const startOfWeek = new Date(today);
@@ -56,7 +56,7 @@ function renderDiary() {
     return entryDate >= startOfWeek;
   });
   const weekDaysWritten = new Set(thisWeekEntries.map(e => e.date)).size;
-  
+
   // Get mood insights
   const moodStats = getMoodStats(entries);
 
@@ -117,44 +117,44 @@ function renderDiary() {
           </div>
           <div class="week-stat">${weekDaysWritten}/7 days written</div>
           <div class="week-progress">
-            <div class="week-progress-bar" style="width: ${(weekDaysWritten/7)*100}%"></div>
+            <div class="week-progress-bar" style="width: ${(weekDaysWritten / 7) * 100}%"></div>
           </div>
         </div>
         
         <!-- Mood Insights Card -->
         <div class="overview-card mood-insights">
           <div class="overview-header">
-            <span class="overview-icon">🧠</span>
+            ${renderIcon('insights', null, 'overview-icon')}
             <h3>Mood Insights</h3>
           </div>
           <div class="mood-sparkline">
             <canvas id="moodSparkline"></canvas>
           </div>
           <div class="mood-insight-text">
-            ${moodStats.peak ? `✨ Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)` : 'Start writing to see insights'}
+            ${moodStats.peak ? `${renderIcon('mood-great', null, 'insight-dot')} Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)` : 'Start writing to see insights'}
           </div>
         </div>
       </div>
       
       <!-- Navigation Tabs -->
       <div class="diary-nav-tabs">
-        <button class="nav-tab ${currentDiaryView === 'home' ? 'active' : ''}" onclick="switchDiaryView('home')">
-          ${renderIcon('home', null, 'nav-icon')} Home
+        <button class="nav-tab ${currentDiaryView === 'home' ? 'active' : ''}" onclick="switchDiaryView('home')" title="Home">
+          ${renderIcon('home', null, 'class="nav-icon"')}
         </button>
-        <button class="nav-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')">
-          ${renderIcon('list', null, 'nav-icon')} All Entries
+        <button class="nav-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')" title="All Entries">
+          ${renderIcon('list', null, 'class="nav-icon"')}
         </button>
-        <button class="nav-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')">
-          ${renderIcon('calendar', null, 'nav-icon')} Calendar
+        <button class="nav-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')" title="Calendar">
+          ${renderIcon('calendar', null, 'class="nav-icon"')}
         </button>
-        <button class="nav-tab ${currentDiaryView === 'yearly' ? 'active' : ''}" onclick="switchDiaryView('yearly')">
-          ${renderIcon('yearly', null, 'nav-icon')} Yearly
+        <button class="nav-tab ${currentDiaryView === 'yearly' ? 'active' : ''}" onclick="switchDiaryView('yearly')" title="Yearly">
+          ${renderIcon('yearly', null, 'class="nav-icon"')}
         </button>
-        <button class="nav-tab ${currentDiaryView === 'insights' ? 'active' : ''}" onclick="switchDiaryView('insights')">
-          ${renderIcon('insights', null, '')} Insights
+        <button class="nav-tab ${currentDiaryView === 'insights' ? 'active' : ''}" onclick="switchDiaryView('insights')" title="Insights">
+          ${renderIcon('insights', null, 'class="nav-icon"')}
         </button>
-        <button class="nav-tab ${currentDiaryView === 'tags' ? 'active' : ''}" onclick="switchDiaryView('tags')">
-          ${renderIcon('tags', null, '')} Tags
+        <button class="nav-tab ${currentDiaryView === 'tags' ? 'active' : ''}" onclick="switchDiaryView('tags')" title="Tags">
+          ${renderIcon('tags', null, 'class="nav-icon"')}
         </button>
       </div>
       
@@ -187,7 +187,7 @@ function renderDiary() {
   `;
 
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-  
+
   // Render sparkline for any view that has it
   setTimeout(() => {
     const sparklineCanvas = document.getElementById('moodSparkline');
@@ -203,7 +203,7 @@ function getWeekDots(entries) {
   const today = new Date();
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
-  
+
   const dots = [];
   for (let i = 0; i < 7; i++) {
     const day = new Date(startOfWeek);
@@ -211,7 +211,7 @@ function getWeekDots(entries) {
     const dateStr = day.toISOString().slice(0, 10);
     const entry = entries.find(e => e.date === dateStr);
     const isToday = dateStr === today.toISOString().slice(0, 10);
-    
+
     dots.push(`
       <div class="week-dot ${entry ? 'has-entry' : ''} ${isToday ? 'today' : ''}" 
            title="${days[i]}${entry ? ` - Mood: ${entry.mood_score}/10` : ''}"
@@ -228,33 +228,33 @@ function getWeekDots(entries) {
 function getMoodStats(entries) {
   const last30 = entries.slice(-30);
   const moods = last30.filter(e => e.mood_score).map(e => Number(e.mood_score));
-  
+
   if (moods.length < 2) {
-    return { 
-      trend: 'stable', 
+    return {
+      trend: 'stable',
       peak: null,
       avgMood: moods.length > 0 ? moods[0].toFixed(1) : null
     };
   }
-  
+
   const recent = moods.slice(-7);
   const older = moods.slice(-14, -7);
   const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
   const olderAvg = older.length > 0 ? older.reduce((a, b) => a + b, 0) / older.length : recentAvg;
-  
+
   let trend = 'stable';
   if (recentAvg > olderAvg + 0.5) trend = 'up';
   else if (recentAvg < olderAvg - 0.5) trend = 'down';
-  
+
   // Find peak day
   const last7Days = entries.slice(-7);
-  const peakEntry = last7Days.reduce((max, e) => 
+  const peakEntry = last7Days.reduce((max, e) =>
     (!max || Number(e.mood_score) > Number(max.mood_score)) ? e : max, null);
-  
+
   // Calculate overall average
   const allMoods = entries.filter(e => e.mood_score).map(e => Number(e.mood_score));
   const avgMood = allMoods.length > 0 ? (allMoods.reduce((a, b) => a + b, 0) / allMoods.length).toFixed(1) : null;
-  
+
   return {
     trend,
     peak: peakEntry ? {
@@ -268,7 +268,7 @@ function getMoodStats(entries) {
 // Render home content (recent entries)
 function renderHomeContent(sorted) {
   const recentEntries = sorted.slice(0, 5);
-  
+
   if (recentEntries.length === 0) {
     return `
       <div class="empty-home">
@@ -281,12 +281,12 @@ function renderHomeContent(sorted) {
       </div>
     `;
   }
-  
+
   return `
     <div class="recent-entries-section">
       <div class="section-header">
         ${renderIcon('entries', null, '')} Entries
-        <button class="view-all-btn" onclick="switchDiaryView('list')">View All →</button>
+        <button class="view-all-btn" onclick="switchDiaryView('list')">View All ${renderIcon('chevron-right', null, 'view-all-icon')}</button>
       </div>
       <div class="entries-list">
         ${recentEntries.map(entry => renderEntryCard(entry)).join('')}
@@ -301,13 +301,18 @@ function renderEntryCard(entry) {
   const dateStr = getRelativeDate(entry.date);
   const score = Number(entry.mood_score || 5);
   const wordCount = entry.text ? entry.text.split(/\s+/).length : 0;
-  
+
   let moodColor = '#F59E0B';
   if (score >= 8) moodColor = '#10B981';
   else if (score <= 4) moodColor = '#EF4444';
-  
-  const tags = entry.tags ? entry.tags.split(',').map(t => t.trim()) : [];
-  
+
+  // Normalize and split tags (both comma and space separated)
+  const tags = entry.tags
+    ? entry.tags.split(/[,\s]+/)
+      .map(t => t.trim().replace(/^#+/, ''))
+      .filter(t => t.length > 0)
+    : [];
+
   return `
     <div class="entry-card" onclick="openEditDiary('${entry.id}')">
       <div class="entry-mood-indicator" style="background: ${moodColor}"></div>
@@ -327,7 +332,7 @@ function renderEntryCard(entry) {
           </div>
         ` : ''}
         <div class="entry-meta">
-          ${renderIcon('words', null, '')}
+          ${renderIcon('words', null, '')} ${wordCount} words
         </div>
       </div>
       <div class="entry-actions">
@@ -348,15 +353,15 @@ function getRelativeDate(dateStr) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  
+
   if (dateStr === today.toISOString().slice(0, 10)) return 'Today';
   if (dateStr === yesterday.toISOString().slice(0, 10)) return 'Yesterday';
-  
+
   return date.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // Delete entry
-window.deleteEntry = async function(id) {
+window.deleteEntry = async function (id) {
   if (confirm('Delete this entry?')) {
     await apiCall('delete', 'diary', null, id);
     await refreshData('diary');
@@ -373,17 +378,23 @@ function renderListView(sorted) {
       </div>
     `;
   }
-  
+
   const moodStats = getMoodStats(sorted);
   const streak = calculateStreak(sorted);
-  
+
   return `
-    <div class="list-view-header">
-      <div class="list-stats">
-        ${renderIcon('entries', null, 'stat-badge')} entries
-        <span class="stat-badge">🔥 ${streak} day streak</span>
-        ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10 avg</span>` : ''}
-        ${moodStats.peak ? `${renderIcon('default', null, 'stat-badge')} ${moodStats.peak.day} (${moodStats.peak.mood}/10)</span>` : ''}
+    <div class="list-view">
+      <div class="view-header-row">
+        <div class="header-title">
+          ${renderIcon('list', null, 'header-icon')}
+          <h2>All Entries</h2>
+        </div>
+        <div class="list-stats">
+          <span class="stat-badge">📝 ${sorted.length} entries</span>
+          <span class="stat-badge">🔥 ${streak} day streak</span>
+          ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10 avg</span>` : ''}
+          ${moodStats.peak ? `<span class="stat-badge">✨ Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)</span>` : ''}
+        </div>
       </div>
     </div>
     <div class="entries-list-full">
@@ -396,17 +407,17 @@ function renderListView(sorted) {
 function renderCalendarView(entries) {
   const entryMap = {};
   entries.forEach(e => entryMap[e.date] = e);
-  
+
   const today = new Date();
   const year = today.getFullYear();
   const month = today.getMonth();
-  
+
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const startDay = firstDay.getDay();
-  
+
   const monthName = firstDay.toLocaleDateString('default', { month: 'long', year: 'numeric' });
-  
+
   // Get mood stats for current month
   const monthEntries = entries.filter(e => {
     const d = new Date(e.date);
@@ -414,39 +425,42 @@ function renderCalendarView(entries) {
   });
   const moodStats = getMoodStats(monthEntries);
   const streak = calculateStreak(entries);
-  
+
   let days = [];
-  
+
   // Previous month days
   const prevMonthLast = new Date(year, month, 0).getDate();
   for (let i = startDay - 1; i >= 0; i--) {
     days.push({ date: prevMonthLast - i, isOtherMonth: true });
   }
-  
+
   // Current month days
   for (let i = 1; i <= lastDay.getDate(); i++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
     const entry = entryMap[dateStr];
-    days.push({ 
-      date: i, 
-      isOtherMonth: false, 
+    days.push({
+      date: i,
+      isOtherMonth: false,
       entry,
       isToday: dateStr === today.toISOString().slice(0, 10)
     });
   }
-  
+
   // Next month days
   const remaining = (7 - (days.length % 7)) % 7;
   for (let i = 1; i <= remaining; i++) {
     days.push({ date: i, isOtherMonth: true });
   }
-  
+
   return `
     <div class="calendar-view">
-      <div class="calendar-header">
-        <h2>${monthName}</h2>
+      <div class="view-header-row">
+        <div class="header-title">
+          ${renderIcon('calendar', null, 'header-icon')}
+          <h2>${monthName}</h2>
+        </div>
         <div class="calendar-stats">
-          ${renderIcon('entries', null, 'stat-badge')} this month
+          <span class="stat-badge">📝 ${monthEntries.length} this month</span>
           ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10</span>` : ''}
         </div>
       </div>
@@ -455,12 +469,12 @@ function renderCalendarView(entries) {
       </div>
       <div class="calendar-grid">
         ${days.map(d => {
-          if (d.isOtherMonth) return `<div class="calendar-day other-month"></div>`;
-          
-          const moodLevel = d.entry ? Math.ceil(Number(d.entry.mood_score || 5) / 2) : 0;
-          const moodColors = ['', '#FEE2E2', '#FEF3C7', '#FEF9C3', '#D1FAE5', '#A7F3D0'];
-          
-          return `
+    if (d.isOtherMonth) return `<div class="calendar-day other-month"></div>`;
+
+    const moodLevel = d.entry ? Math.ceil(Number(d.entry.mood_score || 5) / 2) : 0;
+    const moodColors = ['', '#FEE2E2', '#FEF3C7', '#FEF9C3', '#D1FAE5', '#A7F3D0'];
+
+    return `
             <div class="calendar-day ${d.isToday ? 'today' : ''} ${d.entry ? 'has-entry' : ''}" 
                  style="${moodLevel > 0 ? `background: ${moodColors[moodLevel]}20` : ''}"
                  onclick="${d.entry ? `openEditDiary('${d.entry.id}')` : `openDiaryModal('${year}-${String(month + 1).padStart(2, '0')}-${String(d.date).padStart(2, '0')}')`}">
@@ -471,7 +485,7 @@ function renderCalendarView(entries) {
               ` : ''}
             </div>
           `;
-        }).join('')}
+  }).join('')}
       </div>
     </div>
   `;
@@ -481,26 +495,26 @@ function renderCalendarView(entries) {
 function renderYearlyView(entries) {
   const entryMap = {};
   entries.forEach(e => entryMap[e.date] = e);
-  
+
   const today = new Date();
   const year = today.getFullYear();
   const months = [];
-  
+
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  
+
   for (let m = 0; m < 12; m++) {
     const firstDay = new Date(year, m, 1);
     const lastDay = new Date(year, m + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startDayOfWeek = firstDay.getDay();
-    
+
     let days = [];
-    
+
     // Empty cells for days before the 1st
     for (let i = 0; i < startDayOfWeek; i++) {
       days.push({ day: null, entry: null });
     }
-    
+
     // Days of the month
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -508,28 +522,31 @@ function renderYearlyView(entries) {
       const isToday = dateStr === today.toISOString().slice(0, 10);
       days.push({ day: d, entry, isToday });
     }
-    
+
     // Count entries this month
     const monthEntries = days.filter(d => d.entry).length;
-    
+
     months.push({
       name: monthNames[m],
       days,
       entryCount: monthEntries
     });
   }
-  
+
   // Calculate yearly stats
   const totalEntries = entries.length;
   const streak = calculateStreak(entries);
   const moodStats = getMoodStats(entries);
-  
+
   return `
     <div class="yearly-view">
-      <div class="yearly-header">
-        <h2>${year} Overview</h2>
+      <div class="view-header-row">
+        <div class="header-title">
+          ${renderIcon('calendar', null, 'header-icon')}
+          <h2>${year} Overview</h2>
+        </div>
         <div class="yearly-stats">
-          📝 ${totalEntries} entries
+          <span class="stat-badge">📝 ${totalEntries} entries</span>
           <span class="stat-badge">🔥 ${streak} day streak</span>
           ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10 avg</span>` : ''}
         </div>
@@ -543,19 +560,19 @@ function renderYearlyView(entries) {
             </div>
             <div class="month-days">
               ${m.days.map(d => {
-                if (!d.day) return '<div class="day-cell empty"></div>';
-                const moodScore = d.entry ? Number(d.entry.mood_score || 5) : 0;
-                const moodLevel = Math.ceil(moodScore / 2);
-                const moodColors = ['', '#EF4444', '#F97316', '#EAB308', '#22C55E', '#10B981'];
-                const bgColor = d.entry ? moodColors[moodLevel] : 'transparent';
-                return `
+    if (!d.day) return '<div class="day-cell empty"></div>';
+    const moodScore = d.entry ? Number(d.entry.mood_score || 5) : 0;
+    const moodLevel = Math.ceil(moodScore / 2);
+    const moodColors = ['', '#EF4444', '#F97316', '#EAB308', '#22C55E', '#10B981'];
+    const bgColor = d.entry ? moodColors[moodLevel] : 'transparent';
+    return `
                   <div class="day-cell ${d.entry ? 'has-entry' : ''} ${d.isToday ? 'today' : ''}"
                        style="background-color: ${bgColor} !important;"
                        onclick="${d.entry ? `openEditDiary('${d.entry.id}')` : `openDiaryModal('${year}-${String(monthNames.indexOf(m.name) + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}')`}"
                        title="${d.day}${d.entry ? ` - Mood: ${d.entry.mood_score}/10` : ''}">
                   </div>
                 `;
-              }).join('')}
+  }).join('')}
             </div>
           </div>
         `).join('')}
@@ -569,19 +586,22 @@ function renderInsightsView(entries) {
   const moodStats = getMoodStats(entries);
   const achievements = state.data.diary_achievements || [];
   const streak = calculateStreak(entries);
-  
+
   // Calculate writing frequency
   const thisMonth = entries.filter(e => {
     const d = new Date(e.date);
     return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear();
   });
-  
+
   const totalWords = entries.reduce((acc, e) => acc + (e.text ? e.text.split(/\s+/).length : 0), 0);
-  
+
   return `
     <div class="insights-view">
-      <div class="insights-header">
-        <h2>Insights</h2>
+      <div class="view-header-row">
+        <div class="header-title">
+          ${renderIcon('insights', null, 'header-icon')}
+          <h2>Insights</h2>
+        </div>
         <button class="export-btn" onclick="window.exportDiary()">
           ${renderIcon('export', null, '')} Export
         </button>
@@ -611,24 +631,24 @@ function renderInsightsView(entries) {
           ${renderIcon('achievements', null, '')} Achievements
           <div class="achievements-list">
             ${achievements.map(a => {
-              let unlocked = false;
-              const totalEntries = entries.length;
-              const goodMoodCount = entries.filter(e => Number(e.mood_score) >= 8).length;
-              
-              if (a.type === 'streak' && streak >= Number(a.target_value)) unlocked = true;
-              if (a.type === 'entries' && totalEntries >= Number(a.target_value)) unlocked = true;
-              if (a.type === 'mood' && goodMoodCount >= Number(a.target_value)) unlocked = true;
-              
-              return `
+    let unlocked = false;
+    const totalEntries = entries.length;
+    const goodMoodCount = entries.filter(e => Number(e.mood_score) >= 8).length;
+
+    if (a.type === 'streak' && streak >= Number(a.target_value)) unlocked = true;
+    if (a.type === 'entries' && totalEntries >= Number(a.target_value)) unlocked = true;
+    if (a.type === 'mood' && goodMoodCount >= Number(a.target_value)) unlocked = true;
+
+    return `
                 <div class="achievement-item ${unlocked ? 'unlocked' : 'locked'}">
-                  <span class="achievement-icon">Achieved</div>
+                  <span class="achievement-icon">${unlocked ? '🏆' : '🔒'}</span>
                   <div class="achievement-info">
                     <span class="achievement-name">${a.name}</span>
                     <span class="achievement-desc">${a.description}</span>
                   </div>
                 </div>
               `;
-            }).join('')}
+  }).join('')}
           </div>
         </div>
       </div>
@@ -640,86 +660,86 @@ function renderInsightsView(entries) {
 function renderMoodSparkline(entries) {
   const canvas = document.getElementById('moodSparkline');
   if (!canvas) return;
-  
+
   const ctx = canvas.getContext('2d');
   const last14 = entries.slice(-14);
-  
+
   if (last14.length < 2) {
     // Show placeholder
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     return;
   }
-  
+
   const width = canvas.parentElement.offsetWidth;
   const height = 80;
   canvas.width = width;
   canvas.height = height;
-  
+
   const moods = last14.map(e => Number(e.mood_score || 5));
-  
+
   // Use actual min/max for better visualization
   const dataMin = Math.min(...moods);
   const dataMax = Math.max(...moods);
   // Add some padding to the range
   const min = Math.max(0, dataMin - 2);
   const max = Math.min(10, dataMax + 1);
-  
+
   const padding = 15;
   const chartWidth = width - padding * 2;
   const chartHeight = height - padding * 2;
-  
+
   // Draw gradient fill
   const gradient = ctx.createLinearGradient(0, 0, 0, height);
   gradient.addColorStop(0, 'rgba(79, 70, 229, 0.4)');
   gradient.addColorStop(1, 'rgba(79, 70, 229, 0.02)');
-  
+
   ctx.beginPath();
   ctx.moveTo(padding, height - padding);
-  
+
   moods.forEach((mood, i) => {
     const x = padding + (i / Math.max(1, moods.length - 1)) * chartWidth;
     const y = height - padding - ((mood - min) / Math.max(1, max - min)) * chartHeight;
     ctx.lineTo(x, y);
   });
-  
+
   ctx.lineTo(width - padding, height - padding);
   ctx.closePath();
   ctx.fillStyle = gradient;
   ctx.fill();
-  
+
   // Draw line
   ctx.beginPath();
   ctx.strokeStyle = '#4F46E5';
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  
+
   moods.forEach((mood, i) => {
     const x = padding + (i / Math.max(1, moods.length - 1)) * chartWidth;
     const y = height - padding - ((mood - min) / Math.max(1, max - min)) * chartHeight;
-    
+
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
-  
+
   // Draw points with value labels
   moods.forEach((mood, i) => {
     const x = padding + (i / Math.max(1, moods.length - 1)) * chartWidth;
     const y = height - padding - ((mood - min) / Math.max(1, max - min)) * chartHeight;
-    
+
     // Point
     ctx.beginPath();
     ctx.arc(x, y, 5, 0, Math.PI * 2);
     ctx.fillStyle = '#4F46E5';
     ctx.fill();
-    
+
     // White center
     ctx.beginPath();
     ctx.arc(x, y, 2, 0, Math.PI * 2);
     ctx.fillStyle = 'white';
     ctx.fill();
-    
+
     // Value label above point
     if (moods.length <= 7) {
       ctx.fillStyle = '#6B7280';
@@ -728,40 +748,40 @@ function renderMoodSparkline(entries) {
       ctx.fillText(mood.toFixed(0), x, y - 10);
     }
   });
-  
+
   // Draw y-axis labels
   ctx.fillStyle = '#9CA3AF';
   ctx.font = '9px sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(max.toFixed(0), 2, padding + 4);
   ctx.fillText(min.toFixed(0), 2, height - padding);
-  
+
   moods.forEach((mood, i) => {
     const x = padding + (i / Math.max(1, moods.length - 1)) * chartWidth;
     const y = height - padding - ((mood - min) / Math.max(1, max - min)) * chartHeight;
-    
+
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
-  
+
   // Draw points with value labels
   moods.forEach((mood, i) => {
     const x = padding + (i / Math.max(1, moods.length - 1)) * chartWidth;
     const y = height - padding - ((mood - min) / Math.max(1, max - min)) * chartHeight;
-    
+
     // Point
     ctx.beginPath();
     ctx.arc(x, y, 5, 0, Math.PI * 2);
     ctx.fillStyle = '#4F46E5';
     ctx.fill();
-    
+
     // White center
     ctx.beginPath();
     ctx.arc(x, y, 2, 0, Math.PI * 2);
     ctx.fillStyle = 'white';
     ctx.fill();
-    
+
     // Value label above point
     if (moods.length <= 7) {
       ctx.fillStyle = '#6B7280';
@@ -770,7 +790,7 @@ function renderMoodSparkline(entries) {
       ctx.fillText(mood.toFixed(0), x, y - 10);
     }
   });
-  
+
   // Draw y-axis labels
   ctx.fillStyle = '#9CA3AF';
   ctx.font = '9px sans-serif';
@@ -782,11 +802,11 @@ function renderMoodSparkline(entries) {
 // Filter entries
 function filterEntries(entries) {
   let filtered = entries;
-  
+
   if (currentDateFilter !== 'all') {
     const today = new Date();
     const cutoff = new Date();
-    
+
     if (currentDateFilter === 'week') {
       cutoff.setDate(today.getDate() - today.getDay());
     } else if (currentDateFilter === 'month') {
@@ -794,55 +814,58 @@ function filterEntries(entries) {
     } else if (currentDateFilter === 'last7') {
       cutoff.setDate(today.getDate() - 7);
     }
-    
+
     filtered = filtered.filter(e => new Date(e.date) >= cutoff);
   }
-  
+
   if (currentSearchQuery) {
     const query = currentSearchQuery.toLowerCase();
-    filtered = filtered.filter(e => 
+    filtered = filtered.filter(e =>
       (e.text && e.text.toLowerCase().includes(query)) ||
       (e.tags && e.tags.toLowerCase().includes(query))
     );
   }
-  
+
   if (currentTagFilter) {
-    filtered = filtered.filter(e => 
-      e.tags && e.tags.toLowerCase().includes(currentTagFilter.toLowerCase())
-    );
+    const filter = currentTagFilter.toLowerCase();
+    filtered = filtered.filter(e => {
+      if (!e.tags) return false;
+      const entryTags = e.tags.split(/[,\s]+/).map(t => t.trim().toLowerCase().replace(/^#+/, ''));
+      return entryTags.includes(filter.replace(/^#+/, ''));
+    });
   }
-  
+
   return filtered;
 }
 
-window.handleDiarySearch = function(query) {
+window.handleDiarySearch = function (query) {
   currentSearchQuery = query;
   renderDiary();
 };
 
-window.handleDateFilter = function(filter) {
+window.handleDateFilter = function (filter) {
   currentDateFilter = filter;
   renderDiary();
 };
 
 function calculateStreak(entries) {
   if (!entries.length) return 0;
-  
+
   const dates = entries.map(e => e.date).filter(d => d).sort((a, b) => b.localeCompare(a));
   if (!dates.length) return 0;
-  
+
   let streak = 0;
   const today = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  
+
   if (dates[0] !== today && dates[0] !== yesterday) return 0;
-  
+
   let currentDate = dates[0] === today ? new Date() : new Date(Date.now() - 86400000);
-  
+
   for (const dateStr of dates) {
     const entryDate = new Date(dateStr).toISOString().slice(0, 10);
     const checkDate = currentDate.toISOString().slice(0, 10);
-    
+
     if (entryDate === checkDate) {
       streak++;
       currentDate.setDate(currentDate.getDate() - 1);
@@ -850,18 +873,18 @@ function calculateStreak(entries) {
       break;
     }
   }
-  
+
   return streak;
 }
 
 function getAchievements(entries) {
   const achievements = state.data.diary_achievements || [];
   const unlocked = [];
-  
+
   const totalEntries = entries.length;
   const streak = calculateStreak(entries);
   const goodMoodCount = entries.filter(e => Number(e.mood_score) >= 8).length;
-  
+
   achievements.forEach(a => {
     let isUnlocked = false;
     if (a.type === 'streak' && streak >= Number(a.target_value)) isUnlocked = true;
@@ -869,11 +892,11 @@ function getAchievements(entries) {
     if (a.type === 'mood' && goodMoodCount >= Number(a.target_value)) isUnlocked = true;
     if (isUnlocked) unlocked.push(a);
   });
-  
+
   return unlocked;
 }
 
-window.switchDiaryView = function(view) {
+window.switchDiaryView = function (view) {
   currentDiaryView = view;
   renderDiary();
 };
@@ -881,28 +904,32 @@ window.switchDiaryView = function(view) {
 function renderTagsView() {
   const tagsData = state.data.diary_tags || [];
   const entries = state.data.diary || [];
-  
+
   const tagCounts = {};
   entries.forEach(e => {
     if (e.tags) {
-      e.tags.split(',').forEach(tag => {
-        const t = tag.trim().toLowerCase();
+      // Robust split by comma or space, remove extra hashtags
+      e.tags.split(/[,\s]+/).forEach(tag => {
+        const t = tag.trim().toLowerCase().replace(/^#+/, '');
         if (t) tagCounts[t] = (tagCounts[t] || 0) + 1;
       });
     }
   });
-  
+
   const allTags = [...new Set([...Object.keys(tagCounts), ...tagsData.map(t => t.name.toLowerCase())])];
-  
+
   const colors = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
-  
+
   const moodStats = getMoodStats(entries);
   const streak = calculateStreak(entries);
-  
+
   return `
     <div class="tags-view">
-      <div class="tags-header-row">
-        ${renderIcon('tags', null, '')} Your Tags
+      <div class="view-header-row">
+        <div class="header-title">
+          ${renderIcon('tags', null, 'header-icon')} 
+          <h2>Your Tags</h2>
+        </div>
         <div class="tags-stats">
           <span class="stat-badge">📝 ${entries.length} entries</span>
           <span class="stat-badge">🔥 ${streak} day streak</span>
@@ -916,31 +943,68 @@ function renderTagsView() {
             <p>No tags yet. Tags will appear when you use them.</p>
           </div>
         ` : allTags.map((tag, idx) => {
-          const count = tagCounts[tag] || 0;
-          const color = colors[idx % colors.length];
-          return `
+    const count = tagCounts[tag] || 0;
+    const color = colors[idx % colors.length];
+    return `
             <div class="tag-chip" style="--tag-color: ${color}" onclick="filterByTag('${tag}')">
               <span class="tag-name">#${tag}</span>
               <span class="tag-count">${count}</span>
             </div>
           `;
-        }).join('')}
+  }).join('')}
       </div>
       
       <!-- Templates Section -->
       <div class="templates-section">
-        ${renderIcon('template', null, '')} Templates
-        <button class="btn" onclick="openTemplateModal()">+ New Template</button>
+        <div class="section-header-row">
+          <div class="section-title">
+            ${renderIcon('template', null, '')} Templates
+          </div>
+          <div class="section-actions">
+            ${(state.data.diary_templates || []).length === 0 ? `
+              <button class="btn btn-seed" onclick="seedDefaultTemplates()">
+                ${renderIcon('plus', null, '')} Seed Defaults
+              </button>
+            ` : ''}
+            <button class="btn primary" onclick="openTemplateModal()">+ New Template</button>
+          </div>
+        </div>
         ${renderTemplatesList()}
       </div>
     </div>
   `;
 }
 
+window.seedDefaultTemplates = async function () {
+  const defaults = [
+    { title: "Standard Reflection", category: "reflection", content: "### Today's Highlights\n- \n\n### Challenges Overcome\n- \n\n### One Thing To Improve\n- " },
+    { title: "Gratitude Journal", category: "gratitude", content: "### Today, I am grateful for:\n1. \n2. \n3. \n\n### What would have made today even better?\n- " },
+    { title: "Evening Wind-down", category: "reflection", content: "### What's on my mind right now?\n\n\n### Am I holding onto any stress? How can I let it go?\n\n\n### Intention for tomorrow:\n- " },
+    { title: "Weekly Goals Check-in", category: "goals", content: "### Progress on Main Goal\n\n\n### Sub-tasks Completed\n- \n\n### Adjustments for Next Week\n- " },
+    { title: "Brain Dump", category: "reflection", content: "### Unfiltered Thoughts\n\n\n### Actionable Items from this Dump\n- \n- " }
+  ];
+
+  if (confirm('Add 5 default templates to your spreadsheet?')) {
+    const btn = document.querySelector('.btn-seed');
+    if (btn) btn.disabled = true;
+
+    for (const t of defaults) {
+      await apiCall('create', 'diary_templates', {
+        ...t,
+        is_default: false,
+        sort_order: 1
+      });
+    }
+
+    await refreshData('diary_templates');
+    renderDiary();
+  }
+};
+
 function renderTemplatesList() {
   const templates = state.data.diary_templates || [];
   if (!templates.length) return '<p class="text-muted">No templates yet</p>';
-  
+
   return `
     <div class="templates-grid">
       ${templates.map(t => `
@@ -959,19 +1023,19 @@ function renderTemplatesList() {
   `;
 }
 
-window.useTemplate = function(id) {
+window.useTemplate = function (id) {
   const templates = state.data.diary_templates || [];
   const t = templates.find(x => x.id === id);
   if (t) openDiaryModal(null, t.content);
 };
 
-window.editTemplate = function(id) {
+window.editTemplate = function (id) {
   const templates = state.data.diary_templates || [];
   const t = templates.find(x => x.id === id);
   openTemplateModal(t);
 };
 
-window.deleteTemplate = async function(id) {
+window.deleteTemplate = async function (id) {
   if (confirm('Delete this template?')) {
     await apiCall('delete', 'diary_templates', null, id);
     await refreshData('diary_templates');
@@ -979,10 +1043,10 @@ window.deleteTemplate = async function(id) {
   }
 };
 
-window.openTemplateModal = function(template = null) {
+window.openTemplateModal = function (template = null) {
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  
+
   box.innerHTML = `
     <h3>${template ? 'Edit Template' : 'New Template'}</h3>
     <input class="input" id="mTemplateTitle" placeholder="Title" value="${template?.title || ''}">
@@ -1000,30 +1064,30 @@ window.openTemplateModal = function(template = null) {
   modal.classList.remove('hidden');
 };
 
-window.saveTemplate = async function(existingId) {
+window.saveTemplate = async function (existingId) {
   const title = document.getElementById('mTemplateTitle').value;
   const category = document.getElementById('mTemplateCategory').value;
   const content = document.getElementById('mTemplateContent').value;
-  
+
   if (!title || !content) return alert('Fill all fields');
-  
+
   const payload = { title, category, content, is_default: false, sort_order: 1 };
-  
+
   if (existingId && existingId !== 'null') {
     await apiCall('update', 'diary_templates', payload, existingId);
   } else {
     await apiCall('create', 'diary_templates', payload);
   }
-  
+
   document.getElementById('universalModal').classList.add('hidden');
   await refreshData('diary_templates');
   renderDiary();
 };
 
-window.openTagModal = function() {
+window.openTagModal = function () {
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  
+
   box.innerHTML = `
     <h3>New Tag</h3>
     <input class="input" id="mTagName" placeholder="Tag name">
@@ -1035,35 +1099,35 @@ window.openTagModal = function() {
   modal.classList.remove('hidden');
 };
 
-window.saveNewTag = async function() {
+window.saveNewTag = async function () {
   const name = document.getElementById('mTagName').value.toLowerCase().trim();
   if (!name) return;
-  
+
   await apiCall('create', 'diary_tags', { name, color: '#4F46E5', usage_count: 0 });
   document.getElementById('universalModal').classList.add('hidden');
   await refreshData('diary_tags');
   renderDiary();
 };
 
-window.filterByTag = function(tag) {
+window.filterByTag = function (tag) {
   currentTagFilter = tag;
   currentDiaryView = 'list';
   renderDiary();
 };
 
 // Modal functions
-window.openDiaryModal = function(dateStr, templateContent = '') {
+window.openDiaryModal = function (dateStr, templateContent = '') {
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
   const defaultDate = dateStr || new Date().toISOString().slice(0, 10);
-  
+
   // Get settings
   const settings = state.data.settings?.[0] || {};
   const defaultMood = settings.diary_default_mood || '5';
   const showTasks = settings.diary_show_tasks !== false;
   const showHabits = settings.diary_show_habits !== false;
   const showExpenses = settings.diary_show_expenses !== false;
-  
+
   const templates = state.data.diary_templates || [];
   const contextData = getContextData(defaultDate);
 
@@ -1130,7 +1194,7 @@ window.openDiaryModal = function(dateStr, templateContent = '') {
       </div>
     </div>
   `;
-  
+
   // Word count listener
   const editor = document.getElementById('mDiaryText');
   editor.addEventListener('input', () => {
@@ -1143,7 +1207,7 @@ window.openDiaryModal = function(dateStr, templateContent = '') {
 };
 
 // Load template in modal
-window.loadTemplateInModal = function(templateId) {
+window.loadTemplateInModal = function (templateId) {
   if (!templateId) return;
   const templates = state.data.diary_templates || [];
   const t = templates.find(x => x.id == templateId);
@@ -1153,23 +1217,23 @@ window.loadTemplateInModal = function(templateId) {
   }
 };
 
-window.updateMoodDisplay = function(value) {
+window.updateMoodDisplay = function (value) {
   document.getElementById('moodEmoji').textContent = getMoodEmoji(value);
   document.getElementById('moodVal').textContent = value;
 };
 
-window.formatText = function(cmd) {
+window.formatText = function (cmd) {
   document.execCommand(cmd, false, null);
 };
 
-window.openEditDiary = function(id) {
+window.openEditDiary = function (id) {
   const e = (state.data.diary || []).find(x => String(x.id) === String(id));
   if (!e) return;
-  
+
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
   const score = Number(e.mood_score || 5);
-  
+
   box.innerHTML = `
     <div class="diary-modal-new">
       <h2>✍️ Edit Entry</h2>
@@ -1197,7 +1261,7 @@ window.openEditDiary = function(id) {
       </div>
     </div>
   `;
-  
+
   const editor = document.getElementById('mDiaryText');
   editor.addEventListener('input', () => {
     const text = editor.innerText || '';
@@ -1212,14 +1276,14 @@ function getContextData(dateStr) {
   const context = {};
   const tasks = state.data.tasks || [];
   context.tasks = tasks.filter(t => t.due_date === dateStr && t.status === 'completed');
-  
+
   const habits = state.data.habit_logs || [];
   context.habits = habits.filter(h => h.log_date === dateStr);
-  
+
   const expenses = state.data.expenses || [];
   const dayExpenses = expenses.filter(e => e.date === dateStr);
   context.expenses = dayExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-  
+
   return context;
 }
 
@@ -1232,10 +1296,10 @@ function getMoodEmoji(score) {
   return '🤩';
 }
 
-window.exportDiary = function() {
+window.exportDiary = function () {
   const entries = state.data.diary || [];
   if (!entries.length) return alert('No entries');
-  
+
   const data = {
     exported_at: new Date().toISOString(),
     total_entries: entries.length,
@@ -1246,7 +1310,7 @@ window.exportDiary = function() {
       text: e.text
     }))
   };
-  
+
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

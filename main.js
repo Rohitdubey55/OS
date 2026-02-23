@@ -19,6 +19,46 @@ window.state = {
 // Keep a reference for convenience
 const state = window.state;
 
+// --- TOAST NOTIFICATION ---
+function toast(msg, duration = 3000) {
+    const t = document.getElementById('toast');
+    if (t) {
+        t.innerText = msg;
+        t.style.opacity = 1;
+        t.style.display = 'block';
+        // Clear any existing timeout
+        if (t._toastTimeout) clearTimeout(t._toastTimeout);
+        t._toastTimeout = setTimeout(() => {
+            t.style.opacity = 0;
+            t.style.display = 'none';
+        }, duration);
+    } else {
+        console.log('Toast:', msg);
+    }
+}
+
+// Alias for compatibility with other code
+window.showToast = toast;
+
+// --- REFRESH ALL DATA ---
+async function refreshAll() {
+    console.log('Refreshing all data...');
+    showToast('Refreshing...');
+    try {
+        await loadAllData();
+        // Re-render current view
+        if (state.view) {
+            routeTo(state.view);
+        }
+        showToast('Data refreshed');
+    } catch (e) {
+        console.error('Refresh failed:', e);
+        showToast('Refresh failed');
+    }
+}
+
+window.refreshAll = refreshAll;
+
 // --- UTILITIES ---
 
 function escapeHtml(text) {
@@ -33,16 +73,16 @@ function formatReminderDateTime(date) {
     const diff = date - now;
     const isToday = date.toDateString() === now.toDateString();
     const isTomorrow = new Date(now.getTime() + 86400000).toDateString() === date.toDateString();
-    
+
     if (isToday) {
         return `Today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
     if (isTomorrow) {
         return `Tomorrow at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     }
-    
-    return date.toLocaleDateString([], { 
-        month: 'short', 
+
+    return date.toLocaleDateString([], {
+        month: 'short',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
@@ -152,7 +192,10 @@ async function routeTo(viewName) {
     // Update Nav Active States
     document.querySelectorAll('.nav-item, .mob-item, .tab').forEach(el => {
 
-        const target = el.dataset.target || (el.getAttribute('onclick') && el.getAttribute('onclick').match(/'([^']+)'/)[1]);
+        const target = el.dataset.target || (() => {
+            const match = el.getAttribute('onclick')?.match(/'([^']+)'/);
+            return match ? match[1] : null;
+        })();
 
         el.classList.toggle('active', target === viewName);
 
@@ -162,7 +205,7 @@ async function routeTo(viewName) {
 
 
     const main = document.getElementById('main');
-    
+
     // Guard: if main not found, wait and retry (max 5 times)
     if (!main) {
         if (!window._routeRetryCount) window._routeRetryCount = 0;
@@ -241,7 +284,7 @@ async function initApp() {
     }
 
     console.log('initApp: Starting...');
-    
+
     // Register Service Worker
     if ('serviceWorker' in navigator) {
         try {
@@ -249,11 +292,11 @@ async function initApp() {
             console.log('[SW Debug] Current location:', window.location.href);
             console.log('[SW Debug] Base URL:', window.location.origin);
             console.log('[SW Debug] Pathname:', window.location.pathname);
-            
+
             // Use absolute path for GitHub Pages compatibility
             const swPath = `${window.location.pathname.replace(/\/$/, '')}/sw.js`;
             console.log('[SW Debug] Attempting to register SW at:', swPath);
-            
+
             const registration = await navigator.serviceWorker.register(swPath, {
                 scope: `${window.location.pathname.replace(/\/$/, '')}/`
             });
@@ -266,9 +309,12 @@ async function initApp() {
     } else {
         console.warn('[SW Debug] Service Worker not supported in this browser');
     }
-    
+
     await loadAllData();
     console.log('initApp: Data loaded.');
+
+    // Initial render of static icons in index.html
+    if (typeof renderAllIcons === 'function') renderAllIcons();
 
     routeTo('dashboard');
 
@@ -853,12 +899,12 @@ document.addEventListener('click', async (e) => {
         const cat = document.getElementById('mHabitCat').value;
         const freq = document.getElementById('mHabitFreq').value;
         const days = typeof getSelectedDays === 'function' ? getSelectedDays('mHabitDays') : '';
-        
+
         // Debug: find ALL elements with mHabitTime in the modal
         const modal = document.getElementById('universalModal');
         const allTimeInputs = modal ? modal.querySelectorAll('#mHabitTime') : [];
         console.log('[Habit Save] All #mHabitTime elements in modal:', allTimeInputs.length, allTimeInputs);
-        
+
         const timeEl = document.getElementById('mHabitTime');
         const time = timeEl ? timeEl.value : '';
         const emoji = document.getElementById('mHabitEmoji')?.value || '✨';
@@ -1060,12 +1106,12 @@ document.addEventListener('click', async (e) => {
         const cat = document.getElementById('mHabitCat').value;
         const freq = document.getElementById('mHabitFreq').value;
         const days = typeof getSelectedDays === 'function' ? getSelectedDays('mHabitDays') : '';
-        
+
         // Debug: find ALL elements with mHabitTime in the modal
         const modal = document.getElementById('universalModal');
         const allTimeInputs = modal ? modal.querySelectorAll('#mHabitTime') : [];
         console.log('[Habit Update] All #mHabitTime elements in modal:', allTimeInputs.length, allTimeInputs);
-        
+
         const timeEl = document.getElementById('mHabitTime');
         const time = timeEl ? timeEl.value : '';
         const emoji = document.getElementById('mHabitEmoji')?.value || '✨';
@@ -1225,7 +1271,7 @@ async function refreshData(viewContext) {
     try {
         const data = await apiCall('get', sheetName);
         state.data[stateKey] = data;
-        
+
         // Debug: Log habits data after refresh
         if (viewContext === 'habits') {
             console.log('[Debug] Habits data from API:', JSON.stringify(data, null, 2));
@@ -1338,8 +1384,8 @@ function applyThemeOnLoad() {
     document.documentElement.style.setProperty('--primary', color);
 
     // Apply theme mode (light/dark/forest/midnight)
-    const mode = settings.theme_mode || 'light';
-    document.documentElement.setAttribute('data-theme', mode);
+    const [mode] = (settings.theme_mode || 'light').split('|');
+    document.documentElement.setAttribute('data-theme', mode || 'light');
 
     console.log('Theme applied:', mode, color);
 }
@@ -1354,8 +1400,8 @@ function applySettings() {
     document.documentElement.style.setProperty('--primary', color);
 
     // Apply theme mode (light/dark/forest/midnight)
-    const mode = settings.theme_mode || 'light';
-    document.documentElement.setAttribute('data-theme', mode);
+    const [mode] = (settings.theme_mode || 'light').split('|');
+    document.documentElement.setAttribute('data-theme', mode || 'light');
 
     // Apply orientation lock
     const orientation = settings.orientation_lock || 'auto';
@@ -1407,7 +1453,7 @@ window.openAIModal = function () {
             <div style="display:grid; gap:12px;">
                 <button class="btn large" style="justify-content:flex-start; height:60px; background:var(--bg); color:var(--text-main); border:1px solid var(--border)" onclick="triggerAIAnalysis()">
                     <div style="width:32px; height:32px; background:var(--primary-soft); border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:12px">
-                        <i data-lucide="zap" style="width:16px; color:var(--primary)"></i>
+                        ${renderIcon('priority', null, 'style="width:16px; color:var(--primary)"')}
                     </div>
                     <div style="text-align:left">
                         <div style="font-weight:600">Deep Analysis</div>
@@ -1417,7 +1463,7 @@ window.openAIModal = function () {
 
                 <button class="btn large" style="justify-content:flex-start; height:60px; background:var(--bg); color:var(--text-main); border:1px solid var(--border)" onclick="showAIChatView()">
                     <div style="width:32px; height:32px; background:var(--primary-soft); border-radius:50%; display:flex; align-items:center; justify-content:center; margin-right:12px">
-                        <i data-lucide="message-circle" style="width:16px; color:var(--primary)"></i>
+                        ${renderIcon('chat', null, 'style="width:16px; color:var(--primary)"')}
                     </div>
                     <div style="text-align:left">
                         <div style="font-weight:600">Ask a Question</div>
@@ -1434,7 +1480,7 @@ window.triggerAIAnalysis = async function () {
     const content = document.getElementById('aiModalContent');
     content.innerHTML = `
         <div style="text-align:center; padding:40px; color:var(--text-muted)">
-            <i data-lucide="loader" class="spin" style="width:32px; height:32px; margin-bottom:16px; color:var(--primary)"></i>
+            ${renderIcon('loading', null, 'class="spin" style="width:32px; height:32px; margin-bottom:16px; color:var(--primary)"')}
             <div class="typing-indicator"><span></span><span></span><span></span></div>
             <div style="margin-top:16px; font-weight:500">Analyzing ${state.view.charAt(0).toUpperCase() + state.view.slice(1)}...</div>
         </div>
@@ -1459,7 +1505,7 @@ window.showAIChatView = function () {
             </div>
             <div style="display:flex; gap:8px">
                 <input id="aiChatInput" class="input" style="margin:0" placeholder="Type your question..." onkeypress="if(event.key==='Enter') sendAIQuestion()">
-                <button class="btn primary" onclick="sendAIQuestion()"><i data-lucide="send" style="width:16px"></i></button>
+                <button class="btn primary" onclick="sendAIQuestion()">${renderIcon('send', null, 'style="width:16px"')}</button>
             </div>
         </div>
     `;
@@ -1532,9 +1578,9 @@ function renderAIContent(mdText) {
     // Parse headers, bullets, etc
     let html = mdText
         .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--primary);">$1</strong>')
-        .replace(/### (.*?)\n/g, '<div class="ai-section-title"><i data-lucide="hash" style="width:12px"></i> $1</div>')
+        .replace(/### (.*?)\n/g, `<div class="ai-section-title">${renderIcon('hash', null, 'style="width:12px"')} $1</div>`)
         .replace(/## (.*?)\n/g, '<div class="ai-title" style="font-size:18px; margin:16px 0 8px 0">$1</div>')
-        .replace(/- (.*?)\n/g, '<div style="display:flex; gap:8px; margin-bottom:6px"><i data-lucide="chevron-right" style="width:14px; margin-top:4px; flex-shrink:0; color:var(--accent)"></i> <span>$1</span></div>')
+        .replace(/- (.*?)\n/g, `<div style="display:flex; gap:8px; margin-bottom:6px">${renderIcon('right', null, 'style="width:14px; margin-top:4px; flex-shrink:0; color:var(--accent)"')} <span>$1</span></div>`)
         .replace(/\n\n/g, '<div style="height:12px"></div>');
 
     content.innerHTML = `<div class="ai-content-box">${html}</div>`;
@@ -1549,12 +1595,12 @@ window.closeAIModal = function () {
 };
 
 // Universal Modal Functions
-window.openUniversalModal = function() {
+window.openUniversalModal = function () {
     const modal = document.getElementById('universalModal');
     if (modal) modal.classList.remove('hidden');
 };
 
-window.closeUniversalModal = function() {
+window.closeUniversalModal = function () {
     const modal = document.getElementById('universalModal');
     if (modal) modal.classList.add('hidden');
 };

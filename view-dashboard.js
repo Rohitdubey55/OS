@@ -123,7 +123,7 @@ function renderDashboard() {
       const greeting = h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening';
       const settings = state.data.settings?.[0] || {};
       const name = settings.name || settings.user_name || "User";
-      
+
       // Get custom messages or use defaults
       let message;
       if (h < 12) {
@@ -145,7 +145,7 @@ function renderDashboard() {
                 ${h < 12 ? `
                 <div class="glass-panel fade-in stagger-2" style="padding:12px 20px; border-radius:16px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); display:inline-flex; align-items:center; gap:12px; cursor:pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.04);" onclick="routeTo('tasks')">
                     <div style="width:36px; height:36px; border-radius:10px; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; color:var(--primary);">
-                        <i data-lucide="target" style="width:18px;"></i>
+                        ${renderIcon('goals', null, 'style="width:18px;"')}
                     </div>
                     <div class="hide-mobile">
                         <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-3); font-weight:700;">Focus</div>
@@ -189,14 +189,14 @@ function renderDashboard() {
          <div class="widget-header" onclick="toggleWidget(this)">
             <div class="widget-title">
                 <span style="position:relative;">
-                    <i data-lucide="sparkles" style="width:20px; margin-right:8px; color:var(--primary); animation: aiSparkle 2s ease-in-out infinite;"></i>
+                    ${renderIcon('default', null, 'style="width:20px; margin-right:8px; color:var(--primary); animation: aiSparkle 2s ease-in-out infinite;"')}
                     <span style="position:absolute; top:0; left:0; width:100%; height:100%; background:var(--primary); filter:blur(8px); opacity:0.3; animation: aiGlow 2s ease-in-out infinite alternate;"></span>
                 </span>
                 Daily Briefing
             </div>
             <div style="display:flex; align-items:center; gap:12px">
-                <button class="btn icon" onclick="event.stopPropagation(); generateDashboardInsight()" title="Refresh Insight" style="transition:transform 0.3s;"><i data-lucide="refresh-cw" style="width:14px"></i></button>
-                <i class="widget-chevron" data-lucide="chevron-down" style="width:20px"></i>
+                <button class="btn icon" onclick="event.stopPropagation(); generateDashboardInsight()" title="Refresh Insight" style="transition:transform 0.3s;">${renderIcon('refresh', null, 'style="width:14px"')}</button>
+                ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
             </div>
          </div>
          <div class="widget-body" style="padding-top: 8px;">
@@ -207,7 +207,7 @@ function renderDashboard() {
                    </div>
                    <button class="btn primary" onclick="generateDashboardInsight()" style="padding: 14px 28px; border-radius: 14px; background: linear-gradient(135deg, var(--primary), #818cf8); box-shadow: 0 4px 15px rgba(99,102,241,0.4), 0 2px 4px rgba(0,0,0,0.1); position:relative; overflow:hidden; animation: aiFloat 3s ease-in-out infinite;">
                        <span style="position:relative; z-index:1; display:flex; align-items:center; gap:8px;">
-                           <i data-lucide="zap" style="width:18px; animation: aiBolt 1.5s ease-in-out infinite;"></i> 
+                           ${renderIcon('priority', null, 'style="width:18px; animation: aiBolt 1.5s ease-in-out infinite;"')} 
                            Generate Insight
                        </span>
                        <span style="position:absolute; top:0; left:-100%; width:200%; height:100%; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent); animation: aiShine 3s ease-in-out infinite;"></span>
@@ -259,7 +259,7 @@ function renderDashboard() {
         
         <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('finance')">
            <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="background:var(--primary-soft); color:var(--primary); width:36px; height:36px; border-radius: 12px;"><i data-lucide="wallet" style="width:18px;"></i></div>
+             <div class="kpi-icon" style="background:var(--primary-soft); color:var(--primary); width:36px; height:36px; border-radius: 12px;">${renderIcon('wallet', null, 'style="width:18px;"')}</div>
            </div>
            <div style="margin-top:16px;">
              <div class="kpi-value" style="font-size:20px; font-weight: 700;">₹${netWorth.toLocaleString()}</div>
@@ -269,7 +269,7 @@ function renderDashboard() {
 
         <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('finance')">
            <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="background:var(--danger-soft); color:var(--danger); width:36px; height:36px; border-radius: 12px;"><i data-lucide="trending-down" style="width:18px;"></i></div>
+             <div class="kpi-icon" style="background:var(--danger-soft); color:var(--danger); width:36px; height:36px; border-radius: 12px;">${renderIcon('loss', null, 'style="width:18px;"')}</div>
              <div style="width:50px; height:24px;"><canvas id="sparkSpend"></canvas></div>
            </div>
            <div style="margin-top:16px;">
@@ -280,7 +280,7 @@ function renderDashboard() {
 
         <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('tasks')">
            <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="width:36px; height:36px; border-radius: 12px;"><i data-lucide="check-circle" style="width:18px;"></i></div>
+             <div class="kpi-icon" style="width:36px; height:36px; border-radius: 12px;">${renderIcon('check-circle', null, 'style="width:18px;"')}</div>
            </div>
            <div style="margin-top:16px;">
              <div class="kpi-value" style="font-size:20px; font-weight: 700;">${completionRate}%</div>
@@ -298,10 +298,10 @@ function renderDashboard() {
       return `
       <div class="widget-card ${stateClass}" id="widget-cashflow" data-widget-id="cashflow" style="min-height:auto">
          <div class="widget-header" onclick="toggleWidget(this)">
-            <div class="widget-title"><i data-lucide="bar-chart-3" style="width:18px; margin-right:6px"></i> Cash Flow</div>
+            <div class="widget-title">${renderIcon('insights', null, 'style="width:18px; margin-right:6px"')} Cash Flow</div>
             <div style="display:flex; align-items:center; gap:10px">
                 <button class="btn icon" onclick="event.stopPropagation(); routeTo('finance')">→</button>
-                <i class="widget-chevron" data-lucide="chevron-down" style="width:20px"></i>
+                ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
             </div>
          </div>
          <div class="widget-body">
@@ -326,10 +326,10 @@ function renderDashboard() {
       return `
       <div class="widget-card collapsed">
          <div class="widget-header" onclick="toggleWidget(this)">
-            <div class="widget-title"><i data-lucide="zap" style="width:18px; margin-right:6px"></i> Tasks</div>
+            <div class="widget-title">${renderIcon('priority', null, 'style="width:18px; margin-right:6px"')} Tasks</div>
             <div style="display:flex; align-items:center; gap:10px" onclick="event.stopPropagation()">
                 <button class="btn icon" onclick="routeTo('tasks')">+</button>
-                <i class="widget-chevron" data-lucide="chevron-down" style="width:20px"></i>
+                ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
             </div>
          </div>
          <div class="widget-body">
@@ -359,7 +359,7 @@ function renderDashboard() {
           try {
             const eventDate = new Date(e.start_datetime).toISOString().split('T')[0];
             return eventDate === todayStr;
-          } catch(err) { return false; }
+          } catch (err) { return false; }
         })
         .sort((a, b) => (a.start_datetime || 0) - (b.start_datetime || 0));
 
@@ -374,9 +374,9 @@ function renderDashboard() {
       return `
       <div class="widget-card ${stateClass}" id="widget-today" data-widget-id="today">
          <div class="widget-header" onclick="toggleWidget(this)">
-            <div class="widget-title"><i data-lucide="calendar" style="width:18px; margin-right:6px"></i> Schedule & Events</div>
+            <div class="widget-title">${renderIcon('calendar', null, 'style="width:18px; margin-right:6px"')} Schedule & Events</div>
             <div style="display:flex; align-items:center; gap:10px">
-                <i class="widget-chevron" data-lucide="chevron-down" style="width:20px"></i>
+                ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
             </div>
          </div>
          <div class="widget-body">
@@ -425,9 +425,9 @@ function renderDashboard() {
       return `
       <div class="widget-card collapsed">
          <div class="widget-header" onclick="toggleWidget(this)">
-            <div class="widget-title"><i data-lucide="flame" style="width:18px; margin-right:6px"></i> Habits</div>
+            <div class="widget-title">${renderIcon('streak', null, 'style="width:18px; margin-right:6px"')} Habits</div>
             <div style="display:flex; align-items:center; gap:10px" onclick="event.stopPropagation()">
-                <i class="widget-chevron" data-lucide="chevron-down" style="width:20px"></i>
+                ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
             </div>
          </div>
          <div class="widget-body">
@@ -439,7 +439,7 @@ function renderDashboard() {
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:14px;">
                     <span style="${isDone ? 'text-decoration:line-through; color:var(--text-muted)' : ''}">${h.habit_name}</span>
                     <div class="habit-check ${isDone ? 'done' : ''}" data-action="toggle-habit" data-id="${h.id}">
-                        ${isDone ? '<i data-lucide="check" style="width:12px; color:white"></i>' : ''}
+                        ${isDone ? renderIcon('save', null, 'style="width:12px; color:white"') : ''}
                     </div>
                 </div>
                 `;
@@ -485,10 +485,10 @@ function renderDashboard() {
     <div class="dash-wrapper">
       
       <div class="quick-actions" style="margin: 12px 0 16px 0; display:flex; justify-content:space-between; gap:12px; padding:4px 4px; overflow:visible;">
-        <button class="qa-btn round-icon" onclick="openTaskModal()" title="Add Task" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'"><i data-lucide="zap" style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"></i></button>
-        <button class="qa-btn round-icon" onclick="openFinanceAction()" title="Add Expense" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'"><i data-lucide="wallet" style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"></i></button>
-        <button class="qa-btn round-icon" onclick="routeTo('calendar'); setTimeout(()=>openEventModal(),500)" title="New Event" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'"><i data-lucide="calendar" style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"></i></button>
-        <button class="qa-btn round-icon" onclick="openHabitModal()" title="New Habit" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'"><i data-lucide="flame" style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"></i></button>
+        <button class="qa-btn round-icon" onclick="openTaskModal()" title="Add Task" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('priority', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
+        <button class="qa-btn round-icon" onclick="openFinanceAction()" title="Add Expense" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('wallet', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
+        <button class="qa-btn round-icon" onclick="routeTo('calendar'); setTimeout(()=>openEventModal(),500)" title="New Event" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('calendar', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
+        <button class="qa-btn round-icon" onclick="openHabitModal()" title="New Habit" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('streak', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
       </div>
 
       <div class="dash-grid">
@@ -497,7 +497,7 @@ function renderDashboard() {
 
       <div style="margin:20px 0 40px 0; text-align:center">
         <button class="btn" onclick="openDashCustomize()" style="width:100%; background:var(--surface-1); border:1px solid var(--border); color:var(--text-muted); justify-content:center; padding:12px;">
-            <i data-lucide="layout-dashboard" style="width:16px; margin-right:8px"></i> Dashboard Layout
+            ${renderIcon('dashboard', null, 'style="width:16px; margin-right:8px"')} Dashboard Layout
         </button>
       </div>
     </div>
@@ -582,7 +582,7 @@ function _renderDashConfigModal() {
     <div id="dashConfigList">
       ${config.map((sec, i) => `
         <div class="dash-sort-item" data-id="${sec.id}" style="display:flex; align-items:center; gap:12px; padding:12px; background:var(--surface-2); border-radius:10px; margin-bottom:8px; touch-action:none;">
-          <div class="dash-handle" style="cursor:grab; padding:4px; color:var(--text-muted);"><i data-lucide="grip-vertical"></i></div>
+          <div class="dash-handle" style="cursor:grab; padding:4px; color:var(--text-muted);">${renderIcon('drag')}</div>
           <div style="flex:1; font-weight:600; font-size:15px; padding:0 8px;">${sec.label}</div>
           <button class="btn" style="min-width:60px; font-size:12px; padding:6px 12px; border-radius:20px; background:${sec.visible ? 'var(--primary)' : 'var(--surface-3)'}; color:white; border:none; cursor:pointer;"
                   onclick="toggleDashSection(${i})">
@@ -772,7 +772,7 @@ function renderDashMainChart(expenses) {
   const today = new Date();
   const thirtyDaysAgo = new Date(today);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
+
   // Initialize all days in range with 0
   for (let i = 0; i < 30; i++) {
     const d = new Date(thirtyDaysAgo);
@@ -780,7 +780,7 @@ function renderDashMainChart(expenses) {
     const k = d.toISOString().slice(0, 10); // YYYY-MM-DD
     days[k] = 0;
   }
-  
+
   // Fill in actual expense data
   expenses.forEach(e => {
     if (e.type !== 'expense') return;
@@ -902,7 +902,7 @@ window.generateDashboardInsight = async function () {
   // Show Loading State
   contentDiv.innerHTML = `
     <div style="display:flex; flex-direction:column; align-items:center; padding:20px 0; color:var(--text-muted)">
-      <i data-lucide="loader" class="spin" style="width:24px; margin-bottom:10px"></i>
+      ${renderIcon('loading', null, 'class="spin" style="width:24px; margin-bottom:10px"')}
       <span>Analyzing your day...</span>
     </div>
     `;
@@ -949,7 +949,7 @@ window.generateDashboardInsight = async function () {
   } catch (err) {
     contentDiv.innerHTML = `
     <div style="color:var(--danger); text-align:center; padding:10px">
-      <i data-lucide="alert-circle" style="width:20px; display:inline-block; vertical-align:middle"></i>
+      ${renderIcon('info', null, 'style="width:20px; display:inline-block; vertical-align:middle"')}
         ${err.message || 'Failed to generate insight.'}
       </div>
     `;

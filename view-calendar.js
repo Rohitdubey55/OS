@@ -24,9 +24,9 @@ function renderCalendar() {
           
           <div class="cal-actions-row">
              <div class="cal-controls">
-               <button class="cal-btn" onclick="navCal(-1)">←</button>
+               <button class="cal-btn" onclick="navCal(-1)">${renderIcon('back')}</button>
                <button class="cal-btn" onclick="navCal(0)">Today</button>
-               <button class="cal-btn" onclick="navCal(1)">→</button>
+               <button class="cal-btn" onclick="navCal(1)">${renderIcon('next')}</button>
              </div>
              
              <div class="cal-controls">
@@ -35,7 +35,7 @@ function renderCalendar() {
                <button class="cal-btn ${calState.view === 'day' ? 'active' : ''}" onclick="switchCalView('day')">Day</button>
              </div>
              
-             <button class="btn primary" onclick="openEventModal()">+ Add Event</button>
+             <button class="btn primary" onclick="openEventModal()">${renderIcon('add', null, 'style="width:14px; margin-right:4px"')} Add Event</button>
           </div>
         </div>
 
@@ -88,7 +88,7 @@ window.openEventModal = function (dateIso = null, startTime = "09:00") {
             <div style="margin-bottom:20px;">
               <label style="font-size:12px; font-weight:600; color:var(--text-2); display:block; margin-bottom:8px;">Event Title</label>
               <div class="input-group" style="position:relative;">
-                <i data-lucide="tag" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"></i>
+                ${renderIcon('tag', null, 'style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"')}
                 <input class="input" id="evtTitle" placeholder="e.g., Team Sync" style="padding-left:36px; font-weight:600; font-size:1.1em; width:100%;">
               </div>
             </div>
@@ -111,21 +111,21 @@ window.openEventModal = function (dateIso = null, startTime = "09:00") {
               <div style="grid-column: 1 / -1;">
                 <label style="font-size:12px; font-weight:600; color:var(--text-2); display:block; margin-bottom:8px;">Date</label>
                 <div class="input-group" style="position:relative;">
-                  <i data-lucide="calendar" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"></i>
+                  ${renderIcon('calendar', null, 'style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"')}
                   <input type="date" class="input" id="evtDate" style="padding-left:36px; width:100%;">
                 </div>
               </div>
               <div>
                 <label style="font-size:12px; font-weight:600; color:var(--text-2); display:block; margin-bottom:8px;">Start Time</label>
                 <div class="input-group" style="position:relative;">
-                  <i data-lucide="clock" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"></i>
+                  ${renderIcon('clock', null, 'style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"')}
                   <input class="input" type="time" id="evtStart" style="padding-left:36px; width:100%;">
                 </div>
               </div>
               <div>
                 <label style="font-size:12px; font-weight:600; color:var(--text-2); display:block; margin-bottom:8px;">End Time</label>
                 <div class="input-group" style="position:relative;">
-                  <i data-lucide="clock" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"></i>
+                  ${renderIcon('clock', null, 'style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"')}
                   <input class="input" type="time" id="evtEnd" style="padding-left:36px; width:100%;">
                 </div>
               </div>
@@ -134,7 +134,7 @@ window.openEventModal = function (dateIso = null, startTime = "09:00") {
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <button class="btn" style="flex:1;" onclick="closeModal()">Cancel</button>
               <button class="btn primary" style="flex:1;" data-action="save-event">Save Event</button>
-              <button id="evtDelete" class="btn hidden" style="flex:0; background:var(--danger); color:white; border:none; padding:8px;" onclick="deleteEventFromModal()"><i data-lucide="trash-2" style="width:18px;height:18px;"></i></button>
+              <button id="evtDelete" class="btn hidden" style="flex:0; background:var(--danger); color:white; border:none; padding:8px;" onclick="deleteEventFromModal()">${renderIcon('delete', null, 'style="width:18px;height:18px;"')}</button>
             </div>
           </div>
         </div>
@@ -320,8 +320,14 @@ function renderTimeGrid() {
     const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     // Match events whose start date equals this day (robust: check both T and space variants)
     const dayEvents = (state.data.planner || []).filter(e => {
-      const sd = extractDatetime(e.start_datetime);
-      return sd.date === iso;
+      if (!e.start_datetime) return false;
+      try {
+        const sd = extractDatetime(e.start_datetime);
+        if (!sd || !sd.date) return false;
+        return sd.date === iso;
+      } catch (err) {
+        return false;
+      }
     });
 
     const eventsHtml = dayEvents.map(e => {

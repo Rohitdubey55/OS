@@ -369,12 +369,12 @@ function renderPeople() {
         
         <div class="people-header">
             <h1 class="people-title">
-                <i data-lucide="users" style="width:32px; height:32px;"></i>
+                ${renderIcon('people', null, 'style="width:32px; height:32px;"')}
                 People
             </h1>
             <div class="people-controls">
                 <div class="people-search">
-                    <i data-lucide="search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted);"></i>
+                    ${renderIcon('search', null, 'style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; color:var(--text-muted); font-size: 14px; font-weight: 800;"')}
                     <input type="text" placeholder="Search people..." value="${peopleState.filter}" oninput="peopleState.filter=this.value; renderPeople()">
                 </div>
                 <div class="people-actions">
@@ -387,14 +387,14 @@ function renderPeople() {
                     </select>
                     <div class="people-view-tabs">
                         <button class="people-tab ${peopleState.view === 'grid' ? 'active' : ''}" onclick="window.switchPeopleView('grid')" title="Grid View">
-                            <i data-lucide="layout-grid" style="width:18px"></i>
+                            ${renderIcon('grid', null, 'style="width:18px"')}
                         </button>
                         <button class="people-tab ${peopleState.view === 'timeline' ? 'active' : ''}" onclick="window.switchPeopleView('timeline')" title="Timeline View">
-                            <i data-lucide="calendar" style="width:18px"></i>
+                            ${renderIcon('calendar', null, 'style="width:18px"')}
                         </button>
                     </div>
                     <button class="add-person-btn" onclick="window.openPersonModal()">
-                        <i data-lucide="plus" style="width:18px"></i>
+                        ${renderIcon('add', null, 'style="width:18px"')}
                         Add Person
                     </button>
                 </div>
@@ -409,16 +409,16 @@ function renderPeople() {
     if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
-window.switchPeopleView = function(view) {
+window.switchPeopleView = function (view) {
     peopleState.view = view;
     renderPeople();
 };
 
-window.togglePersonCard = function(personId) {
+window.togglePersonCard = function (personId) {
     try {
         peopleState.expandedId = String(peopleState.expandedId) === String(personId) ? null : personId;
         renderPeople();
-    } catch(e) {
+    } catch (e) {
         console.error('Error in togglePersonCard:', e);
     }
 };
@@ -562,11 +562,11 @@ function renderPersonCard(p, isExpanded = false) {
 
        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px; border-top:1px solid var(--border-color); padding-top:10px">
            <button class="btn small secondary" onclick="event.stopPropagation(); window.openDebtModal('${p.id}')" title="Add Financial Transaction">
-               <i data-lucide="indian-rupee" style="width:14px"></i> Money
+               ${renderIcon('rupee', null, 'style="width:14px"')} Money
            </button>
            <button class="btn small primary" onclick="event.stopPropagation(); window.logContact('${p.id}')">Log</button>
-           <button class="btn icon" onclick="event.stopPropagation(); window.openEditPerson('${p.id}')"><i data-lucide="pencil" style="width:14px"></i></button>
-           <button class="btn icon" onclick="event.stopPropagation(); window.deletePerson('${p.id}')" title="Delete Person"><i data-lucide="trash-2" style="width:14px"></i></button>
+           <button class="btn icon" onclick="event.stopPropagation(); window.openEditPerson('${p.id}')">${renderIcon('edit', null, 'style="width:14px"')}</button>
+           <button class="btn icon" onclick="event.stopPropagation(); window.deletePerson('${p.id}')" title="Delete Person">${renderIcon('delete', null, 'style="width:14px"')}</button>
        </div>
    </div>`;
 }
@@ -656,9 +656,9 @@ window.openEditPerson = function (id) {
 };
 
 // Delete Person
-window.deletePerson = async function(id) {
+window.deletePerson = async function (id) {
     if (!confirm('Are you sure you want to delete this person? This will also delete all their debt records.')) return;
-    
+
     try {
         await apiCall('people', 'delete', { id: String(id) });
         // Also delete related debts
@@ -675,10 +675,10 @@ window.deletePerson = async function(id) {
 };
 
 // Debt/Money Modal
-window.openDebtModal = function(personId) {
+window.openDebtModal = function (personId) {
     const p = (state.data.people || []).find(x => String(x.id) === String(personId));
     if (!p) return;
-    
+
     // Calculate balance
     const debts = (state.data.people_debts || []).filter(d => String(d.person_id) === String(personId));
     let balance = 0;
@@ -706,7 +706,7 @@ window.openDebtModal = function(personId) {
     }
 
     box.innerHTML = `
-    <h3>${renderIcon('money', null, '')} Money with ${p.name}</h3>
+    <h3>${renderIcon('rupee', null, 'style="display:inline-block; vertical-align: middle; margin-top: -4px;"')} Money with ${p.name}</h3>
     <div class="debt-modal-amount">
         <span class="${p._balance > 0 ? 'balance-positive' : (p._balance < 0 ? 'balance-negative' : 'balance-zero')}">
             ${p._balance > 0 ? 'They owe you' : (p._balance < 0 ? 'You owe them' : 'Settled')}
@@ -743,7 +743,7 @@ window.openDebtModal = function(personId) {
     modal.classList.remove('hidden');
 };
 
-window.saveDebt = async function(personId) {
+window.saveDebt = async function (personId) {
     const amount = parseFloat(document.getElementById('mDebtAmount').value);
     const type = document.getElementById('mDebtType').value;
     const date = document.getElementById('mDebtDate').value;
@@ -800,7 +800,7 @@ window.logContact = function (id) {
 window.confirmLogContact = async function (id) {
     const noteInput = document.getElementById('mLogNote');
     const note = noteInput ? noteInput.value.trim() : '';
-    
+
     document.getElementById('universalModal').classList.add('hidden');
     const today = new Date().toISOString();
     const dateStr = new Date().toLocaleDateString();
@@ -808,8 +808,8 @@ window.confirmLogContact = async function (id) {
     const p = (state.data.people || []).find(x => String(x.id) === String(id));
     if (p) {
         p.last_contact = today;
-        const logEntry = note 
-            ? `[${dateStr}] ${note}` 
+        const logEntry = note
+            ? `[${dateStr}] ${note}`
             : `[${dateStr}] Interaction logged.`;
         p.notes = p.notes ? p.notes + '\n' + logEntry : logEntry;
 

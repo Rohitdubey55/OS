@@ -30,9 +30,9 @@ function renderVision() {
 
       <!-- View Tabs -->
       <div class="vision-view-tabs">
-        <button class="vision-tab ${visionState.view === 'grid' ? 'active' : ''}" onclick="switchVisionView('grid')" title="Grid View"><i data-lucide="layout-grid" style="width:18px"></i></button>
-        <button class="vision-tab ${visionState.view === 'list' ? 'active' : ''}" onclick="switchVisionView('list')" title="List View"><i data-lucide="list" style="width:18px"></i></button>
-        <button class="vision-tab ${visionState.view === 'timeline' ? 'active' : ''}" onclick="switchVisionView('timeline')" title="Timeline View"><i data-lucide="calendar" style="width:18px"></i></button>
+        <button class="vision-tab ${visionState.view === 'grid' ? 'active' : ''}" onclick="switchVisionView('grid')" title="Grid View">${renderIcon('grid', null, 'style="width:18px"')}</button>
+        <button class="vision-tab ${visionState.view === 'list' ? 'active' : ''}" onclick="switchVisionView('list')" title="List View">${renderIcon('list', null, 'style="width:18px"')}</button>
+        <button class="vision-tab ${visionState.view === 'timeline' ? 'active' : ''}" onclick="switchVisionView('timeline')" title="Timeline View">${renderIcon('calendar', null, 'style="width:18px"')}</button>
       </div>
 
       ${visionState.view === 'grid' ? renderVisionGrid(filtered) : ''}
@@ -104,7 +104,7 @@ function renderVisionGrid(goals) {
 // List View
 function renderVisionList(goals) {
   if (goals.length === 0) {
-    return `<div class="vision-empty"><div class="vision-empty-icon"><i data-lucide="sparkles" style="width:48px; height:48px; display:inline-block"></i></div><div class="vision-empty-text">No vision goals found</div></div>`;
+    return `<div class="vision-empty"><div class="vision-empty-icon">${renderIcon('default', null, 'style="width:48px; height:48px; display:inline-block"')}</div><div class="vision-empty-text">No vision goals found</div></div>`;
   }
   return `<div class="vision-list">${goals.map(g => renderVisionListItem(g)).join('')}</div>`;
 }
@@ -134,14 +134,14 @@ function renderVisionListItem(g) {
 // Timeline View
 function renderVisionTimeline(goals) {
   if (goals.length === 0) {
-    return `<div class="vision-empty"><div class="vision-empty-icon"><i data-lucide="sparkles" style="width:48px; height:48px; display:inline-block"></i></div><div class="vision-empty-text">No vision goals found</div></div>`;
+    return `<div class="vision-empty"><div class="vision-empty-icon">${renderIcon('default', null, 'style="width:48px; height:48px; display:inline-block"')}</div><div class="vision-empty-text">No vision goals found</div></div>`;
   }
   const grouped = groupByYear(goals);
   return `
     <div class="vision-timeline">
     ${Object.keys(grouped).sort().map(year => `
         <div class="timeline-year-section">
-          <h3 class="timeline-year-header"><i data-lucide="calendar" style="width:18px; display:inline-block; vertical-align:middle; margin-right:6px"></i> ${year}</h3>
+          <h3 class="timeline-year-header">${renderIcon('calendar', null, 'style="width:18px; display:inline-block; vertical-align:middle; margin-right:6px"')} ${year}</h3>
           <div class="timeline-items">
             ${grouped[year].map(g => renderTimelineItem(g)).join('')}
           </div>
@@ -316,9 +316,17 @@ function groupByYear(goals) {
 }
 
 function getCategoryIcon(category) {
-  const icons = { 'Personal': 'target', 'Career': 'briefcase', 'Travel': 'plane', 'Finance': 'coins', 'Health': 'activity', 'Education': 'book-open', 'Relationship': 'heart' };
-  const iconName = icons[category] || 'star';
-  return `<i data-lucide="${iconName}" style="width:16px; display:inline-block; vertical-align:text-bottom; margin-right:4px"></i>`;
+  const icons = {
+    'Personal': 'goals',
+    'Career': 'productivity',
+    'Travel': 'productivity', // Fallback for now, could be 'plane' if added
+    'Finance': 'money',
+    'Health': 'health',
+    'Education': 'learning',
+    'Relationship': 'health'
+  };
+  const iconName = icons[category] || 'default';
+  return renderIcon(iconName, null, 'style="width:16px; display:inline-block; vertical-align:text-bottom; margin-right:4px"');
 }
 
 function formatDate(dateStr) {
@@ -395,8 +403,8 @@ window.openVisionDetail = function (id) {
     </div>
     <div style="display:flex; justify-content:flex-end; gap:10px;">
         <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Close</button>
-        <button class="btn" style="color:var(--primary); border-color:var(--primary)" onclick="openEditVision('${g.id}')"><i data-lucide="pencil" style="width:16px; margin-right:6px"></i> Edit Goal</button>
-        <button class="btn" style="color:var(--danger); border-color:var(--danger)" onclick="deleteVision('${g.id}')"><i data-lucide="trash-2" style="width:16px; margin-right:6px"></i> Delete Goal</button>
+        <button class="btn" style="color:var(--primary); border-color:var(--primary)" onclick="openEditVision('${g.id}')">${renderIcon('edit', null, 'style="width:16px; margin-right:6px"')} Edit Goal</button>
+        <button class="btn" style="color:var(--danger); border-color:var(--danger)" onclick="deleteVision('${g.id}')">${renderIcon('delete', null, 'style="width:16px; margin-right:6px"')} Delete Goal</button>
     </div>
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
@@ -531,10 +539,10 @@ document.addEventListener('click', async function (event) {
 
 // --- VISION IMAGE UPLOAD ---
 
-window.openVisionImageSheet = function(visionId) {
+window.openVisionImageSheet = function (visionId) {
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  
+
   box.innerHTML = `
     <h3>Add Image</h3>
     
@@ -553,7 +561,7 @@ window.openVisionImageSheet = function(visionId) {
       <div class="upload-zone" id="dropZone" style="border:2px dashed var(--border-color); border-radius:12px; padding:40px; text-align:center; cursor:pointer;" onclick="document.getElementById('visionFileInput').click()">
         <input type="file" id="visionFileInput" accept="image/*" hidden onchange="handleVisionFileSelect(this.files)">
         <div class="upload-prompt">
-          <i data-lucide="upload-cloud" style="width:48px; height:48px; color:var(--primary)"></i>
+          ${renderIcon('upload-cloud', null, 'style="width:48px; height:48px; color:var(--primary)"')}
           <p style="margin:10px 0 5px;">Tap to select or drag & drop</p>
           <span style="font-size:12px; color:var(--text-muted)">PNG, JPG, GIF, WebP - Max 10MB</span>
         </div>
@@ -588,14 +596,14 @@ window.openVisionImageSheet = function(visionId) {
       </button>
     </div>
   `;
-  
+
   openUniversalModal();
-  
+
   // Initialize icons
   if (typeof lucide !== 'undefined') {
     lucide.createIcons();
   }
-  
+
   // Set up drag and drop
   const dropZone = document.getElementById('dropZone');
   if (dropZone) {
@@ -615,12 +623,12 @@ window.openVisionImageSheet = function(visionId) {
   }
 }
 
-window.switchImageSource = function(source) {
+window.switchImageSource = function (source) {
   const uploadTab = document.getElementById('imageUploadTab');
   const urlTab = document.getElementById('imageUrlTab');
   const uploadBtn = document.getElementById('uploadTabBtn');
   const urlBtn = document.getElementById('urlTabBtn');
-  
+
   if (source === 'upload') {
     uploadTab.classList.remove('hidden');
     urlTab.classList.add('hidden');
@@ -634,23 +642,23 @@ window.switchImageSource = function(source) {
   }
 }
 
-window.handleVisionFileSelect = function(files) {
+window.handleVisionFileSelect = function (files) {
   const file = files[0];
   if (!file) return;
-  
+
   // Validate file type
   const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   if (!validTypes.includes(file.type)) {
     showToast('Invalid file type. Use PNG, JPG, GIF, or WebP', 'error');
     return;
   }
-  
+
   // Validate file size (10MB max)
   if (file.size > 10 * 1024 * 1024) {
     showToast('File too large. Max 10MB', 'error');
     return;
   }
-  
+
   // Read and preview
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -671,13 +679,13 @@ window.handleVisionFileSelect = function(files) {
   reader.readAsDataURL(file);
 }
 
-window.loadImageFromUrl = function() {
+window.loadImageFromUrl = function () {
   const url = document.getElementById('visionImageUrl').value;
   if (!url) {
     showToast('Enter a valid URL', 'error');
     return;
   }
-  
+
   // Validate URL format
   try {
     new URL(url);
@@ -685,7 +693,7 @@ window.loadImageFromUrl = function() {
     showToast('Invalid URL format', 'error');
     return;
   }
-  
+
   // Load preview
   const img = new Image();
   img.crossOrigin = 'anonymous';
@@ -704,25 +712,25 @@ window.loadImageFromUrl = function() {
   img.src = url;
 }
 
-window.saveVisionImage = async function(visionId) {
+window.saveVisionImage = async function (visionId) {
   const img = window.pendingVisionImage;
   if (!img) {
     showToast('No image selected', 'error');
     return;
   }
-  
+
   showToast('Saving image...');
-  
+
   try {
     let payload;
-    
+
     if (img.data) {
       // Upload from device - determine storage strategy
       if (img.size > 500 * 1024) {
         // Large file - would use Google Drive (simplified for now - store as base64)
         showToast('Large image detected. Consider using URL for better performance.', 'info');
       }
-      
+
       // Save image metadata to vision_images sheet
       payload = {
         vision_id: visionId,
@@ -732,15 +740,15 @@ window.saveVisionImage = async function(visionId) {
         file_size: img.size,
         uploaded_at: new Date().toISOString()
       };
-      
+
       await apiCall('create', 'vision_images', payload);
-      
+
       // Also update the vision_board with primary image
       await apiCall('update', 'vision_board', {
         image_url: img.data,
         image_source: 'upload'
       }, visionId);
-      
+
     } else if (img.url) {
       // URL source - just update vision
       payload = {
@@ -749,22 +757,22 @@ window.saveVisionImage = async function(visionId) {
       };
       await apiCall('update', 'vision_board', payload, visionId);
     }
-    
+
     // Refresh vision data
     await refreshData('vision');
     closeUniversalModal();
     showToast('Image saved successfully!', 'success');
-    
+
   } catch (error) {
     console.error(error);
     showToast('Error saving image', 'error');
   }
-  
+
   // Clear pending image
   window.pendingVisionImage = null;
 }
 
-window.clearVisionUpload = function() {
+window.clearVisionUpload = function () {
   window.pendingVisionImage = null;
   document.getElementById('uploadPreview').classList.add('hidden');
   document.getElementById('previewImage').src = '';

@@ -255,9 +255,9 @@ function renderHabits() {
             </div>
 
             <button class="btn secondary small" onclick="markAllHabitsDone()" title="Mark all today's habits as done">
-              <i data-lucide="check-circle" style="width:14px; margin-right:4px"></i>All Done
+              ${renderIcon('check-circle', null, 'style="width:14px; margin-right:4px"')}All Done
             </button>
-            <button class="btn primary small" onclick="openHabitModal()">+ Add Habit</button>
+            <button class="btn primary small" onclick="openHabitModal()">${renderIcon('add', null, 'style="width:14px; margin-right:4px"')} Add Habit</button>
           </div>
         </div>
 
@@ -271,7 +271,11 @@ function renderHabits() {
     const isDoneToday = hLogs.some(l => (l.date || '').startsWith(today));
     const isDoneSelectedDate = _backDateMode ? hLogs.some(l => (l.date || '').startsWith(_selectedBackDate)) : isDoneToday;
     const scheduledToday = isHabitScheduledToday(h);
-    const emoji = h.emoji || getIcon(categoryEmojis[h.category]) || '✨';
+
+    // Resolve icon from emoji or category
+    const iconName = resolveLegacyEmoji(h.emoji) || categoryEmojis[h.category] || 'default';
+    const habitIconHtml = renderIcon(iconName, null, 'class="habit-emoji-lg"');
+
     const daysList = h.days ? h.days.split(',').map(s => s.trim()) : [];
     const isExpanded = _expandedHabitId === h.id;
 
@@ -299,7 +303,7 @@ function renderHabits() {
               
                 <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
                   <div style="display:flex; align-items:center;">
-                    <span class="habit-emoji-lg">${emoji}</span>
+                    ${habitIconHtml}
                     <div>
                       <div class="habit-title-lg">${h.habit_name}</div>
                       <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
@@ -307,9 +311,9 @@ function renderHabits() {
                   </div>
                   <div style="display:flex; align-items:center; gap:12px;">
                     <div class="streak-pill">
-                      <i data-lucide="flame" style="width:16px;"></i> ${stats.streak}
+                      ${renderIcon('streak', null, 'style="width:16px;"')} ${stats.streak}
                     </div>
-                    <i data-lucide="chevron-down" class="collapse-icon" style="width:20px; color:var(--text-muted);"></i>
+                    ${renderIcon('down', null, 'class="collapse-icon" style="width:20px; color:var(--text-muted);"')}
                   </div>
                 </div>
 
@@ -356,15 +360,15 @@ function renderHabits() {
             
                   <div class="habit-action-row">
                     <button class="habit-action-btn secondary" onclick="event.stopPropagation(); openEditHabit('${h.id}')">
-                      <i data-lucide="pencil" style="width:14px;"></i> Edit
+                      ${renderIcon('edit', null, 'style="width:14px;"')} Edit
                     </button>
                     <button class="habit-action-btn secondary" onclick="event.stopPropagation(); deleteHabit('${h.id}')">
-                      <i data-lucide="trash-2" style="width:14px;"></i>
+                      ${renderIcon('delete', null, 'style="width:14px;"')}
                     </button>
                     ${scheduledToday || _backDateMode ? `
                     <button class="habit-action-btn primary ${isDoneSelectedDate ? 'done' : ''}" 
                             onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}">
-                      ${isDoneSelectedDate ? '<i data-lucide="check" style="width:14px;"></i> Done' : '<i data-lucide="circle" style="width:14px;"></i> Mark Done'}
+                      ${isDoneSelectedDate ? `${renderIcon('save', null, 'style="width:14px;"')} Done` : `${renderIcon('circle', null, 'style="width:14px;"')} Mark Done`}
                     </button>
                     ` : ''}
                   </div>
@@ -380,7 +384,7 @@ function renderHabits() {
 }
 
 // Toggle habit card expansion
-window.toggleHabitCard = function(habitId) {
+window.toggleHabitCard = function (habitId) {
   const card = document.getElementById('habit-card-' + habitId);
   if (card) {
     card.classList.toggle('habit-expanded');
@@ -389,7 +393,7 @@ window.toggleHabitCard = function(habitId) {
 };
 
 // Toggle habit for a specific date (back-date marking)
-window.toggleHabitForDate = async function(habitId, date) {
+window.toggleHabitForDate = async function (habitId, date) {
   const existingIdx = state.data.habit_logs.findIndex(
     l => String(l.habit_id) === String(habitId) && (l.date || '').startsWith(date)
   );
@@ -416,7 +420,7 @@ window.toggleHabitForDate = async function(habitId, date) {
 };
 
 // Delete habit function
-window.deleteHabit = async function(id) {
+window.deleteHabit = async function (id) {
   if (!confirm('Delete this habit?')) return;
   await apiCall('delete', 'habits', {}, id);
   showToast('Habit deleted');
@@ -573,14 +577,14 @@ function calculateHabitStats(logs, today, habit) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const iso = d.toISOString().slice(0, 10);
-    
+
     let isScheduled = true;
     if (habit && habit.frequency === 'weekly' && habit.days) {
       const dayIdx = d.getDay();
       const dayName = DAY_NAMES[dayIdx === 0 ? 6 : dayIdx - 1];
       isScheduled = habit.days.split(',').map(s => s.trim()).includes(dayName);
     }
-    
+
     if (isScheduled && !unique.includes(iso)) {
       consecutiveMissed++;
       if (consecutiveMissed >= 3) break;
@@ -615,7 +619,7 @@ function calculateHabitStats(logs, today, habit) {
 
   const completionRate = scheduledDays > 0 ? Math.round((completedDays / scheduledDays) * 100) : 0;
 
-    return { streak, dateButtonsHtml, total: unique.length, completionRate, consecutiveMissed };
+  return { streak, dateButtonsHtml, total: unique.length, completionRate, consecutiveMissed };
 }
 
 /* --- DAY PICKER HTML --- */
@@ -691,7 +695,7 @@ window.openHabitModal = function () {
 function parseReminderTimeToHHMM(val) {
   if (!val) return '';
   const s = String(val);
-  
+
   // Handle Google Sheets datetime format: "1899-12-30T02:54:00"
   // The time portion is what we want
   if (s.startsWith('1899-12-30T')) {
@@ -700,19 +704,19 @@ function parseReminderTimeToHHMM(val) {
       return timePart;
     }
   }
-  
+
   // Handle other ISO-like formats with T
   if (s.includes('T')) {
     const dt = new Date(s);
     if (isNaN(dt.getTime())) return '';
     return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
   }
-  
+
   // Already HH:mm or HH:mm:ss
   if (s.match(/^\d{2}:\d{2}/)) {
     return s.slice(0, 5);
   }
-  
+
   return '';
 }
 

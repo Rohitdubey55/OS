@@ -146,8 +146,8 @@ function showBrowserNotification(title, options = {}) {
     }
     
     const notification = new Notification(title, {
-        icon: '/icon.png',
-        badge: '/badge.png',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
         tag: options.tag || 'personalos',
         renotify: options.renotify || true,
         body: options.body || '',

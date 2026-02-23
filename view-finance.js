@@ -11,15 +11,15 @@ function renderFinance() {
       <div class="header-row">
         <h2 class="page-title">Finance</h2>
         <div style="display:flex;gap:8px;">
-          <button class="btn primary" onclick="openFinanceAction()">+ Add New</button>
+          <button class="btn primary" onclick="openFinanceAction()">${renderIcon('add', null, 'style="width:14px; margin-right:4px;"')} Add New</button>
         </div>
       </div>
 
       <div class="fin-nav">
-        <button class="fin-tab ${finState === 'expenses' ? 'active' : ''}" onclick="switchFinTab('expenses')"><i data-lucide="wallet" style="width:16px; margin-right:6px"></i> Expenses</button>
-        <button class="fin-tab ${finState === 'income' ? 'active' : ''}" onclick="switchFinTab('income')"><i data-lucide="trending-up" style="width:16px; margin-right:6px"></i> Income</button>
-        <button class="fin-tab ${finState === 'funds' ? 'active' : ''}" onclick="switchFinTab('funds')"><i data-lucide="target" style="width:16px; margin-right:6px"></i> Funds</button>
-        <button class="fin-tab ${finState === 'assets' ? 'active' : ''}" onclick="switchFinTab('assets')"><i data-lucide="landmark" style="width:16px; margin-right:6px"></i> Assets</button>
+        <button class="fin-tab ${finState === 'expenses' ? 'active' : ''}" onclick="switchFinTab('expenses')">${renderIcon('wallet', null, 'style="width:16px; margin-right:6px"')} Expenses</button>
+        <button class="fin-tab ${finState === 'income' ? 'active' : ''}" onclick="switchFinTab('income')">${renderIcon('chart', null, 'style="width:16px; margin-right:6px"')} Income</button>
+        <button class="fin-tab ${finState === 'funds' ? 'active' : ''}" onclick="switchFinTab('funds')">${renderIcon('target', null, 'style="width:16px; margin-right:6px"')} Funds</button>
+        <button class="fin-tab ${finState === 'assets' ? 'active' : ''}" onclick="switchFinTab('assets')">${renderIcon('landmark', null, 'style="width:16px; margin-right:6px"')} Assets</button>
       </div>
 
       <div id="finance-content"></div>
@@ -142,11 +142,11 @@ function getWeekBounds(date = new Date()) {
   const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
   const monday = new Date(d.setDate(diff));
   monday.setHours(0, 0, 0, 0);
-  
+
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
   sunday.setHours(23, 59, 59, 999);
-  
+
   return { start: monday, end: sunday };
 }
 
@@ -159,12 +159,12 @@ function renderFinExpenses(container) {
   // Parse Budgets - use separate fields, not calculated from categories
   const monthlyBudget = Number(settings.monthly_budget) || 0;
   const weeklyBudget = Number(settings.weekly_budget) || 0;
-  
+
   let categoryBudgets = {};
   try {
     if (settings.category_budgets) categoryBudgets = JSON.parse(settings.category_budgets);
   } catch (e) { console.error("Invalid category budget JSON", e); }
-  
+
   // Filter Logic
   const filtered = allExpenses.filter(e => {
     const d = new Date(e.date);
@@ -174,7 +174,7 @@ function renderFinExpenses(container) {
       // Handle both old format (string/number) and new format (object)
       const catData = categoryBudgets[e.category];
       let catSource = 'weekly'; // Default to weekly for backward compatibility
-      
+
       if (catData !== undefined) {
         if (typeof catData === 'object' && catData !== null) {
           catSource = catData.source || 'weekly';
@@ -184,9 +184,9 @@ function renderFinExpenses(container) {
         }
       }
       // If category is not in budget settings at all, show in weekly (backward compat)
-      
+
       if (catSource !== 'weekly') return false;
-      
+
       // Filter by current week (Monday-based)
       return d >= weekBounds.start && d <= weekBounds.end;
     }
@@ -269,7 +269,7 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
   return `
     <div class="dash-card" style="padding:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
-             <div class="stat-label"><i data-lucide="calendar" style="width:14px; margin-right:6px; display:inline-block"></i> Monthly Overview</div>
+             <div class="stat-label">${renderIcon('calendar', null, 'style="width:14px; margin-right:6px; display:inline-block"')} Monthly Overview</div>
              <div class="stat-val" style="font-size:1.2em">₹${totalExp} <span style="font-size:0.6em; color:var(--text-muted)">/ ₹${limit || 0}</span></div>
         </div>
         
@@ -298,7 +298,7 @@ function renderWeeklyOverview(totalExp, limit) {
   return `
      <div class="dash-card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-             <div class="stat-label"><i data-lucide="zap" style="width:14px; margin-right:6px; display:inline-block"></i> Weekly Budget (${mondayStr} - ${sundayStr})</div>
+             <div class="stat-label">${renderIcon('priority', null, 'style="width:14px; margin-right:6px; display:inline-block"')} Weekly Budget (${mondayStr} - ${sundayStr})</div>
              <div class="stat-val" style="font-size:1.2em">₹${totalExp} <span style="font-size:0.6em; color:var(--text-muted)">/ ${limit}</span></div>
         </div>
         
@@ -346,11 +346,11 @@ function renderFinIncome(container) {
     <!-- Summary Cards -->
     <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: var(--space-6);">
       <div class="dash-card">
-        <div class="stat-label"><i data-lucide="trending-up" style="width:14px; display:inline-block; vertical-align:middle; margin-right:4px"></i> Total Income</div>
+        <div class="stat-label">${renderIcon('chart', null, 'style="width:14px; display:inline-block; vertical-align:middle; margin-right:4px"')} Total Income</div>
         <div class="stat-val" style="color:var(--success)">₹${totalInc.toLocaleString()}</div>
       </div>
       <div class="dash-card">
-        <div class="stat-label"><i data-lucide="activity" style="width:14px; display:inline-block; vertical-align:middle; margin-right:4px"></i> Net Balance</div>
+        <div class="stat-label">${renderIcon('activity', null, 'style="width:14px; display:inline-block; vertical-align:middle; margin-right:4px"')} Net Balance</div>
         <div class="stat-val" style="color:${netBalance >= 0 ? 'var(--success)' : 'var(--danger)'}">₹${Math.abs(netBalance).toLocaleString()}</div>
         <div class="text-muted" style="font-size:12px; margin-top:8px">${netBalance >= 0 ? 'Surplus' : 'Deficit'}</div>
       </div>
@@ -407,8 +407,8 @@ function renderFinFunds(container) {
             <div class="fund-progress-fill" style="width:${pct}%"></div>
           </div>
           <div style="margin-top:10px; display:flex; gap:6px; justify-content:flex-end">
-            <button class="btn icon" onclick="openEditFund('${f.id}')" title="Edit"><i data-lucide="pencil" style="width:14px"></i></button>
-            <button class="btn icon" data-action="delete" data-sheet="funds" data-id="${f.id}"><i data-lucide="trash-2" style="width:14px"></i></button>
+            <button class="btn icon" onclick="openEditFund('${f.id}')" title="Edit">${renderIcon('edit', null, 'style="width:14px"')}</button>
+            <button class="btn icon" data-action="delete" data-sheet="funds" data-id="${f.id}">${renderIcon('delete', null, 'style="width:14px"')}</button>
           </div>
         </div>`;
   }).join('')}
@@ -432,8 +432,8 @@ function renderFinAssets(container) {
           <div><div style="font-weight:600">${a.asset_name}</div><div class="asset-type">${a.type}</div></div>
           <div style="display:flex; align-items:center; gap:10px">
              <div style="font-weight:600">₹${Number(a.value).toLocaleString()}</div>
-             <button class="btn icon" onclick="openEditAsset('${a.id}')" title="Edit"><i data-lucide="pencil" style="width:14px"></i></button>
-             <button class="btn icon" data-action="delete" data-sheet="assets" data-id="${a.id}"><i data-lucide="trash-2" style="width:14px"></i></button>
+             <button class="btn icon" onclick="openEditAsset('${a.id}')" title="Edit">${renderIcon('edit', null, 'style="width:14px"')}</button>
+             <button class="btn icon" data-action="delete" data-sheet="assets" data-id="${a.id}">${renderIcon('delete', null, 'style="width:14px"')}</button>
           </div>
         </div>
       `).join('')}
@@ -451,7 +451,7 @@ window.openEditTransaction = function (id) {
   const box = modal.querySelector('.modal-box');
   const categories = getAllFinanceCategories();
   const isExpense = tx.type === 'expense';
-  
+
   box.innerHTML = `
     <h3>Edit Transaction</h3>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px">
@@ -489,12 +489,12 @@ window.openEditTransaction = function (id) {
   modal.classList.remove('hidden');
 }
 
-window.deleteTransaction = async function(id) {
+window.deleteTransaction = async function (id) {
   if (!confirm('Are you sure you want to delete this transaction?')) return;
-  
+
   const btn = document.querySelector('button[data-action="delete-tx"][data-id="' + id + '"]');
   if (btn) btn.disabled = true;
-  
+
   try {
     const url = SCRIPT_URL + '?action=deleteRow&sheet=expenses&id=' + encodeURIComponent(id);
     const resp = await fetch(url);
@@ -593,7 +593,7 @@ function getFinanceCategories() {
   if (settings.finance_categories) {
     try {
       return JSON.parse(settings.finance_categories);
-    } catch (e) {}
+    } catch (e) { }
   }
   // No defaults - return empty categories (must come from sheet)
   return { expense: [], income: [] };
@@ -606,14 +606,14 @@ async function saveFinanceCategoriesToSettings(categories) {
     ...settings,
     finance_categories: JSON.stringify(categories)
   };
-  
+
   // Update settings in the sheet
   if (settings.id) {
     await apiCall('update', 'settings', newSettings, settings.id);
   } else {
     await apiCall('create', 'settings', newSettings);
   }
-  
+
   // Update local state
   if (!state.data.settings) state.data.settings = [{}];
   state.data.settings[0] = newSettings;
@@ -626,14 +626,14 @@ function getAllFinanceCategories() {
   let budgetCats = {};
   try {
     if (settings.category_budgets) budgetCats = JSON.parse(settings.category_budgets);
-  } catch (e) {}
+  } catch (e) { }
   const budgetCatKeys = Object.keys(budgetCats).filter(c => c && c.trim() !== '');
-  
+
   return budgetCatKeys.sort();
 }
 
 // Add a new category
-window.addFinanceCategory = async function(categoryName, type = 'expense') {
+window.addFinanceCategory = async function (categoryName, type = 'expense') {
   if (!categoryName || categoryName.trim() === '') return false;
   const trimmed = categoryName.trim();
   const categories = getFinanceCategories();
@@ -648,7 +648,7 @@ window.addFinanceCategory = async function(categoryName, type = 'expense') {
 };
 
 // Delete a category
-window.deleteFinanceCategory = async function(categoryName, type) {
+window.deleteFinanceCategory = async function (categoryName, type) {
   const categories = getFinanceCategories();
   categories[type] = categories[type].filter(c => c !== categoryName);
   await saveFinanceCategoriesToSettings(categories);
@@ -656,16 +656,16 @@ window.deleteFinanceCategory = async function(categoryName, type) {
 };
 
 // Rename a category
-window.renameFinanceCategory = async function(oldName, newName, type) {
+window.renameFinanceCategory = async function (oldName, newName, type) {
   if (!newName || newName.trim() === '') return false;
   const trimmed = newName.trim();
   const categories = getFinanceCategories();
-  
+
   if (categories[type].includes(trimmed) && trimmed !== oldName) {
     showToast('Category name already exists');
     return false;
   }
-  
+
   categories[type] = categories[type].map(c => c === oldName ? trimmed : c);
   await saveFinanceCategoriesToSettings(categories);
   showToast(`Category renamed to "${trimmed}"`);
@@ -673,11 +673,11 @@ window.renameFinanceCategory = async function(oldName, newName, type) {
 };
 
 // Open Finance Category Manager Modal
-window.openFinanceCategoryManager = function() {
+window.openFinanceCategoryManager = function () {
   const cats = getFinanceCategories();
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  
+
   box.innerHTML = `
     <h3 style="margin-bottom:16px;">Manage Finance Categories</h3>
     
@@ -693,7 +693,7 @@ window.openFinanceCategoryManager = function() {
           <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;margin-bottom:4px;">
             <span style="font-size:13px;">${cat}</span>
             <button class="btn icon small" onclick="deleteFinanceCategoryWithRefresh('${cat}', 'expense')" title="Delete">
-              <i data-lucide="x" style="width:12px;"></i>
+              ${renderIcon('x', null, 'style="width:12px;"')}
             </button>
           </div>
         `).join('')}
@@ -712,7 +712,7 @@ window.openFinanceCategoryManager = function() {
           <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid var(--border-color);border-radius:6px;margin-bottom:4px;">
             <span style="font-size:13px;">${cat}</span>
             <button class="btn icon small" onclick="deleteFinanceCategoryWithRefresh('${cat}', 'income')" title="Delete">
-              <i data-lucide="x" style="width:12px;"></i>
+              ${renderIcon('x', null, 'style="width:12px;"')}
             </button>
           </div>
         `).join('')}
@@ -723,17 +723,17 @@ window.openFinanceCategoryManager = function() {
       <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Close</button>
     </div>
   `;
-  
+
   modal.classList.remove('hidden');
   lucide.createIcons();
 };
 
-window.deleteFinanceCategoryWithRefresh = async function(categoryName, type) {
+window.deleteFinanceCategoryWithRefresh = async function (categoryName, type) {
   await deleteFinanceCategory(categoryName, type);
   openFinanceCategoryManager(); // Refresh the modal
 };
 
-window.saveNewFinanceCategory = async function(type) {
+window.saveNewFinanceCategory = async function (type) {
   const inputId = type === 'expense' ? 'newExpenseCatInput' : 'newIncomeCatInput';
   const input = document.getElementById(inputId);
   const name = input.value.trim();
@@ -750,8 +750,8 @@ window.generateFinanceInsight = async function () {
   if (!contentDiv) return;
 
   contentDiv.style.display = 'block';
-  contentDiv.innerHTML = `<i data-lucide="loader" class="spin" style="width:16px"></i> Analyzing finances...`;
-  lucide.createIcons();
+  contentDiv.innerHTML = `${renderIcon('loading', null, 'class="spin" style="width:16px"')} Analyzing finances...`;
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 
   try {
     const contextData = {

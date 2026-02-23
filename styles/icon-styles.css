@@ -51,9 +51,81 @@
   font-size: 24px;
 }
 
+/* Phosphor icon styles */
+.ph-icon {
+  font-size: 20px;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.ph-icon.sm {
+  font-size: 14px;
+}
+
+.ph-icon.lg {
+  font-size: 24px;
+}
+
+/* Remix icon styles */
+.remix-icon {
+  font-family: "remixicon" !important;
+  font-size: 20px;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.remix-icon.sm {
+  font-size: 14px;
+}
+
+.remix-icon.lg {
+  font-size: 24px;
+}
+
+/* Tabler icon styles */
+.tabler-icon {
+  font-family: "tabler-icons" !important;
+  font-size: 20px;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.tabler-icon.sm {
+  font-size: 14px;
+}
+
+.tabler-icon.lg {
+  font-size: 24px;
+}
+
+/* Colorful icon styles */
+.fci-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.fci-icon.sm {
+  width: 14px;
+  height: 14px;
+}
+
+.fci-icon.lg {
+  width: 24px;
+  height: 24px;
+}
+
 /* Nav icon styles */
 .nav-icon.lucide-icon,
 .nav-icon.material-icon,
+.nav-icon.ph-icon,
+.nav-icon.remix-icon,
+.nav-icon.tabler-icon,
+.nav-icon.fci-icon,
 .nav-icon.emoji-icon {
   width: 18px;
   height: 18px;
@@ -63,6 +135,10 @@
 /* Stat icon styles */
 .stat-icon.lucide-icon,
 .stat-icon.material-icon,
+.stat-icon.ph-icon,
+.stat-icon.remix-icon,
+.stat-icon.tabler-icon,
+.stat-icon.fci-icon,
 .stat-icon.emoji-icon {
   width: 24px;
   height: 24px;
@@ -72,6 +148,10 @@
 /* Overview icon styles */
 .overview-icon.lucide-icon,
 .overview-icon.material-icon,
+.overview-icon.ph-icon,
+.overview-icon.remix-icon,
+.overview-icon.tabler-icon,
+.overview-icon.fci-icon,
 .overview-icon.emoji-icon {
   width: 18px;
   height: 18px;
@@ -81,6 +161,10 @@
 /* Search icon */
 .search-icon.lucide-icon,
 .search-icon.material-icon,
+.search-icon.ph-icon,
+.search-icon.remix-icon,
+.search-icon.tabler-icon,
+.search-icon.fci-icon,
 .search-icon.emoji-icon {
   width: 16px;
   height: 16px;
@@ -89,6 +173,10 @@
 /* Action button icons */
 .action-btn.lucide-icon,
 .action-btn.material-icon,
+.action-btn.ph-icon,
+.action-btn.remix-icon,
+.action-btn.tabler-icon,
+.action-btn.fci-icon,
 .action-btn.emoji-icon {
   width: 16px;
   height: 16px;
@@ -97,6 +185,10 @@
 /* Empty state icons */
 .empty-illustration.lucide-icon,
 .empty-illustration.material-icon,
+.empty-illustration.ph-icon,
+.empty-illustration.remix-icon,
+.empty-illustration.tabler-icon,
+.empty-illustration.fci-icon,
 .empty-illustration.emoji-icon {
   font-size: 48px;
   margin-bottom: 16px;
@@ -105,7 +197,7 @@
 /* Icon pack selector in settings */
 .icon-pack-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 12px;
   margin: 16px 0;
 }
@@ -114,12 +206,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 12px;
+  padding: 12px 8px;
   border: 2px solid var(--border-color, #e5e7eb);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   background: var(--bg-secondary, #fff);
+  min-height: 80px;
+  justify-content: center;
 }
 
 .icon-pack-option:hover {
@@ -137,16 +231,36 @@
 }
 
 .pack-preview {
-  font-size: 20px;
-  margin-bottom: 8px;
+  font-size: 18px;
   display: flex;
   gap: 4px;
+  justify-content: center;
+  align-items: center;
+  min-height: 24px;
+}
+
+.pack-preview svg {
+  width: 20px;
+  height: 20px;
+}
+
+.icon-pack-option .pack-preview i,
+.icon-pack-option .pack-preview span,
+.icon-pack-option .pack-preview svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pack-name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-primary, #1f2937);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .pack-description {
@@ -170,6 +284,10 @@
 /* Quick write icon */
 .quick-write-icon.lucide-icon,
 .quick-write-icon.material-icon,
+.quick-write-icon.ph-icon,
+.quick-write-icon.remix-icon,
+.quick-write-icon.tabler-icon,
+.quick-write-icon.fci-icon,
 .quick-write-icon.emoji-icon {
   width: 20px;
   height: 20px;

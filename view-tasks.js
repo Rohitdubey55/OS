@@ -64,7 +64,7 @@ function _getSearchValue() {
 function parseDueTimeForInput(val) {
   if (!val) return '';
   const s = String(val);
-  
+
   // Handle Google Sheets datetime format: "1899-12-30T14:30:00"
   if (s.startsWith('1899-12-30T')) {
     const timePart = s.slice(11, 16); // Extract "14:30"
@@ -72,7 +72,7 @@ function parseDueTimeForInput(val) {
       return timePart;
     }
   }
-  
+
   // Handle ISO format with T
   if (s.includes('T') && !s.startsWith('1899')) {
     const dt = new Date(s);
@@ -80,12 +80,12 @@ function parseDueTimeForInput(val) {
       return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
     }
   }
-  
+
   // Already HH:mm
   if (s.match(/^\d{2}:\d{2}/)) {
     return s.slice(0, 5);
   }
-  
+
   return '';
 }
 
@@ -256,9 +256,9 @@ function renderTasks(filter = '') {
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn secondary" onclick="openCategoryManager()">
-            <i data-lucide="folder" style="width:14px;margin-right:4px;"></i>Categories
+            ${renderIcon('tags', null, 'style="width:14px;margin-right:4px;"')}Categories
           </button>
-          <button class="btn primary" onclick="openTaskModal()">+ Add Task</button>
+          <button class="btn primary" onclick="openTaskModal()">${renderIcon('add', null, 'style="width:14px; margin-right:4px"')} Add Task</button>
         </div>
       </div>
 
@@ -330,19 +330,19 @@ function renderTasks(filter = '') {
       <!-- ── OVERDUE BANNER ── -->
       ${overdueCount > 0 ? `
       <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--danger);">
-        <i data-lucide="alert-triangle" style="width:14px;flex-shrink:0;"></i>
+        ${renderIcon('warning', null, 'style="width:14px;flex-shrink:0;"')}
         <span><strong>${overdueCount} task${overdueCount > 1 ? 's' : ''}</strong> past due date</span>
       </div>` : ''}
 
       <!-- ── RECURRING TODAY ── -->
       ${recurringToday.length > 0 ? renderBentoSection('__recurring_today__',
-    `<i data-lucide="repeat" style="width:13px;"></i> Today's Recurring`,
+    `${renderIcon('repeat', null, 'style="width:13px;"')} Today's Recurring`,
     recurringToday, true) : ''}
 
       <!-- ── PENDING BY CATEGORY ── -->
       ${pending.length === 0 && recurringToday.length === 0 ? `
         <div class="bento-card" style="padding:32px;text-align:center;">
-          <i data-lucide="check-circle-2" style="width:32px;color:var(--success);margin-bottom:8px;display:block;margin-left:auto;margin-right:auto;"></i>
+          ${renderIcon('check-circle', null, 'style="width:32px;color:var(--success);margin-bottom:8px;display:block;margin-left:auto;margin-right:auto;"')}
           <div style="font-weight:600;color:var(--text-2);margin-bottom:4px;">All clear!</div>
           <div style="font-size:12px;color:var(--text-muted);">No active tasks right now.</div>
         </div>
@@ -354,12 +354,12 @@ function renderTasks(filter = '') {
 
       <!-- ── COMPLETED ── -->
       ${_showCompletedTasks && completed.length > 0 ? renderBentoSection('__completed__',
-      `<i data-lucide="check-circle" style="width:13px;"></i> Completed`,
+      `${renderIcon('check-circle', null, 'style="width:13px;"')} Completed`,
       completed, false) : ''}
 
       <!-- ── OTHER RECURRING ── -->
       ${recurringOther.length > 0 ? renderBentoSection('__recurring_other__',
-        `<i data-lucide="repeat" style="width:13px;"></i> Other Recurring`,
+        `${renderIcon('repeat', null, 'style="width:13px;"')} Other Recurring`,
         recurringOther, true, false, true) : ''}
 
       <!-- bottom spacer -->
@@ -386,9 +386,9 @@ function renderBentoSection(key, label, tasks, isRecurring = false, hideCategory
         <div style="width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0;"></div>
         <span style="flex:1;font-size:13px;font-weight:600;color:var(--text-1);">${label}</span>
         ${p1InGroup > 0 ? `<span style="font-size:10px;font-weight:700;color:${PRIORITY_COLOR.P1};background:${PRIORITY_COLOR.P1}18;border-radius:20px;padding:1px 7px;">${p1InGroup} urgent</span>` : ''}
-        ${overdueInGroup > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--danger);background:rgba(239,68,68,0.1);border-radius:20px;padding:1px 7px;">${renderIcon('warning', null, '')} ${overdueInGroup}</span>` : ''}
+        ${overdueInGroup > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--danger);background:rgba(239,68,68,0.1);border-radius:20px;padding:1px 7px;">${renderIcon('warning', null, 'style="width:10px; vertical-align:middle; margin-right:2px;"')} ${overdueInGroup}</span>` : ''}
         <span style="font-size:11px;color:var(--text-muted);margin-left:2px;">${count}</span>
-        <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" style="width:14px;color:var(--text-muted);flex-shrink:0;"></i>
+        ${renderIcon(isCollapsed ? 'right' : 'down', null, 'style="width:14px;color:var(--text-muted);flex-shrink:0;"')}
       </div>
       ${!isCollapsed ? tasks.map(t => renderBentoTaskRow(t, isRecurring, dimmed)).join('') : ''}
     </div>`;
@@ -433,8 +433,8 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
       (isRecurring ? `toggleRecurringTask('${t.id}',${!isDone})` : `toggleTaskOptimistic('${t.id}')`)}"
            style="${isDone ? 'background:var(--primary);border-color:var(--primary);' : (!_itemSelectionMode && t.priority ? `border-color:${pColor}55;` : '')}">
         ${isDone || (_itemSelectionMode && selected)
-      ? `<i data-lucide="check" style="width:10px;color:white;"></i>`
-      : (_itemSelectionMode ? `<i data-lucide="circle" style="width:10px;color:var(--text-muted);"></i>` : '')
+      ? `${renderIcon('save', null, 'style="width:10px;color:white;"')}`
+      : (_itemSelectionMode ? `${renderIcon('circle', null, 'style="width:10px;color:var(--text-muted);"')}` : '')
     }
       </div>
 
@@ -447,15 +447,15 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
           ${!_itemSelectionMode ? `
           <div style="display:flex;align-items:center;gap:1px;flex-shrink:0;margin-top:-1px;">
             <button class="btn icon" style="width:22px;height:22px;padding:2px;" onclick="event.stopPropagation();openEditTask('${t.id}')" title="Edit">
-              <i data-lucide="pencil" style="width:11px;"></i>
+              ${renderIcon('edit', null, 'style="width:11px;"')}
             </button>
             <button class="btn icon" style="width:22px;height:22px;padding:2px;" onclick="event.stopPropagation();addReminderToTask('${t.id}')" title="Remind me">
-              <i data-lucide="bell" style="width:11px;"></i>
+              ${renderIcon('reminder', null, 'style="width:11px;"')}
             </button>
             <button class="btn icon" style="width:22px;height:22px;padding:2px;" onclick="event.stopPropagation();deleteTask('${t.id}')" title="Delete">
-              <i data-lucide="trash-2" style="width:11px;"></i>
+              ${renderIcon('delete', null, 'style="width:11px;"')}
             </button>
-            <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" style="width:13px;color:var(--text-muted);opacity:0.5;margin-left:1px;"></i>
+            ${renderIcon(isExpanded ? 'up' : 'down', null, 'style="width:13px;color:var(--text-muted);opacity:0.5;margin-left:1px;"')}
           </div>` : ''}
         </div>
 
@@ -464,15 +464,15 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
           ${t.due_date ? `
           <span class="task-meta-chip" style="${isOverdue ? 'color:var(--danger);border-color:rgba(239,68,68,0.3);background:rgba(239,68,68,0.07);' : ''}">
-            <i data-lucide="${isOverdue ? 'alert-circle' : 'calendar'}" style="width:9px;"></i>
-            ${dateLabel}${isOverdue ? ` ${renderIcon('warning', null, '')}` : ''}
+            ${renderIcon(isOverdue ? 'alert-circle' : 'calendar', null, 'style="width:9px;"')}
+            ${dateLabel}${isOverdue ? ` ${renderIcon('warning', null, 'style="width:10px;vertical-align:middle;margin-left:2px;"')}` : ''}
           </span>` : ''}
           ${subtasks.length > 0 ? `
           <span class="task-meta-chip" style="${doneSubCount === subtasks.length && subtasks.length > 0 ? 'color:var(--success);border-color:rgba(16,185,129,0.3);' : ''}">
-            <i data-lucide="${doneSubCount === subtasks.length && subtasks.length > 0 ? 'check-circle' : 'list-todo'}" style="width:9px;"></i>
+            ${renderIcon(doneSubCount === subtasks.length && subtasks.length > 0 ? 'check-circle' : 'tasks', null, 'style="width:9px;"')}
             ${doneSubCount}/${subtasks.length}
           </span>` : ''}
-          ${recurLabel ? `<span class="task-meta-chip"><i data-lucide="repeat" style="width:9px;"></i> ${recurLabel}</span>` : ''}
+          ${recurLabel ? `<span class="task-meta-chip">${renderIcon('repeat', null, 'style="width:9px;"')} ${recurLabel}</span>` : ''}
         </div>` : ''}
       </div>
     </div>
@@ -485,17 +485,17 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
         <div class="subtask-item">
           <div class="subtask-mini-check ${s.done ? 'done' : ''}"
                onclick="event.stopPropagation();toggleSubtask('${t.id}',${idx},${!s.done})">
-            ${s.done ? `<i data-lucide="check" style="width:8px;color:white;"></i>` : ''}
+            ${s.done ? `${renderIcon('save', null, 'style="width:8px;color:white;"')}` : ''}
           </div>
           <span style="flex:1;${s.done ? 'text-decoration:line-through;color:var(--text-muted);' : 'color:var(--text-2);'}">${s.text}</span>
-          <i data-lucide="x" style="width:11px;color:var(--text-muted);cursor:pointer;opacity:0.5;"
-             onclick="event.stopPropagation();window.deleteSubtask('${t.id}',${idx})"></i>
+          ${renderIcon('x', null, 'style="width:11px;color:var(--text-muted);cursor:pointer;opacity:0.5;"')}
+             onclick="event.stopPropagation();window.deleteSubtask('${t.id}',${idx})"></div>
         </div>
       `).join('')}
       <!-- Add subtask input -->
       <div style="display:flex;align-items:center;gap:8px;padding:5px 0;margin-top:2px;">
         <div style="width:15px;height:15px;min-width:15px;border:2px dashed var(--border-color);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          <i data-lucide="plus" style="width:8px;color:var(--text-muted);"></i>
+          ${renderIcon('add', null, 'style="width:8px;color:var(--text-muted); font-weight: 800;"')}
         </div>
         <input type="text" id="inline-subtask-input-${t.id}" placeholder="Add subtask…"
                style="flex:1;border:none;background:transparent;outline:none;font-size:12px;color:var(--text-1);"
@@ -669,7 +669,7 @@ window.openTaskModal = function () {
       <div style="border:1px solid var(--border-color);padding:10px;border-radius:10px;">
         <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Subtasks</label>
         <div id="mSubtaskList" style="margin-top:6px;"></div>
-        <button class="btn small secondary" style="width:100%;margin-top:6px;" onclick="addSubtaskInput()">+ Add Subtask</button>
+        <button class="btn small secondary" style="width:100%;margin-top:6px;" onclick="addSubtaskInput()">${renderIcon('add', null, 'style="width:12px; margin-right:4px;"')} Add Subtask</button>
       </div>
       <div style="display:flex;gap:8px;">
         <select class="input" id="mTaskCategory">
@@ -724,7 +724,7 @@ window.addSubtaskInput = function (value = '', done = false) {
   div.innerHTML = `
     <input type="checkbox" class="subtask-check" ${done ? 'checked' : ''}>
     <input type="text" class="input small subtask-text" value="${value}" placeholder="Step…" style="margin:0;flex:1;">
-    <i data-lucide="x" style="width:13px;cursor:pointer;" onclick="this.parentElement.remove()"></i>`;
+    ${renderIcon('x', null, 'style="width:13px;cursor:pointer;" onclick="this.parentElement.remove()"')}`;
   list.appendChild(div);
   if (typeof lucide !== 'undefined') lucide.createIcons();
 };
@@ -755,7 +755,7 @@ window.openEditTask = function (id) {
       <div style="border:1px solid var(--border-color);padding:10px;border-radius:10px;">
         <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Subtasks</label>
         <div id="mSubtaskList" style="margin-top:6px;"></div>
-        <button class="btn small secondary" style="width:100%;margin-top:6px;" onclick="addSubtaskInput()">+ Add Subtask</button>
+        <button class="btn small secondary" style="width:100%;margin-top:6px;" onclick="addSubtaskInput()">${renderIcon('add', null, 'style="width:12px; margin-right:4px;"')} Add Subtask</button>
       </div>
       <div style="display:flex;gap:8px;">
         <select class="input" id="mTaskCategory">
@@ -810,28 +810,28 @@ window.openEditTask = function (id) {
 // Reminder Integration
 // ─────────────────────────────────────────────────────────
 
-window.addReminderToTask = function(taskId) {
+window.addReminderToTask = function (taskId) {
   const task = state.data.tasks.find(t => String(t.id) === String(taskId));
   if (!task) return;
-  
+
   // Open the reminder modal pre-filled with task info
   if (typeof openReminderModal === 'function') {
     // First create a new reminder, then we'll link it
     openReminderModal();
-    
+
     // Pre-fill the form with task info
     setTimeout(() => {
       document.getElementById('reminderTitle').value = `Task: ${task.title}`;
       document.getElementById('reminderDescription').value = task.description || '';
       document.getElementById('reminderCategory').value = 'task';
       document.getElementById('relatedItemType').value = 'task';
-      
+
       // Load tasks in the related item dropdown
       loadRelatedItems('task');
       setTimeout(() => {
         document.getElementById('relatedItemId').value = taskId;
       }, 100);
-      
+
       // Pre-fill with task due date if available
       if (task.due_date) {
         const dueDate = new Date(task.due_date);
@@ -845,9 +845,9 @@ window.addReminderToTask = function(taskId) {
 // ─────────────────────────────────────────────────────────
 // Delete Task Function
 // ─────────────────────────────────────────────────────────
-window.deleteTask = async function(id) {
+window.deleteTask = async function (id) {
   if (!confirm('Delete this task?')) return;
-  
+
   try {
     await apiCall('delete', 'tasks', {}, id);
     showToast('Task deleted');
@@ -871,7 +871,7 @@ function getTaskCategories() {
   if (settings.task_categories) {
     try {
       return JSON.parse(settings.task_categories);
-    } catch (e) {}
+    } catch (e) { }
   }
   return [...DEFAULT_TASK_CATEGORIES];
 }
@@ -883,14 +883,14 @@ async function saveTaskCategoriesToSettings(categories) {
     ...settings,
     task_categories: JSON.stringify(categories)
   };
-  
+
   // Update settings in the sheet
   if (settings.id) {
     await apiCall('update', 'settings', newSettings, settings.id);
   } else {
     await apiCall('create', 'settings', newSettings);
   }
-  
+
   // Update local state
   if (!state.data.settings) state.data.settings = [{}];
   state.data.settings[0] = newSettings;
@@ -904,7 +904,7 @@ function getAllTaskCategories() {
 }
 
 // Add a new category
-window.addTaskCategory = async function(categoryName) {
+window.addTaskCategory = async function (categoryName) {
   if (!categoryName || categoryName.trim() === '') return false;
   const trimmed = categoryName.trim();
   const categories = getTaskCategories();
@@ -919,55 +919,55 @@ window.addTaskCategory = async function(categoryName) {
 };
 
 // Delete a category (tasks will become uncategorized)
-window.deleteTaskCategory = async function(categoryName) {
+window.deleteTaskCategory = async function (categoryName) {
   if (!confirm(`Delete category "${categoryName}"? Tasks will become uncategorized.`)) return;
-  
+
   // Remove from categories list
   const categories = getTaskCategories().filter(c => c !== categoryName);
   await saveTaskCategoriesToSettings(categories);
-  
+
   // Update all tasks with this category to have no category
   const tasksToUpdate = state.data.tasks.filter(t => t.category === categoryName);
   for (const t of tasksToUpdate) {
     await apiCall('update', 'tasks', { ...t, category: '' }, t.id);
   }
-  
+
   showToast(`Category "${categoryName}" deleted`);
   await refreshData('tasks');
 };
 
 // Rename a category
-window.renameTaskCategory = async function(oldName, newName) {
+window.renameTaskCategory = async function (oldName, newName) {
   if (!newName || newName.trim() === '') return false;
   const trimmed = newName.trim();
   const categories = getTaskCategories();
-  
+
   if (categories.includes(trimmed) && trimmed !== oldName) {
     showToast('Category name already exists');
     return false;
   }
-  
+
   // Update categories list
   const newCategories = categories.map(c => c === oldName ? trimmed : c);
   await saveTaskCategoriesToSettings(newCategories);
-  
+
   // Update all tasks with this category
   const tasksToUpdate = state.data.tasks.filter(t => t.category === oldName);
   for (const t of tasksToUpdate) {
     await apiCall('update', 'tasks', { ...t, category: trimmed }, t.id);
   }
-  
+
   showToast(`Category renamed to "${trimmed}"`);
   await refreshData('tasks');
   return true;
 };
 
 // Open Category Management Modal
-window.openCategoryManager = function() {
+window.openCategoryManager = function () {
   const categories = getAllTaskCategories();
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  
+
   box.innerHTML = `
     <h3 style="margin-bottom:16px;">Manage Task Categories</h3>
     
@@ -984,10 +984,10 @@ window.openCategoryManager = function() {
           <span style="font-weight:500;">${cat}</span>
           <div style="display:flex;gap:4px;">
             <button class="btn icon small" onclick="editCategoryName('${cat}')" title="Rename">
-              <i data-lucide="pencil" style="width:12px;"></i>
+              ${renderIcon('edit', null, 'style="width:12px;"')}
             </button>
             <button class="btn icon small" onclick="confirmDeleteCategory('${cat}')" title="Delete">
-              <i data-lucide="trash-2" style="width:12px;"></i>
+              ${renderIcon('delete', null, 'style="width:12px;"')}
             </button>
           </div>
         </div>
@@ -998,12 +998,12 @@ window.openCategoryManager = function() {
       <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Close</button>
     </div>
   `;
-  
+
   modal.classList.remove('hidden');
   lucide.createIcons();
 };
 
-window.saveNewCategory = async function() {
+window.saveNewCategory = async function () {
   const input = document.getElementById('newCategoryInput');
   const name = input.value.trim();
   if (await addTaskCategory(name)) {
@@ -1012,7 +1012,7 @@ window.saveNewCategory = async function() {
   }
 };
 
-window.editCategoryName = async function(oldName) {
+window.editCategoryName = async function (oldName) {
   const newName = prompt(`Rename category "${oldName}" to:`, oldName);
   if (newName && newName !== oldName) {
     await renameTaskCategory(oldName, newName);
@@ -1020,7 +1020,7 @@ window.editCategoryName = async function(oldName) {
   }
 };
 
-window.confirmDeleteCategory = async function(categoryName) {
+window.confirmDeleteCategory = async function (categoryName) {
   await deleteTaskCategory(categoryName);
   document.getElementById('universalModal').classList.add('hidden');
 };

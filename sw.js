@@ -117,7 +117,7 @@ self.addEventListener('message', (event) => {
 
 // Push event listener for push notifications from push service
 self.addEventListener('push', (event) => {
-    console.log('[SW v7] Push received:', event);
+    console.log('[SW v8] Push received:', event);
     
     let data = {
         title: 'PersonalOS',
@@ -151,7 +151,7 @@ self.addEventListener('push', (event) => {
 
 // Push subscription change listener
 self.addEventListener('pushsubscriptionchange', (event) => {
-    console.log('[SW v7] Push subscription changed');
+    console.log('[SW v8] Push subscription changed');
     
     event.waitUntil(
         // Notify the app about subscription change
@@ -165,7 +165,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
                 });
             })
             .catch((error) => {
-                console.error('[SW v7] Failed to resubscribe:', error);
+                console.error('[SW v8] Failed to resubscribe:', error);
             })
     );
 });

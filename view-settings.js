@@ -2,7 +2,7 @@
 
 function renderSettings() {
   // Toggle function for collapsible sections
-  window.toggleSection = function(sectionId) {
+  window.toggleSection = function (sectionId) {
     var body = document.getElementById('body-' + sectionId);
     var icon = document.getElementById('icon-' + sectionId);
     if (body) {
@@ -15,17 +15,18 @@ function renderSettings() {
       }
     }
   };
-  
+
   // Map backend keys to frontend variables
   // Backend relies on: ai_api_key, view_mode
   const s = state.data.settings?.[0] || {};
+  const [themeMode, iconPack] = (s.theme_mode || 'light|emoji').split('|');
 
   const settings = {
     weekly_budget: s.weekly_budget || 0,
     monthly_budget: s.monthly_budget || 0,
     theme_color: s.theme_color || '#4F46E5',
-    theme_mode: s.theme_mode || 'light',
-    icon_pack: s.icon_pack || 'emoji',
+    theme_mode: themeMode || 'light',
+    icon_pack: iconPack || 'emoji',
     hidden_tabs: s.hidden_tabs || '',
     // Map 'ai_api_key' from sheet to 'gemini_api_key' for UI
     gemini_api_key: s.ai_api_key || '',
@@ -56,8 +57,8 @@ function renderSettings() {
       <!-- 1. PROFILE -->
       <details class="settings-details" style="margin-bottom:16px; border:1px solid var(--border-color); border-radius:16px; display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
-            <div class="widget-title"><i data-lucide="user" style="width:18px; margin-right:8px;"></i> Profile</div>
-            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+            <div class="widget-title">${renderIcon('user', null, 'style="width:18px; margin-right:8px;"')} Profile</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Your personal information.</p>
@@ -92,8 +93,8 @@ function renderSettings() {
       <!-- 2. BUDGET -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
-            <div class="widget-title"><i data-lucide="wallet" style="width:18px; margin-right:8px;"></i> Budget Settings</div>
-            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+            <div class="widget-title">${renderIcon('wallet', null, 'style="width:18px; margin-right:8px;"')} Budget Settings</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Manage your financial tracking limits.</p>
@@ -123,8 +124,8 @@ function renderSettings() {
       <!-- 3. APPEARANCE -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
-            <div class="widget-title"><i data-lucide="palette" style="width:18px; margin-right:8px;"></i> Appearance</div>
-            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+            <div class="widget-title">${renderIcon('palette', null, 'style="width:18px; margin-right:8px;"')} Appearance</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Customize the look and feel of your OS.</p>
@@ -182,15 +183,40 @@ function renderSettings() {
                     <span class="pack-preview">${renderIcon('home', 'lucide')} ${renderIcon('calendar', 'lucide')} ${renderIcon('achievements', 'lucide')}</span>
                     <span class="pack-name">Lucide</span>
                 </label>
-                <label class="icon-pack-option ${!settings.icon_pack || settings.icon_pack === 'emoji' ? 'active' : ''}" onclick="selectIconPack('emoji')">
-                    <input type="radio" name="iconPack" value="emoji" ${!settings.icon_pack || settings.icon_pack === 'emoji' ? 'checked' : ''}>
-                    <span class="pack-preview">🏠 📅 🏆</span>
-                    <span class="pack-name">Emoji</span>
+                <label class="icon-pack-option ${settings.icon_pack === 'remix' ? 'active' : ''}" onclick="selectIconPack('remix')">
+                    <input type="radio" name="iconPack" value="remix" ${settings.icon_pack === 'remix' ? 'checked' : ''}>
+                    <span class="pack-preview">${renderIcon('home', 'remix')} ${renderIcon('calendar', 'remix')} ${renderIcon('achievements', 'remix')}</span>
+                    <span class="pack-name">Remix</span>
+                </label>
+                <label class="icon-pack-option ${settings.icon_pack === 'tabler' ? 'active' : ''}" onclick="selectIconPack('tabler')">
+                    <input type="radio" name="iconPack" value="tabler" ${settings.icon_pack === 'tabler' ? 'checked' : ''}>
+                    <span class="pack-preview">${renderIcon('home', 'tabler')} ${renderIcon('calendar', 'tabler')} ${renderIcon('achievements', 'tabler')}</span>
+                    <span class="pack-name">Tabler</span>
                 </label>
                 <label class="icon-pack-option ${settings.icon_pack === 'material' ? 'active' : ''}" onclick="selectIconPack('material')">
                     <input type="radio" name="iconPack" value="material" ${settings.icon_pack === 'material' ? 'checked' : ''}>
                     <span class="pack-preview">${renderIcon('home', 'material')} ${renderIcon('calendar', 'material')} ${renderIcon('achievements', 'material')}</span>
                     <span class="pack-name">Material</span>
+                </label>
+                <label class="icon-pack-option ${settings.icon_pack === 'fontawesome' ? 'active' : ''}" onclick="selectIconPack('fontawesome')">
+                    <input type="radio" name="iconPack" value="fontawesome" ${settings.icon_pack === 'fontawesome' ? 'checked' : ''}>
+                    <span class="pack-preview">${renderIcon('home', 'fontawesome')} ${renderIcon('calendar', 'fontawesome')} ${renderIcon('achievements', 'fontawesome')}</span>
+                    <span class="pack-name">Font Awesome</span>
+                </label>
+                <label class="icon-pack-option ${settings.icon_pack === 'heroicons' ? 'active' : ''}" onclick="selectIconPack('heroicons')">
+                    <input type="radio" name="iconPack" value="heroicons" ${settings.icon_pack === 'heroicons' ? 'checked' : ''}>
+                    <span class="pack-preview">${renderIcon('home', 'heroicons')} ${renderIcon('calendar', 'heroicons')} ${renderIcon('achievements', 'heroicons')}</span>
+                    <span class="pack-name">Heroicons</span>
+                </label>
+                <label class="icon-pack-option ${settings.icon_pack === 'feather' ? 'active' : ''}" onclick="selectIconPack('feather')">
+                    <input type="radio" name="iconPack" value="feather" ${settings.icon_pack === 'feather' ? 'checked' : ''}>
+                    <span class="pack-preview">${renderIcon('home', 'feather')} ${renderIcon('calendar', 'feather')} ${renderIcon('achievements', 'feather')}</span>
+                    <span class="pack-name">Feather</span>
+                </label>
+                <label class="icon-pack-option ${!settings.icon_pack || settings.icon_pack === 'emoji' ? 'active' : ''}" onclick="selectIconPack('emoji')">
+                    <input type="radio" name="iconPack" value="emoji" ${!settings.icon_pack || settings.icon_pack === 'emoji' ? 'checked' : ''}>
+                    <span class="pack-preview">🏠 📅 🏆</span>
+                    <span class="pack-name">Emoji</span>
                 </label>
             </div>
             <input type="hidden" id="sIconPack" value="${settings.icon_pack || 'emoji'}">
@@ -201,8 +227,8 @@ function renderSettings() {
       <!-- 3. AI CONFIG -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
-            <div class="widget-title"><i data-lucide="cpu" style="width:18px; margin-right:8px;"></i> AI Configuration</div>
-            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+            <div class="widget-title">${renderIcon('ai', null, 'style="width:18px; margin-right:8px;"')} AI Configuration</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Power your dashboard with Google Gemini.</p>
@@ -231,8 +257,8 @@ function renderSettings() {
       <!-- 4. TAB VISIBILITY -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
-            <div class="widget-title"><i data-lucide="layout" style="width:18px; margin-right:8px;"></i> Tab Visibility</div>
-            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+            <div class="widget-title">${renderIcon('layout', null, 'style="width:18px; margin-right:8px;"')} Tab Visibility</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Toggle modules on or off.</p>
@@ -253,8 +279,8 @@ function renderSettings() {
       <!-- 5. DIARY SETTINGS -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
-            <div class="widget-title"><i data-lucide="book-open" style="width:18px; margin-right:8px;"></i> Diary Settings</div>
-            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+            <div class="widget-title">${renderIcon('diary', null, 'style="width:18px; margin-right:8px;"')} Diary Settings</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Customize your diary experience.</p>
@@ -290,7 +316,7 @@ function renderSettings() {
         <div style="margin-bottom:16px">
           <label class="setting-label">Export Diary</label>
           <button class="btn secondary" onclick="window.exportDiary && window.exportDiary()">
-            <i data-lucide="download"></i> Export All Entries
+            ${renderIcon('export')} Export All Entries
           </button>
           <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Download all your diary entries as a file.</p>
         </div>
@@ -302,8 +328,8 @@ function renderSettings() {
       <!-- 4. NOTIFICATIONS -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
-            <div class="widget-title"><i data-lucide="bell" style="width:18px; margin-right:8px;"></i> Notifications</div>
-            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+            <div class="widget-title">${renderIcon('reminder', null, 'style="width:18px; margin-right:8px;"')} Notifications</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Configure reminder and notification preferences.</p>
@@ -318,7 +344,7 @@ function renderSettings() {
         
         <div class="setting-item">
             <button class="btn secondary" onclick="requestNotificationPermission()">
-                <i data-lucide="bell"></i> Request Browser Permission
+                ${renderIcon('reminder')} Request Browser Permission
             </button>
             <span class="permission-status" id="notificationPermissionStatus"></span>
         </div>
@@ -357,15 +383,15 @@ function renderSettings() {
       <!-- 5. DATA MANAGEMENT -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
-            <div class="widget-title"><i data-lucide="database" style="width:18px; margin-right:8px;"></i> Data Management</div>
-            <i data-lucide="chevron-down" style="width:20px; transition:transform 0.3s;"></i>
+            <div class="widget-title">${renderIcon('database', null, 'style="width:18px; margin-right:8px;"')} Data Management</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">View raw data or reset the application.</p>
         
         <div class="data-management-actions">
-           <button class="btn secondary" onclick="openGoogleSheet()"><i data-lucide="table" style="width:16px; margin-right:8px"></i> Open Google Sheet</button>
-           <button class="btn danger" onclick="confirmDeleteAllData()"><i data-lucide="trash-2" style="width:16px; margin-right:8px"></i> Delete All Data</button>
+           <button class="btn secondary" onclick="openGoogleSheet()">${renderIcon('grid', null, 'style="width:16px; margin-right:8px"')} Open Google Sheet</button>
+           <button class="btn danger" onclick="confirmDeleteAllData()">${renderIcon('delete', null, 'style="width:16px; margin-right:8px"')} Delete All Data</button>
         </div>
         </div>
       </details>
@@ -386,20 +412,20 @@ function renderSettings() {
   });
 
   initCategoryRows(settings.category_budgets);
-  
+
   // Add toggle functionality for collapsible sections
   document.querySelectorAll('.settings-section .widget-header').forEach(header => {
     const body = header.nextElementSibling;
-    
-    header.addEventListener('click', function() {
+
+    header.addEventListener('click', function () {
       const isExpanded = !body.classList.contains('hidden');
       body.classList.toggle('hidden');
       header.classList.toggle('expanded', !isExpanded);
     });
   });
-  
+
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-  
+
   // Load notification settings from localStorage
   loadNotificationSettingsUI();
 }
@@ -466,15 +492,15 @@ window.applySettings = function () {
   const color = settings.theme_color || '#4F46E5';
   document.documentElement.style.setProperty('--primary', color);
 
-  // 2. Theme Mode (Light/Dark/Forest/Midnight/Sunset/Ocean/Lavender/Rose)
-  const mode = settings.theme_mode || 'light';
-  document.documentElement.setAttribute('data-theme', mode);
+  // 2. Theme Mode & Icon Pack
+  const [mode, iconPack] = (settings.theme_mode || 'light|emoji').split('|');
+  document.documentElement.setAttribute('data-theme', mode || 'light');
 
-  // 3. Icon Pack
-  const iconPack = settings.icon_pack || 'emoji';
+  // 3. Icon Pack Update
+  const packToUse = iconPack || 'emoji';
   try {
     const appSettings = JSON.parse(localStorage.getItem('app_settings') || '{}');
-    appSettings.icon_pack = iconPack;
+    appSettings.icon_pack = packToUse;
     localStorage.setItem('app_settings', JSON.stringify(appSettings));
   } catch (e) { console.warn('Could not save icon pack setting'); }
 
@@ -514,7 +540,7 @@ window.selectOrientation = function (orientation) {
   parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('sOrientation').value = orientation;
-  
+
   // Apply orientation lock
   applyOrientationLock(orientation);
 }
@@ -522,7 +548,7 @@ window.selectOrientation = function (orientation) {
 // Apply orientation lock
 function applyOrientationLock(orientation) {
   console.log('Applying orientation lock:', orientation);
-  
+
   // Try Screen Orientation API first
   if (screen.orientation) {
     if (orientation === 'auto') {
@@ -549,7 +575,7 @@ function applyOrientationLock(orientation) {
 function applyOrientationCSS(orientation) {
   const meta = document.querySelector('meta[name="viewport"]');
   if (!meta) return;
-  
+
   if (orientation === 'portrait') {
     meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   } else if (orientation === 'landscape') {
@@ -563,11 +589,11 @@ function initCategoryRows(jsonStr) {
   const container = document.getElementById('categoryBudgetList');
   container.innerHTML = '';
   const data = safeJsonParse(jsonStr);
-  
+
   // Get unique categories from transactions (Money tab) - only from sheet
   const txCategories = new Set();
   const catSpent = {};
-  
+
   if (state.data.expenses) {
     state.data.expenses.forEach(e => {
       if (e.category) {
@@ -577,7 +603,7 @@ function initCategoryRows(jsonStr) {
       }
     });
   }
-  
+
   // Calculate sum of all category budgets
   let totalBudget = 0;
   let totalSpent = 0;
@@ -589,17 +615,17 @@ function initCategoryRows(jsonStr) {
   Object.values(catSpent).forEach(spent => {
     totalSpent += spent;
   });
-  
+
   // Store for display
   window._categorySpentData = catSpent;
   window._categoryBudgetData = data;
-  
+
   // Combine: saved budget categories + transaction categories (NO hardcoded defaults)
   const allCats = new Set([
     ...Object.keys(data),
     ...txCategories
   ]);
-  
+
   if (allCats.size === 0) {
     // No categories - show one empty row for user to add
     addCategoryRow('', '', 'weekly');
@@ -612,7 +638,7 @@ function initCategoryRows(jsonStr) {
       if (!aHasBudget && bHasBudget) return 1;
       return a.localeCompare(b);
     });
-    
+
     sortedCats.forEach(cat => {
       // Handle both old format (number) and new format (object)
       let budget = '';
@@ -626,7 +652,7 @@ function initCategoryRows(jsonStr) {
       addCategoryRow(cat, budget, source);
     });
   }
-  
+
   // Update summary after initialization
   setTimeout(updateCategorySummary, 100);
 }
@@ -652,7 +678,7 @@ window.addCategoryRow = function (cat = '', amt = '', source = 'weekly') {
       }
     });
   }
-  
+
   const spent = catSpent[cat] || 0;
   const div = document.createElement('div');
   div.style.display = 'flex';
@@ -678,14 +704,14 @@ window.addCategoryRow = function (cat = '', amt = '', source = 'weekly') {
 };
 
 // Update the category summary totals
-window.updateCategorySummary = function() {
+window.updateCategorySummary = function () {
   const data = {};
   document.querySelectorAll('.cat-budget-row').forEach(row => {
     const c = row.querySelector('.cat-name').value.trim();
     const amt = row.querySelector('.cat-amt').value;
     if (c && amt) data[c] = amt;
   });
-  
+
   // Calculate total budget
   let totalBudget = 0;
   Object.values(data).forEach(budget => {
@@ -693,7 +719,7 @@ window.updateCategorySummary = function() {
       totalBudget += Number(budget);
     }
   });
-  
+
   // Calculate total spent from ALL categories (not just those with budget)
   let totalSpent = 0;
   if (state.data.expenses) {
@@ -703,7 +729,7 @@ window.updateCategorySummary = function() {
       }
     });
   }
-  
+
   const budgetEl = document.getElementById('totalCatBudget');
   const spentEl = document.getElementById('totalCatSpent');
   if (budgetEl) budgetEl.textContent = '₹' + totalBudget.toLocaleString();
@@ -717,7 +743,7 @@ window.saveAllSettings = async function (section = 'all') {
   const morning = document.getElementById('morningMessage')?.value || '';
   const afternoon = document.getElementById('afternoonMessage')?.value || '';
   const evening = document.getElementById('eveningMessage')?.value || '';
-  
+
   // Budget fields
   const weekly = document.getElementById('weeklyBudget').value;
   const monthly = document.getElementById('monthlyBudget').value;
@@ -731,7 +757,7 @@ window.saveAllSettings = async function (section = 'all') {
       cats[c] = { budget: Number(a), source: s };
     }
   });
-  
+
   // Appearance fields
   const color = document.getElementById('sColor').value;
   let themeMode = 'light';
@@ -739,11 +765,11 @@ window.saveAllSettings = async function (section = 'all') {
   if (modeBtn) themeMode = modeBtn.textContent.toLowerCase();
   const orientationEl = document.getElementById('sOrientation');
   const orientation = orientationEl?.value || 'auto';
-  
+
   // AI fields
   const apiKey = document.getElementById('sApiKey').value;
   const model = document.getElementById('sModel').value;
-  
+
   // Tab fields
   const allTabs = ['calendar', 'tasks', 'finance', 'habits', 'diary', 'vision', 'people'];
   const checkedTabs = Array.from(document.querySelectorAll('.tab-checkbox:checked')).map(cb => cb.value);
@@ -751,32 +777,32 @@ window.saveAllSettings = async function (section = 'all') {
 
   // Build settings object based on section
   let newSettings = {};
-  
+
   if (section === 'all' || section === 'profile') {
     newSettings.name = name;
     newSettings.morning_message = morning;
     newSettings.afternoon_message = afternoon;
     newSettings.evening_message = evening;
   }
-  
+
   if (section === 'all' || section === 'budget') {
     newSettings.weekly_budget = Number(weekly);
     newSettings.monthly_budget = Number(monthly);
     newSettings.category_budgets = JSON.stringify(cats);
   }
-  
+
   if (section === 'all' || section === 'appearance') {
     newSettings.theme_color = color;
-    newSettings.theme_mode = themeMode;
-    newSettings.icon_pack = document.getElementById('sIconPack')?.value || 'emoji';
+    const currentPack = document.getElementById('sIconPack')?.value || 'emoji';
+    newSettings.theme_mode = `${themeMode}|${currentPack}`;
     newSettings.orientation_lock = orientation;
   }
-  
+
   if (section === 'all' || section === 'ai') {
     newSettings.ai_api_key = apiKey;
     newSettings.ai_model = model;
   }
-  
+
   if (section === 'all' || section === 'tabs') {
     newSettings.hidden_tabs = hidden;
   }
@@ -798,7 +824,7 @@ window.saveAllSettings = async function (section = 'all') {
 
   const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary' };
   showToast(section === 'all' ? 'Saving settings...' : `Saving ${sectionNames[section] || 'settings'}...`);
-  
+
   // Optimistic Update
   if (state.data.settings?.[0]) {
     Object.assign(state.data.settings[0], newSettings);
@@ -844,61 +870,61 @@ window.confirmDeleteAllData = function () {
 // --- NOTIFICATION SETTINGS HELPERS ---
 
 function loadNotificationSettingsUI() {
-    // Get notification state
-    const enabled = document.getElementById('notificationsEnabled');
-    const sound = document.getElementById('notificationSound');
-    const method = document.getElementById('notificationMethod');
-    const quietStart = document.getElementById('quietHoursStart');
-    const quietEnd = document.getElementById('quietHoursEnd');
-    const status = document.getElementById('notificationPermissionStatus');
-    
-    if (enabled && window.notificationState) {
-        enabled.checked = window.notificationState.enabled;
-        if (sound) sound.value = window.notificationState.sound || 'default';
-        if (method) method.value = window.notificationState.defaultMethod || 'both';
-        if (quietStart) quietStart.value = padZero(window.notificationState.quietHoursStart || 22) + ':00';
-        if (quietEnd) quietEnd.value = padZero(window.notificationState.quietHoursEnd || 8) + ':00';
+  // Get notification state
+  const enabled = document.getElementById('notificationsEnabled');
+  const sound = document.getElementById('notificationSound');
+  const method = document.getElementById('notificationMethod');
+  const quietStart = document.getElementById('quietHoursStart');
+  const quietEnd = document.getElementById('quietHoursEnd');
+  const status = document.getElementById('notificationPermissionStatus');
+
+  if (enabled && window.notificationState) {
+    enabled.checked = window.notificationState.enabled;
+    if (sound) sound.value = window.notificationState.sound || 'default';
+    if (method) method.value = window.notificationState.defaultMethod || 'both';
+    if (quietStart) quietStart.value = padZero(window.notificationState.quietHoursStart || 22) + ':00';
+    if (quietEnd) quietEnd.value = padZero(window.notificationState.quietHoursEnd || 8) + ':00';
+  }
+
+  // Show permission status
+  if (status && window.notificationState) {
+    const perm = window.notificationState.permission;
+    if (perm === 'granted') {
+      status.innerHTML = '<span class="permission-granted">Enabled</span>';
+    } else if (perm === 'denied') {
+      status.innerHTML = '<span class="permission-denied">Blocked</span>';
+    } else {
+      status.innerHTML = '<span class="permission-default">Not requested</span>';
     }
-    
-    // Show permission status
-    if (status && window.notificationState) {
-        const perm = window.notificationState.permission;
-        if (perm === 'granted') {
-            status.innerHTML = '<span class="permission-granted">Enabled</span>';
-        } else if (perm === 'denied') {
-            status.innerHTML = '<span class="permission-denied">Blocked</span>';
-        } else {
-            status.innerHTML = '<span class="permission-default">Not requested</span>';
-        }
-    }
+  }
 }
 
 function saveNotificationSettings() {
-    const enabled = document.getElementById('notificationsEnabled');
-    const sound = document.getElementById('notificationSound');
-    const method = document.getElementById('notificationMethod');
-    const quietStart = document.getElementById('quietHoursStart');
-    const quietEnd = document.getElementById('quietHoursEnd');
-    
-    if (window.notificationState) {
-        window.notificationState.enabled = enabled ? enabled.checked : true;
-        window.notificationState.sound = sound ? sound.value : 'default';
-        window.notificationState.defaultMethod = method ? method.value : 'both';
-        
-        if (quietStart) {
-            window.notificationState.quietHoursStart = parseInt(quietStart.value.split(':')[0]);
-        }
-        if (quietEnd) {
-            window.notificationState.quietHoursEnd = parseInt(quietEnd.value.split(':')[0]);
-        }
-        
-        // Save to localStorage
-        if (typeof saveNotificationSettings === 'function') {
-            window.notificationState.saveSettings();
-        }
+  const enabled = document.getElementById('notificationsEnabled');
+  const sound = document.getElementById('notificationSound');
+  const method = document.getElementById('notificationMethod');
+  const quietStart = document.getElementById('quietHoursStart');
+  const quietEnd = document.getElementById('quietHoursEnd');
+
+  if (window.notificationState) {
+    window.notificationState.enabled = enabled ? enabled.checked : true;
+    window.notificationState.sound = sound ? sound.value : 'default';
+    window.notificationState.defaultMethod = method ? method.value : 'both';
+
+    if (quietStart) {
+      window.notificationState.quietHoursStart = parseInt(quietStart.value.split(':')[0]);
     }
+    if (quietEnd) {
+      window.notificationState.quietHoursEnd = parseInt(quietEnd.value.split(':')[0]);
+    }
+
+    // Save to localStorage
+    if (typeof saveNotificationSettings === 'function') {
+      window.notificationState.saveSettings();
+    }
+  }
 }
 
 function padZero(num) {
-    return num.toString().padStart(2, '0');
+  return num.toString().padStart(2, '0');
 }
