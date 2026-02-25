@@ -1159,7 +1159,7 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
           <input type="range" min="1" max="10" value="${defaultMood}" class="mood-slider" id="mMoodScore"
             oninput="updateMoodDisplay(this.value)">
           <div class="mood-display">
-            ${renderIcon('mood-okay', null, 'mood-emoji-large')}
+            <span id="moodEmoji" class="mood-emoji-large">${getMoodEmoji(defaultMood)}</span>
             <span id="moodVal" class="mood-number">${defaultMood}</span>
           </div>
         </div>
@@ -1218,8 +1218,14 @@ window.loadTemplateInModal = function (templateId) {
 };
 
 window.updateMoodDisplay = function (value) {
-  document.getElementById('moodEmoji').textContent = getMoodEmoji(value);
-  document.getElementById('moodVal').textContent = value;
+  const emojiEl = document.getElementById('moodEmoji');
+  const valEl = document.getElementById('moodVal');
+  if (emojiEl) {
+    emojiEl.textContent = getMoodEmoji(value);
+  }
+  if (valEl) {
+    valEl.textContent = value;
+  }
 };
 
 window.formatText = function (cmd) {
