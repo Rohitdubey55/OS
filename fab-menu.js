@@ -47,6 +47,15 @@ function showFabStage2() {
   }
 }
 
+function showFabToolsStage() {
+  document.getElementById('fabStage1').classList.add('hidden');
+  document.getElementById('fabStage3').classList.remove('hidden');
+  // Re-initialize icons for the newly visible stage
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    lucide.createIcons();
+  }
+}
+
 function fabAction(type) {
   closeFABMenu();
 

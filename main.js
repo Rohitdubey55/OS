@@ -251,6 +251,8 @@ async function routeTo(viewName) {
             else if (viewName === 'vision') renderVision();
             else if (viewName === 'settings') renderSettings();
             else if (viewName === 'people') renderPeople();
+            else if (viewName === 'gym') renderGym();
+            else if (viewName === 'notes') renderNotes();
         } catch (e) {
             console.error('Error rendering view ' + viewName + ':', e);
             main.innerHTML = '<div style="padding:20px; color:red">Error loading view: ' + viewName + '<br><small>' + e.message + '</small></div>';

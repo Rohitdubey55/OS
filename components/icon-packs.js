@@ -45,6 +45,11 @@ const ICON_MAPPINGS = {
   'search': { lucide: 'search', emoji: '🔍', material: 'search', remix: 'search-line', tabler: 'search', fontawesome: 'fa-magnifying-glass', heroicons: 'magnifying-glass', feather: 'search' },
   'export': { lucide: 'download', emoji: '📤', material: 'download', remix: 'download-2-line', tabler: 'download', fontawesome: 'fa-download', heroicons: 'arrow-down-tray', feather: 'download' },
   'write': { lucide: 'edit-3', emoji: '✍️', material: 'draw', remix: 'quill-pen-line', tabler: 'writing', fontawesome: 'fa-pen', heroicons: 'pencil-square', feather: 'edit-3' },
+  
+  // Tools
+  'wrench': { lucide: 'wrench', emoji: '🔧', material: 'build', remix: 'wrench-line', tabler: 'wrench', fontawesome: 'fa-wrench', heroicons: 'wrench', feather: 'tool' },
+  'dumbbell': { lucide: 'dumbbell', emoji: '🏋️', material: 'fitness_center', remix: 'dumbbell-line', tabler: 'barbell', fontawesome: 'fa-dumbbell', heroicons: 'bolt', feather: 'activity' },
+  'notebook': { lucide: 'book-open', emoji: '📓', material: 'menu_book', remix: 'book-2-line', tabler: 'notebook', fontawesome: 'fa-book-open', heroicons: 'book-open', feather: 'book' },
 
   // Categories
   'health': { lucide: 'heart', emoji: '❤️', material: 'favorite', remix: 'heart-line', tabler: 'heart', fontawesome: 'fa-heart', heroicons: 'heart', feather: 'heart' },

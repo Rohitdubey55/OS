@@ -47,6 +47,8 @@
 
     <link rel="stylesheet" href="diary-views.css" />
 
+    <link rel="stylesheet" href="tools-views.css" />
+
     <link rel="stylesheet" href="finance-transactions.css" />
 
     <link rel="stylesheet" href="ui-polish.css" />
@@ -235,6 +237,11 @@
                     <button class="fab-menu-button refresh"><i data-icon="refresh"
                             style="width:20px;height:20px;"></i></button>
                 </div>
+                <div class="fab-menu-item" onclick="showFabToolsStage()">
+                    <span class="fab-menu-label">Tools</span>
+                    <button class="fab-menu-button tools"><i data-icon="wrench"
+                            style="width:20px;height:20px;"></i></button>
+                </div>
                 <div class="fab-menu-item" onclick="showFabStage2()">
                     <span class="fab-menu-label">Add New</span>
                     <button class="fab-menu-button add"><i data-icon="add" style="width:20px;height:20px;"></i></button>
@@ -277,6 +284,29 @@
                     <span class="fab-menu-label">Add Vision</span>
                     <button class="fab-menu-button vision">
                         <i data-icon="vision" style="color:#ec4899"></i>
+                    </button>
+                </div>
+                <!-- Back Button -->
+                <div class="fab-menu-item" onclick="showFabStage1()">
+                    <span class="fab-menu-label">Back</span>
+                    <button class="fab-menu-button back">
+                        <i data-icon="back" style="color:var(--text-1)"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stage 3: Tools Sub-Menu (Initially Hidden) -->
+            <div id="fabStage3" class="fab-stage hidden">
+                <div class="fab-menu-item" onclick="routeTo('gym'); closeFABMenu()">
+                    <span class="fab-menu-label">Gym Page</span>
+                    <button class="fab-menu-button gym">
+                        <i data-icon="dumbbell" style="color:var(--primary)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="routeTo('notes'); closeFABMenu()">
+                    <span class="fab-menu-label">Note Taking</span>
+                    <button class="fab-menu-button notes">
+                        <i data-icon="notebook" style="color:var(--success)"></i>
                     </button>
                 </div>
                 <!-- Back Button -->
@@ -362,6 +392,8 @@
 
 
     <script src="view-settings.js"></script>
+    <script src="view-gym.js"></script>
+    <script src="view-notes.js"></script>
     <script src="notification-service.js?v=3"></script>
     <script src="command-palette.js"></script>
 

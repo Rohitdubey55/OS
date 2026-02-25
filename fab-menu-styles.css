@@ -208,3 +208,15 @@
 .fab-menu-button.vision {
     color: #ec4899;
 }
+
+.fab-menu-button.tools {
+    color: var(--info, #0ea5e9);
+}
+
+.fab-menu-button.gym {
+    color: var(--primary, #4F46E5);
+}
+
+.fab-menu-button.notes {
+    color: var(--success, #10b981);
+}
