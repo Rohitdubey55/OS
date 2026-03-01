@@ -1362,6 +1362,11 @@ async function loadAllData() {
         }
     }, 500);
 
+    // Send upcoming habit summary to MIT App Inventor now that habits data is loaded
+    if (typeof sendUpcomingHabitSummary === 'function') {
+        sendUpcomingHabitSummary();
+    }
+
 }
 
 
