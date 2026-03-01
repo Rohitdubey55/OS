@@ -62,6 +62,11 @@ async function renderNotes() {
 // Load Notes Data
 async function loadNotesData() {
     try {
+        // Try to initialize sheets first (in case they don't exist)
+        if (typeof initToolsSheets === 'function') {
+            await initToolsSheets();
+        }
+        
         const response = await apiGet('notes');
         notesData = response || [];
         renderNotesList();

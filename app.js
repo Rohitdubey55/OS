@@ -99,6 +99,20 @@ function extractEpochTime(epoch) {
 }
 
 /* ========= API HELPERS ========= */
+
+// Initialize tools sheets (gym, notes)
+async function initToolsSheets() {
+  try {
+    const url = `${API_BASE}?action=init&sheet=tools`;
+    const res = await fetch(url);
+    const json = await res.json();
+    console.log('Tools sheets initialized:', json);
+    return json;
+  } catch (err) {
+    console.error('Error initializing tools sheets:', err);
+  }
+}
+
 async function apiGet(sheet, opts = {}) {
   const month = opts.month ? `&month=${encodeURIComponent(opts.month)}` : "";
   const url = `${API_BASE}?action=get&sheet=${encodeURIComponent(sheet)}${month}`;

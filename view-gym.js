@@ -56,6 +56,11 @@ async function renderGym() {
 // Load Gym Data
 async function loadGymData() {
     try {
+        // Try to initialize sheets first (in case they don't exist)
+        if (typeof initToolsSheets === 'function') {
+            await initToolsSheets();
+        }
+        
         // Load workouts
         const workoutsResponse = await apiGet('gym_workouts');
         gymData = workoutsResponse || [];

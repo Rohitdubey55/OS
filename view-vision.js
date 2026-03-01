@@ -189,7 +189,7 @@ function renderVisionCard(g, isAchieved = false) {
   const opacity = isAchieved ? 'opacity:0.8; filter:grayscale(0.3);' : '';
 
   return `
-    <div class="vision-card animate-enter" style="${opacity}" onclick="openVisionDetail('${g.id}')">
+    <div class="vision-card animate-enter" style="${opacity}; position:relative;" onclick="openVisionDetail('${g.id}')">
       <div class="vision-card-bg" style="background-image: url('${bgUrl}');"></div>
       <div class="vision-card-overlay"></div>
       <div class="vision-card-content">
@@ -201,9 +201,11 @@ function renderVisionCard(g, isAchieved = false) {
             <div class="vision-card-progress-bar" style="width:${g.progress || 0}%;"></div>
         </div>
       </div>
+      ${renderVideoButton(g)}
     </div>
   `;
 }
+
 
 // Unique default images based on category + title hash
 function getDefaultImage(g) {
@@ -782,4 +784,96 @@ function formatFileSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// ─── MIT APP INVENTOR VIDEO BRIDGE ───────────────────────────────────────────
+
+/**
+ * Detects whether we're running inside a MIT App Inventor WebView.
+ */
+function isRunningInAppInventor() {
+  return typeof window.AppInventor !== 'undefined' ||
+    (typeof Android !== 'undefined' && typeof Android.setWebViewString === 'function');
+}
+
+/**
+ * Sends a command string to MIT App Inventor via WebViewString.
+ * The App Inventor blocks listen for this and act on it.
+ * @param {string} command - e.g. "PLAY_VIDEO|https://..." or "STOP_VIDEO"
+ */
+function sendToAppInventorBridge(command) {
+  try {
+    if (typeof Android !== 'undefined' && Android.setWebViewString) {
+      Android.setWebViewString(command);
+    } else if (typeof window.AppInventor !== 'undefined') {
+      window.AppInventor.setWebViewString(command);
+    }
+  } catch (e) {
+    console.warn('[AppInventor Bridge] Could not send command:', e);
+  }
+}
+
+/**
+ * Play a video using MIT App Inventor's VideoPlayer component.
+ * If not in App Inventor, falls back to opening the URL in its own tab.
+ * @param {string} videoUrl - Direct .mp4 URL or local file:/// path
+ */
+window.playVisionVideo = function (videoUrl) {
+  if (!videoUrl) {
+    showToast('No video URL set for this goal.', 'error');
+    return;
+  }
+
+  if (isRunningInAppInventor()) {
+    // App Inventor blocks listen for "PLAY_VIDEO|<url>"
+    sendToAppInventorBridge(`PLAY_VIDEO|${videoUrl}`);
+    showToast('Opening video player…', 'info');
+  } else {
+    // Browser fallback – open directly
+    window.open(videoUrl, '_blank');
+  }
+};
+
+/**
+ * Stop / hide the VideoPlayer in MIT App Inventor.
+ */
+window.stopVisionVideo = function () {
+  if (isRunningInAppInventor()) {
+    sendToAppInventorBridge('STOP_VIDEO');
+  }
+};
+
+// ─── VISION CARD VIDEO BUTTON HELPER ─────────────────────────────────────────
+
+/**
+ * Returns an HTML play-button string to embed inside a vision card.
+ * Only rendered when the goal has a video_url field.
+ * @param {object} g - vision goal object
+ */
+function renderVideoButton(g) {
+  if (!g.video_url) return '';
+  return `
+    <button
+      class="vision-video-btn"
+      onclick="event.stopPropagation(); playVisionVideo('${g.video_url.replace(/'/g, "\\'")}')"
+      title="Play video"
+      style="
+        position: absolute;
+        bottom: 40px;
+        right: 10px;
+        background: rgba(0,0,0,0.65);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: white;
+        font-size: 16px;
+        backdrop-filter: blur(4px);
+      "
+    >▶</button>
+  `;
 }

@@ -10,6 +10,10 @@ function doGet(e) {
       return getData(e.parameter.sheet);
     }
 
+    if (e.parameter.action === "init") {
+      return initToolsSheets();
+    }
+
     return jsonResponse({ success: false, message: "Invalid GET action" });
 
   } catch (err) {
@@ -314,4 +318,39 @@ function getDueReminders() {
   }
   
   return due;
+}
+
+/* -------- TOOLS SHEETS INITIALIZATION -------- */
+
+function initToolsSheets() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  // Create gym_workouts sheet if not exists
+  let gymWorkoutsSheet = ss.getSheetByName('gym_workouts');
+  if (!gymWorkoutsSheet) {
+    gymWorkoutsSheet = ss.insertSheet('gym_workouts');
+    gymWorkoutsSheet.appendRow(['id', 'date', 'exercise_name', 'workout_type', 'duration_minutes', 'sets', 'reps', 'weight', 'notes']);
+  }
+  
+  // Create gym_exercises sheet if not exists
+  let gymExercisesSheet = ss.getSheetByName('gym_exercises');
+  if (!gymExercisesSheet) {
+    gymExercisesSheet = ss.insertSheet('gym_exercises');
+    gymExercisesSheet.appendRow(['id', 'name', 'muscle_group', 'equipment', 'description']);
+    // Add some default exercises
+    gymExercisesSheet.appendRow([1, 'Bench Press', 'chest', 'barbell', 'Lie on bench, press barbell up']);
+    gymExercisesSheet.appendRow([2, 'Squat', 'legs', 'barbell', 'Stand with bar on shoulders, squat down']);
+    gymExercisesSheet.appendRow([3, 'Deadlift', 'back', 'barbell', 'Lift barbell from ground to hip level']);
+    gymExercisesSheet.appendRow([4, 'Pull Up', 'back', 'bodyweight', 'Hang from bar, pull body up']);
+    gymExercisesSheet.appendRow([5, 'Push Up', 'chest', 'bodyweight', 'Lower body to ground, push back up']);
+  }
+  
+  // Create notes sheet if not exists
+  let notesSheet = ss.getSheetByName('notes');
+  if (!notesSheet) {
+    notesSheet = ss.insertSheet('notes');
+    notesSheet.appendRow(['id', 'title', 'content', 'category', 'created_at', 'updated_at', 'is_pinned', 'tags']);
+  }
+  
+  return { success: true, message: 'Tools sheets initialized' };
 }
