@@ -244,18 +244,18 @@ function renderDashboard() {
                   <p class="fade-in stagger-1" style="font-size:12px; color:var(--text-3); margin:3px 0 0 0; opacity: 0.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${message}</p>
                 </div>
                  <!-- Compact Focus Button -->
-                <div class="glass-panel fade-in stagger-2" style="padding:8px 14px; border-radius:12px; background:var(--primary); border:1px solid rgba(255,255,255,0.2); display:inline-flex; align-items:center; gap:8px; cursor:pointer; box-shadow: 0 4px 12px var(--primary-glow); color:white; flex-shrink:0;" onclick="openFocusMode()">
+                <button class="glass-panel fade-in stagger-2" style="padding:8px 14px; border-radius:12px; background:var(--primary); border:1px solid rgba(255,255,255,0.2); display:inline-flex; align-items:center; gap:8px; cursor:pointer; box-shadow: 0 4px 12px var(--primary-glow); color:white; flex-shrink:0; position:relative; z-index:3; touch-action:manipulation; -webkit-tap-highlight-color:transparent;" onclick="openFocusMode()">
                     ${renderIcon('goals', null, 'style="width:16px; color:white;"')}
-                    <div>
+                    <div style="pointer-events:none;">
                         <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.7px; color:rgba(255,255,255,0.8); font-weight:700;">Focus</div>
                         <div style="font-size:12px; font-weight:700;">Start</div>
                     </div>
-                </div>
+                </button>
                 
             </div>
 
             <!-- Background Decoration -->
-            <div style="position:absolute; top:-50%; right:-10%; width:180px; height:180px; background:var(--primary); filter:blur(80px); opacity:0.12; border-radius:50%; pointer-events:none;"></div>
+            <div style="position:absolute; top:-50%; right:-10%; width:180px; height:180px; background:var(--primary); filter:blur(80px); opacity:0.12; border-radius:50%; pointer-events:none; z-index:0;"></div>
         </div>
       `;
     },
@@ -656,11 +656,11 @@ function renderDashboard() {
       </div>
 
       <div style="display:flex; gap:12px; margin: 12px 0;">
-        <button class="btn" onclick="routeTo('notes')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px;">
+        <button class="btn" onclick="routeTo('notes')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; cursor:pointer;">
            ${renderIcon('entries', null, 'style="width:18px; color:var(--primary)"')}
            <span style="font-weight:600">Notes</span>
         </button>
-        <button class="btn" onclick="routeTo('gym')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px;">
+        <button class="btn" onclick="routeTo('gym')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; cursor:pointer;">
            ${renderIcon('fitness', null, 'style="width:18px; color:var(--danger)"')}
            <span style="font-weight:600">Gym</span>
         </button>

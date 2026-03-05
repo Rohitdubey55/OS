@@ -3,9 +3,12 @@
 // Default dashboard section config
 const DEFAULT_DASH_CONFIG = [
   { id: 'morning', label: 'Morning Greeting', visible: true },
+  { id: 'theNow', label: 'The Now Focus', visible: true },
   { id: 'aiBriefing', label: 'Daily Briefing', visible: true },
   { id: 'vision', label: 'Vision Banner', visible: true },
   { id: 'kpis', label: 'KPI Cards', visible: true },
+  { id: 'budget', label: 'Budget Alert', visible: true },
+  { id: 'pinnedNotes', label: 'Pinned Notes', visible: true },
   { id: 'tasks', label: 'High Priority Tasks', visible: true },
   { id: 'habits', label: 'Habit Tracker', visible: true }
 ];
@@ -85,6 +88,9 @@ function renderDashboard() {
   const main = document.getElementById('main');
   const config = getDashConfig();
 
+  // Check for Weekly Review (Sundays)
+  checkWeeklyReview();
+
   // --- DATA AGGREGATION ---
   const tasks = state.data.tasks || [];
   const pending = tasks.filter(t => t.status !== 'completed');
@@ -117,6 +123,103 @@ function renderDashboard() {
 
   // --- SECTION RENDERERS ---
   const sectionRenderers = {
+    theNow: () => {
+      // Tasks: P1 or due today
+      const nowTasks = pending.filter(t => t.priority === 'P1' || (t.due_date && t.due_date <= todayStr)).slice(0, 3);
+      const tasksStr = nowTasks.length > 0 ? nowTasks.map(t => `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer;" onclick="routeTo('tasks')">
+          <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+            <div style="width:12px; height:12px; flex-shrink:0; border-radius:50%; border:2px solid var(--primary);"></div>
+            <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.title}</span>
+          </div>
+          <span style="font-size:10px; font-weight:700; color:var(--primary); background:var(--primary-soft); padding:2px 6px; border-radius:4px; flex-shrink:0;">${t.priority}</span>
+        </div>
+      `).join('') : '<div style="font-size:13px; color:var(--text-muted); padding:8px 0; font-style:italic;">No urgent tasks.</div>';
+
+      // Habits: Due today & not completed
+      const todayDayName = new Date().toLocaleDateString('en-US', { weekday: 'short' });
+      const nowHabits = (state.data.habits || []).filter(h => {
+        if (h.frequency && h.frequency !== 'daily' && !h.frequency.includes(todayDayName)) return false;
+        if (!h.history) return true;
+        try {
+          const hist = typeof h.history === 'string' ? JSON.parse(h.history) : h.history;
+          return !hist.includes(todayStr);
+        } catch (e) { return true; }
+      }).slice(0, 3);
+      const habitsStr = nowHabits.length > 0 ? nowHabits.map(h => `
+        <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer;" onclick="routeTo('habits')">
+          <div style="font-size:16px; flex-shrink:0;">${h.icon || '🔥'}</div>
+          <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${h.habit_name || h.name || 'Unnamed Habit'}</span>
+        </div>
+      `).join('') : '<div style="font-size:13px; color:var(--text-muted); padding:8px 0; font-style:italic;">All habits done!</div>';
+
+      // Events: Next 3 today
+      const nowEvents = events.slice(0, 3);
+      const eventsStr = nowEvents.length > 0 ? nowEvents.map(e => {
+        let timeStr = 'All Day';
+        if (e.start_datetime) {
+          const d = new Date(e.start_datetime);
+          timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase().replace(' ', '');
+        }
+        return `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer;" onclick="routeTo('calendar')">
+          <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+            <div style="width:4px; height:12px; border-radius:2px; background:var(--info); flex-shrink:0;"></div>
+            <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.title}</span>
+          </div>
+          <span style="font-size:10px; font-weight:700; color:var(--text-muted); flex-shrink:0;">${timeStr}</span>
+        </div>
+        `;
+      }).join('') : '<div style="font-size:13px; color:var(--text-muted); padding:8px 0; font-style:italic;">No upcoming events.</div>';
+
+      const isCollapsed = window.dashWidgetStates['theNow'] === 'collapsed';
+      const stateClass = isCollapsed ? 'collapsed' : '';
+
+      // Only show if there is actually something to do, but typically you always want to show it.
+      return `
+      <div class="widget-card ${stateClass}" id="theNowCard" data-widget-id="theNow" style="margin-bottom: 16px;">
+         <div class="widget-header" onclick="toggleWidget(this)">
+            <div class="widget-title">${renderIcon('goals', null, 'style="width:18px; margin-right:6px; color:var(--primary);"')} The Now</div>
+            <div style="display:flex; align-items:center; gap:10px">
+                ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
+            </div>
+         </div>
+         <div class="widget-body">
+            <div style="background:var(--surface-1); border-radius:var(--bento-radius-xl); padding:2px 4px; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:24px;">
+              
+              <!-- Tasks Col -->
+              <div style="display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                  ${renderIcon('check', null, 'style="width:16px; color:var(--primary);"')}
+                  <span style="font-size:14px; font-weight:700;">Tasks</span>
+                </div>
+                <div style="display:flex; flex-direction:column;">${tasksStr}</div>
+              </div>
+
+              <!-- Habits Col -->
+              <div style="display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                  ${renderIcon('repeat', null, 'style="width:16px; color:var(--warning);"')}
+                  <span style="font-size:14px; font-weight:700;">Habits</span>
+                </div>
+                <div style="display:flex; flex-direction:column;">${habitsStr}</div>
+              </div>
+
+               <!-- Events Col -->
+              <div style="display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                  ${renderIcon('calendar', null, 'style="width:16px; color:var(--info);"')}
+                  <span style="font-size:14px; font-weight:700;">Events</span>
+                </div>
+                <div style="display:flex; flex-direction:column;">${eventsStr}</div>
+              </div>
+
+            </div>
+         </div>
+      </div>
+      `;
+    },
+
     morning: () => {
       const h = new Date().getHours();
       const greeting = h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening';
@@ -134,32 +237,25 @@ function renderDashboard() {
       }
 
       return `
-        <div class="morning-hero" style="min-height:100px; display:flex; flex-direction:column; justify-content:center; padding:20px 24px; background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border-radius:20px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.04), 0 24px 48px rgba(0,0,0,0.02);">
-            <div style="position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                  <h1 class="fade-in" style="font-size:clamp(22px, 3vw, 30px); margin:0; letter-spacing:-0.5px; background: linear-gradient(90deg, var(--text-1), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${greeting}, ${name}.</h1>
-                  <p class="fade-in stagger-1" style="font-size:13px; color:var(--text-3); margin:6px 0 0 0; opacity: 0.85;">${message}</p>
+        <div class="morning-hero" style="min-height:0; display:flex; flex-direction:column; justify-content:center; padding:14px 20px; background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border-radius:20px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+            <div style="position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="flex:1; min-width:0;">
+                  <h1 class="fade-in" style="font-size:clamp(18px, 3vw, 24px); margin:0; letter-spacing:-0.5px; background: linear-gradient(90deg, var(--text-1), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${greeting}, ${name}.</h1>
+                  <p class="fade-in stagger-1" style="font-size:12px; color:var(--text-3); margin:3px 0 0 0; opacity: 0.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${message}</p>
                 </div>
-                 <!-- Contextual Focus Mini-Card -->
-                ${h < 12 ? `
-                <div class="glass-panel fade-in stagger-2" style="padding:12px 20px; border-radius:16px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); display:inline-flex; align-items:center; gap:12px; cursor:pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.04);" onclick="routeTo('tasks')">
-                    <div style="width:36px; height:36px; border-radius:10px; background:var(--primary-soft); display:flex; align-items:center; justify-content:center; color:var(--primary);">
-                        ${renderIcon('goals', null, 'style="width:18px;"')}
+                 <!-- Compact Focus Button -->
+                <button class="glass-panel fade-in stagger-2" style="padding:8px 14px; border-radius:12px; background:var(--primary); border:1px solid rgba(255,255,255,0.2); display:inline-flex; align-items:center; gap:8px; cursor:pointer; box-shadow: 0 4px 12px var(--primary-glow); color:white; flex-shrink:0; position:relative; z-index:3; touch-action:manipulation; -webkit-tap-highlight-color:transparent;" onclick="openFocusMode()">
+                    ${renderIcon('goals', null, 'style="width:16px; color:white;"')}
+                    <div style="pointer-events:none;">
+                        <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.7px; color:rgba(255,255,255,0.8); font-weight:700;">Focus</div>
+                        <div style="font-size:12px; font-weight:700;">Start</div>
                     </div>
-                    <div class="hide-mobile">
-                        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-3); font-weight:700;">Focus</div>
-                        <div style="font-size:14px; font-weight:600;">P1 Tasks</div>
-                    </div>
-                </div>
-                ` : ''}
+                </button>
                 
             </div>
 
-
-
             <!-- Background Decoration -->
-            <div style="position:absolute; top:-50%; right:-10%; width:240px; height:240px; background:var(--primary); filter:blur(100px); opacity:0.12; border-radius:50%; pointer-events:none;"></div>
-            <div style="position:absolute; bottom:-30%; left:-5%; width:180px; height:180px; background:var(--secondary); filter:blur(80px); opacity:0.08; border-radius:50%; pointer-events:none;"></div>
+            <div style="position:absolute; top:-50%; right:-10%; width:180px; height:180px; background:var(--primary); filter:blur(80px); opacity:0.12; border-radius:50%; pointer-events:none; z-index:0;"></div>
         </div>
       `;
     },
@@ -447,6 +543,70 @@ function renderDashboard() {
          </div>
       </div>`;
     },
+
+    // ─── BUDGET ALERT WIDGET ───
+    budget: () => {
+      const settings = state.data.settings?.[0] || {};
+      const monthlyBudget = Number(settings.monthly_budget) || 0;
+      if (!monthlyBudget) return ''; // Don't show if no budget set
+      const currentMonth = new Date().getMonth();
+      const monthExp = (state.data.expenses || [])
+        .filter(e => e.type === 'expense' && new Date(e.date).getMonth() === currentMonth)
+        .reduce((s, e) => s + Number(e.amount), 0);
+      const pct = Math.min(100, Math.round((monthExp / monthlyBudget) * 100));
+      const isWarning = pct >= 80;
+      const isOver = pct >= 100;
+      const barColor = isOver ? '#EF4444' : isWarning ? '#F59E0B' : '#10B981';
+      const remaining = Math.max(0, monthlyBudget - monthExp);
+      return `
+      <div class="widget-card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;">
+              ${isOver ? '🚨' : isWarning ? '⚠️' : '💰'} Monthly Budget
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);">₹${monthExp.toLocaleString()} / ₹${monthlyBudget.toLocaleString()}</div>
+          </div>
+          <div style="height:8px;background:var(--surface-3);border-radius:4px;overflow:hidden;margin-bottom:8px;">
+            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width 0.8s ease;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;">
+            <span style="color:${barColor};font-weight:600;">${pct}% used</span>
+            <span style="color:var(--text-muted);">₹${remaining.toLocaleString()} left</span>
+          </div>
+          ${isWarning ? `<div style="margin-top:8px;padding:6px 10px;background:${isOver ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)'};border-radius:8px;font-size:12px;color:${isOver ? '#DC2626' : '#D97706'};font-weight:600;">
+            ${isOver ? '🚨 Budget exceeded! Watch your spending.' : '⚠️ Approaching your monthly limit.'}
+          </div>` : ''}
+        </div>
+        <div style="padding:0 16px 12px;">
+          <button class="btn" style="width:100%;font-size:12px;padding:6px;" onclick="showQuickLog('expense')">+ Quick Expense</button>
+        </div>
+      </div>`;
+    },
+
+    // ─── PINNED NOTES WIDGET ───
+    pinnedNotes: () => {
+      const notes = (state.data.notes || []).filter(n => n.pinned === true || n.pinned === 'true');
+      if (notes.length === 0) return '';
+      return `
+      <div class="widget-card collapsed">
+        <div class="widget-header" onclick="toggleWidget(this)">
+          <div class="widget-title">📌 Pinned Notes</div>
+          <div style="display:flex;align-items:center;gap:10px" onclick="event.stopPropagation()">
+            <button class="btn icon" onclick="showQuickLog('note'); event.stopPropagation()" title="Quick Note">+</button>
+            ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
+          </div>
+        </div>
+        <div class="widget-body">
+          ${notes.slice(0, 3).map(n => `
+            <div style="padding:10px;background:var(--surface-2);border-radius:10px;margin-bottom:8px;cursor:pointer;" onclick="routeTo('notes')">
+              <div style="font-weight:600;font-size:13px;margin-bottom:2px;">${n.title || 'Untitled'}</div>
+              <div style="font-size:12px;color:var(--text-muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${n.content || ''}</div>
+            </div>`).join('')}
+          ${notes.length > 3 ? `<div style="font-size:12px;color:var(--primary);cursor:pointer;text-align:center;" onclick="routeTo('notes')">+${notes.length - 3} more notes</div>` : ''}
+        </div>
+      </div>`;
+    },
   };
 
   // --- BUILD VISIBLE SECTIONS ---
@@ -483,18 +643,29 @@ function renderDashboard() {
   main.innerHTML = `
     <div class="dash-wrapper">
       
-      <div class="quick-actions" style="margin: 4px 0 8px 0; display:flex; justify-content:space-between; gap:12px; padding:4px 4px; overflow:visible;">
-        <button class="qa-btn round-icon" onclick="openTaskModal()" title="Add Task" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('priority', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
-        <button class="qa-btn round-icon" onclick="openFinanceAction()" title="Add Expense" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('wallet', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
-        <button class="qa-btn round-icon" onclick="routeTo('calendar'); setTimeout(()=>openEventModal(),500)" title="New Event" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('calendar', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
-        <button class="qa-btn round-icon" onclick="openHabitModal()" title="New Habit" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('streak', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
+      <div class="quick-actions" style="margin: 4px 0 8px 0; display:flex; justify-content:space-between; gap:8px; padding:4px 4px; overflow:visible;">
+        <button id="qa-task" class="qa-btn round-icon" onclick="openTaskModal()" title="Add Task" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted); overflow:visible;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('priority', null, 'style="width:20px;"')} <span>Task</span></button>
+        <button id="qa-expense" class="qa-btn round-icon" onclick="showQuickLog('expense')" title="Quick Expense" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('wallet', null, 'style="width:20px;"')} <span>Expense</span></button>
+        <button id="qa-habit" class="qa-btn round-icon" onclick="showQuickLog('habit')" title="Quick Habit" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('streak', null, 'style="width:20px;"')} <span>Habit</span></button>
+        <button id="qa-note" class="qa-btn round-icon" onclick="showQuickLog('note')" title="Quick Note" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('entries', null, 'style="width:20px;"')} <span>Note</span></button>
+        <button class="qa-btn round-icon" onclick="openWeeklyReview()" title="Weekly Review" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> 📊 <span>Review</span></button>
       </div>
 
       <div class="dash-grid">
         ${gridHtml}
       </div>
 
-      <div style="margin:12px 0 24px 0; text-align:center">
+      <div style="display:flex; gap:12px; margin: 12px 0;">
+        <button class="btn" onclick="routeTo('notes')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; cursor:pointer;">
+           ${renderIcon('entries', null, 'style="width:18px; color:var(--primary)"')}
+           <span style="font-weight:600">Notes</span>
+        </button>
+        <button class="btn" onclick="routeTo('gym')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; cursor:pointer;">
+           ${renderIcon('fitness', null, 'style="width:18px; color:var(--danger)"')}
+           <span style="font-weight:600">Gym</span>
+        </button>
+      </div>
+      <div style="margin:0 0 24px 0; text-align:center">
         <button class="btn" onclick="openDashCustomize()" style="width:100%; background:var(--surface-1); border:1px solid var(--border); color:var(--text-muted); justify-content:center; padding:12px;">
             ${renderIcon('dashboard', null, 'style="width:16px; margin-right:8px"')} Dashboard Layout
         </button>
@@ -504,6 +675,14 @@ function renderDashboard() {
 
   // Render Charts + Check AI Insight + Animate KPIs
   setTimeout(() => {
+    // Attach Long Press Actions
+    if (typeof addLongPressAction === 'function') {
+      addLongPressAction('qa-task', () => routeTo('tasks'));
+      addLongPressAction('qa-expense', () => routeTo('finance'));
+      addLongPressAction('qa-habit', () => routeTo('habits'));
+      addLongPressAction('qa-note', () => routeTo('notes'));
+    }
+
     if (visibleSections.some(s => s.id === 'kpis')) {
       renderDashSparkline(expenses);
       // P2 Polish: Animate KPI Counters
@@ -518,41 +697,37 @@ function renderDashboard() {
 
 // P2 Polish: Number Tween Animation
 function animateValue(obj) {
-  const raw = obj.textContent.replace(/[^0-9.-]/g, ''); // Extract number
+  const raw = obj.textContent.replace(/[^0-9.-]/g, '');
   if (!raw) return;
   const end = parseFloat(raw);
-  const prefix = obj.textContent.replace(/[0-9.,-]/g, '').trim(); // e.g. "₹" or "%"
-  // Heuristic: if it looks like currency, prefix matches first char? 
-  // Simple approach: Check original text.
   const original = obj.textContent;
   const isCurrency = original.includes('₹') || original.includes('$');
   const isPercent = original.includes('%');
 
   let startTimestamp = null;
-  const duration = 1500;
+  const duration = 2000;
 
   const step = (timestamp) => {
     if (!startTimestamp) startTimestamp = timestamp;
     const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-    // Ease out quart
-    const ease = 1 - Math.pow(1 - progress, 4);
 
-    const current = Math.floor(progress * end); // Integer tween for now
+    // Smooth cubic easing
+    const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
 
-    // Reconstruct string
-    let text = current.toLocaleString();
-    if (isCurrency) text = '₹' + text; // Hardcoded currency for now or derive
-    if (isPercent) text = text + '%';
+    const current = ease * end;
 
-    // Better reconstruction
-    if (isCurrency) obj.textContent = '₹' + current.toLocaleString();
-    else if (isPercent) obj.textContent = current + '%';
-    else obj.textContent = current;
+    if (isCurrency) {
+      obj.textContent = '₹' + Math.floor(current).toLocaleString();
+    } else if (isPercent) {
+      obj.textContent = Math.round(current) + '%';
+    } else {
+      obj.textContent = Math.floor(current).toLocaleString();
+    }
 
     if (progress < 1) {
       window.requestAnimationFrame(step);
     } else {
-      obj.textContent = original; // Ensure final exact match including decimals if any
+      obj.textContent = original;
     }
   };
   window.requestAnimationFrame(step);
@@ -957,3 +1132,70 @@ window.generateDashboardInsight = async function () {
     lucide.createIcons();
   }
 };
+
+// --- WEEKLY REVIEW ---
+function checkWeeklyReview() {
+  const now = new Date();
+  if (now.getDay() !== 0) return; // Only Sundays
+
+  const weekNum = getWeekNumber(now);
+  const lastReview = localStorage.getItem('lastWeeklyReviewWeek');
+  if (lastReview === String(weekNum)) return;
+
+  setTimeout(showWeeklyReview, 2000); // Show after a delay
+}
+
+function getWeekNumber(d) {
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function showWeeklyReview() {
+  const now = new Date();
+  const weekNum = getWeekNumber(now);
+  localStorage.setItem('lastWeeklyReviewWeek', String(weekNum));
+
+  // Stats aggregation
+  const tasks = state.data.tasks || [];
+  const completedThisWeek = tasks.filter(t => t.status === 'completed').length;
+
+  const habits = state.data.habit_logs || [];
+  const totalStreaks = (state.data.habits || []).reduce((sum, h) => sum + (h.streak || 0), 0);
+
+  const expenses = state.data.expenses || [];
+  const weekSpend = expenses
+    .filter(e => e.type === 'expense')
+    .reduce((s, e) => s + Number(e.amount), 0);
+
+  const modal = document.getElementById('universalModal');
+  const box = modal.querySelector('.modal-box');
+
+  box.innerHTML = `
+    <div style="text-align:center; padding:20px 0;">
+      <div style="font-size:48px; margin-bottom:16px;">📊</div>
+      <h2 style="font-size:24px; font-weight:800; margin-bottom:8px;">Your Weekly Review</h2>
+      <p style="color:var(--text-muted); margin-bottom:32px;">Here's what you accomplished this week.</p>
+      
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:32px;">
+        <div style="background:var(--surface-2); padding:16px; border-radius:16px;">
+          <div style="font-size:24px; font-weight:700; color:var(--primary);">${completedThisWeek}</div>
+          <div style="font-size:12px; font-weight:600; color:var(--text-muted);">Tasks Done</div>
+        </div>
+        <div style="background:var(--surface-2); padding:16px; border-radius:16px;">
+          <div style="font-size:24px; font-weight:700; color:var(--warning);">${totalStreaks}</div>
+          <div style="font-size:12px; font-weight:600; color:var(--text-muted);">Total Streaks</div>
+        </div>
+        <div style="background:var(--surface-2); padding:16px; border-radius:16px; grid-column: span 2;">
+          <div style="font-size:24px; font-weight:700; color:var(--danger);">₹${weekSpend.toLocaleString()}</div>
+          <div style="font-size:12px; font-weight:600; color:var(--text-muted);">Total Spend</div>
+        </div>
+      </div>
+      
+      <button class="btn primary" style="width:100%; padding:14px;" onclick="document.getElementById('universalModal').classList.add('hidden'); triggerConfettiBurst();">Awesome!</button>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+}

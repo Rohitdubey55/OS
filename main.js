@@ -96,18 +96,44 @@ window.addLongPressAction = function (el, callback) {
     // Accept either a DOM element or a string ID
     if (typeof el === 'string') el = document.getElementById(el);
     if (!el) return; // Guard: element doesn't exist
-    let timer;
+
+    // Ensure iOS doesn't add a 300ms tap delay
+    el.style.touchAction = 'manipulation';
+    el.style.webkitTapHighlightColor = 'transparent';
+
+    let timer = null;
+    let didLongPress = false;
+
     const start = (e) => {
+        didLongPress = false;
         timer = setTimeout(() => {
+            didLongPress = true;
             if (typeof triggerHapticBuzz === 'function') triggerHapticBuzz();
             callback(e);
         }, 600);
     };
-    const cancel = () => clearTimeout(timer);
-    el.addEventListener('touchstart', start);
+
+    const cancel = () => {
+        clearTimeout(timer);
+        timer = null;
+    };
+
+    const touchEnd = (e) => {
+        // Only cancel — if it was a short tap, native onclick fires automatically
+        cancel();
+        // If long press fired, don't let click also fire
+        if (didLongPress) {
+            e.preventDefault();
+            e.stopPropagation();
+            didLongPress = false;
+        }
+    };
+
+    el.addEventListener('touchstart', start, { passive: true });
     el.addEventListener('mousedown', start);
-    el.addEventListener('touchend', cancel);
-    el.addEventListener('touchmove', cancel);
+    el.addEventListener('touchend', touchEnd);
+    el.addEventListener('touchmove', cancel, { passive: true });
+    el.addEventListener('touchcancel', cancel);
     el.addEventListener('mouseup', cancel);
     el.addEventListener('mouseleave', cancel);
 };
