@@ -489,34 +489,14 @@ window.triggerConfettiBurst = window.triggerConfetti; // Alias for compatibility
 
 /* ─── FOCUS MODE ─── */
 window.openFocusMode = function () {
-    let focusOverlay = document.getElementById('focusModeOverlay');
-    if (!focusOverlay) {
-        focusOverlay = document.createElement('div');
-        focusOverlay.id = 'focusModeOverlay';
-        focusOverlay.className = 'focus-overlay hidden';
-        document.body.appendChild(focusOverlay);
-    }
-
-    focusOverlay.innerHTML = `
-        <div class="focus-container">
-            <div class="focus-header">
-                <h2>Today's Focus</h2>
-                <button class="btn icon" onclick="closeFocusMode()">${renderIcon('x', null, 'style="width:24px"')}</button>
-            </div>
-            <div id="focusContent">
-                ${renderFocusContent()}
-            </div>
-        </div>
-    `;
-
-    focusOverlay.classList.remove('hidden');
-    if (typeof triggerHapticBuzz === 'function') triggerHapticBuzz();
-    if (typeof lucide !== 'undefined') lucide.createIcons();
+    // NOTE: Actual implementation is defined below (line ~593)
+    // This stub is kept to avoid ReferenceError before the full definition loads.
+    // The second definition overwrites this one.
 };
 
 window.closeFocusMode = function () {
-    const focusOverlay = document.getElementById('focusModeOverlay');
-    if (focusOverlay) focusOverlay.classList.add('hidden');
+    const focusOverlay = document.getElementById('focusModeOverlay') || document.getElementById('focus-overlay');
+    if (focusOverlay) focusOverlay.remove();
 };
 
 function renderFocusContent() {
@@ -721,13 +701,14 @@ window.showQuickLog = function (type = 'expense') {
         showToast('Note saved & pinned!', 'success');
     };
 
-    // Close on outside tap
+    // Close on outside tap — use non-transparent backdrop so iOS registers the tap
     setTimeout(() => {
         const backdrop = document.createElement('div');
-        backdrop.style.cssText = 'position:fixed;inset:0;z-index:1000;';
+        backdrop.className = 'modal-backdrop-ios';
         backdrop.onclick = () => { sheet.remove(); backdrop.remove(); };
         document.body.insertBefore(backdrop, sheet);
-        sheet.style.zIndex = '1001';
+        sheet.style.zIndex = '10000';
+        backdrop.style.zIndex = '9999';
     }, 50);
 };
 

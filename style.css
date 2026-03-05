@@ -4260,3 +4260,91 @@ input:checked+.slider:before {
   border-radius: 4px;
   animation: fillBar 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
+
+/* ============================================================
+   QUICK LOG BOTTOM SHEET — iOS-compatible modal sheet
+   ============================================================ */
+.quick-log-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface-1);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px max(20px, env(safe-area-inset-bottom)) 20px;
+  z-index: 10000;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18), 0 -2px 8px rgba(0, 0, 0, 0.08);
+  animation: sheetSlideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  max-height: 80vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@keyframes sheetSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.quick-log-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  margin: 0 auto 16px auto;
+}
+
+/* iOS-compatible modal backdrop — MUST have a background to receive touches */
+.modal-backdrop-ios {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.01);
+  /* near-transparent but still tappable on iOS */
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Focus Mode close button */
+.focus-close-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+
+.focus-close-btn:hover,
+.focus-close-btn:active {
+  background: var(--surface-3);
+}
+
+.focus-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.focus-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
