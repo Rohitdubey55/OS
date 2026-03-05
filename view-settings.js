@@ -353,8 +353,8 @@ function renderSettings() {
         <div style="margin-bottom:20px;">
           <label class="setting-label">Default Category View</label>
           <div class="density-options" id="taskDefaultViewOptions">
-            <button class="density-btn ${settings.task_default_view === 'expanded' ? 'active' : ''}" onclick="selectTaskDefaultView('expanded')">Expanded</button>
-            <button class="density-btn ${settings.task_default_view === 'collapsed' ? 'active' : ''}" onclick="selectTaskDefaultView('collapsed')">Collapsed</button>
+            <button class="density-btn ${settings.task_default_view === 'collapsed' ? '' : 'active'}" onclick="selectTaskDefaultView('expanded', this)">Expanded</button>
+            <button class="density-btn ${settings.task_default_view === 'collapsed' ? 'active' : ''}" onclick="selectTaskDefaultView('collapsed', this)">Collapsed</button>
           </div>
           <input type="hidden" id="sTaskDefaultView" value="${settings.task_default_view || 'expanded'}">
           <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Whether task categories start collapsed or expanded when you open the Tasks view.</p>
@@ -367,14 +367,15 @@ function renderSettings() {
           <div id="taskCategoryList" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
             ${(() => {
       const raw = settings.task_categories || 'Personal,Work,Health,Learning,Finance,Other';
-      let cats;
+      let cats = [];
       try {
         const parsed = JSON.parse(raw);
         cats = Array.isArray(parsed) ? parsed : raw.split(',').map(c => c.trim()).filter(Boolean);
       } catch (e) {
         cats = raw.split(',').map(c => c.trim()).filter(Boolean);
       }
-      return cats.map(cat => `
+      // Filter out internal setting prefixes
+      return cats.filter(cat => !cat.startsWith('VIEW:')).map(cat => `
                 <div style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;">
                   <span>${cat}</span>
                   <button type="button" onclick="removeTaskCategory(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">\u00d7</button>
@@ -810,10 +811,16 @@ window.selectOrientation = function (orientation) {
 }
 
 // --- Task Settings Helpers ---
-window.selectTaskDefaultView = function (view) {
-  const parent = document.getElementById('taskDefaultViewOptions');
-  if (parent) parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
-  event.target.classList.add('active');
+window.selectTaskDefaultView = function (view, el) {
+  const container = document.getElementById('taskDefaultViewOptions');
+  if (container) {
+    container.querySelectorAll('.density-btn').forEach(btn => btn.classList.remove('active'));
+  }
+  if (el) {
+    el.classList.add('active');
+  } else if (window.event && window.event.target) {
+    window.event.target.classList.add('active');
+  }
   const hidden = document.getElementById('sTaskDefaultView');
   if (hidden) hidden.value = view;
 };
@@ -1172,9 +1179,12 @@ window.saveAllSettings = async function (section = 'all') {
     const taskDefaultView = document.getElementById('sTaskDefaultView')?.value || 'expanded';
     // Collect categories from pill list
     const pillSpans = Array.from(document.querySelectorAll('#taskCategoryList > div > span'));
-    const taskCats = pillSpans.map(s => s.textContent.trim()).filter(Boolean).join(',');
+    const taskCatsBase = pillSpans.map(s => s.textContent.trim()).filter(Boolean).join(',');
+
+    // Store the view preference as a special prefix in the categories string for persistence
+    // as per user request to save it in the same sheet location.
     newSettings.task_default_view = taskDefaultView;
-    newSettings.task_categories = taskCats || 'Personal,Work,Health,Learning,Finance,Other';
+    newSettings.task_categories = `VIEW:${taskDefaultView}|${taskCatsBase || 'Personal,Work,Health,Learning,Finance,Other'}`;
   }
 
   const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary', tasks: 'Tasks' };

@@ -98,7 +98,18 @@ function renderTasks(filter = '') {
   // Apply default collapsed/expanded setting from Settings (only on fresh render with no existing state)
   if (_collapsedCategories.size === 0 && !filter) {
     const s = state.data.settings?.[0] || {};
-    if ((s.task_default_view || 'expanded') === 'collapsed') {
+    let defaultView = s.task_default_view || 'expanded';
+
+    // Check if there's a prefix in task_categories that overrides this
+    if (s.task_categories && s.task_categories.startsWith('VIEW:')) {
+      const parts = s.task_categories.split('|');
+      const viewPref = parts[0].replace('VIEW:', '');
+      if (viewPref === 'collapsed' || viewPref === 'expanded') {
+        defaultView = viewPref;
+      }
+    }
+
+    if (defaultView === 'collapsed') {
       // Pre-collapse all categories when the user prefers collapsed view
       const allCats = [...new Set(tasks.map(t => t.category || 'Other'))];
       allCats.forEach(c => _collapsedCategories.add(c));
@@ -967,8 +978,12 @@ const DEFAULT_TASK_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study
 function getTaskCategories() {
   const settings = state.data.settings?.[0] || {};
   if (settings.task_categories) {
-    // Support both comma-string (from Settings UI) and JSON array (legacy)
-    const raw = settings.task_categories;
+    let raw = settings.task_categories;
+    // Strip internal prefix (VIEW:collapsed|...)
+    if (raw.startsWith('VIEW:')) {
+      raw = raw.split('|')[1] || '';
+    }
+
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
@@ -982,9 +997,17 @@ function getTaskCategories() {
 // Save categories to settings (synced with Google Sheets)
 async function saveTaskCategoriesToSettings(categories) {
   const settings = state.data.settings?.[0] || {};
+  let currentRaw = settings.task_categories || '';
+  let prefix = '';
+
+  // Preserve the internal prefix (VIEW:collapsed|...)
+  if (currentRaw.startsWith('VIEW:')) {
+    prefix = currentRaw.split('|')[0] + '|';
+  }
+
   const newSettings = {
     ...settings,
-    task_categories: JSON.stringify(categories)
+    task_categories: prefix + categories.join(',')
   };
 
   // Update settings in the sheet

@@ -95,6 +95,30 @@ function parseDueTimeForInput(val) {
 function renderTasks(filter = '') {
   let tasks = Array.isArray(state.data.tasks) ? [...state.data.tasks] : [];
 
+  // Apply default collapsed/expanded setting from Settings (only on fresh render with no existing state)
+  if (_collapsedCategories.size === 0 && !filter) {
+    const s = state.data.settings?.[0] || {};
+    let defaultView = s.task_default_view || 'expanded';
+
+    // Check if there's a prefix in task_categories that overrides this
+    if (s.task_categories && s.task_categories.startsWith('VIEW:')) {
+      const parts = s.task_categories.split('|');
+      const viewPref = parts[0].replace('VIEW:', '');
+      if (viewPref === 'collapsed' || viewPref === 'expanded') {
+        defaultView = viewPref;
+      }
+    }
+
+    if (defaultView === 'collapsed') {
+      // Pre-collapse all categories when the user prefers collapsed view
+      const allCats = [...new Set(tasks.map(t => t.category || 'Other'))];
+      allCats.forEach(c => _collapsedCategories.add(c));
+      _collapsedCategories.add('Today\'s 3');
+      _collapsedCategories.add('Recurring');
+    }
+  }
+
+
   if (filter) tasks = tasks.filter(t => (t.title || '').toLowerCase().includes(filter.toLowerCase()));
   if (_taskCategory !== 'All') tasks = tasks.filter(t => t.category === _taskCategory);
   if (_taskPriorityFilter !== 'All') tasks = tasks.filter(t => t.priority === _taskPriorityFilter);
@@ -116,10 +140,10 @@ function renderTasks(filter = '') {
 
   const oneOff = tasks.filter(t => !t.recurrence || t.recurrence === 'none');
   const recurring = tasks.filter(t => t.recurrence && t.recurrence !== 'none');
-  const pending = oneOff.filter(t => t.status !== 'completed');
+  let pending = oneOff.filter(t => t.status !== 'completed');
   const completed = oneOff.filter(t => t.status === 'completed');
 
-  const recurringToday = recurring.filter(t => isTaskDueToday(t));
+  let recurringToday = recurring.filter(t => isTaskDueToday(t));
   const recurringOther = recurring.filter(t => !isTaskDueToday(t));
 
   const allCats = ['All', ...new Set((state.data.tasks || []).map(t => t.category).filter(Boolean))];
@@ -129,6 +153,18 @@ function renderTasks(filter = '') {
 
   // Group pending by category
   const pendingByCat = {};
+
+  // Psychological UX: Pre-attentive Priority "Today's 3"
+  // Grab up to 3 highest priority tasks that are pending or recurring today
+  let allPendingAndRecurring = [...pending, ...recurringToday.filter(t => !isRecurringTaskCompletedToday(t))];
+  allPendingAndRecurring.sort((a, b) => (a.priority === 'P1' && b.priority !== 'P1' ? -1 : (a.priority !== 'P1' && b.priority === 'P1' ? 1 : 0)));
+  const todaysThree = allPendingAndRecurring.slice(0, 3);
+  const todaysThreeIds = todaysThree.map(t => t.id);
+
+  // Remove Today's 3 from the main pending lists to avoid duplication
+  pending = pending.filter(t => !todaysThreeIds.includes(t.id));
+  recurringToday = recurringToday.filter(t => !todaysThreeIds.includes(t.id));
+
   pending.forEach(t => {
     const cat = t.category || 'Uncategorized';
     if (!pendingByCat[cat]) pendingByCat[cat] = [];
@@ -255,6 +291,10 @@ function renderTasks(filter = '') {
           <h2 class="page-title">Tasks</h2>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn secondary" onclick="window._taskFiltersOpen=!window._taskFiltersOpen;renderTasks(_getSearchValue())" style="position:relative;">
+            ${renderIcon('tags', null, 'style="width:14px;margin-right:4px;"')}Filters
+            ${(_taskPriorityFilter !== 'All' || _taskCategory !== 'All') ? `<span style="position:absolute;top:-4px;right:-4px;width:8px;height:8px;background:var(--primary);border-radius:50%;"></span>` : ''}
+          </button>
           <button class="btn secondary" onclick="openCategoryManager()">
             ${renderIcon('tags', null, 'style="width:14px;margin-right:4px;"')}Categories
           </button>
@@ -289,42 +329,44 @@ function renderTasks(filter = '') {
         </div>
       </div>
 
-      <!-- ── FILTERS ── -->
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
-        <!-- Status -->
-        <div class="segmented-control" style="flex:0 0 auto;">
-          <button class="range-btn ${!_showCompletedTasks ? 'active' : ''}"
-            onclick="_showCompletedTasks=false;renderTasks(_getSearchValue())">Active</button>
-          <button class="range-btn ${_showCompletedTasks ? 'active' : ''}"
-            onclick="_showCompletedTasks=true;renderTasks(_getSearchValue())">Done</button>
+      <!-- ── COLLAPSIBLE FILTERS ── -->
+      <div id="task-filter-panel" style="overflow:hidden; transition:max-height 0.3s ease, opacity 0.3s ease; max-height:${window._taskFiltersOpen ? '200px' : '0'}; opacity:${window._taskFiltersOpen ? '1' : '0'}; margin-bottom:${window._taskFiltersOpen ? '12px' : '0'};">
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:10px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px;">
+          <!-- Status -->
+          <div class="segmented-control" style="flex:0 0 auto;">
+            <button class="range-btn ${!_showCompletedTasks ? 'active' : ''}"
+              onclick="_showCompletedTasks=false;renderTasks(_getSearchValue())">Active</button>
+            <button class="range-btn ${_showCompletedTasks ? 'active' : ''}"
+              onclick="_showCompletedTasks=true;renderTasks(_getSearchValue())">Done</button>
+          </div>
+
+          <!-- Priority dot filters -->
+          <div style="display:flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border-color);border-radius:20px;padding:5px 10px;">
+            <button onclick="_taskPriorityFilter='All';renderTasks(_getSearchValue())"
+              style="font-size:11px;font-weight:600;background:none;border:none;cursor:pointer;padding:0 4px;color:${_taskPriorityFilter === 'All' ? 'var(--primary)' : 'var(--text-muted)'};">All</button>
+            ${['P1', 'P2', 'P3'].map(p => `
+              <button class="filter-dot-btn ${_taskPriorityFilter === p ? 'active' : ''}"
+                style="background:${PRIORITY_COLOR[p]}; color:${PRIORITY_COLOR[p]};"
+                onclick="_taskPriorityFilter='${p}';renderTasks(_getSearchValue())"
+                title="${PRIORITY_LABEL[p]}"></button>
+            `).join('')}
+          </div>
+
+          <!-- Category -->
+          <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
+            onchange="_taskCategory=this.value;renderTasks(_getSearchValue())">
+            ${allCats.map(c => `<option value="${c}" ${c === _taskCategory ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+
+          <!-- Sort -->
+          <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
+            onchange="_taskSort=this.value;renderTasks(_getSearchValue())">
+            <option value="priority" ${_taskSort === 'priority' ? 'selected' : ''}>↑ Priority</option>
+            <option value="date"     ${_taskSort === 'date' ? 'selected' : ''}>📅 Date</option>
+            <option value="category" ${_taskSort === 'category' ? 'selected' : ''}>🏷 Group</option>
+            <option value="title"    ${_taskSort === 'title' ? 'selected' : ''}>A–Z</option>
+          </select>
         </div>
-
-        <!-- Priority dot filters -->
-        <div style="display:flex;align-items:center;gap:5px;background:var(--surface-1);border:1px solid var(--border-color);border-radius:20px;padding:5px 10px;">
-          <button onclick="_taskPriorityFilter='All';renderTasks(_getSearchValue())"
-            style="font-size:11px;font-weight:600;background:none;border:none;cursor:pointer;padding:0 4px;color:${_taskPriorityFilter === 'All' ? 'var(--primary)' : 'var(--text-muted)'};">All</button>
-          ${['P1', 'P2', 'P3'].map(p => `
-            <button class="filter-dot-btn ${_taskPriorityFilter === p ? 'active' : ''}"
-              style="background:${PRIORITY_COLOR[p]}; color:${PRIORITY_COLOR[p]};"
-              onclick="_taskPriorityFilter='${p}';renderTasks(_getSearchValue())"
-              title="${PRIORITY_LABEL[p]}"></button>
-          `).join('')}
-        </div>
-
-        <!-- Category -->
-        <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
-          onchange="_taskCategory=this.value;renderTasks(_getSearchValue())">
-          ${allCats.map(c => `<option value="${c}" ${c === _taskCategory ? 'selected' : ''}>${c}</option>`).join('')}
-        </select>
-
-        <!-- Sort -->
-        <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
-          onchange="_taskSort=this.value;renderTasks(_getSearchValue())">
-          <option value="priority" ${_taskSort === 'priority' ? 'selected' : ''}>↑ Priority</option>
-          <option value="date"     ${_taskSort === 'date' ? 'selected' : ''}>${renderIcon('calendar', null, '')} Date</option>
-          <option value="category" ${_taskSort === 'category' ? 'selected' : ''}>${renderIcon('tags', null, '')} Group</option>
-          <option value="title"    ${_taskSort === 'title' ? 'selected' : ''}>A–Z</option>
-        </select>
       </div>
 
       <!-- ── OVERDUE BANNER ── -->
@@ -334,39 +376,62 @@ function renderTasks(filter = '') {
         <span><strong>${overdueCount} task${overdueCount > 1 ? 's' : ''}</strong> past due date</span>
       </div>` : ''}
 
+      <!-- ── TODAY'S 3 (PINNED) ── -->
+      ${todaysThree.length > 0 ? renderBentoSection('__todays_three__',
+    `${renderIcon('priority', null, 'style="width:13px;color:var(--danger)"')} Today's 3`,
+    todaysThree, false, true) : ''}
+
       <!-- ── RECURRING TODAY ── -->
       ${recurringToday.length > 0 ? renderBentoSection('__recurring_today__',
-    `${renderIcon('repeat', null, 'style="width:13px;"')} Today's Recurring`,
-    recurringToday, true) : ''}
+      `${renderIcon('repeat', null, 'style="width:13px;"')} Today's Recurring`,
+      recurringToday, true) : ''}
 
       <!-- ── PENDING BY CATEGORY ── -->
-      ${pending.length === 0 && recurringToday.length === 0 ? `
+      ${pending.length === 0 && recurringToday.length === 0 && todaysThree.length === 0 ? `
         <div class="bento-card" style="padding:32px;text-align:center;">
           ${renderIcon('check-circle', null, 'style="width:32px;color:var(--success);margin-bottom:8px;display:block;margin-left:auto;margin-right:auto;"')}
           <div style="font-weight:600;color:var(--text-2);margin-bottom:4px;">All clear!</div>
           <div style="font-size:12px;color:var(--text-muted);">No active tasks right now.</div>
         </div>
       ` : `<div class="bento-masonry">` + Object.keys(pendingByCat).sort().map((cat, idx) => {
-      // Wrap in a temporary span just to set animation delay based on index
-      const bentoHtml = renderBentoSection(cat, cat, pendingByCat[cat], false, true);
-      return bentoHtml.replace('class="bento-card"', `class="bento-card" style="animation-delay:${idx * 0.05}s;"`);
-    }).join('') + `</div>`}
+        // Wrap in a temporary span just to set animation delay based on index
+        const bentoHtml = renderBentoSection(cat, cat, pendingByCat[cat], false, true);
+        return bentoHtml.replace('class="bento-card"', `class="bento-card" style="animation-delay:${idx * 0.05}s;"`);
+      }).join('') + `</div>`}
 
       <!-- ── COMPLETED ── -->
       ${_showCompletedTasks && completed.length > 0 ? renderBentoSection('__completed__',
-      `${renderIcon('check-circle', null, 'style="width:13px;"')} Completed`,
-      completed, false) : ''}
+        `${renderIcon('check-circle', null, 'style="width:13px;"')} Completed`,
+        completed, false) : ''}
 
       <!-- ── OTHER RECURRING ── -->
       ${recurringOther.length > 0 ? renderBentoSection('__recurring_other__',
-        `${renderIcon('repeat', null, 'style="width:13px;"')} Other Recurring`,
-        recurringOther, true, false, true) : ''}
+          `${renderIcon('repeat', null, 'style="width:13px;"')} Other Recurring`,
+          recurringOther, true, false, true) : ''}
 
       <!-- bottom spacer -->
       <div style="height:80px;"></div>
     </div>`;
 
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+
+  // Attach swipe actions after render
+  _attachTaskSwipes();
+}
+
+function _attachTaskSwipes() {
+  if (typeof window.addSwipeAction !== 'function') return;
+  document.querySelectorAll('.task-bento-row').forEach(row => {
+    const taskId = row.id.replace('task-row-', '');
+    window.addSwipeAction(row,
+      () => { // Swipe Left -> Delete
+        window.deleteTask(taskId);
+      },
+      () => { // Swipe Right -> Toggle Done
+        window.toggleTaskOptimistic(taskId);
+      }
+    );
+  });
 }
 
 // ─────────────────────────────────────────────────────────
@@ -424,7 +489,7 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
   return `
     <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''}"
          id="task-row-${t.id}"
-         style="border-left:3px solid ${isDone ? 'transparent' : pColor};"
+         style="border-left:${t.priority === 'P1' && !isDone ? '4px solid ' + pColor : (t.priority === 'P2' && !isDone ? '3px solid ' + pColor : '3px solid transparent')};"
          onclick="toggleTaskDetails('${t.id}')">
 
       <!-- Checkbox -->
@@ -441,7 +506,7 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
       <!-- Content -->
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:flex-start;gap:4px;">
-          <span class="task-title-text" style="${isDone ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">
+          <span class="task-title-text" style="${isDone ? 'text-decoration:line-through;color:var(--text-muted);' : ''} ${t.priority === 'P1' && !isDone ? 'font-size: 14.5px; font-weight: 600;' : ''}">
             ${t.title}
           </span>
           ${!_itemSelectionMode ? `
@@ -643,10 +708,21 @@ window.toggleTaskOptimistic = async function (id) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
   const newStatus = t.status === 'completed' ? 'pending' : 'completed';
+
+  // Haptic Feedback
+  if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
+
+  const row = document.getElementById(`task-row-${id}`);
+  if (newStatus === 'completed' && row) {
+    row.classList.add('animating-done');
+    await new Promise(r => setTimeout(r, 400));
+  }
+
   t.status = newStatus;
   _reRenderTaskRow(id);
   try {
     await apiCall('update', 'tasks', { status: newStatus }, id);
+    if (newStatus === 'completed') showToast('Task completed!');
   } catch (e) {
     t.status = newStatus === 'completed' ? 'pending' : 'completed';
     _reRenderTaskRow(id);
@@ -677,6 +753,12 @@ window.openTaskModal = function () {
           ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
         </select>
         <input type="text" class="input" id="mTaskTags" placeholder="Tags">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <select class="input" id="mTaskVisionGoal" style="flex:1;">
+          <option value="">Link to Vision Goal (None)</option>
+          ${(state.data.vision || []).filter(g => g.status !== 'achieved').map(g => `<option value="${g.id}">${g.title || g.goal_name}</option>`).join('')}
+        </select>
       </div>
       <div style="display:flex;gap:8px;">
         <select class="input" id="mTaskPriority">
@@ -766,6 +848,12 @@ window.openEditTask = function (id) {
         <input type="text" class="input" id="mTaskTags" value="${t.tags || ''}" placeholder="Tags">
       </div>
       <div style="display:flex;gap:8px;">
+        <select class="input" id="mTaskVisionGoal" style="flex:1;">
+          <option value="">Link to Vision Goal (None)</option>
+          ${(state.data.vision || []).filter(g => g.status !== 'achieved' || g.id === t.vision_id).map(g => `<option value="${g.id}" ${String(g.id) === String(t.vision_id) ? 'selected' : ''}>${g.title || g.goal_name}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;">
         <select class="input" id="mTaskPriority">
           <option value="P1" ${t.priority === 'P1' ? 'selected' : ''}>● High (P1)</option>
           <option value="P2" ${t.priority === 'P2' ? 'selected' : ''}>● Medium (P2)</option>
@@ -848,16 +936,35 @@ window.addReminderToTask = function (taskId) {
 // Delete Task Function
 // ─────────────────────────────────────────────────────────
 window.deleteTask = async function (id) {
-  if (!confirm('Delete this task?')) return;
+  const t = state.data.tasks.find(x => String(x.id) === String(id));
+  if (!t) return;
 
-  try {
-    await apiCall('delete', 'tasks', {}, id);
-    showToast('Task deleted');
-    await refreshData('tasks');
-  } catch (err) {
-    console.error('Failed to delete task:', err);
-    showToast('Failed to delete task');
-  }
+  const originalTask = { ...t };
+  const originalIndex = state.data.tasks.indexOf(t);
+
+  // Optimistic Remove
+  state.data.tasks.splice(originalIndex, 1);
+  renderTasks(_getSearchValue());
+
+  showToast('Task deleted', 'default', async () => {
+    // Undo logic
+    state.data.tasks.splice(originalIndex, 0, originalTask);
+    renderTasks(_getSearchValue());
+    showToast('Task restored');
+  });
+
+  // Delay actual deletion to allow undo
+  setTimeout(async () => {
+    // check if still deleted (not restored)
+    const stillDeleted = !state.data.tasks.find(x => String(x.id) === String(id));
+    if (stillDeleted) {
+      try {
+        await apiCall('delete', 'tasks', {}, id);
+      } catch (err) {
+        console.error('Failed to delete task:', err);
+      }
+    }
+  }, 5000);
 };
 
 // ─────────────────────────────────────────────────────────
@@ -871,9 +978,18 @@ const DEFAULT_TASK_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study
 function getTaskCategories() {
   const settings = state.data.settings?.[0] || {};
   if (settings.task_categories) {
+    let raw = settings.task_categories;
+    // Strip internal prefix (VIEW:collapsed|...)
+    if (raw.startsWith('VIEW:')) {
+      raw = raw.split('|')[1] || '';
+    }
+
     try {
-      return JSON.parse(settings.task_categories);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
     } catch (e) { }
+    // Treat as comma-separated string
+    return raw.split(',').map(c => c.trim()).filter(Boolean);
   }
   return [...DEFAULT_TASK_CATEGORIES];
 }
@@ -881,9 +997,17 @@ function getTaskCategories() {
 // Save categories to settings (synced with Google Sheets)
 async function saveTaskCategoriesToSettings(categories) {
   const settings = state.data.settings?.[0] || {};
+  let currentRaw = settings.task_categories || '';
+  let prefix = '';
+
+  // Preserve the internal prefix (VIEW:collapsed|...)
+  if (currentRaw.startsWith('VIEW:')) {
+    prefix = currentRaw.split('|')[0] + '|';
+  }
+
   const newSettings = {
     ...settings,
-    task_categories: JSON.stringify(categories)
+    task_categories: prefix + categories.join(',')
   };
 
   // Update settings in the sheet
