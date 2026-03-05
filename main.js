@@ -93,6 +93,9 @@ function formatReminderDateTime(date) {
 
 // --- LONG PRESS ACTION HELPER ---
 window.addLongPressAction = function (el, callback) {
+    // Accept either a DOM element or a string ID
+    if (typeof el === 'string') el = document.getElementById(el);
+    if (!el) return; // Guard: element doesn't exist
     let timer;
     const start = (e) => {
         timer = setTimeout(() => {
@@ -108,6 +111,7 @@ window.addLongPressAction = function (el, callback) {
     el.addEventListener('mouseup', cancel);
     el.addEventListener('mouseleave', cancel);
 };
+
 
 // --- API HANDLING ---
 

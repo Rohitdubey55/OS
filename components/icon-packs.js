@@ -45,6 +45,7 @@ const ICON_MAPPINGS = {
   'search': { lucide: 'search', emoji: '🔍', material: 'search', remix: 'search-line', tabler: 'search', fontawesome: 'fa-magnifying-glass', heroicons: 'magnifying-glass', feather: 'search' },
   'export': { lucide: 'download', emoji: '📤', material: 'download', remix: 'download-2-line', tabler: 'download', fontawesome: 'fa-download', heroicons: 'arrow-down-tray', feather: 'download' },
   'write': { lucide: 'edit-3', emoji: '✍️', material: 'draw', remix: 'quill-pen-line', tabler: 'writing', fontawesome: 'fa-pen', heroicons: 'pencil-square', feather: 'edit-3' },
+  'tasks': { lucide: 'list-checks', emoji: '✅', material: 'task_alt', remix: 'task-line', tabler: 'checklist', fontawesome: 'fa-list-check', heroicons: 'clipboard-document-check', feather: 'check-square' },
 
   // Tools
   'wrench': { lucide: 'wrench', emoji: '🔧', material: 'build', remix: 'wrench-line', tabler: 'wrench', fontawesome: 'fa-wrench', heroicons: 'wrench', feather: 'tool' },
@@ -84,12 +85,12 @@ const ICON_MAPPINGS = {
   'url': { lucide: 'link', emoji: '🔗', material: 'link', remix: 'link', tabler: 'link', fontawesome: 'fa-link', heroicons: 'link', feather: 'link' },
 
   // Mood faces (specific mappings)
-  'mood-great': { lucide: 'grinning', emoji: '🤩', material: 'sentiment_very_satisfied', remix: 'emotion-laugh-line', tabler: 'mood-star', fontawesome: 'fa-face-grin-stars', heroicons: 'face-frown', feather: 'star' },
+  'mood-great': { lucide: 'laugh', emoji: '🤩', material: 'sentiment_very_satisfied', remix: 'emotion-laugh-line', tabler: 'mood-star', fontawesome: 'fa-face-grin-stars', heroicons: 'face-smile', feather: 'smile' },
   'mood-good': { lucide: 'smile', emoji: '😄', material: 'sentiment_satisfied', remix: 'emotion-happy-line', tabler: 'mood-smile', fontawesome: 'fa-face-smile', heroicons: 'face-smile', feather: 'smile' },
   'mood-okay': { lucide: 'meh', emoji: '🙂', material: 'sentiment_neutral', remix: 'emotion-normal-line', tabler: 'mood-neutral', fontawesome: 'fa-face-meh', heroicons: 'face-neutral', feather: 'meh' },
   'mood-low': { lucide: 'frown', emoji: '😔', material: 'sentiment_dissatisfied', remix: 'emotion-unhappy-line', tabler: 'mood-sad', fontawesome: 'fa-face-frown', heroicons: 'face-frown', feather: 'frown' },
   'mood-bad': { lucide: 'frown', emoji: '😕', material: 'sentiment_very_dissatisfied', remix: 'emotion-sad-line', tabler: 'mood-cry', fontawesome: 'fa-face-frown-open', heroicons: 'face-frown', feather: 'frown' },
-  'mood-sad': { lucide: 'sad-tear', emoji: '😞', material: 'sentiment_very_dissatisfied', remix: 'emotion-sad-line', tabler: 'mood-cry', fontawesome: 'fa-face-sad-tear', heroicons: 'face-frown', feather: 'frown' },
+  'mood-sad': { lucide: 'frown', emoji: '😞', material: 'sentiment_very_dissatisfied', remix: 'emotion-sad-line', tabler: 'mood-cry', fontawesome: 'fa-face-sad-tear', heroicons: 'face-frown', feather: 'frown' },
 
   // Notifications
   'reminder': { lucide: 'bell', emoji: '🔔', material: 'notifications', remix: 'notification-line', tabler: 'bell', fontawesome: 'fa-bell', heroicons: 'bell', feather: 'bell' },
