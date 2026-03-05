@@ -115,6 +115,9 @@ function renderTasks(filter = '') {
       allCats.forEach(c => _collapsedCategories.add(c));
       _collapsedCategories.add('Today\'s 3');
       _collapsedCategories.add('Recurring');
+    } else {
+      // Ensure everything is expanded if the user prefers expanded view
+      _collapsedCategories.clear();
     }
   }
 
@@ -438,7 +441,7 @@ function _attachTaskSwipes() {
 //  BENTO SECTION
 // ─────────────────────────────────────────────────────────
 function renderBentoSection(key, label, tasks, isRecurring = false, hideCategory = false, dimmed = false) {
-  const isCollapsed = !_collapsedCategories.has(key); // Default collapsed (empty set = all collapsed)
+  const isCollapsed = _collapsedCategories.has(key); // Now correctly uses .has() for collapse state. Empty set = expanded.
   const count = tasks.length;
   const today = new Date().toISOString().slice(0, 10);
   const overdueInGroup = tasks.filter(t => t.due_date && t.due_date < today && t.status !== 'completed').length;
