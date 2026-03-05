@@ -2,6 +2,56 @@
    DESIGN ENGINE: SEMANTIC SURFACES & DEPTH TOKENS
    ========================================================================== */
 
+/* ==========================================================================
+   iOS WebView Fix: Make all div/span elements with onclick handlers tappable.
+   Without `cursor: pointer`, iOS WKWebView silently ignores onclick on non-button
+   elements. This is the canonical fix for Capacitor/Cordova iOS apps.
+   ========================================================================== */
+[onclick],
+[data-action],
+.nav-item,
+.mob-item,
+.qa-btn,
+.btn,
+.tab,
+.card-action,
+.modal-close,
+.widget-action,
+.quick-action,
+.toggle-btn,
+.dash-toggle-item,
+.tab-toggle-item,
+.density-btn,
+.color-option,
+.icon-pack-option,
+.kpi-card,
+.entry-card,
+.stat-card,
+.habit-row,
+.person-card,
+.task-row,
+.bento-task-row,
+.category-header,
+.nav-tab,
+.filter-chip,
+.budget-category-row,
+.note-card,
+.goal-card {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure buttons don't have the 300ms tap delay on iOS */
+button,
+a,
+input[type="button"],
+input[type="submit"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+
 :root {
   /* --- 0. LUMINOUS THEME CORE (New) --- */
   /* Spacing System (8pt grid base) */
@@ -569,24 +619,24 @@ body.spacious {
 /* Page Transitions */
 .page-enter {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateX(-20px);
 }
 
 .page-enter-active {
   opacity: 1;
-  transform: translateY(0);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform: translateX(0);
+  transition: opacity 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .page-exit {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateX(0);
 }
 
 .page-exit-active {
   opacity: 0;
-  transform: translateY(-10px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transform: translateX(20px);
+  transition: opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Header Bar inside Main (for Toggle) */
@@ -1734,11 +1784,56 @@ body.spacious {
     max-width: 450px;
     max-height: 88vh;
     overflow-y: auto;
-    padding: 24px;
     border-radius: 16px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
     animation: modalIn 0.2s ease-out;
+    position: relative;
+    padding: 0;
   }
+
+  .modal-box::before {
+    content: '';
+    display: block;
+    height: 8px;
+    width: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent, #8B5CF6));
+  }
+
+  /* Target everything inside modal-box for padding except the pseudo-element */
+  .modal-box>* {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .modal-box> :first-child {
+    padding-top: 20px;
+  }
+
+  .modal-box> :last-child {
+    padding-bottom: 24px;
+  }
+
+  .modal-box h3 {
+    font-size: 20px;
+    font-weight: 800;
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--text-1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .modal-box>div {
+    margin-bottom: 16px;
+    /* Better section spacing */
+  }
+
+  .modal-box>div:last-child {
+    margin-bottom: 0;
+  }
+
+
 
   @keyframes modalIn {
     from {
@@ -2827,6 +2922,17 @@ body.spacious {
     align-items: center;
     gap: 10px;
     color: var(--text-1);
+    margin: 0;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+    display: block;
   }
 
 
@@ -3894,4 +4000,263 @@ input:checked+.slider:before {
 
 .settings-section .widget-header:active i[data-lucide="chevron-down"] {
   transform: rotate(180deg);
+}
+
+/* --- TOAST NOTIFICATIONS (Enhanced) --- */
+#toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--text-1);
+  color: var(--surface-base);
+  padding: 12px 24px;
+  border-radius: 50px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 99999;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+#toast.toast-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+#toast-undo-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: white;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: background 0.2s;
+}
+
+#toast-undo-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Vision Progress Bar Animation */
+@keyframes fillBar {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: var(--progress-width);
+  }
+}
+
+.vision-progress-fill {
+  animation: fillBar 1s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+
+/* --- TASK COMPLETION ANIMATION --- */
+@keyframes slideStrike {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 100%;
+  }
+}
+
+.task-bento-row.animating-done .task-title-text {
+  position: relative;
+  color: var(--text-muted);
+}
+
+.task-bento-row.animating-done .task-title-text::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 55%;
+  height: 2px;
+  background: var(--primary);
+  animation: slideStrike 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.task-bento-row.animating-done {
+  transform: scale(0.98);
+  opacity: 0.7;
+  transition: all 0.3s ease;
+}
+
+/* --- SWIPE HINTS --- */
+.swipe-hint {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  color: white;
+  font-weight: 700;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.swipe-hint.left {
+  right: 0;
+  background: var(--success);
+  border-radius: 0 12px 12px 0;
+}
+
+.swipe-hint.right {
+  left: 0;
+  background: var(--danger);
+  border-radius: 12px 0 0 12px;
+}
+
+/* --- FOCUS MODE OVERLAY --- */
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--surface-base);
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.focus-overlay.hidden {
+  display: none;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+.focus-container {
+  max-width: 500px;
+  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+}
+
+.focus-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.focus-header h2 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.focus-section {
+  margin-bottom: 24px;
+}
+
+.focus-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.focus-item:active {
+  transform: scale(0.98);
+}
+
+.focus-item-checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2.5px solid var(--primary);
+}
+
+.focus-item-text {
+  font-weight: 600;
+  font-size: 15px;
+  flex: 1;
+}
+
+.focus-priority {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.focus-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-radius: 16px;
+  font-style: italic;
+}
+
+/* --- HABIT STREAK GLOW --- */
+@keyframes streakGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+    transform: scale(1);
+  }
+
+  50% {
+    box-shadow: 0 0 15px 5px rgba(245, 158, 11, 0.6);
+    transform: scale(1.05);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+    transform: scale(1);
+  }
+}
+
+.streak-pill.milestone-7 {
+  border: 1px solid #EF4444;
+  animation: streakGlow 2s infinite ease-in-out;
+}
+
+.streak-pill.milestone-30 {
+  border: 2px solid #F59E0B;
+  animation: streakGlow 1.5s infinite ease-in-out;
+  font-weight: 800;
+}
+
+/* Updated Vision Bars for Animation */
+.vision-progress-fill {
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  height: 100%;
+  border-radius: 4px;
+  animation: fillBar 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }

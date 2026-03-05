@@ -2,6 +2,56 @@
    DESIGN ENGINE: SEMANTIC SURFACES & DEPTH TOKENS
    ========================================================================== */
 
+/* ==========================================================================
+   iOS WebView Fix: Make all div/span elements with onclick handlers tappable.
+   Without `cursor: pointer`, iOS WKWebView silently ignores onclick on non-button
+   elements. This is the canonical fix for Capacitor/Cordova iOS apps.
+   ========================================================================== */
+[onclick],
+[data-action],
+.nav-item,
+.mob-item,
+.qa-btn,
+.btn,
+.tab,
+.card-action,
+.modal-close,
+.widget-action,
+.quick-action,
+.toggle-btn,
+.dash-toggle-item,
+.tab-toggle-item,
+.density-btn,
+.color-option,
+.icon-pack-option,
+.kpi-card,
+.entry-card,
+.stat-card,
+.habit-row,
+.person-card,
+.task-row,
+.bento-task-row,
+.category-header,
+.nav-tab,
+.filter-chip,
+.budget-category-row,
+.note-card,
+.goal-card {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure buttons don't have the 300ms tap delay on iOS */
+button,
+a,
+input[type="button"],
+input[type="submit"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+
 :root {
   /* --- 0. LUMINOUS THEME CORE (New) --- */
   /* Spacing System (8pt grid base) */
