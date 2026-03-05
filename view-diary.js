@@ -1,7 +1,7 @@
 /* view-diary.js - Enhanced Diary UI with Bento Design */
 
 // Diary view state
-let currentDiaryView = 'home'; // 'home', 'list', 'weekly', 'monthly', 'yearly', 'tags', 'insights'
+let currentDiaryView = 'list'; // 'list', 'weekly', 'monthly', 'yearly', 'tags', 'insights'
 let currentSearchQuery = '';
 let currentDateFilter = 'all';
 let currentTagFilter = '';
@@ -138,13 +138,9 @@ function renderDiary() {
       
       <!-- Navigation Tabs -->
       <div class="diary-nav-tabs">
-        <button class="nav-tab ${currentDiaryView === 'home' ? 'active' : ''}" onclick="switchDiaryView('home')" title="Home">
-          ${renderIcon('home', null, 'class="nav-icon"')}
-        </button>
         <button class="nav-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')" title="All Entries">
           ${renderIcon('list', null, 'class="nav-icon"')}
         </button>
-        <button class="nav-tab ${currentDiaryView === 'timeline' ? 'active' : ''}" onclick="switchDiaryView('timeline')" title="Timeline" style="font-size:16px;">🕐</button>
         <button class="nav-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')" title="Calendar">
           ${renderIcon('calendar', null, 'class="nav-icon"')}
         </button>
@@ -161,9 +157,7 @@ function renderDiary() {
       
       <!-- Content Area -->
       <div class="diary-content">
-        ${currentDiaryView === 'home' ? renderHomeContent(sorted) : ''}
         ${currentDiaryView === 'list' ? renderListView(sorted) : ''}
-        ${currentDiaryView === 'timeline' ? renderTimelineView(sorted) : ''}
         ${currentDiaryView === 'calendar' ? renderCalendarView(entries) : ''}
         ${currentDiaryView === 'yearly' ? renderYearlyView(entries) : ''}
         ${currentDiaryView === 'insights' ? renderInsightsView(entries) : ''}
