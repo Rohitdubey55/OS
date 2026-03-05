@@ -660,7 +660,17 @@ function renderDashboard() {
         ${gridHtml}
       </div>
 
-      <div style="margin:12px 0 24px 0; text-align:center">
+      <div style="display:flex; gap:12px; margin: 12px 0;">
+        <button class="btn" onclick="routeTo('notes')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px;">
+           ${renderIcon('entries', null, 'style="width:18px; color:var(--primary)"')}
+           <span style="font-weight:600">Notes</span>
+        </button>
+        <button class="btn" onclick="routeTo('gym')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px;">
+           ${renderIcon('fitness', null, 'style="width:18px; color:var(--danger)"')}
+           <span style="font-weight:600">Gym</span>
+        </button>
+      </div>
+      <div style="margin:0 0 24px 0; text-align:center">
         <button class="btn" onclick="openDashCustomize()" style="width:100%; background:var(--surface-1); border:1px solid var(--border); color:var(--text-muted); justify-content:center; padding:12px;">
             ${renderIcon('dashboard', null, 'style="width:16px; margin-right:8px"')} Dashboard Layout
         </button>
