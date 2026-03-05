@@ -578,7 +578,7 @@ window.markAllHabitsDone = async function () {
 
   // Find habits scheduled today that aren't done yet
   const pending = habits.filter(h => {
-    const isScheduled = isHabitScheduledToday(h);
+    let isScheduled = isHabitScheduledToday(h);
     const isDone = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(today));
     return isScheduled && !isDone;
   });

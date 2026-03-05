@@ -116,10 +116,10 @@ function renderTasks(filter = '') {
 
   const oneOff = tasks.filter(t => !t.recurrence || t.recurrence === 'none');
   const recurring = tasks.filter(t => t.recurrence && t.recurrence !== 'none');
-  const pending = oneOff.filter(t => t.status !== 'completed');
+  let pending = oneOff.filter(t => t.status !== 'completed');
   const completed = oneOff.filter(t => t.status === 'completed');
 
-  const recurringToday = recurring.filter(t => isTaskDueToday(t));
+  let recurringToday = recurring.filter(t => isTaskDueToday(t));
   const recurringOther = recurring.filter(t => !isTaskDueToday(t));
 
   const allCats = ['All', ...new Set((state.data.tasks || []).map(t => t.category).filter(Boolean))];
