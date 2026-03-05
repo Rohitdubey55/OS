@@ -21,6 +21,16 @@ function renderSettings() {
   const s = state.data.settings?.[0] || {};
   const [themeMode, iconPack] = (s.theme_mode || 'light|emoji').split('|');
 
+  // Tasks settings - parse from task_categories prefix if present (persistence)
+  let taskDefaultView = s.task_default_view || 'expanded';
+  if (s.task_categories && s.task_categories.startsWith('VIEW:')) {
+    const parts = s.task_categories.split('|');
+    const viewPref = parts[0].replace('VIEW:', '');
+    if (viewPref === 'collapsed' || viewPref === 'expanded') {
+      taskDefaultView = viewPref;
+    }
+  }
+
   const settings = {
     weekly_budget: s.weekly_budget || 0,
     monthly_budget: s.monthly_budget || 0,
@@ -47,8 +57,8 @@ function renderSettings() {
     diary_show_expenses: s.diary_show_expenses !== false,
     // Notification settings
     habit_summary_time: s.habit_summary_time || '08:00',
-    // Tasks settings
-    task_default_view: s.task_default_view || 'expanded',
+    // Logic parsed above
+    task_default_view: taskDefaultView,
     task_categories: s.task_categories || 'Personal,Work,Health,Learning,Finance,Other'
   };
 
