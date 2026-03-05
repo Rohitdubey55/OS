@@ -578,9 +578,6 @@ function renderDashboard() {
             ${isOver ? '🚨 Budget exceeded! Watch your spending.' : '⚠️ Approaching your monthly limit.'}
           </div>` : ''}
         </div>
-        <div style="padding:0 16px 12px;">
-          <button class="btn" style="width:100%;font-size:12px;padding:6px;" onclick="showQuickLog('expense')">+ Quick Expense</button>
-        </div>
       </div>`;
     },
 

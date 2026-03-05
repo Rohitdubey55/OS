@@ -739,38 +739,44 @@ window.openWeeklyReview = function () {
     const dateRange = `${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 
     box.innerHTML = `
-    <div class="modal-header-bar" style="background:linear-gradient(135deg,#7C3AED,#4F46E5);">
-      <h3>📊 Weekly Review</h3>
-      <span style="color:rgba(255,255,255,0.7);font-size:12px;margin-left:auto;">${dateRange}</span>
+    <div class="modal-header-bar" style="background:linear-gradient(135deg,#7C3AED,#4F46E5); border-radius:20px 20px 0 0; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div>
+        <h3 style="margin:0 0 2px 0;">📊 Weekly Review</h3>
+        <span style="color:rgba(255,255,255,0.75);font-size:12px;">${dateRange}</span>
+      </div>
+      <button onclick="document.getElementById('universalModal').classList.add('hidden')" style="background:rgba(255,255,255,0.2);border:none;border-radius:50%;width:36px;height:36px;font-size:18px;color:white;cursor:pointer;touch-action:manipulation;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>
     </div>
-    <div class="weekly-review-grid">
-      <div class="weekly-stat-card">
-        <div class="weekly-stat-value" style="color:var(--success);">${doneTasksThisWeek}</div>
-        <div class="weekly-stat-label">Tasks Completed</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:20px;">
+      <div style="background:var(--surface-2);border-radius:16px;padding:20px;text-align:center;">
+        <div style="font-size:32px;font-weight:800;color:var(--success);line-height:1;">${doneTasksThisWeek}</div>
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">Tasks Done</div>
       </div>
-      <div class="weekly-stat-card">
-        <div class="weekly-stat-value" style="color:#FF6B35;">${weekHabitsTotal}</div>
-        <div class="weekly-stat-label">Habit Logs</div>
+      <div style="background:var(--surface-2);border-radius:16px;padding:20px;text-align:center;">
+        <div style="font-size:32px;font-weight:800;color:#FF6B35;line-height:1;">${weekHabitsTotal}</div>
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">Habit Logs</div>
       </div>
-      <div class="weekly-stat-card">
-        <div class="weekly-stat-value" style="color:var(--danger);">₹${weekSpend.toLocaleString()}</div>
-        <div class="weekly-stat-label">Spent This Week</div>
+      <div style="background:var(--surface-2);border-radius:16px;padding:20px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:var(--danger);line-height:1;">₹${weekSpend.toLocaleString('en-IN')}</div>
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">Spent</div>
       </div>
-      <div class="weekly-stat-card">
-        <div class="weekly-stat-value" style="color:var(--primary);">${weekDiary}</div>
-        <div class="weekly-stat-label">Diary Entries</div>
+      <div style="background:var(--surface-2);border-radius:16px;padding:20px;text-align:center;">
+        <div style="font-size:32px;font-weight:800;color:var(--primary);line-height:1;">${weekDiary}</div>
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-top:6px;">Diary Entries</div>
       </div>
     </div>
-    <div style="text-align:center;font-size:14px;color:var(--text-muted);margin-bottom:16px;">
+    <div style="padding:0 20px 10px;text-align:center;font-size:14px;color:var(--text-muted);">
       ${doneTasksThisWeek === 0 && weekHabitsTotal < 3 ? "Let's do better next week 💪" :
             doneTasksThisWeek >= 5 ? "Incredible week! 🚀 You crushed it!" :
                 "Good progress this week! Keep it up 🌟"}
     </div>
-    <button class="btn primary" style="width:100%;" onclick="document.getElementById('universalModal').classList.add('hidden')">
-      Close Review
-    </button>
+    <div style="padding:0 20px 20px;">
+      <button class="btn primary" style="width:100%;border-radius:14px;padding:14px;font-size:15px;touch-action:manipulation;" onclick="document.getElementById('universalModal').classList.add('hidden')">
+        Close Review
+      </button>
+    </div>
   `;
     modal.classList.remove('hidden');
+
 };
 
 /* ═══════════════════════════════════════════════
