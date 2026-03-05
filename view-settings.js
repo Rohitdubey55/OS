@@ -1000,6 +1000,7 @@ window.saveAllSettings = async function (section = 'all') {
   if (state.data.settings?.[0]) {
     Object.assign(state.data.settings[0], newSettings);
     if (section === 'all' || section === 'appearance') applySettings();
+    if (section === 'all' || section === 'tabs') updateTabVisibility();
   }
 
   const existingId = state.data.settings?.[0]?.id;
