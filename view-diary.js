@@ -137,21 +137,26 @@ function renderDiary() {
       </div>
       
       <!-- Navigation Tabs -->
-      <div class="diary-nav-tabs">
-        <button class="nav-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')" title="All Entries">
-          ${renderIcon('list', null, 'class="nav-icon"')}
+      <div class="diary-nav-tabs" style="display:flex; justify-content:stretch; gap:4px; background:var(--surface-2); border-radius:16px; padding:4px; margin-bottom:12px;">
+        <button class="nav-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')" title="All Entries" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'list' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'list' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'list' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
+          ${renderIcon('list', null, 'style="width:16px;"')}
+          <span>List</span>
         </button>
-        <button class="nav-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')" title="Calendar">
-          ${renderIcon('calendar', null, 'class="nav-icon"')}
+        <button class="nav-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')" title="Calendar" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'calendar' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'calendar' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'calendar' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
+          ${renderIcon('calendar', null, 'style="width:16px;"')}
+          <span>Month</span>
         </button>
-        <button class="nav-tab ${currentDiaryView === 'yearly' ? 'active' : ''}" onclick="switchDiaryView('yearly')" title="Yearly">
-          ${renderIcon('yearly', null, 'class="nav-icon"')}
+        <button class="nav-tab ${currentDiaryView === 'yearly' ? 'active' : ''}" onclick="switchDiaryView('yearly')" title="Yearly" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'yearly' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'yearly' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'yearly' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
+          ${renderIcon('yearly', null, 'style="width:16px;"')}
+          <span>Year</span>
         </button>
-        <button class="nav-tab ${currentDiaryView === 'insights' ? 'active' : ''}" onclick="switchDiaryView('insights')" title="Insights">
-          ${renderIcon('insights', null, 'class="nav-icon"')}
+        <button class="nav-tab ${currentDiaryView === 'insights' ? 'active' : ''}" onclick="switchDiaryView('insights')" title="Insights" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'insights' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'insights' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'insights' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
+          ${renderIcon('insights', null, 'style="width:16px;"')}
+          <span>Stats</span>
         </button>
-        <button class="nav-tab ${currentDiaryView === 'tags' ? 'active' : ''}" onclick="switchDiaryView('tags')" title="Tags">
-          ${renderIcon('tags', null, 'class="nav-icon"')}
+        <button class="nav-tab ${currentDiaryView === 'tags' ? 'active' : ''}" onclick="switchDiaryView('tags')" title="Tags" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'tags' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'tags' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'tags' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
+          ${renderIcon('tags', null, 'style="width:16px;"')}
+          <span>Tags</span>
         </button>
       </div>
       

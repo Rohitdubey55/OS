@@ -95,6 +95,19 @@ function parseDueTimeForInput(val) {
 function renderTasks(filter = '') {
   let tasks = Array.isArray(state.data.tasks) ? [...state.data.tasks] : [];
 
+  // Apply default collapsed/expanded setting from Settings (only on fresh render with no existing state)
+  if (_collapsedCategories.size === 0 && !filter) {
+    const s = state.data.settings?.[0] || {};
+    if ((s.task_default_view || 'expanded') === 'collapsed') {
+      // Pre-collapse all categories when the user prefers collapsed view
+      const allCats = [...new Set(tasks.map(t => t.category || 'Other'))];
+      allCats.forEach(c => _collapsedCategories.add(c));
+      _collapsedCategories.add('Today\'s 3');
+      _collapsedCategories.add('Recurring');
+    }
+  }
+
+
   if (filter) tasks = tasks.filter(t => (t.title || '').toLowerCase().includes(filter.toLowerCase()));
   if (_taskCategory !== 'All') tasks = tasks.filter(t => t.category === _taskCategory);
   if (_taskPriorityFilter !== 'All') tasks = tasks.filter(t => t.priority === _taskPriorityFilter);
@@ -954,9 +967,14 @@ const DEFAULT_TASK_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study
 function getTaskCategories() {
   const settings = state.data.settings?.[0] || {};
   if (settings.task_categories) {
+    // Support both comma-string (from Settings UI) and JSON array (legacy)
+    const raw = settings.task_categories;
     try {
-      return JSON.parse(settings.task_categories);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
     } catch (e) { }
+    // Treat as comma-separated string
+    return raw.split(',').map(c => c.trim()).filter(Boolean);
   }
   return [...DEFAULT_TASK_CATEGORIES];
 }

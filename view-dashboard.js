@@ -237,31 +237,25 @@ function renderDashboard() {
       }
 
       return `
-        <div class="morning-hero" style="min-height:100px; display:flex; flex-direction:column; justify-content:center; padding:20px 24px; background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border-radius:20px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06), 0 12px 32px rgba(0,0,0,0.04), 0 24px 48px rgba(0,0,0,0.02);">
-            <div style="position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                  <h1 class="fade-in" style="font-size:clamp(22px, 3vw, 30px); margin:0; letter-spacing:-0.5px; background: linear-gradient(90deg, var(--text-1), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${greeting}, ${name}.</h1>
-                  <p class="fade-in stagger-1" style="font-size:13px; color:var(--text-3); margin:6px 0 0 0; opacity: 0.85;">${message}</p>
+        <div class="morning-hero" style="min-height:0; display:flex; flex-direction:column; justify-content:center; padding:14px 20px; background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border-radius:20px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
+            <div style="position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="flex:1; min-width:0;">
+                  <h1 class="fade-in" style="font-size:clamp(18px, 3vw, 24px); margin:0; letter-spacing:-0.5px; background: linear-gradient(90deg, var(--text-1), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${greeting}, ${name}.</h1>
+                  <p class="fade-in stagger-1" style="font-size:12px; color:var(--text-3); margin:3px 0 0 0; opacity: 0.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${message}</p>
                 </div>
-                 <!-- Contextual Focus Mini-Card -->
-                <!-- Contextual Focus Mode Button -->
-                <div class="glass-panel fade-in stagger-2" style="padding:12px 24px; border-radius:16px; background:var(--primary); border:1px solid rgba(255,255,255,0.2); display:inline-flex; align-items:center; gap:12px; cursor:pointer; box-shadow: 0 8px 16px var(--primary-glow); color:white;" onclick="openFocusMode()">
-                    <div style="width:32px; height:32px; border-radius:10px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center;">
-                        ${renderIcon('goals', null, 'style="width:18px; color:white;"')}
-                    </div>
+                 <!-- Compact Focus Button -->
+                <div class="glass-panel fade-in stagger-2" style="padding:8px 14px; border-radius:12px; background:var(--primary); border:1px solid rgba(255,255,255,0.2); display:inline-flex; align-items:center; gap:8px; cursor:pointer; box-shadow: 0 4px 12px var(--primary-glow); color:white; flex-shrink:0;" onclick="openFocusMode()">
+                    ${renderIcon('goals', null, 'style="width:16px; color:white;"')}
                     <div>
-                        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:rgba(255,255,255,0.8); font-weight:700;">Morning ritual</div>
-                        <div style="font-size:14px; font-weight:700;">Start Focus Mode</div>
+                        <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.7px; color:rgba(255,255,255,0.8); font-weight:700;">Focus</div>
+                        <div style="font-size:12px; font-weight:700;">Start</div>
                     </div>
                 </div>
                 
             </div>
 
-
-
             <!-- Background Decoration -->
-            <div style="position:absolute; top:-50%; right:-10%; width:240px; height:240px; background:var(--primary); filter:blur(100px); opacity:0.12; border-radius:50%; pointer-events:none;"></div>
-            <div style="position:absolute; bottom:-30%; left:-5%; width:180px; height:180px; background:var(--secondary); filter:blur(80px); opacity:0.08; border-radius:50%; pointer-events:none;"></div>
+            <div style="position:absolute; top:-50%; right:-10%; width:180px; height:180px; background:var(--primary); filter:blur(80px); opacity:0.12; border-radius:50%; pointer-events:none;"></div>
         </div>
       `;
     },

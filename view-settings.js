@@ -46,7 +46,10 @@ function renderSettings() {
     diary_show_habits: s.diary_show_habits !== false,
     diary_show_expenses: s.diary_show_expenses !== false,
     // Notification settings
-    habit_summary_time: s.habit_summary_time || '08:00'
+    habit_summary_time: s.habit_summary_time || '08:00',
+    // Tasks settings
+    task_default_view: s.task_default_view || 'expanded',
+    task_categories: s.task_categories || 'Personal,Work,Health,Learning,Finance,Other'
   };
 
   const main = document.getElementById('main');
@@ -334,6 +337,48 @@ function renderSettings() {
         </div>
         
         <button class="btn primary" onclick="saveAllSettings('diary')">Save Diary Settings</button>
+        </div>
+      </details>
+
+      <!-- 7. TASKS SETTINGS -->
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title">${renderIcon('tasks', null, 'style="width:18px; margin-right:8px;"')} Tasks Settings</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
+        <p class="section-description">Customize your task experience.</p>
+        
+        <!-- Default View -->
+        <div style="margin-bottom:20px;">
+          <label class="setting-label">Default Category View</label>
+          <div class="density-options" id="taskDefaultViewOptions">
+            <button class="density-btn ${settings.task_default_view === 'expanded' ? 'active' : ''}" onclick="selectTaskDefaultView('expanded')">Expanded</button>
+            <button class="density-btn ${settings.task_default_view === 'collapsed' ? 'active' : ''}" onclick="selectTaskDefaultView('collapsed')">Collapsed</button>
+          </div>
+          <input type="hidden" id="sTaskDefaultView" value="${settings.task_default_view || 'expanded'}">
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Whether task categories start collapsed or expanded when you open the Tasks view.</p>
+        </div>
+
+        <!-- Categories -->
+        <div style="margin-bottom:20px;">
+          <label class="setting-label">Task Categories</label>
+          <p style="font-size:12px; color:var(--text-muted); margin-top:0; margin-bottom:12px;">These categories appear in the task form and filter bar.</p>
+          <div id="taskCategoryList" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            ${(settings.task_categories || 'Personal,Work,Health,Learning,Finance,Other').split(',').map(cat => cat.trim()).filter(Boolean).map(cat => `
+              <div style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;">
+                <span>${cat}</span>
+                <button type="button" onclick="removeTaskCategory(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">×</button>
+              </div>
+            `).join('')}
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" id="newTaskCategoryInput" class="input" placeholder="New category name..." style="flex:1;" onkeydown="if(event.key==='Enter'){addTaskCategory(); event.preventDefault();}">
+            <button class="btn secondary" onclick="addTaskCategory()">+ Add</button>
+          </div>
+        </div>
+
+        <button class="btn primary" onclick="saveAllSettings('tasks')">Save Tasks Settings</button>
         </div>
       </details>
 
@@ -754,6 +799,36 @@ window.selectOrientation = function (orientation) {
   applyOrientationLock(orientation);
 }
 
+// --- Task Settings Helpers ---
+window.selectTaskDefaultView = function (view) {
+  const parent = document.getElementById('taskDefaultViewOptions');
+  if (parent) parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
+  event.target.classList.add('active');
+  const hidden = document.getElementById('sTaskDefaultView');
+  if (hidden) hidden.value = view;
+};
+
+window.addTaskCategory = function () {
+  const input = document.getElementById('newTaskCategoryInput');
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) return;
+  const list = document.getElementById('taskCategoryList');
+  if (!list) return;
+  // Check duplicate
+  const existing = Array.from(list.querySelectorAll('span')).map(s => s.textContent.trim().toLowerCase());
+  if (existing.includes(val.toLowerCase())) { input.value = ''; return; }
+  const pill = document.createElement('div');
+  pill.style.cssText = 'display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;';
+  pill.innerHTML = `<span>${val}</span><button type="button" onclick="removeTaskCategory(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">\u00d7</button>`;
+  list.appendChild(pill);
+  input.value = '';
+};
+
+window.removeTaskCategory = function (btn) {
+  btn.closest('div').remove();
+};
+
 // Apply orientation lock
 function applyOrientationLock(orientation) {
   console.log('Applying orientation lock:', orientation);
@@ -1083,7 +1158,16 @@ window.saveAllSettings = async function (section = 'all') {
     newSettings.diary_show_expenses = showExpenses;
   }
 
-  const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary' };
+  if (section === 'all' || section === 'tasks') {
+    const taskDefaultView = document.getElementById('sTaskDefaultView')?.value || 'expanded';
+    // Collect categories from pill list
+    const pillSpans = Array.from(document.querySelectorAll('#taskCategoryList > div > span'));
+    const taskCats = pillSpans.map(s => s.textContent.trim()).filter(Boolean).join(',');
+    newSettings.task_default_view = taskDefaultView;
+    newSettings.task_categories = taskCats || 'Personal,Work,Health,Learning,Finance,Other';
+  }
+
+  const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary', tasks: 'Tasks' };
   showToast(section === 'all' ? 'Saving settings...' : `Saving ${sectionNames[section] || 'settings'}...`);
 
   // Optimistic Update
