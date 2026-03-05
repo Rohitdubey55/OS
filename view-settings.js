@@ -272,7 +272,23 @@ function renderSettings() {
         </div>
       </details>
 
-      <!-- 5. DIARY SETTINGS -->
+      <!-- 5. DASHBOARD LAYOUT -->
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title">${renderIcon('home', null, 'style="width:18px; margin-right:8px;"')} Dashboard Layout</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
+        <p class="section-description">Toggle and rearrange dashboard widgets.</p>
+        
+        <div class="dash-toggles" id="dashTogglesList">
+           ${renderDashboardTogglesOrdered()}
+        </div>
+        <button class="btn primary" onclick="saveAllSettings('dashboard')" style="margin-top:12px">Save Dashboard Layout</button>
+        </div>
+      </details>
+
+      <!-- 6. DIARY SETTINGS -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
             <div class="widget-title">${renderIcon('diary', null, 'style="width:18px; margin-right:8px;"')} Diary Settings</div>
@@ -482,6 +498,66 @@ function renderTabTogglesOrdered(layoutStr, fallbackHiddenStr) {
 
   return orderedTabs.map(tab => renderTabToggle(tab.label, tab.id, tab.visible)).join('');
 }
+
+function renderDashboardTogglesOrdered() {
+  const baseConfig = typeof DEFAULT_DASH_CONFIG !== 'undefined' ? DEFAULT_DASH_CONFIG : [
+    { id: 'morning', label: 'Morning Greeting', visible: true },
+    { id: 'theNow', label: 'The Now Focus', visible: true },
+    { id: 'aiBriefing', label: 'Daily Briefing', visible: true },
+    { id: 'vision', label: 'Vision Banner', visible: true },
+    { id: 'kpis', label: 'KPI Cards', visible: true },
+    { id: 'budget', label: 'Budget Alert', visible: true },
+    { id: 'pinnedNotes', label: 'Pinned Notes', visible: true },
+    { id: 'tasks', label: 'High Priority Tasks', visible: true },
+    { id: 'habits', label: 'Habit Tracker', visible: true }
+  ];
+
+  let layoutData = [];
+  const s = state.data.settings?.[0] || {};
+  try {
+    if (s.dashboard_config) {
+      let parsed = s.dashboard_config;
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      layoutData = parsed;
+    }
+  } catch (e) { }
+
+  let orderedWidgets = [];
+  if (layoutData && layoutData.length > 0) {
+    layoutData.forEach(item => {
+      const baseInfo = baseConfig.find(b => b.id === item.id);
+      if (baseInfo) orderedWidgets.push({ ...baseInfo, visible: item.visible });
+    });
+    baseConfig.forEach(b => {
+      if (!orderedWidgets.some(ow => ow.id === b.id)) orderedWidgets.push({ ...b, visible: true });
+    });
+  } else {
+    orderedWidgets = baseConfig.map(b => ({ ...b }));
+  }
+
+  return orderedWidgets.map(w => `
+      <label class="dash-toggle-item" data-id="${w.id}" data-label="${w.label}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface-2); border-radius: 8px; margin-bottom: 8px;">
+         <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+            <div>
+               <div class="toggle-name" style="font-weight: 500;">${w.label}</div>
+            </div>
+         </div>
+         <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="toggle-label" style="margin: 0;">
+                <input type="checkbox" class="dash-checkbox" value="${w.id}" ${w.visible !== false ? 'checked' : ''}>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+               <button type="button" class="btn icon small" onclick="moveTab(event, this, -1)" style="padding: 2px; height: auto;" title="Move Up">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+               </button>
+               <button type="button" class="btn icon small" onclick="moveTab(event, this, 1)" style="padding: 2px; height: auto;" title="Move Down">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+               </button>
+            </div>
+         </div>
+      </label>
+  `).join('');
+}
 function renderColorOption(color, activeColor) {
   const isActive = (activeColor || '#4F46E5').toLowerCase() === color.toLowerCase();
   return `<div class="color-option ${isActive ? 'active' : ''}" style="background-color: ${color}" data-color="${color}"></div>`;
@@ -519,7 +595,7 @@ window.moveTab = function (event, btnElement, direction) {
   event.preventDefault();
   event.stopPropagation();
 
-  const row = btnElement.closest('.tab-toggle-item');
+  const row = btnElement.closest('.tab-toggle-item, .dash-toggle-item');
   const list = row.parentElement;
 
   if (direction === -1) {
@@ -911,6 +987,16 @@ window.saveAllSettings = async function (section = 'all') {
   });
   const navLayoutJSON = JSON.stringify(navLayoutArray);
 
+  // Read dashboard toggles correctly
+  const dashItemsDOM = Array.from(document.querySelectorAll('.dash-toggle-item'));
+  const dashLayoutArray = dashItemsDOM.map(el => {
+    const isVisible = el.querySelector('.dash-checkbox').checked;
+    // ensure label is preserved
+    const label = el.dataset.label;
+    return { id: el.dataset.id, label: label, visible: isVisible };
+  });
+  const dashLayoutJSON = JSON.stringify(dashLayoutArray);
+
   // Build settings object based on section
   let newSettings = {};
 
@@ -941,6 +1027,10 @@ window.saveAllSettings = async function (section = 'all') {
 
   if (section === 'all' || section === 'tabs') {
     newSettings.nav_layout = navLayoutJSON;
+  }
+
+  if (section === 'all' || section === 'dashboard') {
+    newSettings.dashboard_config = dashLayoutJSON;
   }
 
   if (section === 'all' || section === 'notifications') {

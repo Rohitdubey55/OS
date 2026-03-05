@@ -3,6 +3,7 @@
 // Default dashboard section config
 const DEFAULT_DASH_CONFIG = [
   { id: 'morning', label: 'Morning Greeting', visible: true },
+  { id: 'theNow', label: 'The Now Focus', visible: true },
   { id: 'aiBriefing', label: 'Daily Briefing', visible: true },
   { id: 'vision', label: 'Vision Banner', visible: true },
   { id: 'kpis', label: 'KPI Cards', visible: true },
@@ -119,6 +120,93 @@ function renderDashboard() {
 
   // --- SECTION RENDERERS ---
   const sectionRenderers = {
+    theNow: () => {
+      // Tasks: P1 or due today
+      const nowTasks = pending.filter(t => t.priority === 'P1' || (t.due_date && t.due_date <= todayStr)).slice(0, 3);
+      const tasksStr = nowTasks.length > 0 ? nowTasks.map(t => `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer;" onclick="routeTo('tasks')">
+          <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+            <div style="width:12px; height:12px; flex-shrink:0; border-radius:50%; border:2px solid var(--primary);"></div>
+            <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.title}</span>
+          </div>
+          <span style="font-size:10px; font-weight:700; color:var(--primary); background:var(--primary-soft); padding:2px 6px; border-radius:4px; flex-shrink:0;">${t.priority}</span>
+        </div>
+      `).join('') : '<div style="font-size:13px; color:var(--text-muted); padding:8px 0; font-style:italic;">No urgent tasks.</div>';
+
+      // Habits: Due today & not completed
+      const todayDayName = new Date().toLocaleDateString('en-US', { weekday: 'short' });
+      const nowHabits = (state.data.habits || []).filter(h => {
+        if (h.frequency && h.frequency !== 'daily' && !h.frequency.includes(todayDayName)) return false;
+        if (!h.history) return true;
+        try {
+          const hist = typeof h.history === 'string' ? JSON.parse(h.history) : h.history;
+          return !hist.includes(todayStr);
+        } catch (e) { return true; }
+      }).slice(0, 3);
+      const habitsStr = nowHabits.length > 0 ? nowHabits.map(h => `
+        <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer;" onclick="routeTo('habits')">
+          <div style="font-size:16px; flex-shrink:0;">${h.icon || '🔥'}</div>
+          <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${h.name}</span>
+        </div>
+      `).join('') : '<div style="font-size:13px; color:var(--text-muted); padding:8px 0; font-style:italic;">All habits done!</div>';
+
+      // Events: Next 3 today
+      const nowEvents = events.slice(0, 3);
+      const eventsStr = nowEvents.length > 0 ? nowEvents.map(e => {
+        let timeStr = 'All Day';
+        if (e.start_datetime) {
+          const d = new Date(e.start_datetime);
+          timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase().replace(' ', '');
+        }
+        return `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer;" onclick="routeTo('calendar')">
+          <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+            <div style="width:4px; height:12px; border-radius:2px; background:var(--info); flex-shrink:0;"></div>
+            <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${e.title}</span>
+          </div>
+          <span style="font-size:10px; font-weight:700; color:var(--text-muted); flex-shrink:0;">${timeStr}</span>
+        </div>
+        `;
+      }).join('') : '<div style="font-size:13px; color:var(--text-muted); padding:8px 0; font-style:italic;">No upcoming events.</div>';
+
+      // Only show if there is actually something to do, but typically you always want to show it.
+      return `
+      <div class="the-now-section" style="margin-bottom: 24px;">
+        <div style="font-size:10px; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:1px; margin-bottom:8px; padding-left:4px;">Action Center</div>
+        <div style="background:var(--surface-1); border-radius:var(--bento-radius-xl); padding:20px; box-shadow:var(--shadow-layer-1), var(--shadow-layer-2); display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:24px;">
+          
+          <!-- Tasks Col -->
+          <div style="display:flex; flex-direction:column;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+              ${renderIcon('check', null, 'style="width:16px; color:var(--primary);"')}
+              <span style="font-size:14px; font-weight:700;">Tasks</span>
+            </div>
+            <div style="display:flex; flex-direction:column;">${tasksStr}</div>
+          </div>
+
+          <!-- Habits Col -->
+          <div style="display:flex; flex-direction:column;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+              ${renderIcon('repeat', null, 'style="width:16px; color:var(--warning);"')}
+              <span style="font-size:14px; font-weight:700;">Habits</span>
+            </div>
+            <div style="display:flex; flex-direction:column;">${habitsStr}</div>
+          </div>
+
+           <!-- Events Col -->
+          <div style="display:flex; flex-direction:column;">
+            <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+              ${renderIcon('calendar', null, 'style="width:16px; color:var(--info);"')}
+              <span style="font-size:14px; font-weight:700;">Events</span>
+            </div>
+            <div style="display:flex; flex-direction:column;">${eventsStr}</div>
+          </div>
+
+        </div>
+      </div>
+      `;
+    },
+
     morning: () => {
       const h = new Date().getHours();
       const greeting = h < 12 ? 'Good Morning' : h < 18 ? 'Good Afternoon' : 'Good Evening';
