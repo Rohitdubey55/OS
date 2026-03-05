@@ -263,10 +263,10 @@ function renderSettings() {
             ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
-        <p class="section-description">Toggle and rearrange modules (drag to reorder).</p>
+        <p class="section-description">Toggle and rearrange modules.</p>
         
         <div class="tab-toggles" id="tabTogglesList">
-           ${renderTabTogglesOrdered(settings.hidden_tabs, settings.tab_order)}
+           ${renderTabTogglesOrdered(settings.nav_layout, settings.hidden_tabs)}
         </div>
         <button class="btn primary" onclick="saveAllSettings('tabs')" style="margin-top:12px">Save Tabs</button>
         </div>
@@ -433,16 +433,6 @@ function renderSettings() {
     });
   });
 
-  // Enable drag and drop sorting for tabs
-  const tabList = document.getElementById('tabTogglesList');
-  if (tabList && typeof Sortable !== 'undefined') {
-    new Sortable(tabList, {
-      animation: 150,
-      handle: '.drag-handle',
-      ghostClass: 'sortable-ghost'
-    });
-  }
-
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 
   // Load notification settings from localStorage
@@ -450,7 +440,7 @@ function renderSettings() {
 }
 
 // Helpers
-function renderTabTogglesOrdered(hiddenStr, orderStr) {
+function renderTabTogglesOrdered(layoutStr, fallbackHiddenStr) {
   const allTabs = [
     { id: 'calendar', label: 'Calendar' },
     { id: 'tasks', label: 'Tasks' },
@@ -461,48 +451,92 @@ function renderTabTogglesOrdered(hiddenStr, orderStr) {
     { id: 'people', label: 'People' }
   ];
 
-  let orderedTabs = [...allTabs];
+  let layoutData = [];
+  try {
+    layoutData = layoutStr ? JSON.parse(layoutStr) : [];
+  } catch (e) { console.error("Error parsing Nav_Layout:", e); }
 
-  // If we have a custom order, sort the tabs array to match it
-  if (orderStr) {
-    const orderList = orderStr.split(',').map(s => s.trim());
-    orderedTabs.sort((a, b) => {
-      const indexA = orderList.indexOf(a.id);
-      const indexB = orderList.indexOf(b.id);
-      // If a tab isn't in the orderList (e.g. a new feature), put it at the end
-      if (indexA === -1 && indexB === -1) return 0;
-      if (indexA === -1) return 1;
-      if (indexB === -1) return -1;
-      return indexA - indexB;
+  let orderedTabs = [];
+
+  if (layoutData && layoutData.length > 0) {
+    // Use layout array to define order and visibility
+    layoutData.forEach(itemConfig => {
+      const tabInfo = allTabs.find(t => t.id === itemConfig.id);
+      if (tabInfo) {
+        orderedTabs.push({ ...tabInfo, visible: itemConfig.visible });
+      }
     });
+    // Add any newly added hardcoded tabs that aren't in layout yet
+    allTabs.forEach(t => {
+      if (!orderedTabs.some(ot => ot.id === t.id)) {
+        orderedTabs.push({ ...t, visible: true });
+      }
+    });
+  } else {
+    // Fallback if Nav_Layout is empty
+    orderedTabs = allTabs.map(t => ({
+      ...t,
+      visible: fallbackHiddenStr ? !fallbackHiddenStr.includes(t.id) : true
+    }));
   }
 
-  return orderedTabs.map(tab => renderTabToggle(tab.label, tab.id, hiddenStr)).join('');
+  return orderedTabs.map(tab => renderTabToggle(tab.label, tab.id, tab.visible)).join('');
 }
 function renderColorOption(color, activeColor) {
   const isActive = (activeColor || '#4F46E5').toLowerCase() === color.toLowerCase();
   return `<div class="color-option ${isActive ? 'active' : ''}" style="background-color: ${color}" data-color="${color}"></div>`;
 }
 
-function renderTabToggle(label, key, hiddenStr) {
-  const isHidden = (hiddenStr || '').includes(key);
+function renderTabToggle(label, key, isVisible) {
   return `
-      <label class="tab-toggle-item" data-id="${key}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface-2); border-radius: 8px; margin-bottom: 8px; cursor: grab;">
-         <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="drag-handle" style="color: var(--text-muted); display: flex; align-items: center;">
-               ${renderIcon('menu', null, 'style="width: 16px;"')}
-            </div>
+      <label class="tab-toggle-item" data-id="${key}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface-2); border-radius: 8px; margin-bottom: 8px;">
+         <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
             <div>
                <div class="toggle-name" style="font-weight: 500;">${label}</div>
                <div style="font-size:12px; color:var(--text-muted); margin-top:2px">Show ${label} tab</div>
             </div>
          </div>
-         <div class="toggle-label" style="margin: 0;">
-            <input type="checkbox" class="tab-checkbox" value="${key}" ${!isHidden ? 'checked' : ''}>
+         <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="toggle-label" style="margin: 0;">
+                <input type="checkbox" class="tab-checkbox" value="${key}" ${isVisible !== false ? 'checked' : ''}>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+               <button type="button" class="btn icon small" onclick="moveTab(event, this, -1)" style="padding: 2px; height: auto;" title="Move Up">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+               </button>
+               <button type="button" class="btn icon small" onclick="moveTab(event, this, 1)" style="padding: 2px; height: auto;" title="Move Down">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+               </button>
+            </div>
          </div>
       </label>
     `;
 }
+
+// Logic for Up/Down buttons
+window.moveTab = function (event, btnElement, direction) {
+  // Prevent checkbox click
+  event.preventDefault();
+  event.stopPropagation();
+
+  const row = btnElement.closest('.tab-toggle-item');
+  const list = row.parentElement;
+
+  if (direction === -1) {
+    // Move Up
+    const prev = row.previousElementSibling;
+    if (prev) {
+      list.insertBefore(row, prev);
+    }
+  } else if (direction === 1) {
+    // Move Down
+    const next = row.nextElementSibling;
+    if (next) {
+      list.insertBefore(next, row); // This swaps places but visually doesn't work if next is the last element
+      list.insertBefore(row, next.nextSibling); // Properly moves after the next sibling
+    }
+  }
+};
 
 // --- HELPER: Set Model from Chip ---
 window.setModel = function (modelId) {
@@ -520,10 +554,21 @@ window.updateTabVisibility = function () {
   const settings = state.data.settings?.[0];
   if (!settings) return;
 
-  const hiddenStr = settings.hidden_tabs || '';
-  const hiddenList = hiddenStr.split(',').map(s => s.trim());
-  const orderStr = settings.tab_order || '';
-  const orderList = orderStr ? orderStr.split(',').map(s => s.trim()) : [];
+  const layoutStr = settings.nav_layout || '';
+  let orderList = [];
+  let hiddenList = [];
+
+  if (layoutStr) {
+    try {
+      const layoutData = JSON.parse(layoutStr);
+      orderList = layoutData.map(item => item.id);
+      hiddenList = layoutData.filter(item => !item.visible).map(item => item.id);
+    } catch (e) { console.error("Error parsing Nav_Layout in UI:", e); }
+  } else {
+    // Fallback to old keys
+    const hiddenStr = settings.hidden_tabs || '';
+    hiddenList = hiddenStr.split(',').map(s => s.trim());
+  }
 
   // Helper function to reorder DOM nodes inside their parent container
   const reorderNodes = (containerSelector, itemSelector) => {
@@ -858,14 +903,13 @@ window.saveAllSettings = async function (section = 'all') {
   const apiKey = document.getElementById('sApiKey').value;
   const model = document.getElementById('sModel').value;
 
-  // Tab fields
-  const allTabs = ['calendar', 'tasks', 'finance', 'habits', 'diary', 'vision', 'people'];
-  const checkedTabs = Array.from(document.querySelectorAll('.tab-checkbox:checked')).map(cb => cb.value);
-  const hidden = allTabs.filter(t => !checkedTabs.includes(t)).join(',');
-
-  // Read exact order of elements in DOM after drag-and-drop
+  // Read exact order and visibility of elements in DOM
   const tabItemsDOM = Array.from(document.querySelectorAll('.tab-toggle-item'));
-  const currentOrder = tabItemsDOM.map(el => el.dataset.id).filter(id => id).join(',');
+  const navLayoutArray = tabItemsDOM.map(el => {
+    const isVisible = el.querySelector('.tab-checkbox').checked;
+    return { id: el.dataset.id, visible: isVisible };
+  });
+  const navLayoutJSON = JSON.stringify(navLayoutArray);
 
   // Build settings object based on section
   let newSettings = {};
@@ -896,8 +940,7 @@ window.saveAllSettings = async function (section = 'all') {
   }
 
   if (section === 'all' || section === 'tabs') {
-    newSettings.hidden_tabs = hidden;
-    newSettings.tab_order = currentOrder;
+    newSettings.nav_layout = navLayoutJSON;
   }
 
   if (section === 'all' || section === 'notifications') {
