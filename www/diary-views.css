@@ -145,16 +145,15 @@
 .stat-card {
   background: var(--surface-1);
   border-radius: var(--bento-radius-md);
-  padding: var(--space-2);
+  padding: 12px 8px;
   text-align: center;
   position: relative;
-  overflow: hidden;
-  aspect-ratio: 1 / 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-width: 0;
+  min-height: 90px;
 
   /* Multi-layer shadow */
   box-shadow:
@@ -434,8 +433,8 @@
 
 .diary-nav-tabs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  /* Exactly 6 columns for absolute even spacing */
+  grid-template-columns: repeat(5, 1fr);
+  /* Exactly 5 columns for absolute even spacing */
   margin-bottom: var(--space-3);
   padding: 4px;
   background: var(--surface-1);
@@ -443,7 +442,7 @@
   box-shadow: var(--shadow-layer-2);
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 50;
   width: 100%;
   backdrop-filter: blur(8px);
   /* Optional for premium feel if supported */

@@ -365,12 +365,22 @@ function renderSettings() {
           <label class="setting-label">Task Categories</label>
           <p style="font-size:12px; color:var(--text-muted); margin-top:0; margin-bottom:12px;">These categories appear in the task form and filter bar.</p>
           <div id="taskCategoryList" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-            ${(settings.task_categories || 'Personal,Work,Health,Learning,Finance,Other').split(',').map(cat => cat.trim()).filter(Boolean).map(cat => `
-              <div style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;">
-                <span>${cat}</span>
-                <button type="button" onclick="removeTaskCategory(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">×</button>
-              </div>
-            `).join('')}
+            ${(() => {
+      const raw = settings.task_categories || 'Personal,Work,Health,Learning,Finance,Other';
+      let cats;
+      try {
+        const parsed = JSON.parse(raw);
+        cats = Array.isArray(parsed) ? parsed : raw.split(',').map(c => c.trim()).filter(Boolean);
+      } catch (e) {
+        cats = raw.split(',').map(c => c.trim()).filter(Boolean);
+      }
+      return cats.map(cat => `
+                <div style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;">
+                  <span>${cat}</span>
+                  <button type="button" onclick="removeTaskCategory(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">\u00d7</button>
+                </div>
+              `).join('');
+    })()}
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
             <input type="text" id="newTaskCategoryInput" class="input" placeholder="New category name..." style="flex:1;" onkeydown="if(event.key==='Enter'){addTaskCategory(); event.preventDefault();}">

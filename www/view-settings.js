@@ -46,7 +46,10 @@ function renderSettings() {
     diary_show_habits: s.diary_show_habits !== false,
     diary_show_expenses: s.diary_show_expenses !== false,
     // Notification settings
-    habit_summary_time: s.habit_summary_time || '08:00'
+    habit_summary_time: s.habit_summary_time || '08:00',
+    // Tasks settings
+    task_default_view: s.task_default_view || 'expanded',
+    task_categories: s.task_categories || 'Personal,Work,Health,Learning,Finance,Other'
   };
 
   const main = document.getElementById('main');
@@ -263,22 +266,32 @@ function renderSettings() {
             ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
-        <p class="section-description">Toggle modules on or off.</p>
+        <p class="section-description">Toggle and rearrange modules.</p>
         
-        <div class="tab-toggles">
-           ${renderTabToggle('Calendar', 'calendar', settings.hidden_tabs)}
-           ${renderTabToggle('Tasks', 'tasks', settings.hidden_tabs)}
-           ${renderTabToggle('Finance', 'finance', settings.hidden_tabs)}
-           ${renderTabToggle('Habits', 'habits', settings.hidden_tabs)}
-           ${renderTabToggle('Diary', 'diary', settings.hidden_tabs)}
-           ${renderTabToggle('Vision', 'vision', settings.hidden_tabs)}
-           ${renderTabToggle('People', 'people', settings.hidden_tabs)}
+        <div class="tab-toggles" id="tabTogglesList">
+           ${renderTabTogglesOrdered(settings.nav_layout, settings.hidden_tabs)}
         </div>
         <button class="btn primary" onclick="saveAllSettings('tabs')" style="margin-top:12px">Save Tabs</button>
         </div>
       </details>
 
-      <!-- 5. DIARY SETTINGS -->
+      <!-- 5. DASHBOARD LAYOUT -->
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title">${renderIcon('home', null, 'style="width:18px; margin-right:8px;"')} Dashboard Layout</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
+        <p class="section-description">Toggle and rearrange dashboard widgets.</p>
+        
+        <div class="dash-toggles" id="dashTogglesList">
+           ${renderDashboardTogglesOrdered()}
+        </div>
+        <button class="btn primary" onclick="saveAllSettings('dashboard')" style="margin-top:12px">Save Dashboard Layout</button>
+        </div>
+      </details>
+
+      <!-- 6. DIARY SETTINGS -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
             <div class="widget-title">${renderIcon('diary', null, 'style="width:18px; margin-right:8px;"')} Diary Settings</div>
@@ -324,6 +337,58 @@ function renderSettings() {
         </div>
         
         <button class="btn primary" onclick="saveAllSettings('diary')">Save Diary Settings</button>
+        </div>
+      </details>
+
+      <!-- 7. TASKS SETTINGS -->
+      <details class="settings-details" style="display:block;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title">${renderIcon('tasks', null, 'style="width:18px; margin-right:8px;"')} Tasks Settings</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
+        <p class="section-description">Customize your task experience.</p>
+        
+        <!-- Default View -->
+        <div style="margin-bottom:20px;">
+          <label class="setting-label">Default Category View</label>
+          <div class="density-options" id="taskDefaultViewOptions">
+            <button class="density-btn ${settings.task_default_view === 'expanded' ? 'active' : ''}" onclick="selectTaskDefaultView('expanded')">Expanded</button>
+            <button class="density-btn ${settings.task_default_view === 'collapsed' ? 'active' : ''}" onclick="selectTaskDefaultView('collapsed')">Collapsed</button>
+          </div>
+          <input type="hidden" id="sTaskDefaultView" value="${settings.task_default_view || 'expanded'}">
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Whether task categories start collapsed or expanded when you open the Tasks view.</p>
+        </div>
+
+        <!-- Categories -->
+        <div style="margin-bottom:20px;">
+          <label class="setting-label">Task Categories</label>
+          <p style="font-size:12px; color:var(--text-muted); margin-top:0; margin-bottom:12px;">These categories appear in the task form and filter bar.</p>
+          <div id="taskCategoryList" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            ${(() => {
+      const raw = settings.task_categories || 'Personal,Work,Health,Learning,Finance,Other';
+      let cats;
+      try {
+        const parsed = JSON.parse(raw);
+        cats = Array.isArray(parsed) ? parsed : raw.split(',').map(c => c.trim()).filter(Boolean);
+      } catch (e) {
+        cats = raw.split(',').map(c => c.trim()).filter(Boolean);
+      }
+      return cats.map(cat => `
+                <div style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;">
+                  <span>${cat}</span>
+                  <button type="button" onclick="removeTaskCategory(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">\u00d7</button>
+                </div>
+              `).join('');
+    })()}
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" id="newTaskCategoryInput" class="input" placeholder="New category name..." style="flex:1;" onkeydown="if(event.key==='Enter'){addTaskCategory(); event.preventDefault();}">
+            <button class="btn secondary" onclick="addTaskCategory()">+ Add</button>
+          </div>
+        </div>
+
+        <button class="btn primary" onclick="saveAllSettings('tasks')">Save Tasks Settings</button>
         </div>
       </details>
 
@@ -446,23 +511,163 @@ function renderSettings() {
 }
 
 // Helpers
+function renderTabTogglesOrdered(layoutStr, fallbackHiddenStr) {
+  const allTabs = [
+    { id: 'calendar', label: 'Calendar' },
+    { id: 'tasks', label: 'Tasks' },
+    { id: 'finance', label: 'Finance' },
+    { id: 'habits', label: 'Habits' },
+    { id: 'diary', label: 'Diary' },
+    { id: 'vision', label: 'Vision' },
+    { id: 'people', label: 'People' }
+  ];
+
+  let layoutData = [];
+  try {
+    layoutData = layoutStr ? JSON.parse(layoutStr) : [];
+  } catch (e) { console.error("Error parsing Nav_Layout:", e); }
+
+  let orderedTabs = [];
+
+  if (layoutData && layoutData.length > 0) {
+    // Use layout array to define order and visibility
+    layoutData.forEach(itemConfig => {
+      const tabInfo = allTabs.find(t => t.id === itemConfig.id);
+      if (tabInfo) {
+        orderedTabs.push({ ...tabInfo, visible: itemConfig.visible });
+      }
+    });
+    // Add any newly added hardcoded tabs that aren't in layout yet
+    allTabs.forEach(t => {
+      if (!orderedTabs.some(ot => ot.id === t.id)) {
+        orderedTabs.push({ ...t, visible: true });
+      }
+    });
+  } else {
+    // Fallback if Nav_Layout is empty
+    orderedTabs = allTabs.map(t => ({
+      ...t,
+      visible: fallbackHiddenStr ? !fallbackHiddenStr.includes(t.id) : true
+    }));
+  }
+
+  return orderedTabs.map(tab => renderTabToggle(tab.label, tab.id, tab.visible)).join('');
+}
+
+function renderDashboardTogglesOrdered() {
+  const baseConfig = typeof DEFAULT_DASH_CONFIG !== 'undefined' ? DEFAULT_DASH_CONFIG : [
+    { id: 'morning', label: 'Morning Greeting', visible: true },
+    { id: 'theNow', label: 'The Now Focus', visible: true },
+    { id: 'aiBriefing', label: 'Daily Briefing', visible: true },
+    { id: 'vision', label: 'Vision Banner', visible: true },
+    { id: 'kpis', label: 'KPI Cards', visible: true },
+    { id: 'budget', label: 'Budget Alert', visible: true },
+    { id: 'pinnedNotes', label: 'Pinned Notes', visible: true },
+    { id: 'tasks', label: 'High Priority Tasks', visible: true },
+    { id: 'habits', label: 'Habit Tracker', visible: true }
+  ];
+
+  let layoutData = [];
+  const s = state.data.settings?.[0] || {};
+  try {
+    if (s.dashboard_config) {
+      let parsed = s.dashboard_config;
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      layoutData = parsed;
+    }
+  } catch (e) { }
+
+  let orderedWidgets = [];
+  if (layoutData && layoutData.length > 0) {
+    layoutData.forEach(item => {
+      const baseInfo = baseConfig.find(b => b.id === item.id);
+      if (baseInfo) orderedWidgets.push({ ...baseInfo, visible: item.visible });
+    });
+    baseConfig.forEach(b => {
+      if (!orderedWidgets.some(ow => ow.id === b.id)) orderedWidgets.push({ ...b, visible: true });
+    });
+  } else {
+    orderedWidgets = baseConfig.map(b => ({ ...b }));
+  }
+
+  return orderedWidgets.map(w => `
+      <label class="dash-toggle-item" data-id="${w.id}" data-label="${w.label}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface-2); border-radius: 8px; margin-bottom: 8px;">
+         <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+            <div>
+               <div class="toggle-name" style="font-weight: 500;">${w.label}</div>
+            </div>
+         </div>
+         <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="toggle-label" style="margin: 0;">
+                <input type="checkbox" class="dash-checkbox" value="${w.id}" ${w.visible !== false ? 'checked' : ''}>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+               <button type="button" class="btn icon small" onclick="moveTab(event, this, -1)" style="padding: 2px; height: auto;" title="Move Up">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+               </button>
+               <button type="button" class="btn icon small" onclick="moveTab(event, this, 1)" style="padding: 2px; height: auto;" title="Move Down">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+               </button>
+            </div>
+         </div>
+      </label>
+  `).join('');
+}
 function renderColorOption(color, activeColor) {
   const isActive = (activeColor || '#4F46E5').toLowerCase() === color.toLowerCase();
   return `<div class="color-option ${isActive ? 'active' : ''}" style="background-color: ${color}" data-color="${color}"></div>`;
 }
 
-function renderTabToggle(label, key, hiddenStr) {
-  const isHidden = (hiddenStr || '').includes(key);
+function renderTabToggle(label, key, isVisible) {
   return `
-      <label class="tab-toggle-item">
-         <div class="toggle-label">
-            <input type="checkbox" class="tab-checkbox" value="${key}" ${!isHidden ? 'checked' : ''}>
-            <span class="toggle-name">${label}</span>
+      <label class="tab-toggle-item" data-id="${key}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface-2); border-radius: 8px; margin-bottom: 8px;">
+         <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+            <div>
+               <div class="toggle-name" style="font-weight: 500;">${label}</div>
+               <div style="font-size:12px; color:var(--text-muted); margin-top:2px">Show ${label} tab</div>
+            </div>
          </div>
-         <div style="font-size:12px; color:var(--text-muted); margin-top:4px">Show ${label} tab</div>
+         <div style="display: flex; align-items: center; gap: 16px;">
+            <div class="toggle-label" style="margin: 0;">
+                <input type="checkbox" class="tab-checkbox" value="${key}" ${isVisible !== false ? 'checked' : ''}>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+               <button type="button" class="btn icon small" onclick="moveTab(event, this, -1)" style="padding: 2px; height: auto;" title="Move Up">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+               </button>
+               <button type="button" class="btn icon small" onclick="moveTab(event, this, 1)" style="padding: 2px; height: auto;" title="Move Down">
+                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+               </button>
+            </div>
+         </div>
       </label>
     `;
 }
+
+// Logic for Up/Down buttons
+window.moveTab = function (event, btnElement, direction) {
+  // Prevent checkbox click
+  event.preventDefault();
+  event.stopPropagation();
+
+  const row = btnElement.closest('.tab-toggle-item, .dash-toggle-item');
+  const list = row.parentElement;
+
+  if (direction === -1) {
+    // Move Up
+    const prev = row.previousElementSibling;
+    if (prev) {
+      list.insertBefore(row, prev);
+    }
+  } else if (direction === 1) {
+    // Move Down
+    const next = row.nextElementSibling;
+    if (next) {
+      list.insertBefore(next, row); // This swaps places but visually doesn't work if next is the last element
+      list.insertBefore(row, next.nextSibling); // Properly moves after the next sibling
+    }
+  }
+};
 
 // --- HELPER: Set Model from Chip ---
 window.setModel = function (modelId) {
@@ -480,22 +685,66 @@ window.updateTabVisibility = function () {
   const settings = state.data.settings?.[0];
   if (!settings) return;
 
-  const hiddenStr = settings.hidden_tabs || '';
-  const hiddenList = hiddenStr.split(',').map(s => s.trim());
+  const layoutStr = settings.nav_layout || '';
+  let orderList = [];
+  let hiddenList = [];
 
-  // 1. Sidebar Items
-  document.querySelectorAll('.nav-item').forEach(el => {
-    const target = el.dataset.target;
-    if (hiddenList.includes(target)) el.style.display = 'none';
-    else el.style.display = 'flex';
-  });
+  if (layoutStr) {
+    try {
+      const layoutData = JSON.parse(layoutStr);
+      orderList = layoutData.map(item => item.id);
+      hiddenList = layoutData.filter(item => !item.visible).map(item => item.id);
+    } catch (e) { console.error("Error parsing Nav_Layout in UI:", e); }
+  } else {
+    // Fallback to old keys
+    const hiddenStr = settings.hidden_tabs || '';
+    hiddenList = hiddenStr.split(',').map(s => s.trim());
+  }
 
-  // 2. Mobile Nav Items
-  document.querySelectorAll('.mob-item').forEach(el => {
-    const target = el.dataset.target;
-    if (hiddenList.includes(target)) el.style.display = 'none';
-    else el.style.display = 'flex';
-  });
+  // Helper function to reorder DOM nodes inside their parent container
+  const reorderNodes = (containerSelector, itemSelector) => {
+    const container = document.querySelector(containerSelector);
+    if (!container) return;
+
+    // Get all items in the container
+    const items = Array.from(container.querySelectorAll(itemSelector));
+
+    // Sort items based on the orderList
+    items.sort((a, b) => {
+      const targetA = a.dataset.target;
+      const targetB = b.dataset.target;
+
+      // Keep dashboard at the top
+      if (targetA === 'dashboard') return -1;
+      if (targetB === 'dashboard') return 1;
+
+      const indexA = orderList.indexOf(targetA);
+      const indexB = orderList.indexOf(targetB);
+
+      // If a tab isn't in the list, keep its original relative weight (or put at end)
+      if (indexA === -1 && indexB === -1) return 0;
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+
+      return indexA - indexB;
+    });
+
+    // Reattach items to the DOM in the new order (this naturally moves them without detaching completely!)
+    items.forEach(item => {
+      container.appendChild(item);
+
+      // Also apply visibility while we're looping through them
+      const target = item.dataset.target;
+      if (target && target !== 'dashboard') {
+        if (hiddenList.includes(target)) item.style.display = 'none';
+        else item.style.display = 'flex';
+      }
+    });
+  };
+
+  // Run the reordering and visibility updates on both navigation menus
+  reorderNodes('.sidebar nav', '.nav-item');
+  reorderNodes('.mobile-nav', '.mob-item');
 }
 
 // --- APPLY SETTINGS (Unified Logic) ---
@@ -559,6 +808,36 @@ window.selectOrientation = function (orientation) {
   // Apply orientation lock
   applyOrientationLock(orientation);
 }
+
+// --- Task Settings Helpers ---
+window.selectTaskDefaultView = function (view) {
+  const parent = document.getElementById('taskDefaultViewOptions');
+  if (parent) parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
+  event.target.classList.add('active');
+  const hidden = document.getElementById('sTaskDefaultView');
+  if (hidden) hidden.value = view;
+};
+
+window.addTaskCategory = function () {
+  const input = document.getElementById('newTaskCategoryInput');
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) return;
+  const list = document.getElementById('taskCategoryList');
+  if (!list) return;
+  // Check duplicate
+  const existing = Array.from(list.querySelectorAll('span')).map(s => s.textContent.trim().toLowerCase());
+  if (existing.includes(val.toLowerCase())) { input.value = ''; return; }
+  const pill = document.createElement('div');
+  pill.style.cssText = 'display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;';
+  pill.innerHTML = `<span>${val}</span><button type="button" onclick="removeTaskCategory(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">\u00d7</button>`;
+  list.appendChild(pill);
+  input.value = '';
+};
+
+window.removeTaskCategory = function (btn) {
+  btn.closest('div').remove();
+};
 
 // Apply orientation lock
 function applyOrientationLock(orientation) {
@@ -785,10 +1064,23 @@ window.saveAllSettings = async function (section = 'all') {
   const apiKey = document.getElementById('sApiKey').value;
   const model = document.getElementById('sModel').value;
 
-  // Tab fields
-  const allTabs = ['calendar', 'tasks', 'finance', 'habits', 'diary', 'vision', 'people'];
-  const checkedTabs = Array.from(document.querySelectorAll('.tab-checkbox:checked')).map(cb => cb.value);
-  const hidden = allTabs.filter(t => !checkedTabs.includes(t)).join(',');
+  // Read exact order and visibility of elements in DOM
+  const tabItemsDOM = Array.from(document.querySelectorAll('.tab-toggle-item'));
+  const navLayoutArray = tabItemsDOM.map(el => {
+    const isVisible = el.querySelector('.tab-checkbox').checked;
+    return { id: el.dataset.id, visible: isVisible };
+  });
+  const navLayoutJSON = JSON.stringify(navLayoutArray);
+
+  // Read dashboard toggles correctly
+  const dashItemsDOM = Array.from(document.querySelectorAll('.dash-toggle-item'));
+  const dashLayoutArray = dashItemsDOM.map(el => {
+    const isVisible = el.querySelector('.dash-checkbox').checked;
+    // ensure label is preserved
+    const label = el.dataset.label;
+    return { id: el.dataset.id, label: label, visible: isVisible };
+  });
+  const dashLayoutJSON = JSON.stringify(dashLayoutArray);
 
   // Build settings object based on section
   let newSettings = {};
@@ -819,7 +1111,11 @@ window.saveAllSettings = async function (section = 'all') {
   }
 
   if (section === 'all' || section === 'tabs') {
-    newSettings.hidden_tabs = hidden;
+    newSettings.nav_layout = navLayoutJSON;
+  }
+
+  if (section === 'all' || section === 'dashboard') {
+    newSettings.dashboard_config = dashLayoutJSON;
   }
 
   if (section === 'all' || section === 'notifications') {
@@ -872,13 +1168,23 @@ window.saveAllSettings = async function (section = 'all') {
     newSettings.diary_show_expenses = showExpenses;
   }
 
-  const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary' };
+  if (section === 'all' || section === 'tasks') {
+    const taskDefaultView = document.getElementById('sTaskDefaultView')?.value || 'expanded';
+    // Collect categories from pill list
+    const pillSpans = Array.from(document.querySelectorAll('#taskCategoryList > div > span'));
+    const taskCats = pillSpans.map(s => s.textContent.trim()).filter(Boolean).join(',');
+    newSettings.task_default_view = taskDefaultView;
+    newSettings.task_categories = taskCats || 'Personal,Work,Health,Learning,Finance,Other';
+  }
+
+  const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary', tasks: 'Tasks' };
   showToast(section === 'all' ? 'Saving settings...' : `Saving ${sectionNames[section] || 'settings'}...`);
 
   // Optimistic Update
   if (state.data.settings?.[0]) {
     Object.assign(state.data.settings[0], newSettings);
     if (section === 'all' || section === 'appearance') applySettings();
+    if (section === 'all' || section === 'tabs') updateTabVisibility();
   }
 
   const existingId = state.data.settings?.[0]?.id;
