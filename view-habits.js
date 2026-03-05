@@ -124,6 +124,11 @@ function renderHabits() {
           font-size: 14px;
           box-shadow: 0 2px 8px rgba(255,107,53,0.3);
         }
+        @keyframes pulse-gold {
+          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+          70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
         .habit-action-row {
           display: flex;
           gap: 8px;
@@ -342,12 +347,18 @@ function renderHabits() {
                     </div>
                   </div>
                   <div style="display:flex; align-items:center; gap:12px;">
-                    <div class="streak-pill">
-                      ${renderIcon('streak', null, 'style="width:16px;"')} ${stats.streak}
+                    <div class="streak-pill ${stats.streak >= 30 ? 'milestone-30' : (stats.streak >= 7 ? 'milestone-7' : '')}" style="${stats.streak >= 7 ? 'background:linear-gradient(135deg, #FEF08A, #F59E0B); color:#78350F;' : ''} ${stats.streak >= 30 ? 'box-shadow: 0 0 15px rgba(245, 158, 11, 0.5); animation: pulse-gold 2s infinite;' : ''}">
+                      ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : renderIcon('streak', null, 'style="width:16px;"'))} ${stats.streak}
                     </div>
                     ${renderIcon('down', null, 'class="collapse-icon" style="width:20px; color:var(--text-muted);"')}
                   </div>
                 </div>
+
+                ${scheduledToday && !isDoneToday && new Date().getHours() >= 20 ? `
+                  <div style="padding: 0 16px 12px 16px; font-size: 11px; font-weight: 700; color: #EF4444; letter-spacing: 0.5px; text-transform: uppercase;">
+                     <i data-lucide="alert-circle" style="width:12px; vertical-align:middle; margin-right:4px;"></i> Don't break the chain!
+                  </div>
+                ` : ''}
 
                 <div class="habit-card-body">
                   ${h.frequency === 'weekly' && daysList.length > 0 ? `
@@ -417,6 +428,24 @@ function renderHabits() {
   if (typeof window.syncNativeNotifications === 'function') {
     window.syncNativeNotifications();
   }
+
+  // Attach swipe actions
+  _attachHabitSwipes();
+}
+
+function _attachHabitSwipes() {
+  if (typeof window.addSwipeAction !== 'function') return;
+  document.querySelectorAll('.habit-card-new').forEach(row => {
+    const habitId = row.id.replace('habit-card-', '');
+    window.addSwipeAction(row,
+      () => { // Swipe Left -> Delete
+        window.deleteHabit(habitId);
+      },
+      () => { // Swipe Right -> Toggle Done
+        window.toggleHabitOptimistic(habitId);
+      }
+    );
+  });
 }
 
 // Toggle habit card expansion
@@ -460,10 +489,31 @@ window.toggleHabitForDate = async function (habitId, date) {
 
 // Delete habit function
 window.deleteHabit = async function (id) {
-  if (!confirm('Delete this habit?')) return;
-  await apiCall('delete', 'habits', {}, id);
-  showToast('Habit deleted');
-  await refreshData('habits');
+  const h = state.data.habits.find(x => String(x.id) === String(id));
+  if (!h) return;
+
+  const originalHabit = { ...h };
+  const originalIndex = state.data.habits.indexOf(h);
+
+  // Optimistic Remove
+  state.data.habits.splice(originalIndex, 1);
+  renderHabits();
+
+  showToast('Habit deleted', 'default', async () => {
+    // Undo logic
+    state.data.habits.splice(originalIndex, 0, originalHabit);
+    renderHabits();
+    showToast('Habit restored');
+  });
+
+  // Delay actual deletion to allow undo
+  setTimeout(async () => {
+    // check if still deleted
+    const stillDeleted = !state.data.habits.find(x => String(x.id) === String(id));
+    if (stillDeleted) {
+      await apiCall('delete', 'habits', {}, id);
+    }
+  }, 5000);
 };
 
 // Bug fix: This function was called in ogni habit card onclick but was never defined.
@@ -478,12 +528,35 @@ window.toggleHabitOptimistic = async function (id) {
     // Already done today — remove log (un-mark)
     const toDelete = state.data.habit_logs[existingIdx];
     state.data.habit_logs.splice(existingIdx, 1);
+
+    // Haptic interaction
+    if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
+
     renderHabits(); // Instant re-render
     await apiCall('delete', 'habit_logs', {}, toDelete.id);
   } else {
     // Not done today — add log (mark done)
     const newLog = { id: 'temp-' + Date.now(), habit_id: id, date: today, completed: true };
     state.data.habit_logs.push(newLog);
+
+    // Haptic interaction
+    if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
+
+    // Psychological Pattern: Variable Rewards / Operant Conditioning
+    // Calculate new streak to see if we hit a milestone
+    const hBlogs = state.data.habit_logs.filter(l => String(l.habit_id) === String(id));
+    const hDef = state.data.habits.find(h => String(h.id) === String(id));
+    const stats = calculateHabitStats(hBlogs, today, hDef);
+
+    if (stats.streak === 7 || stats.streak === 30 || stats.streak === 100) {
+      if (typeof window.triggerConfettiBurst === 'function') {
+        setTimeout(() => window.triggerConfettiBurst(), 300); // slight delay for visual sync
+      }
+      if (stats.streak === 30 && typeof window.playSuccessSound === 'function') {
+        window.playSuccessSound();
+      }
+    }
+
     renderHabits(); // Instant re-render
     await apiCall('create', 'habit_logs', { habit_id: id, date: today, completed: true });
   }

@@ -129,6 +129,18 @@ function renderTasks(filter = '') {
 
   // Group pending by category
   const pendingByCat = {};
+
+  // Psychological UX: Pre-attentive Priority "Today's 3"
+  // Grab up to 3 highest priority tasks that are pending or recurring today
+  let allPendingAndRecurring = [...pending, ...recurringToday.filter(t => !isRecurringTaskCompletedToday(t))];
+  allPendingAndRecurring.sort((a, b) => (a.priority === 'P1' && b.priority !== 'P1' ? -1 : (a.priority !== 'P1' && b.priority === 'P1' ? 1 : 0)));
+  const todaysThree = allPendingAndRecurring.slice(0, 3);
+  const todaysThreeIds = todaysThree.map(t => t.id);
+
+  // Remove Today's 3 from the main pending lists to avoid duplication
+  pending = pending.filter(t => !todaysThreeIds.includes(t.id));
+  recurringToday = recurringToday.filter(t => !todaysThreeIds.includes(t.id));
+
   pending.forEach(t => {
     const cat = t.category || 'Uncategorized';
     if (!pendingByCat[cat]) pendingByCat[cat] = [];
@@ -340,39 +352,62 @@ function renderTasks(filter = '') {
         <span><strong>${overdueCount} task${overdueCount > 1 ? 's' : ''}</strong> past due date</span>
       </div>` : ''}
 
+      <!-- ── TODAY'S 3 (PINNED) ── -->
+      ${todaysThree.length > 0 ? renderBentoSection('__todays_three__',
+    `${renderIcon('priority', null, 'style="width:13px;color:var(--danger)"')} Today's 3`,
+    todaysThree, false, true) : ''}
+
       <!-- ── RECURRING TODAY ── -->
       ${recurringToday.length > 0 ? renderBentoSection('__recurring_today__',
-    `${renderIcon('repeat', null, 'style="width:13px;"')} Today's Recurring`,
-    recurringToday, true) : ''}
+      `${renderIcon('repeat', null, 'style="width:13px;"')} Today's Recurring`,
+      recurringToday, true) : ''}
 
       <!-- ── PENDING BY CATEGORY ── -->
-      ${pending.length === 0 && recurringToday.length === 0 ? `
+      ${pending.length === 0 && recurringToday.length === 0 && todaysThree.length === 0 ? `
         <div class="bento-card" style="padding:32px;text-align:center;">
           ${renderIcon('check-circle', null, 'style="width:32px;color:var(--success);margin-bottom:8px;display:block;margin-left:auto;margin-right:auto;"')}
           <div style="font-weight:600;color:var(--text-2);margin-bottom:4px;">All clear!</div>
           <div style="font-size:12px;color:var(--text-muted);">No active tasks right now.</div>
         </div>
       ` : `<div class="bento-masonry">` + Object.keys(pendingByCat).sort().map((cat, idx) => {
-      // Wrap in a temporary span just to set animation delay based on index
-      const bentoHtml = renderBentoSection(cat, cat, pendingByCat[cat], false, true);
-      return bentoHtml.replace('class="bento-card"', `class="bento-card" style="animation-delay:${idx * 0.05}s;"`);
-    }).join('') + `</div>`}
+        // Wrap in a temporary span just to set animation delay based on index
+        const bentoHtml = renderBentoSection(cat, cat, pendingByCat[cat], false, true);
+        return bentoHtml.replace('class="bento-card"', `class="bento-card" style="animation-delay:${idx * 0.05}s;"`);
+      }).join('') + `</div>`}
 
       <!-- ── COMPLETED ── -->
       ${_showCompletedTasks && completed.length > 0 ? renderBentoSection('__completed__',
-      `${renderIcon('check-circle', null, 'style="width:13px;"')} Completed`,
-      completed, false) : ''}
+        `${renderIcon('check-circle', null, 'style="width:13px;"')} Completed`,
+        completed, false) : ''}
 
       <!-- ── OTHER RECURRING ── -->
       ${recurringOther.length > 0 ? renderBentoSection('__recurring_other__',
-        `${renderIcon('repeat', null, 'style="width:13px;"')} Other Recurring`,
-        recurringOther, true, false, true) : ''}
+          `${renderIcon('repeat', null, 'style="width:13px;"')} Other Recurring`,
+          recurringOther, true, false, true) : ''}
 
       <!-- bottom spacer -->
       <div style="height:80px;"></div>
     </div>`;
 
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+
+  // Attach swipe actions after render
+  _attachTaskSwipes();
+}
+
+function _attachTaskSwipes() {
+  if (typeof window.addSwipeAction !== 'function') return;
+  document.querySelectorAll('.task-bento-row').forEach(row => {
+    const taskId = row.id.replace('task-row-', '');
+    window.addSwipeAction(row,
+      () => { // Swipe Left -> Delete
+        window.deleteTask(taskId);
+      },
+      () => { // Swipe Right -> Toggle Done
+        window.toggleTaskOptimistic(taskId);
+      }
+    );
+  });
 }
 
 // ─────────────────────────────────────────────────────────
@@ -430,7 +465,7 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
   return `
     <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''}"
          id="task-row-${t.id}"
-         style="border-left:3px solid ${isDone ? 'transparent' : pColor};"
+         style="border-left:${t.priority === 'P1' && !isDone ? '4px solid ' + pColor : (t.priority === 'P2' && !isDone ? '3px solid ' + pColor : '3px solid transparent')};"
          onclick="toggleTaskDetails('${t.id}')">
 
       <!-- Checkbox -->
@@ -447,7 +482,7 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
       <!-- Content -->
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:flex-start;gap:4px;">
-          <span class="task-title-text" style="${isDone ? 'text-decoration:line-through;color:var(--text-muted);' : ''}">
+          <span class="task-title-text" style="${isDone ? 'text-decoration:line-through;color:var(--text-muted);' : ''} ${t.priority === 'P1' && !isDone ? 'font-size: 14.5px; font-weight: 600;' : ''}">
             ${t.title}
           </span>
           ${!_itemSelectionMode ? `
@@ -649,10 +684,21 @@ window.toggleTaskOptimistic = async function (id) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
   const newStatus = t.status === 'completed' ? 'pending' : 'completed';
+
+  // Haptic Feedback
+  if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
+
+  const row = document.getElementById(`task-row-${id}`);
+  if (newStatus === 'completed' && row) {
+    row.classList.add('animating-done');
+    await new Promise(r => setTimeout(r, 400));
+  }
+
   t.status = newStatus;
   _reRenderTaskRow(id);
   try {
     await apiCall('update', 'tasks', { status: newStatus }, id);
+    if (newStatus === 'completed') showToast('Task completed!');
   } catch (e) {
     t.status = newStatus === 'completed' ? 'pending' : 'completed';
     _reRenderTaskRow(id);
@@ -683,6 +729,12 @@ window.openTaskModal = function () {
           ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
         </select>
         <input type="text" class="input" id="mTaskTags" placeholder="Tags">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <select class="input" id="mTaskVisionGoal" style="flex:1;">
+          <option value="">Link to Vision Goal (None)</option>
+          ${(state.data.vision || []).filter(g => g.status !== 'achieved').map(g => `<option value="${g.id}">${g.title || g.goal_name}</option>`).join('')}
+        </select>
       </div>
       <div style="display:flex;gap:8px;">
         <select class="input" id="mTaskPriority">
@@ -772,6 +824,12 @@ window.openEditTask = function (id) {
         <input type="text" class="input" id="mTaskTags" value="${t.tags || ''}" placeholder="Tags">
       </div>
       <div style="display:flex;gap:8px;">
+        <select class="input" id="mTaskVisionGoal" style="flex:1;">
+          <option value="">Link to Vision Goal (None)</option>
+          ${(state.data.vision || []).filter(g => g.status !== 'achieved' || g.id === t.vision_id).map(g => `<option value="${g.id}" ${String(g.id) === String(t.vision_id) ? 'selected' : ''}>${g.title || g.goal_name}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;">
         <select class="input" id="mTaskPriority">
           <option value="P1" ${t.priority === 'P1' ? 'selected' : ''}>● High (P1)</option>
           <option value="P2" ${t.priority === 'P2' ? 'selected' : ''}>● Medium (P2)</option>
@@ -854,16 +912,35 @@ window.addReminderToTask = function (taskId) {
 // Delete Task Function
 // ─────────────────────────────────────────────────────────
 window.deleteTask = async function (id) {
-  if (!confirm('Delete this task?')) return;
+  const t = state.data.tasks.find(x => String(x.id) === String(id));
+  if (!t) return;
 
-  try {
-    await apiCall('delete', 'tasks', {}, id);
-    showToast('Task deleted');
-    await refreshData('tasks');
-  } catch (err) {
-    console.error('Failed to delete task:', err);
-    showToast('Failed to delete task');
-  }
+  const originalTask = { ...t };
+  const originalIndex = state.data.tasks.indexOf(t);
+
+  // Optimistic Remove
+  state.data.tasks.splice(originalIndex, 1);
+  renderTasks(_getSearchValue());
+
+  showToast('Task deleted', 'default', async () => {
+    // Undo logic
+    state.data.tasks.splice(originalIndex, 0, originalTask);
+    renderTasks(_getSearchValue());
+    showToast('Task restored');
+  });
+
+  // Delay actual deletion to allow undo
+  setTimeout(async () => {
+    // check if still deleted (not restored)
+    const stillDeleted = !state.data.tasks.find(x => String(x.id) === String(id));
+    if (stillDeleted) {
+      try {
+        await apiCall('delete', 'tasks', {}, id);
+      } catch (err) {
+        console.error('Failed to delete task:', err);
+      }
+    }
+  }, 5000);
 };
 
 // ─────────────────────────────────────────────────────────

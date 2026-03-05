@@ -137,7 +137,7 @@ function renderVisionCard(g, isAchieved = false) {
         <div class="vision-card-title">${g.title}</div>
         ${g.target_date ? `<div class="vision-card-category">${formatDate(g.target_date)}</div>` : ''}
         <div class="vision-card-progress">
-          <div class="vision-card-progress-bar" style="width:${g.progress || 0}%"></div>
+        <div class="vision-progress-fill" style="--progress-width:${g.progress || 0}%; width:${g.progress || 0}%"></div>
         </div>
       </div>
     </div>
@@ -172,7 +172,7 @@ function renderVisionListItem(g) {
         <div class="vision-list-cat">${g.category || 'Personal'}</div>
         <div class="vision-list-date">${g.target_date ? 'Target: ' + formatDate(g.target_date) : 'No deadline'}</div>
         <div class="vision-list-progress-wrap">
-          <div class="vision-list-progress-bar" style="width:${g.progress || 0}%"></div>
+          <div class="vision-progress-fill" style="--progress-width:${g.progress || 0}%; width:${g.progress || 0}%"></div>
         </div>
       </div>
       ${badgeText ? `<div class="vision-list-badge ${badgeClass}">${badgeText}</div>` : ''}
@@ -212,7 +212,7 @@ function renderTimelineItem(g) {
           ${isAchieved ? ` • ${renderIcon('trophy', null, 'style="width:12px;"')} Achieved` : (daysLeft !== null ? ' • ' + Math.abs(daysLeft) + (daysLeft < 0 ? 'd ago' : 'd left') : '')}
         </div>
         <div class="timeline-progress">
-          <div class="timeline-progress-bar" style="width:${g.progress || 0}%"></div>
+          <div class="vision-progress-fill" style="--progress-width:${g.progress || 0}%; width:${g.progress || 0}%"></div>
         </div>
       </div>
     </div>
@@ -260,7 +260,7 @@ window.openVisionDetail = function (id) {
         <span style="color:var(--primary);font-weight:800">${g.progress || 0}%</span>
       </div>
       <div class="vision-detail-progress-bar-wrap">
-        <div class="vision-detail-progress-fill" style="width:${g.progress || 0}%"></div>
+        <div class="vision-progress-fill" style="--progress-width:${g.progress || 0}%; width:${g.progress || 0}%"></div>
       </div>
     </div>
 
@@ -291,7 +291,8 @@ window.openVisionDetail = function (id) {
       }).filter(Boolean);
 
       if (!linked.length) return '';
-      return `<div style="margin-bottom:16px">
+      return `
+      <div style="margin-bottom:16px">
         <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px; display:flex; align-items:center; gap:4px;">${renderIcon('link', null, 'style="width:14px;"')} Linked Habits</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px">
           ${linked.map(h => `<span style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;background:var(--primary-soft);color:var(--primary);font-size:13px;font-weight:600">
@@ -301,14 +302,33 @@ window.openVisionDetail = function (id) {
       </div>`;
     })()}
 
+    <!-- Linked Tasks -->
+    ${(() => {
+      const linkedTasks = (state.data.tasks || []).filter(t => String(t.vision_id) === String(g.id));
+      if (linkedTasks.length === 0) return '';
+      return `
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px; display:flex; align-items:center; gap:4px;">${renderIcon('check-square', null, 'style="width:14px;"')} Linked Tasks</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${linkedTasks.map(t => `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:var(--surface-2);font-size:13px;">
+             <div style="width:8px;height:8px;border-radius:50%;background:${t.priority === 'P1' ? 'var(--danger)' : (t.priority === 'P2' ? 'var(--warning)' : 'var(--success)')}"></div>
+             <span style="flex:1;${t.status === 'completed' ? 'text-decoration:line-through;opacity:0.6;' : ''}">${t.title}</span>
+             <span style="font-size:10px;color:var(--text-muted);">${t.due_date || ''}</span>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    })()}
+
     <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
       <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Close</button>
+      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden'); setTimeout(() => { openTaskModal(); setTimeout(() => { if(document.getElementById('mTaskVisionGoal')) document.getElementById('mTaskVisionGoal').value = '${g.id}'; }, 100); }, 300);" style="color:var(--primary);border-color:var(--primary); display:flex; align-items:center; gap:6px;">${renderIcon('add', null, 'style="width:14px;"')} Quick Task</button>
       ${hasVideo ? `<button class="btn" onclick="openVideoModal('${sanitizeUrl(g.video_url)}')" style="color:var(--primary);border-color:var(--primary); display:flex; align-items:center; gap:6px;">${renderIcon('play', null, 'style="width:14px;"')} Watch Video</button>` : ''}
       <button class="btn ${g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE' ? 'success' : ''}" onclick="toggleVisionFocus('${g.id}')" style="display:flex; align-items:center; gap:6px; ${g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE' ? '' : 'color:var(--text-2);border-color:var(--border-color)'}">${g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE' ? `${renderIcon('star', null, 'style="width:14px; fill:var(--warning); color:var(--warning);"')}` : `${renderIcon('star', null, 'style="width:14px;"')}`} ${g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE' ? 'Month Focus' : 'Set Focus'}</button>
       <button class="btn" onclick="openEditVision('${g.id}')" style="color:var(--primary);border-color:var(--primary); display:flex; align-items:center; gap:6px;">${renderIcon('edit', null, 'style="width:14px;"')} Edit</button>
       <button class="btn" onclick="deleteVision('${g.id}')" style="color:var(--danger);border-color:var(--danger); display:flex; align-items:center; gap:6px;">${renderIcon('delete', null, 'style="width:14px;"')} Delete</button>
     </div>
   `;
+
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   modal.classList.remove('hidden');
 };
@@ -362,78 +382,78 @@ window.openEditVision = function (id) {
 function buildVisionForm(g) {
   const isEdit = !!g;
   return `
-    <h3 style="margin-bottom:16px;font-size:18px;font-weight:800; display:flex; align-items:center; gap:8px;">${isEdit ? renderIcon('edit', null, 'style="width:20px;"') + ' Edit Goal' : renderIcon('target', null, 'style="width:20px;"') + ' New Vision Goal'}</h3>
+        < h3 style = "margin-bottom:16px;font-size:18px;font-weight:800; display:flex; align-items:center; gap:8px;" > ${isEdit ? renderIcon('edit', null, 'style="width:20px;"') + ' Edit Goal' : renderIcon('target', null, 'style="width:20px;"') + ' New Vision Goal'}</h3 >
 
-    <input class="input" id="mVisTitle" placeholder="Goal Title *" value="${isEdit ? escH(g.title) : ''}">
+          <input class="input" id="mVisTitle" placeholder="Goal Title *" value="${isEdit ? escH(g.title) : ''}">
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <select class="input" id="mVisCat">
-        ${VISION_CATEGORIES.map(c => `<option value="${c}" ${isEdit && g.category === c ? 'selected' : ''}>${c}</option>`).join('')}
-      </select>
-      <input type="date" class="input" id="mVisDate" value="${isEdit ? (g.target_date || '') : ''}">
-    </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <select class="input" id="mVisCat">
+                ${VISION_CATEGORIES.map(c => `<option value="${c}" ${isEdit && g.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+              <input type="date" class="input" id="mVisDate" value="${isEdit ? (g.target_date || '') : ''}">
+            </div>
 
-    <div style="margin-bottom:10px">
-      <label style="font-size:13px;font-weight:600;color:var(--text-2);display:flex;justify-content:space-between;margin-bottom:8px">
-        <span>Progress ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? '(Auto-calculated from habits)' : ''}</span>
-        <strong id="mVisProgressVal" style="color:var(--primary)">${isEdit ? (g.progress || 0) : 0}%</strong>
-      </label>
-      <input type="range" id="mVisProgress" min="0" max="100" value="${isEdit ? (g.progress || 0) : 0}"
-             ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? 'disabled' : ''}
-             oninput="document.getElementById('mVisProgressVal').textContent = this.value + '%'"
-             style="-webkit-appearance:none;appearance:none;width:calc(100% - 4px);display:block;margin:0 2px;height:6px;border-radius:3px;background:var(--surface-3);outline:none;cursor:${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? 'not-allowed; opacity: 0.5' : 'pointer'}">
-    </div>
+            <div style="margin-bottom:10px">
+              <label style="font-size:13px;font-weight:600;color:var(--text-2);display:flex;justify-content:space-between;margin-bottom:8px">
+                <span>Progress ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? '(Auto-calculated from habits)' : ''}</span>
+                <strong id="mVisProgressVal" style="color:var(--primary)">${isEdit ? (g.progress || 0) : 0}%</strong>
+              </label>
+              <input type="range" id="mVisProgress" min="0" max="100" value="${isEdit ? (g.progress || 0) : 0}"
+                ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? 'disabled' : ''}
+                oninput="document.getElementById('mVisProgressVal').textContent = this.value + '%'"
+                style="-webkit-appearance:none;appearance:none;width:calc(100% - 4px);display:block;margin:0 2px;height:6px;border-radius:3px;background:var(--surface-3);outline:none;cursor:${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? 'not-allowed; opacity: 0.5' : 'pointer'}">
+            </div>
 
-    <textarea class="input" id="mVisNotes" placeholder="Notes (optional)" style="height:80px;resize:vertical">${isEdit ? escH(g.notes || '') : ''}</textarea>
+            <textarea class="input" id="mVisNotes" placeholder="Notes (optional)" style="height:80px;resize:vertical">${isEdit ? escH(g.notes || '') : ''}</textarea>
 
-    <!-- Media Attachment Tabs -->
-    <div style="margin-top:14px;margin-bottom:6px;font-size:13px;font-weight:700;color:var(--text-2); display:flex; align-items:center; gap:4px;">${renderIcon('image', null, 'style="width:14px;"')} Attach Media</div>
-    <div class="vision-modal-tabs">
-      <button class="vision-modal-tab active" id="vTabImg" onclick="switchVisionMediaTab('image')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('image', null, 'style="width:14px;"')} Image</button>
-      <button class="vision-modal-tab" id="vTabUrl" onclick="switchVisionMediaTab('url')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('link', null, 'style="width:14px;"')} Image URL</button>
-      <button class="vision-modal-tab" id="vTabVid" onclick="switchVisionMediaTab('video')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('play', null, 'style="width:14px;"')} Video</button>
-    </div>
+            <!-- Media Attachment Tabs -->
+            <div style="margin-top:14px;margin-bottom:6px;font-size:13px;font-weight:700;color:var(--text-2); display:flex; align-items:center; gap:4px;">${renderIcon('image', null, 'style="width:14px;"')} Attach Media</div>
+            <div class="vision-modal-tabs">
+              <button class="vision-modal-tab active" id="vTabImg" onclick="switchVisionMediaTab('image')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('image', null, 'style="width:14px;"')} Image</button>
+              <button class="vision-modal-tab" id="vTabUrl" onclick="switchVisionMediaTab('url')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('link', null, 'style="width:14px;"')} Image URL</button>
+              <button class="vision-modal-tab" id="vTabVid" onclick="switchVisionMediaTab('video')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('play', null, 'style="width:14px;"')} Video</button>
+            </div>
 
-    <!-- Image Upload -->
-    <div id="vPanelImg">
-      <div class="vision-upload-zone" id="vImgZone" onclick="document.getElementById('vImgInput').click()">
-        <input type="file" id="vImgInput" accept="image/*" hidden onchange="handleVisionMedia(this.files,'image')">
-        <span class="vision-upload-icon">${renderIcon('image', null, 'style="width:32px; color:var(--text-muted);"')}</span>
-        <div style="font-weight:600;margin-bottom:4px">Tap to select image</div>
-        <div class="vision-upload-hint">PNG, JPG, WebP · Max 8 MB</div>
-      </div>
-      <div id="vImgPreviewWrap" class="vision-media-preview" style="display:none">
-        <img id="vImgPreview" src="" alt="preview">
-        <button class="vision-media-remove" onclick="clearVisionMedia('image')">✕</button>
-      </div>
-      ${isEdit && g.image_url && !g.image_url.startsWith('data:') ? `<p style="font-size:12px;color:var(--text-muted);margin-top:4px">Current: <a href="${escH(g.image_url)}" target="_blank" style="color:var(--primary)">Open existing image</a></p>` : ''}
-    </div>
+            <!-- Image Upload -->
+            <div id="vPanelImg">
+              <div class="vision-upload-zone" id="vImgZone" onclick="document.getElementById('vImgInput').click()">
+                <input type="file" id="vImgInput" accept="image/*" hidden onchange="handleVisionMedia(this.files,'image')">
+                  <span class="vision-upload-icon">${renderIcon('image', null, 'style="width:32px; color:var(--text-muted);"')}</span>
+                  <div style="font-weight:600;margin-bottom:4px">Tap to select image</div>
+                  <div class="vision-upload-hint">PNG, JPG, WebP · Max 8 MB</div>
+              </div>
+              <div id="vImgPreviewWrap" class="vision-media-preview" style="display:none">
+                <img id="vImgPreview" src="" alt="preview">
+                  <button class="vision-media-remove" onclick="clearVisionMedia('image')">✕</button>
+              </div>
+              ${isEdit && g.image_url && !g.image_url.startsWith('data:') ? `<p style="font-size:12px;color:var(--text-muted);margin-top:4px">Current: <a href="${escH(g.image_url)}" target="_blank" style="color:var(--primary)">Open existing image</a></p>` : ''}
+            </div>
 
-    <!-- URL Tab -->
-    <div id="vPanelUrl" style="display:none">
-      <input type="url" id="mVisImg" class="input" placeholder="https://example.com/image.jpg" value="${isEdit ? escH(g?.image_url?.startsWith('data:') ? '' : (g.image_url || '')) : ''}">
-    </div>
+            <!-- URL Tab -->
+            <div id="vPanelUrl" style="display:none">
+              <input type="url" id="mVisImg" class="input" placeholder="https://example.com/image.jpg" value="${isEdit ? escH(g?.image_url?.startsWith('data:') ? '' : (g.image_url || '')) : ''}">
+            </div>
 
-    <!-- Video Upload -->
-    <div id="vPanelVid" style="display:none">
-      <div class="vision-upload-zone" id="vVidZone" onclick="document.getElementById('vVidInput').click()">
-        <input type="file" id="vVidInput" accept="video/*" hidden onchange="handleVisionMedia(this.files,'video')">
-        <span class="vision-upload-icon">${renderIcon('video', null, 'style="width:32px;height:32px;"')}</span>
-        <div style="font-weight:600;margin-bottom:4px">Tap to select video from storage</div>
-        <div class="vision-upload-hint">MP4, MOV, WebM · Max 200 MB</div>
-      </div>
-      <div id="vVidPreviewWrap" class="vision-media-preview" style="display:none">
-        <video id="vVidPreview" src="" controls style="width:100%;border-radius:12px;max-height:200px"></video>
-        <button class="vision-media-remove" onclick="clearVisionMedia('video')">✕</button>
-      </div>
-      ${isEdit && g.video_url ? `<p style="font-size:12px;color:var(--text-muted);margin-top:4px">Current video attached. Upload new to replace.</p>` : ''}
-    </div>
+            <!-- Video Upload -->
+            <div id="vPanelVid" style="display:none">
+              <div class="vision-upload-zone" id="vVidZone" onclick="document.getElementById('vVidInput').click()">
+                <input type="file" id="vVidInput" accept="video/*" hidden onchange="handleVisionMedia(this.files,'video')">
+                  <span class="vision-upload-icon">${renderIcon('video', null, 'style="width:32px;height:32px;"')}</span>
+                  <div style="font-weight:600;margin-bottom:4px">Tap to select video from storage</div>
+                  <div class="vision-upload-hint">MP4, MOV, WebM · Max 200 MB</div>
+              </div>
+              <div id="vVidPreviewWrap" class="vision-media-preview" style="display:none">
+                <video id="vVidPreview" src="" controls style="width:100%;border-radius:12px;max-height:200px"></video>
+                <button class="vision-media-remove" onclick="clearVisionMedia('video')">✕</button>
+              </div>
+              ${isEdit && g.video_url ? `<p style="font-size:12px;color:var(--text-muted);margin-top:4px">Current video attached. Upload new to replace.</p>` : ''}
+            </div>
 
-    <!-- Habit Linker -->
-    <div style="margin-top:14px">
-      <div style="font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:8px">${renderIcon('link', null, 'style="width:16px;height:16px;margin-right:4px"')} Link Habits</div>
-      <div style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;padding:2px 0">
-        ${(() => {
+            <!-- Habit Linker -->
+            <div style="margin-top:14px">
+              <div style="font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:8px">${renderIcon('link', null, 'style="width:16px;height:16px;margin-right:4px"')} Link Habits</div>
+              <div style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;padding:2px 0">
+                ${(() => {
       const habits = state.data.habits || [];
       // Support legacy string format ("id1,id2") or new JSON format [{"id":"id1", "target":25, "startDate":"2026..."}]
       let existingHabits = [];
@@ -472,26 +492,26 @@ function buildVisionForm(g) {
       }).join('');
     })()
     }
-      </div>
-    </div>
+              </div>
+            </div>
 
-    <!-- Month Focus -->
-    <label style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 14px;background:var(--surface-2);border-radius:12px;cursor:pointer">
-      <input type="checkbox" id="mVisMonthFocus" ${isEdit && (g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE') ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--primary)">
-      <div>
-        <div style="font-size:13px;font-weight:700">⭐ Focus This Month</div>
-        <div style="font-size:11px;color:var(--text-muted)">Pin this goal to the Focus view</div>
-      </div>
-    </label>
+            <!-- Month Focus -->
+            <label style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 14px;background:var(--surface-2);border-radius:12px;cursor:pointer">
+              <input type="checkbox" id="mVisMonthFocus" ${isEdit && (g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE') ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--primary)">
+                <div>
+                  <div style="font-size:13px;font-weight:700">⭐ Focus This Month</div>
+                  <div style="font-size:11px;color:var(--text-muted)">Pin this goal to the Focus view</div>
+                </div>
+            </label>
 
-    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap">
-      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-      ${isEdit && g.status !== 'achieved' ? `<button class="btn success" onclick="markVisionAchieved('${g.id}')">${renderIcon('trophy', null, 'style="width:16px;height:16px;margin-right:4px"')} Mark Achieved</button>` : ''}
-      <button class="btn primary" data-action="${isEdit ? 'update-vision-modal' : 'save-vision-modal'}" ${isEdit ? `data-edit-id="${g.id}"` : ''}>
-        ${isEdit ? 'Update Goal' : 'Save Goal'}
-      </button>
-    </div>
-  `;
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap">
+              <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+              ${isEdit && g.status !== 'achieved' ? `<button class="btn success" onclick="markVisionAchieved('${g.id}')">${renderIcon('trophy', null, 'style="width:16px;height:16px;margin-right:4px"')} Mark Achieved</button>` : ''}
+              <button class="btn primary" data-action="${isEdit ? 'update-vision-modal' : 'save-vision-modal'}" ${isEdit ? `data-edit-id="${g.id}"` : ''}>
+                ${isEdit ? 'Update Goal' : 'Save Goal'}
+              </button>
+            </div>
+            `;
 }
 
 function initVisionFormListeners() {
@@ -775,10 +795,10 @@ function getDaysLeft(target) {
 
 function emptyState() {
   return `<div class="vision-empty">
-    <span class="vision-empty-icon">${renderIcon('target', null, 'style="width:48px;height:48px;"')}</span>
-    <div class="vision-empty-text">No goals found</div>
-    <div class="vision-empty-sub">Try changing your filter or adding a new goal</div>
-  </div>`;
+              <span class="vision-empty-icon">${renderIcon('target', null, 'style="width:48px;height:48px;"')}</span>
+              <div class="vision-empty-text">No goals found</div>
+              <div class="vision-empty-sub">Try changing your filter or adding a new goal</div>
+            </div>`;
 }
 
 function escH(str) {

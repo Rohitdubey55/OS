@@ -2,7 +2,7 @@
 
 let peopleState = {
     view: 'grid',     // grid, timeline
-    sortBy: 'name',   // name, birthday, last_contact, next_interaction, favorite
+    sortBy: 'overdue',   // overdue, name, birthday, last_contact, next_interaction, favorite
     filter: '',
     expandedId: null  // Currently expanded card ID
 };
@@ -34,6 +34,10 @@ function renderPeople() {
         switch (peopleState.sortBy) {
             case 'name':
                 return (a.name || '').localeCompare(b.name || '');
+            case 'overdue':
+                const now = new Date();
+                const getDays = (dateStr) => dateStr ? (now - new Date(dateStr)) / (1000 * 60 * 60 * 24) : 9999;
+                return getDays(b.last_contact) - getDays(a.last_contact); // Highest days ago (most overdue) first
             case 'birthday':
                 if (!a.birthday && !b.birthday) return 0;
                 if (!a.birthday) return 1;
@@ -369,6 +373,33 @@ function renderPeople() {
             .person-card-expanded .person-expand-icon {
                 transform: rotate(180deg);
             }
+            .birthday-banner {
+                background: linear-gradient(135deg, #FEF08A, #F59E0B);
+                border-radius: 12px;
+                padding: 12px 16px;
+                margin-bottom: 12px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+                position: sticky;
+                top: 8px; /* Slight offset from top edge */
+                z-index: 10;
+            }
+            .birthday-banner-icon {
+                font-size: 24px;
+            }
+            .birthday-banner-title {
+                font-size: 14px;
+                font-weight: 800;
+                color: #78350F;
+                margin-bottom: 2px;
+            }
+            .birthday-banner-sub {
+                font-size: 12px;
+                font-weight: 600;
+                color: #92400E;
+            }
         </style>
         
         <div class="people-header">
@@ -541,6 +572,23 @@ function renderPersonCard(p, isExpanded = false) {
     const balance = p._balance || 0;
     const balanceClass = balance > 0 ? 'balance-positive' : (balance < 0 ? 'balance-negative' : 'balance-zero');
 
+    // Calculate Relationship Decay
+    let decayColor = 'var(--text-muted)';
+    let decayTitle = 'No interaction history';
+    if (p.last_contact) {
+        const diffDays = (new Date() - new Date(p.last_contact)) / (1000 * 60 * 60 * 24);
+        if (diffDays <= 14) {
+            decayColor = 'var(--success, #10B981)';
+            decayTitle = 'Active (Contacted within 14 days)';
+        } else if (diffDays <= 30) {
+            decayColor = 'var(--warning, #F59E0B)';
+            decayTitle = 'Fading (Contacted ' + Math.floor(diffDays) + ' days ago)';
+        } else {
+            decayColor = 'var(--danger, #EF4444)';
+            decayTitle = 'At Risk (Contacted ' + Math.floor(diffDays) + ' days ago)';
+        }
+    }
+
     return `
     <div class="card person-card person-card-${isExpanded ? 'expanded' : 'collapsed'}" style="position:relative; border:1px solid var(--border-color); border-radius:12px; overflow:hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.02); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-2) 100%); margin-bottom: 2px;">
        <div class="person-card-header" onclick="window.togglePersonCard('${p.id}')" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; padding:4px 8px; transition:background 0.2s;">
@@ -549,7 +597,9 @@ function renderPersonCard(p, isExpanded = false) {
                    ${(p.name || '?').charAt(0).toUpperCase()}
                </div>
                <div style="min-width:0;">
-                   <div style="font-weight:700; font-size:13px; color:var(--text-primary); letter-spacing:-0.2px; margin-bottom:0px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.name}</div>
+                   <div style="font-weight:700; font-size:13px; color:var(--text-primary); letter-spacing:-0.2px; margin-bottom:0px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                       <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${decayColor}; margin-right:4px;" title="${decayTitle}"></span>${p.name}
+                   </div>
                    <div style="font-size:10px; color:var(--text-muted); margin-top:-2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.relationship || 'Contact'}</div>
                </div>
            </div>

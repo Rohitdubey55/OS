@@ -904,24 +904,22 @@ async function sendUpcomingHabitSummary() {
         if (!window.LocalNotifications) return;
 
         const habits = (state && state.data && state.data.habits) || [];
-        if (habits.length === 0) return;
+        const tasks = (state && state.data && state.data.tasks) || [];
 
         const now = new Date();
         const in24 = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
         const upcoming = [];
 
+        // 1. Gather Habits
         habits.forEach(habit => {
             if (!habit.reminder_time) return;
-
             const t = parseHabitTime(habit.reminder_time);
             if (!t) return;
 
-            // Build a Date for today at the habit's time
             const habitToday = new Date(now);
             habitToday.setHours(t.hours, t.minutes, 0, 0);
 
-            // If already passed today, check tomorrow's occurrence
             let habitTime = habitToday;
             if (habitTime <= now) {
                 const habitTomorrow = new Date(habitToday);
@@ -931,45 +929,49 @@ async function sendUpcomingHabitSummary() {
 
             if (habitTime <= in24) {
                 const timeLabel = `${String(t.hours).padStart(2, '0')}:${String(t.minutes).padStart(2, '0')}`;
-                const emoji = habit.emoji || '⭐';
+                const emoji = habit.icon || '🔥';
                 const name = habit.habit_name || 'Habit';
-                upcoming.push({ habitTime, line: `${emoji} ${name} ${timeLabel}` });
+                upcoming.push({ time: habitTime, line: `${emoji} ${name} (${timeLabel})` });
             }
         });
 
-        if (upcoming.length === 0) return;
+        // 2. Gather High Priority Tasks
+        const highTasks = tasks.filter(t => t.status !== 'completed' && t.priority === 'P1');
+        const taskLines = highTasks.slice(0, 3).map(t => `📌 ${t.title}`);
 
-        // Sort by time
-        upcoming.sort((a, b) => a.habitTime - b.habitTime);
+        if (upcoming.length === 0 && taskLines.length === 0) return;
 
-        const bodyText = upcoming.map(u => u.line).join('\n');
+        // Sort habits by time
+        upcoming.sort((a, b) => a.time - b.time);
 
-        // Request permissions if needed
+        let bodyText = '';
+        if (taskLines.length > 0) {
+            bodyText += 'Top Tasks:\n' + taskLines.join('\n') + '\n\n';
+        }
+        if (upcoming.length > 0) {
+            bodyText += 'Habits:\n' + upcoming.map(u => u.line).join('\n');
+        }
+
+        // Request permissions
         const permStatus = await window.LocalNotifications.checkPermissions();
         if (permStatus.display !== 'granted') {
             await window.LocalNotifications.requestPermissions();
         }
 
-        let soundOption = (window.notificationState && window.notificationState.sound) ? window.notificationState.sound : 'default';
-        let config = {
-            title: "📅 Habits Today",
-            body: bodyText,
-            id: 999999
-        };
-
-        if (soundOption === 'none') {
-            config.sound = null;
-        } else if (soundOption !== 'default' && soundOption !== 'alert') {
-            config.sound = soundOption;
-        }
-
         await window.LocalNotifications.schedule({
-            notifications: [config]
+            notifications: [{
+                id: 1000001,
+                title: '🌅 Your Morning Briefing',
+                body: bodyText,
+                schedule: { at: new Date(Date.now() + 500) },
+                sound: (window.notificationState && window.notificationState.sound === 'none') ? null : 'default',
+                actionTypeId: 'OPEN_DASHBOARD'
+            }]
         });
 
-        console.log('[HabitSummary] Scheduled native summary notification');
+        console.log('[MorningBriefing] Scheduled native notification');
     } catch (e) {
-        console.error('[HabitSummary] Error:', e);
+        console.error('[MorningBriefing] Error:', e);
     }
 }
 

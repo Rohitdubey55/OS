@@ -91,6 +91,24 @@ function formatReminderDateTime(date) {
 
 
 
+// --- LONG PRESS ACTION HELPER ---
+window.addLongPressAction = function (el, callback) {
+    let timer;
+    const start = (e) => {
+        timer = setTimeout(() => {
+            if (typeof triggerHapticBuzz === 'function') triggerHapticBuzz();
+            callback(e);
+        }, 600);
+    };
+    const cancel = () => clearTimeout(timer);
+    el.addEventListener('touchstart', start);
+    el.addEventListener('mousedown', start);
+    el.addEventListener('touchend', cancel);
+    el.addEventListener('touchmove', cancel);
+    el.addEventListener('mouseup', cancel);
+    el.addEventListener('mouseleave', cancel);
+};
+
 // --- API HANDLING ---
 
 async function apiCall(action, sheet, payload = {}, id = null) {
@@ -334,7 +352,7 @@ async function initApp() {
 
 
 
-function showToast(msg, type = 'default') {
+function showToast(msg, type = 'default', undoCallback = null) {
     let t = document.getElementById('toast');
     if (!t) { console.log('Toast:', msg); return; }
 
@@ -345,7 +363,12 @@ function showToast(msg, type = 'default') {
         default: null
     };
 
-    t.innerText = msg;
+    if (undoCallback) {
+        t.innerHTML = `<span>${msg}</span> <button id="toast-undo-btn" style="background:rgba(255,255,255,0.2); border:none; color:white; font-weight:700; border-radius:4px; padding:4px 8px; cursor:pointer; font-size:12px; margin-left:12px;">UNDO</button>`;
+    } else {
+        t.innerText = msg;
+    }
+
     t.style.background = colors[type] || '';
     t.style.color = colors[type] ? 'white' : '';
 
@@ -354,9 +377,44 @@ function showToast(msg, type = 'default') {
     void t.offsetWidth; // force reflow
     t.classList.add('toast-visible');
 
+    if (undoCallback) {
+        document.getElementById('toast-undo-btn').onclick = () => {
+            t.classList.remove('toast-visible'); // Hide immediately immediately
+            undoCallback();
+        }
+    }
+
     clearTimeout(t._hideTimer);
-    t._hideTimer = setTimeout(() => t.classList.remove('toast-visible'), 3000);
+    t._hideTimer = setTimeout(() => t.classList.remove('toast-visible'), undoCallback ? 5000 : 3000);
 }
+
+// Micro-interaction: Save flash
+window.showSaveLock = function () {
+    let lock = document.getElementById('save-lock-flash');
+    if (!lock) {
+        lock = document.createElement('div');
+        lock.id = 'save-lock-flash';
+        lock.innerHTML = typeof renderIcon === 'function' ? renderIcon('save', null, 'style="width:48px; color:white;"') : '💾';
+        Object.assign(lock.style, {
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%) scale(0)',
+            background: 'rgba(0,0,0,0.7)', borderRadius: '24px', padding: '24px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            pointerEvents: 'none', zIndex: '9999', opacity: '0', transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+        });
+        document.body.appendChild(lock);
+    }
+
+    // Trigger animation
+    lock.style.opacity = '1';
+    lock.style.transform = 'translate(-50%, -50%) scale(1)';
+
+    if (navigator.vibrate) navigator.vibrate(20);
+
+    setTimeout(() => {
+        lock.style.opacity = '0';
+        lock.style.transform = 'translate(-50%, -50%) scale(0.5)';
+    }, 600);
+};
 
 /* ─── CONFETTI HELPER ─── */
 window.triggerConfetti = function (duration = 1500) {
@@ -397,6 +455,80 @@ window.triggerConfetti = function (duration = 1500) {
     }
     draw();
 };
+window.triggerConfettiBurst = window.triggerConfetti; // Alias for compatibility
+
+/* ─── FOCUS MODE ─── */
+window.openFocusMode = function () {
+    let focusOverlay = document.getElementById('focusModeOverlay');
+    if (!focusOverlay) {
+        focusOverlay = document.createElement('div');
+        focusOverlay.id = 'focusModeOverlay';
+        focusOverlay.className = 'focus-overlay hidden';
+        document.body.appendChild(focusOverlay);
+    }
+
+    focusOverlay.innerHTML = `
+        <div class="focus-container">
+            <div class="focus-header">
+                <h2>Today's Focus</h2>
+                <button class="btn icon" onclick="closeFocusMode()">${renderIcon('x', null, 'style="width:24px"')}</button>
+            </div>
+            <div id="focusContent">
+                ${renderFocusContent()}
+            </div>
+        </div>
+    `;
+
+    focusOverlay.classList.remove('hidden');
+    if (typeof triggerHapticBuzz === 'function') triggerHapticBuzz();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+};
+
+window.closeFocusMode = function () {
+    const focusOverlay = document.getElementById('focusModeOverlay');
+    if (focusOverlay) focusOverlay.classList.add('hidden');
+};
+
+function renderFocusContent() {
+    const today = new Date().toISOString().slice(0, 10);
+    const tasks = (state.data.tasks || []).filter(t => t.status !== 'completed' && (t.priority === 'P1' || t.due_date === today)).slice(0, 5);
+    const habits = (state.data.habits || []).filter(h => {
+        const todayDayName = new Date().toLocaleDateString('en-US', { weekday: 'short' });
+        if (h.frequency && h.frequency !== 'daily' && !h.frequency.includes(todayDayName)) return false;
+        const exists = (state.data.habit_logs || []).some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(today));
+        return !exists;
+    }).slice(0, 5);
+
+    const taskItems = tasks.map(t => `
+        <div class="focus-item" onclick="closeFocusMode(); routeTo('tasks')">
+            <div class="focus-item-checkbox"></div>
+            <div class="focus-item-text">${t.title}</div>
+            <div class="focus-priority">${t.priority}</div>
+        </div>
+    `).join('');
+
+    const habitItems = habits.map(h => `
+        <div class="focus-item" onclick="closeFocusMode(); routeTo('habits')">
+            <div class="focus-item-icon">${h.icon || '🔥'}</div>
+            <div class="focus-item-text">${h.habit_name}</div>
+        </div>
+    `).join('');
+
+    return `
+        <section class="focus-section">
+            <div class="section-label">Critical Tasks</div>
+            ${taskItems || '<div class="focus-empty">No urgent tasks for today</div>'}
+        </section>
+        <section class="focus-section">
+            <div class="section-label">Habits to Complete</div>
+            ${habitItems || '<div class="focus-empty">All habits for today are done!</div>'}
+        </section>
+        <div style="margin-top:auto; padding:20px; text-align:center;">
+             <button class="btn primary" style="width:100%" onclick="closeFocusMode()">I'm Ready</button>
+        </div>
+    `;
+}
+window.triggerConfettiBurst = window.triggerConfetti; // Alias for compatibility
 
 /* ─── SWIPE ACTION HELPER ─── */
 window.addSwipeAction = function (el, onSwipeLeft, onSwipeRight) {
@@ -1279,12 +1411,15 @@ document.addEventListener('click', async (e) => {
             recurrenceDays = Array.from(checkedBoxes).map(cb => cb.value).join(',');
         }
 
+        const visionId = document.getElementById('mTaskVisionGoal')?.value || '';
+
         if (!title) { showToast("Title required"); return; }
 
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Creating task...");
         await apiCall('create', 'tasks', {
             title, description: desc, category: cat, tags: tags,
+            vision_id: visionId,
             subtasks: JSON.stringify(subtasks),
             priority: prio, due_date: date || '', due_time: time || '',
             duration: duration,
@@ -1339,13 +1474,17 @@ document.addEventListener('click', async (e) => {
             recurrenceDays = Array.from(checkedBoxes).map(cb => cb.value).join(',');
         }
 
+        const visionId = document.getElementById('mTaskVisionGoal')?.value || '';
+
         if (!title) return;
 
         document.getElementById('universalModal').classList.add('hidden');
+        if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating task...");
 
         await apiCall('update', 'tasks', {
             title, description: desc, category: cat, tags: tags,
+            vision_id: visionId,
             subtasks: JSON.stringify(subtasks),
             priority: prio, due_date: date || '', due_time: time,
             duration: duration,
@@ -1367,6 +1506,7 @@ document.addEventListener('click', async (e) => {
 
         if (!amt) return;
         document.getElementById('universalModal').classList.add('hidden');
+        if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating transaction...");
         await apiCall('update', 'expenses', { amount: amt, category: cat, type: type, date: date, source: source, notes: notes, payment_mode: payment_mode }, editId);
         await refreshData('finance');
@@ -1379,6 +1519,7 @@ document.addEventListener('click', async (e) => {
         const current = document.getElementById('mFundCurrent').value;
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
+        if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating fund...");
         await apiCall('update', 'funds', { fund_name: name, target_amount: target, current_amount: current }, editId);
         await refreshData('finance');
@@ -1391,6 +1532,7 @@ document.addEventListener('click', async (e) => {
         const value = document.getElementById('mAssetValue').value;
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
+        if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating asset...");
         await apiCall('update', 'assets', { asset_name: name, type: type, value: value }, editId);
         await refreshData('finance');
@@ -2175,6 +2317,13 @@ function playAlarmSound() {
     audio.currentTime = 0;
     audio.play().catch(e => console.log("Audio play failed", e));
 }
+
+window.playSuccessSound = function () {
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3'); // Cheery win sound
+    const settings = state.data.settings?.[0] || { volume: 100 };
+    audio.volume = (settings.volume || 100) / 100;
+    audio.play().catch(e => console.log("Success sound play failed", e));
+};
 
 // Global test function for Settings page
 window.testAlarmSound = function () {
