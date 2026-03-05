@@ -146,7 +146,7 @@ function renderDashboard() {
       const habitsStr = nowHabits.length > 0 ? nowHabits.map(h => `
         <div style="display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer;" onclick="routeTo('habits')">
           <div style="font-size:16px; flex-shrink:0;">${h.icon || '🔥'}</div>
-          <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${h.name}</span>
+          <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${h.habit_name || h.name || 'Unnamed Habit'}</span>
         </div>
       `).join('') : '<div style="font-size:13px; color:var(--text-muted); padding:8px 0; font-style:italic;">All habits done!</div>';
 
@@ -177,7 +177,7 @@ function renderDashboard() {
       <div class="widget-card ${stateClass}" id="theNowCard" data-widget-id="theNow" style="margin-bottom: 16px;">
          <div class="widget-header" onclick="toggleWidget(this)">
             <div class="widget-title">${renderIcon('goals', null, 'style="width:18px; margin-right:6px; color:var(--primary);"')} The Now</div>
-            <div style="display:flex; align-items:center; gap:10px" onclick="event.stopPropagation()">
+            <div style="display:flex; align-items:center; gap:10px">
                 ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
             </div>
          </div>

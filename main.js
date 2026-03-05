@@ -443,7 +443,9 @@ window.openFocusMode = function () {
     const tasks = (state.data.tasks || []).filter(t => t.status !== 'completed' && t.due_date <= todayStr && t.due_date);
     const events = (state.data.planner || []).filter(e => {
         if (!e.start_datetime) return false;
-        return new Date(e.start_datetime).toISOString().slice(0, 10) === todayStr;
+        const d = new Date(e.start_datetime);
+        if (isNaN(d.getTime())) return false;
+        return d.toISOString().slice(0, 10) === todayStr;
     }).sort((a, b) => (a.start_datetime || '').localeCompare(b.start_datetime || ''));
 
     const overlay = document.createElement('div');
