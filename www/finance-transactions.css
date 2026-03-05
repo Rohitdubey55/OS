@@ -1,0 +1,103 @@
+/* Finance Transactions List Styles */
+
+.transactions-list {
+    margin-top: 24px;
+}
+
+.transactions-list h3 {
+    margin-bottom: 16px;
+    color: var(--text-main);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.transaction-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    margin-bottom: 10px;
+    transition: all 0.25s ease;
+    cursor: pointer;
+}
+
+.transaction-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 16px rgba(79, 70, 229, 0.1);
+    transform: translateY(-2px);
+}
+
+.transaction-date {
+    flex-shrink: 0;
+    width: 52px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 8px 6px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    line-height: 1.4;
+}
+
+.transaction-category {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 2px;
+}
+
+.transaction-source {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.transaction-notes {
+    font-size: 12px;
+    color: var(--text-2);
+    font-style: italic;
+    margin-top: 4px;
+    max-width: 160px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.transaction-amount {
+    font-size: 15px;
+    font-weight: 700;
+    margin-left: auto;
+    padding-right: 12px;
+}
+
+/* Transaction actions hidden - triggered by clicking card */
+.transaction-actions {
+    display: none;
+}
+
+@media (max-width: 600px) {
+    .transaction-card {
+        flex-wrap: wrap;
+        padding: 12px 14px;
+    }
+
+    .transaction-date {
+        width: auto;
+        min-width: 45px;
+    }
+
+    .transaction-details {
+        flex: 1;
+        min-width: 100px;
+    }
+
+    .transaction-amount {
+        order: 2;
+        padding-right: 0;
+    }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "os-master",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "build": "rm -rf www && mkdir www && npx esbuild capacitor-init.js --bundle --minify --outfile=www/capacitor-bundle.js && cp *.html *.js *.css *.png *.svg www/ 2>/dev/null || true && cp -r styles components tools_views plans www/ 2>/dev/null || true"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rohitdubey55/OS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/rohitdubey55/OS/issues"
+  },
+  "homepage": "https://github.com/rohitdubey55/OS#readme",
+  "dependencies": {
+    "@capacitor-community/native-audio": "^8.0.0",
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/core": "^8.1.0",
+    "@capacitor/ios": "^8.1.0",
+    "@capacitor/local-notifications": "^8.0.1",
+    "@capacitor/push-notifications": "^8.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.1.0",
+    "esbuild": "^0.27.3"
+  }
+}
