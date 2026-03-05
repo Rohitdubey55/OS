@@ -169,40 +169,50 @@ function renderDashboard() {
         `;
       }).join('') : '<div style="font-size:13px; color:var(--text-muted); padding:8px 0; font-style:italic;">No upcoming events.</div>';
 
+      const isCollapsed = window.dashWidgetStates['theNow'] === 'collapsed';
+      const stateClass = isCollapsed ? 'collapsed' : '';
+
       // Only show if there is actually something to do, but typically you always want to show it.
       return `
-      <div class="the-now-section" style="margin-bottom: 24px;">
-        <div style="font-size:10px; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:1px; margin-bottom:8px; padding-left:4px;">Action Center</div>
-        <div style="background:var(--surface-1); border-radius:var(--bento-radius-xl); padding:20px; box-shadow:var(--shadow-layer-1), var(--shadow-layer-2); display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:24px;">
-          
-          <!-- Tasks Col -->
-          <div style="display:flex; flex-direction:column;">
-            <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-              ${renderIcon('check', null, 'style="width:16px; color:var(--primary);"')}
-              <span style="font-size:14px; font-weight:700;">Tasks</span>
+      <div class="widget-card ${stateClass}" id="theNowCard" data-widget-id="theNow" style="margin-bottom: 16px;">
+         <div class="widget-header" onclick="toggleWidget(this)">
+            <div class="widget-title">${renderIcon('goals', null, 'style="width:18px; margin-right:6px; color:var(--primary);"')} The Now</div>
+            <div style="display:flex; align-items:center; gap:10px" onclick="event.stopPropagation()">
+                ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
             </div>
-            <div style="display:flex; flex-direction:column;">${tasksStr}</div>
-          </div>
+         </div>
+         <div class="widget-body">
+            <div style="background:var(--surface-1); border-radius:var(--bento-radius-xl); padding:2px 4px; display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:24px;">
+              
+              <!-- Tasks Col -->
+              <div style="display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                  ${renderIcon('check', null, 'style="width:16px; color:var(--primary);"')}
+                  <span style="font-size:14px; font-weight:700;">Tasks</span>
+                </div>
+                <div style="display:flex; flex-direction:column;">${tasksStr}</div>
+              </div>
 
-          <!-- Habits Col -->
-          <div style="display:flex; flex-direction:column;">
-            <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-              ${renderIcon('repeat', null, 'style="width:16px; color:var(--warning);"')}
-              <span style="font-size:14px; font-weight:700;">Habits</span>
+              <!-- Habits Col -->
+              <div style="display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                  ${renderIcon('repeat', null, 'style="width:16px; color:var(--warning);"')}
+                  <span style="font-size:14px; font-weight:700;">Habits</span>
+                </div>
+                <div style="display:flex; flex-direction:column;">${habitsStr}</div>
+              </div>
+
+               <!-- Events Col -->
+              <div style="display:flex; flex-direction:column;">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                  ${renderIcon('calendar', null, 'style="width:16px; color:var(--info);"')}
+                  <span style="font-size:14px; font-weight:700;">Events</span>
+                </div>
+                <div style="display:flex; flex-direction:column;">${eventsStr}</div>
+              </div>
+
             </div>
-            <div style="display:flex; flex-direction:column;">${habitsStr}</div>
-          </div>
-
-           <!-- Events Col -->
-          <div style="display:flex; flex-direction:column;">
-            <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-              ${renderIcon('calendar', null, 'style="width:16px; color:var(--info);"')}
-              <span style="font-size:14px; font-weight:700;">Events</span>
-            </div>
-            <div style="display:flex; flex-direction:column;">${eventsStr}</div>
-          </div>
-
-        </div>
+         </div>
       </div>
       `;
     },
