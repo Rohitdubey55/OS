@@ -263,16 +263,10 @@ function renderSettings() {
             ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
         </summary>
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
-        <p class="section-description">Toggle modules on or off.</p>
+        <p class="section-description">Toggle and rearrange modules (drag to reorder).</p>
         
-        <div class="tab-toggles">
-           ${renderTabToggle('Calendar', 'calendar', settings.hidden_tabs)}
-           ${renderTabToggle('Tasks', 'tasks', settings.hidden_tabs)}
-           ${renderTabToggle('Finance', 'finance', settings.hidden_tabs)}
-           ${renderTabToggle('Habits', 'habits', settings.hidden_tabs)}
-           ${renderTabToggle('Diary', 'diary', settings.hidden_tabs)}
-           ${renderTabToggle('Vision', 'vision', settings.hidden_tabs)}
-           ${renderTabToggle('People', 'people', settings.hidden_tabs)}
+        <div class="tab-toggles" id="tabTogglesList">
+           ${renderTabTogglesOrdered(settings.hidden_tabs, settings.tab_order)}
         </div>
         <button class="btn primary" onclick="saveAllSettings('tabs')" style="margin-top:12px">Save Tabs</button>
         </div>
@@ -439,6 +433,16 @@ function renderSettings() {
     });
   });
 
+  // Enable drag and drop sorting for tabs
+  const tabList = document.getElementById('tabTogglesList');
+  if (tabList && typeof Sortable !== 'undefined') {
+    new Sortable(tabList, {
+      animation: 150,
+      handle: '.drag-handle',
+      ghostClass: 'sortable-ghost'
+    });
+  }
+
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 
   // Load notification settings from localStorage
@@ -446,6 +450,35 @@ function renderSettings() {
 }
 
 // Helpers
+function renderTabTogglesOrdered(hiddenStr, orderStr) {
+  const allTabs = [
+    { id: 'calendar', label: 'Calendar' },
+    { id: 'tasks', label: 'Tasks' },
+    { id: 'finance', label: 'Finance' },
+    { id: 'habits', label: 'Habits' },
+    { id: 'diary', label: 'Diary' },
+    { id: 'vision', label: 'Vision' },
+    { id: 'people', label: 'People' }
+  ];
+
+  let orderedTabs = [...allTabs];
+
+  // If we have a custom order, sort the tabs array to match it
+  if (orderStr) {
+    const orderList = orderStr.split(',').map(s => s.trim());
+    orderedTabs.sort((a, b) => {
+      const indexA = orderList.indexOf(a.id);
+      const indexB = orderList.indexOf(b.id);
+      // If a tab isn't in the orderList (e.g. a new feature), put it at the end
+      if (indexA === -1 && indexB === -1) return 0;
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
+  }
+
+  return orderedTabs.map(tab => renderTabToggle(tab.label, tab.id, hiddenStr)).join('');
+}
 function renderColorOption(color, activeColor) {
   const isActive = (activeColor || '#4F46E5').toLowerCase() === color.toLowerCase();
   return `<div class="color-option ${isActive ? 'active' : ''}" style="background-color: ${color}" data-color="${color}"></div>`;
@@ -454,12 +487,19 @@ function renderColorOption(color, activeColor) {
 function renderTabToggle(label, key, hiddenStr) {
   const isHidden = (hiddenStr || '').includes(key);
   return `
-      <label class="tab-toggle-item">
-         <div class="toggle-label">
-            <input type="checkbox" class="tab-checkbox" value="${key}" ${!isHidden ? 'checked' : ''}>
-            <span class="toggle-name">${label}</span>
+      <label class="tab-toggle-item" data-id="${key}" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface-2); border-radius: 8px; margin-bottom: 8px; cursor: grab;">
+         <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="drag-handle" style="color: var(--text-muted); display: flex; align-items: center;">
+               ${renderIcon('menu', null, 'style="width: 16px;"')}
+            </div>
+            <div>
+               <div class="toggle-name" style="font-weight: 500;">${label}</div>
+               <div style="font-size:12px; color:var(--text-muted); margin-top:2px">Show ${label} tab</div>
+            </div>
          </div>
-         <div style="font-size:12px; color:var(--text-muted); margin-top:4px">Show ${label} tab</div>
+         <div class="toggle-label" style="margin: 0;">
+            <input type="checkbox" class="tab-checkbox" value="${key}" ${!isHidden ? 'checked' : ''}>
+         </div>
       </label>
     `;
 }
@@ -482,20 +522,53 @@ window.updateTabVisibility = function () {
 
   const hiddenStr = settings.hidden_tabs || '';
   const hiddenList = hiddenStr.split(',').map(s => s.trim());
+  const orderStr = settings.tab_order || '';
+  const orderList = orderStr ? orderStr.split(',').map(s => s.trim()) : [];
 
-  // 1. Sidebar Items
-  document.querySelectorAll('.nav-item').forEach(el => {
-    const target = el.dataset.target;
-    if (hiddenList.includes(target)) el.style.display = 'none';
-    else el.style.display = 'flex';
-  });
+  // Helper function to reorder DOM nodes inside their parent container
+  const reorderNodes = (containerSelector, itemSelector) => {
+    const container = document.querySelector(containerSelector);
+    if (!container) return;
 
-  // 2. Mobile Nav Items
-  document.querySelectorAll('.mob-item').forEach(el => {
-    const target = el.dataset.target;
-    if (hiddenList.includes(target)) el.style.display = 'none';
-    else el.style.display = 'flex';
-  });
+    // Get all items in the container
+    const items = Array.from(container.querySelectorAll(itemSelector));
+
+    // Sort items based on the orderList
+    items.sort((a, b) => {
+      const targetA = a.dataset.target;
+      const targetB = b.dataset.target;
+
+      // Keep dashboard at the top
+      if (targetA === 'dashboard') return -1;
+      if (targetB === 'dashboard') return 1;
+
+      const indexA = orderList.indexOf(targetA);
+      const indexB = orderList.indexOf(targetB);
+
+      // If a tab isn't in the list, keep its original relative weight (or put at end)
+      if (indexA === -1 && indexB === -1) return 0;
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+
+      return indexA - indexB;
+    });
+
+    // Reattach items to the DOM in the new order (this naturally moves them without detaching completely!)
+    items.forEach(item => {
+      container.appendChild(item);
+
+      // Also apply visibility while we're looping through them
+      const target = item.dataset.target;
+      if (target && target !== 'dashboard') {
+        if (hiddenList.includes(target)) item.style.display = 'none';
+        else item.style.display = 'flex';
+      }
+    });
+  };
+
+  // Run the reordering and visibility updates on both navigation menus
+  reorderNodes('.sidebar nav', '.nav-item');
+  reorderNodes('.mobile-nav', '.mob-item');
 }
 
 // --- APPLY SETTINGS (Unified Logic) ---
@@ -790,6 +863,10 @@ window.saveAllSettings = async function (section = 'all') {
   const checkedTabs = Array.from(document.querySelectorAll('.tab-checkbox:checked')).map(cb => cb.value);
   const hidden = allTabs.filter(t => !checkedTabs.includes(t)).join(',');
 
+  // Read exact order of elements in DOM after drag-and-drop
+  const tabItemsDOM = Array.from(document.querySelectorAll('.tab-toggle-item'));
+  const currentOrder = tabItemsDOM.map(el => el.dataset.id).filter(id => id).join(',');
+
   // Build settings object based on section
   let newSettings = {};
 
@@ -820,6 +897,7 @@ window.saveAllSettings = async function (section = 'all') {
 
   if (section === 'all' || section === 'tabs') {
     newSettings.hidden_tabs = hidden;
+    newSettings.tab_order = currentOrder;
   }
 
   if (section === 'all' || section === 'notifications') {
