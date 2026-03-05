@@ -154,6 +154,396 @@ select:focus {
     }
 }
 
+/* ─── PAGE SLIDE TRANSITION ─── */
+.page-enter {
+    opacity: 0;
+    transform: translateX(18px);
+    transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.page-enter-active {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.page-exit {
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.page-exit-active {
+    opacity: 0;
+    transform: translateX(-18px);
+}
+
+/* ─── SPRING TOAST (bottom slide-up) ─── */
+#toast {
+    position: fixed;
+    bottom: 84px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface-1, #fff);
+    color: var(--text-1, #111);
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+    z-index: 9999;
+    pointer-events: none;
+    transition: opacity 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    opacity: 0;
+}
+
+#toast.toast-visible {
+    opacity: 1 !important;
+    transform: translateX(-50%) translateY(0) !important;
+}
+
+/* ─── TASK COMPLETION: STRIKETHROUGH SLIDE-IN ─── */
+@keyframes strikeSlide {
+    from {
+        text-decoration-color: transparent;
+        opacity: 0.9;
+    }
+
+    to {
+        text-decoration-color: currentColor;
+        opacity: 0.55;
+    }
+}
+
+.task-done-anim {
+    animation: strikeSlide 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    text-decoration: line-through;
+}
+
+/* ─── HABIT MARK DONE BURST ─── */
+@keyframes checkBurst {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+    }
+
+    40% {
+        transform: scale(1.35);
+        box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+    }
+
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    }
+}
+
+.habit-check-burst {
+    animation: checkBurst 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* ─── HABIT STREAK MILESTONE GLOW ─── */
+@keyframes milestoneGlow {
+
+    0%,
+    100% {
+        box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+    }
+
+    50% {
+        box-shadow: 0 0 20px 6px rgba(255, 200, 50, 0.7), 0 2px 8px rgba(255, 107, 53, 0.4);
+        transform: scale(1.08);
+    }
+}
+
+.streak-milestone {
+    animation: milestoneGlow 1.2s ease-in-out 3;
+}
+
+/* ─── VISION PROGRESS BAR FILL ANIMATION ─── */
+@keyframes fillBar {
+    from {
+        width: 0 !important;
+    }
+
+    to {
+        /* width set by inline style */
+    }
+}
+
+.vision-progress-bar-anim {
+    animation: fillBar 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* ─── COLORED MODAL HEADER BAR ─── */
+.modal-header-bar {
+    margin: -20px -20px 16px -20px;
+    padding: 16px 20px 14px;
+    background: linear-gradient(135deg, var(--primary, #4F46E5), #818cf8);
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-header-bar h3 {
+    margin: 0;
+    color: white;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.modal-header-bar svg,
+.modal-header-bar i {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* ─── CONFETTI CANVAS OVERLAY ─── */
+#confetti-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 9998;
+}
+
+/* ─── SWIPE ROW STYLES ─── */
+.swipe-row-wrap {
+    position: relative;
+    overflow: hidden;
+    border-radius: inherit;
+}
+
+.swipe-row-actions {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.swipe-row-wrap.swiped .swipe-row-actions {
+    opacity: 1;
+}
+
+/* ─── BIRTHDAY BANNER ─── */
+.birthday-banner {
+    background: linear-gradient(135deg, #FF6B6B, #FF8E53);
+    border-radius: 16px;
+    padding: 14px 18px;
+    margin-bottom: 12px;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 4px 20px rgba(255, 107, 107, 0.35);
+    animation: slideUp 0.4s ease;
+}
+
+.birthday-banner-icon {
+    font-size: 28px;
+}
+
+.birthday-banner-title {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.birthday-banner-sub {
+    font-size: 12px;
+    opacity: 0.85;
+    margin-top: 2px;
+}
+
+/* ─── FOCUS MODE OVERLAY ─── */
+.focus-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-main);
+    z-index: 1000;
+    overflow-y: auto;
+    animation: slideUp 0.3s ease;
+    padding: 0 0 80px 0;
+}
+
+.focus-header {
+    padding: 20px;
+    background: linear-gradient(135deg, var(--primary), #818cf8);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.focus-header h2 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.focus-close-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.focus-section {
+    padding: 16px;
+    background: var(--surface-1);
+    margin: 12px 12px 0;
+    border-radius: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.focus-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+/* ─── WEEKLY REVIEW MODAL ─── */
+.weekly-review-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0 16px;
+}
+
+.weekly-stat-card {
+    background: var(--surface-2);
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+}
+
+.weekly-stat-value {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--primary);
+}
+
+.weekly-stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* ─── QUICK LOG POPUP ─── */
+.quick-log-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface-1);
+    border-radius: 20px 20px 0 0;
+    padding: 20px;
+    z-index: 1001;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.15);
+    animation: slideUpSheet 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slideUpSheet {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+.quick-log-handle {
+    width: 36px;
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    margin: 0 auto 16px;
+}
+
+/* ─── DIARY TIMELINE VIEW ─── */
+.diary-timeline {
+    position: relative;
+    padding-left: 28px;
+}
+
+.diary-timeline::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, var(--primary), var(--border-color));
+    border-radius: 2px;
+}
+
+.timeline-entry {
+    position: relative;
+    margin-bottom: 16px;
+    background: var(--surface-1);
+    border-radius: 14px;
+    padding: 12px 14px;
+    border-left: 3px solid var(--primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    animation: slideUp 0.3s ease both;
+}
+
+.timeline-entry::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    top: 18px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary);
+    border: 3px solid var(--bg-main);
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.4);
+}
+
+.timeline-entry-date {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.timeline-entry-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-1);
+}
+
+.timeline-entry-mood {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+
 /* Badge Animations */
 .badge,
 .mood-badge,

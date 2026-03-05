@@ -406,6 +406,20 @@ function renderPeople() {
         </div>
 
         <div style="padding: 0 4px;">
+          ${(() => {
+            const todayMMDD = new Date().toISOString().slice(5, 10); // MM-DD
+            const bdays = (state.data.people || []).filter(p => p.birthday && p.birthday.slice(5, 10) === todayMMDD);
+            if (!bdays.length) return '';
+            const names = bdays.map(p => p.name).join(', ');
+            return `
+            <div class="birthday-banner">
+              <div class="birthday-banner-icon">🎂</div>
+              <div>
+                <div class="birthday-banner-title">🎉 Birthday${bdays.length > 1 ? 's' : ''} Today!</div>
+                <div class="birthday-banner-sub">${names} — Don't forget to wish them!</div>
+              </div>
+            </div>`;
+        })()}
           ${peopleState.view === 'grid' ? renderPeopleGrid(people) : ''}
           ${peopleState.view === 'timeline' ? renderPeopleTimeline(people) : ''}
         </div>

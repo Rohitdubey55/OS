@@ -144,6 +144,7 @@ function renderDiary() {
         <button class="nav-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')" title="All Entries">
           ${renderIcon('list', null, 'class="nav-icon"')}
         </button>
+        <button class="nav-tab ${currentDiaryView === 'timeline' ? 'active' : ''}" onclick="switchDiaryView('timeline')" title="Timeline" style="font-size:16px;">🕐</button>
         <button class="nav-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')" title="Calendar">
           ${renderIcon('calendar', null, 'class="nav-icon"')}
         </button>
@@ -162,6 +163,7 @@ function renderDiary() {
       <div class="diary-content">
         ${currentDiaryView === 'home' ? renderHomeContent(sorted) : ''}
         ${currentDiaryView === 'list' ? renderListView(sorted) : ''}
+        ${currentDiaryView === 'timeline' ? renderTimelineView(sorted) : ''}
         ${currentDiaryView === 'calendar' ? renderCalendarView(entries) : ''}
         ${currentDiaryView === 'yearly' ? renderYearlyView(entries) : ''}
         ${currentDiaryView === 'insights' ? renderInsightsView(entries) : ''}
@@ -399,6 +401,63 @@ function renderListView(sorted) {
     </div>
     <div class="entries-list-full">
       ${sorted.map(entry => renderEntryCard(entry)).join('')}
+    </div>
+  `;
+}
+
+// Render timeline view — mood colored vertical timeline
+function renderTimelineView(sorted) {
+  if (sorted.length === 0) {
+    return `<div class="empty-list"><p>No entries yet. Start writing!</p></div>`;
+  }
+
+  const getMoodColor = (score) => {
+    const s = Number(score || 5);
+    if (s >= 8) return '#10B981';
+    if (s >= 5) return '#F59E0B';
+    return '#EF4444';
+  };
+
+  const getMoodBg = (score) => {
+    const s = Number(score || 5);
+    if (s >= 8) return 'rgba(16,185,129,0.10)';
+    if (s >= 5) return 'rgba(245,158,11,0.10)';
+    return 'rgba(239,68,68,0.10)';
+  };
+
+  return `
+    <div class="view-header-row" style="margin-bottom:16px;">
+      <div class="header-title">
+        <h2>🕐 Timeline</h2>
+      </div>
+      <div class="list-stats">
+        <span class="stat-badge">📝 ${sorted.length} entries</span>
+      </div>
+    </div>
+    <div class="diary-timeline">
+      ${sorted.map((entry, i) => {
+    const moodColor = getMoodColor(entry.mood_score);
+    const moodBg = getMoodBg(entry.mood_score);
+    const score = Number(entry.mood_score || 5);
+    const dateStr = entry.date ? new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    const preview = (entry.text || '').substring(0, 200);
+    const tags = entry.tags ? entry.tags.split(/[,\s]+/).filter(t => t).slice(0, 3) : [];
+
+    return `
+          <div class="timeline-entry" style="border-left-color:${moodColor}; background:${moodBg}; animation-delay:${i * 0.05}s;">
+            <div class="timeline-entry-date">${dateStr}</div>
+            <div class="timeline-entry-text">${preview}${(entry.text || '').length > 200 ? '...' : ''}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:6px;">
+              <div style="display:flex;gap:4px;">
+                ${tags.map(t => `<span style="font-size:10px;padding:2px 7px;background:var(--surface-2);border-radius:10px;color:var(--text-muted);">#${t}</span>`).join('')}
+              </div>
+              <div class="timeline-entry-mood" style="background:${moodBg};color:${moodColor};">
+                ${getMoodEmoji(score)} ${score}/10
+              </div>
+            </div>
+            <button style="position:absolute;top:10px;right:10px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:14px;" onclick="openEditDiary('${entry.id}')">✏️</button>
+          </div>`;
+  }).join('')}
     </div>
   `;
 }

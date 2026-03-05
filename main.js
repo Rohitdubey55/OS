@@ -334,34 +334,345 @@ async function initApp() {
 
 
 
-function showToast(msg) {
+function showToast(msg, type = 'default') {
+    let t = document.getElementById('toast');
+    if (!t) { console.log('Toast:', msg); return; }
 
-    const t = document.getElementById('toast');
+    // Type styles
+    const colors = {
+        success: 'linear-gradient(135deg,#10B981,#059669)',
+        error: 'linear-gradient(135deg,#EF4444,#DC2626)',
+        default: null
+    };
 
-    if (t) {
+    t.innerText = msg;
+    t.style.background = colors[type] || '';
+    t.style.color = colors[type] ? 'white' : '';
 
-        t.innerText = msg;
+    // Spring slide-up animation
+    t.classList.remove('toast-visible');
+    void t.offsetWidth; // force reflow
+    t.classList.add('toast-visible');
 
-        t.style.opacity = 1;
-
-        setTimeout(() => t.style.opacity = 0, 3000);
-
-    } else {
-
-        console.log("Toast:", msg);
-
-    }
-
+    clearTimeout(t._hideTimer);
+    t._hideTimer = setTimeout(() => t.classList.remove('toast-visible'), 3000);
 }
+
+/* ─── CONFETTI HELPER ─── */
+window.triggerConfetti = function (duration = 1500) {
+    let canvas = document.getElementById('confetti-canvas');
+    if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.id = 'confetti-canvas';
+        document.body.appendChild(canvas);
+    }
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    const pieces = Array.from({ length: 80 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * -canvas.height,
+        w: 8 + Math.random() * 8,
+        h: 4 + Math.random() * 4,
+        color: ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#C77DFF', '#FF9A3C'][Math.floor(Math.random() * 6)],
+        rot: Math.random() * 360,
+        vx: (Math.random() - 0.5) * 3,
+        vy: 2 + Math.random() * 4,
+        vr: (Math.random() - 0.5) * 6
+    }));
+    const start = Date.now();
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        pieces.forEach(p => {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rot * Math.PI / 180);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+            ctx.restore();
+            p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+        });
+        if (Date.now() - start < duration) requestAnimationFrame(draw);
+        else { ctx.clearRect(0, 0, canvas.width, canvas.height); canvas.remove(); }
+    }
+    draw();
+};
+
+/* ─── SWIPE ACTION HELPER ─── */
+window.addSwipeAction = function (el, onSwipeLeft, onSwipeRight) {
+    let startX = 0, startY = 0, moved = false;
+    el.addEventListener('touchstart', e => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; moved = false; }, { passive: true });
+    el.addEventListener('touchmove', e => {
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        if (Math.abs(dy) > Math.abs(dx)) return; // ignore vertical scrolls
+        moved = true;
+        if (dx < -30 && onSwipeLeft) el.style.transform = `translateX(${Math.max(dx, -80)}px)`;
+        if (dx > 30 && onSwipeRight) el.style.transform = `translateX(${Math.min(dx, 80)}px)`;
+    }, { passive: true });
+    el.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].clientX - startX;
+        el.style.transition = 'transform 0.2s ease';
+        el.style.transform = 'translateX(0)';
+        setTimeout(() => el.style.transition = '', 200);
+        if (!moved) return;
+        if (dx < -60 && onSwipeLeft) { setTimeout(onSwipeLeft, 150); }
+        if (dx > 60 && onSwipeRight) { setTimeout(onSwipeRight, 150); }
+    });
+};
 
 
 
 function isoDate() { return new Date().toISOString().slice(0, 10); }
 
+/* ═══════════════════════════════════════════════
+   🎯  FOCUS MODE — today's habits + tasks + event
+═══════════════════════════════════════════════ */
+window.openFocusMode = function () {
+    const todayStr = isoDate();
+    const habits = (state.data.habits || []).filter(h => {
+        if (!h.frequency || h.frequency === 'daily') return true;
+        if (h.frequency === 'weekly' && h.days) {
+            const d = new Date().getDay();
+            const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d];
+            return h.days.split(',').map(s => s.trim()).includes(day);
+        }
+        return true;
+    });
+    const logs = state.data.habit_logs || [];
+    const tasks = (state.data.tasks || []).filter(t => t.status !== 'completed' && t.due_date <= todayStr && t.due_date);
+    const events = (state.data.planner || []).filter(e => {
+        if (!e.start_datetime) return false;
+        return new Date(e.start_datetime).toISOString().slice(0, 10) === todayStr;
+    }).sort((a, b) => (a.start_datetime || '').localeCompare(b.start_datetime || ''));
+
+    const overlay = document.createElement('div');
+    overlay.id = 'focus-overlay';
+    overlay.className = 'focus-overlay';
+    overlay.innerHTML = `
+    <div class="focus-header">
+      <h2>⚡ Focus Mode</h2>
+      <button class="focus-close-btn" onclick="document.getElementById('focus-overlay').remove()">✕</button>
+    </div>
+    ${events.length > 0 ? `
+    <div class="focus-section">
+      <div class="focus-section-title">📅 Next Event</div>
+      <div style="font-weight:600; font-size:15px;">${events[0].title}</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${new Date(events[0].start_datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+    </div>` : ''}
+    <div class="focus-section">
+      <div class="focus-section-title">✅ Due Tasks (${tasks.length})</div>
+      ${tasks.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;">All done! 🎉</div>' :
+            tasks.slice(0, 5).map(t => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color);">
+          <div style="width:18px;height:18px;border-radius:50%;border:2px solid var(--primary);cursor:pointer;flex-shrink:0;" onclick="toggleTaskOptimistic('${t.id}');this.style.background='var(--primary)';"></div>
+          <span style="font-size:14px;font-weight:500;">${t.title}</span>
+          <span style="font-size:11px;color:var(--danger);margin-left:auto;">${t.due_date}</span>
+        </div>`).join('')}
+    </div>
+    <div class="focus-section">
+      <div class="focus-section-title">🔥 Today's Habits (${habits.length})</div>
+      ${habits.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;">No habits today.</div>' :
+            habits.map(h => {
+                const done = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(todayStr));
+                return `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color);">
+            <div style="width:18px;height:18px;border-radius:50%;${done ? 'background:var(--primary);border:2px solid var(--primary);' : 'border:2px solid var(--border-color);'}cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;" onclick="toggleHabitOptimistic('${h.id}');this.style.background='var(--primary)';this.style.borderColor='var(--primary)';">
+              ${done ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+            </div>
+            <span style="font-size:14px;font-weight:500;${done ? 'text-decoration:line-through;opacity:0.5;' : ''}">${h.habit_name}</span>
+          </div>`;
+            }).join('')}
+    </div>
+  `;
+    document.body.appendChild(overlay);
+};
+
+/* ═══════════════════════════════════════════════
+   🧾  QUICK LOG — log without navigating
+═══════════════════════════════════════════════ */
+window.showQuickLog = function (type = 'expense') {
+    document.getElementById('quick-log-sheet')?.remove();
+    const sheet = document.createElement('div');
+    sheet.id = 'quick-log-sheet';
+    sheet.className = 'quick-log-sheet';
+
+    const content = {
+        expense: `
+      <div class="quick-log-handle"></div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:14px;">💸 Quick Expense</div>
+      <input type="number" id="ql-amount" class="input" placeholder="Amount (₹)" autofocus style="margin-bottom:8px;">
+      <input type="text" id="ql-note" class="input" placeholder="What for? (e.g. Coffee)" style="margin-bottom:14px;">
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary" style="flex:1;" onclick="document.getElementById('quick-log-sheet').remove()">Cancel</button>
+        <button class="btn primary" style="flex:1;" onclick="window._quickSaveExpense()">Save ₹</button>
+      </div>`,
+        note: `
+      <div class="quick-log-handle"></div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:14px;">📌 Quick Note</div>
+      <input type="text" id="ql-title" class="input" placeholder="Title" style="margin-bottom:8px;">
+      <textarea id="ql-note" class="input" placeholder="Note content..." rows="3" style="margin-bottom:14px;"></textarea>
+      <div style="display:flex;gap:8px;">
+        <button class="btn secondary" style="flex:1;" onclick="document.getElementById('quick-log-sheet').remove()">Cancel</button>
+        <button class="btn primary" style="flex:1;" onclick="window._quickSaveNote()">Save Note</button>
+      </div>`,
+        habit: `
+      <div class="quick-log-handle"></div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:12px;">🔥 Quick Habit Log</div>
+      <div style="display:flex;flex-direction:column;gap:8px;max-height:250px;overflow-y:auto;margin-bottom:14px;">
+        ${(state.data.habits || []).map(h => {
+            const done = (state.data.habit_logs || []).some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(isoDate()));
+            return `<div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--surface-2);border-radius:10px;cursor:pointer;${done ? 'opacity:0.5' : ''}" onclick="toggleHabitOptimistic('${h.id}'); showToast('${h.habit_name} logged!','success'); this.style.opacity='0.5';">
+            <div style="font-size:20px;">${done ? '✅' : '⬜'}</div>
+            <div style="font-weight:500;">${h.habit_name}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <button class="btn secondary" style="width:100%;" onclick="document.getElementById('quick-log-sheet').remove()">Done</button>`
+    };
+
+    sheet.innerHTML = content[type] || content.expense;
+    document.body.appendChild(sheet);
+
+    window._quickSaveExpense = async () => {
+        const amount = document.getElementById('ql-amount')?.value;
+        const note = document.getElementById('ql-note')?.value || 'Quick expense';
+        if (!amount) { showToast('Enter amount', 'error'); return; }
+        await apiCall('create', 'expenses', { amount: Number(amount), type: 'expense', date: isoDate(), notes: note, category: 'General' });
+        const newExp = { id: 'tmp-' + Date.now(), amount: Number(amount), type: 'expense', date: isoDate(), notes: note, category: 'General' };
+        if (!state.data.expenses) state.data.expenses = [];
+        state.data.expenses.push(newExp);
+        document.getElementById('quick-log-sheet').remove();
+        showToast('₹' + amount + ' logged!', 'success');
+    };
+
+    window._quickSaveNote = async () => {
+        const title = document.getElementById('ql-title')?.value || 'Quick Note';
+        const note = document.getElementById('ql-note')?.value || '';
+        if (!note.trim()) { showToast('Enter note content', 'error'); return; }
+        await apiCall('create', 'notes', { title, content: note, pinned: true, date: isoDate() });
+        if (!state.data.notes) state.data.notes = [];
+        state.data.notes.push({ id: 'tmp-' + Date.now(), title, content: note, pinned: true, date: isoDate() });
+        document.getElementById('quick-log-sheet').remove();
+        showToast('Note saved & pinned!', 'success');
+    };
+
+    // Close on outside tap
+    setTimeout(() => {
+        const backdrop = document.createElement('div');
+        backdrop.style.cssText = 'position:fixed;inset:0;z-index:1000;';
+        backdrop.onclick = () => { sheet.remove(); backdrop.remove(); };
+        document.body.insertBefore(backdrop, sheet);
+        sheet.style.zIndex = '1001';
+    }, 50);
+};
+
+/* ═══════════════════════════════════════════════
+   📊  WEEKLY REVIEW — Sunday summary modal
+═══════════════════════════════════════════════ */
+window.openWeeklyReview = function () {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - 6);
+    const startStr = startOfWeek.toISOString().slice(0, 10);
+    const todayStr = isoDate();
+
+    const tasks = state.data.tasks || [];
+    const habits = state.data.habits || [];
+    const logs = state.data.habit_logs || [];
+    const expenses = state.data.expenses || [];
+    const diary = state.data.diary || [];
+
+    const doneTasksThisWeek = tasks.filter(t => t.status === 'completed' && t.due_date >= startStr && t.due_date <= todayStr).length;
+    const weekHabitsTotal = logs.filter(l => (l.date || '').slice(0, 10) >= startStr).length;
+    const weekSpend = expenses.filter(e => e.type === 'expense' && (e.date || '').slice(0, 10) >= startStr).reduce((s, e) => s + Number(e.amount), 0);
+    const weekDiary = diary.filter(d => (d.date || '').slice(0, 10) >= startStr).length;
+
+    const modal = document.getElementById('universalModal');
+    const box = modal.querySelector('.modal-box');
+
+    const dateRange = `${startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
+    box.innerHTML = `
+    <div class="modal-header-bar" style="background:linear-gradient(135deg,#7C3AED,#4F46E5);">
+      <h3>📊 Weekly Review</h3>
+      <span style="color:rgba(255,255,255,0.7);font-size:12px;margin-left:auto;">${dateRange}</span>
+    </div>
+    <div class="weekly-review-grid">
+      <div class="weekly-stat-card">
+        <div class="weekly-stat-value" style="color:var(--success);">${doneTasksThisWeek}</div>
+        <div class="weekly-stat-label">Tasks Completed</div>
+      </div>
+      <div class="weekly-stat-card">
+        <div class="weekly-stat-value" style="color:#FF6B35;">${weekHabitsTotal}</div>
+        <div class="weekly-stat-label">Habit Logs</div>
+      </div>
+      <div class="weekly-stat-card">
+        <div class="weekly-stat-value" style="color:var(--danger);">₹${weekSpend.toLocaleString()}</div>
+        <div class="weekly-stat-label">Spent This Week</div>
+      </div>
+      <div class="weekly-stat-card">
+        <div class="weekly-stat-value" style="color:var(--primary);">${weekDiary}</div>
+        <div class="weekly-stat-label">Diary Entries</div>
+      </div>
+    </div>
+    <div style="text-align:center;font-size:14px;color:var(--text-muted);margin-bottom:16px;">
+      ${doneTasksThisWeek === 0 && weekHabitsTotal < 3 ? "Let's do better next week 💪" :
+            doneTasksThisWeek >= 5 ? "Incredible week! 🚀 You crushed it!" :
+                "Good progress this week! Keep it up 🌟"}
+    </div>
+    <button class="btn primary" style="width:100%;" onclick="document.getElementById('universalModal').classList.add('hidden')">
+      Close Review
+    </button>
+  `;
+    modal.classList.remove('hidden');
+};
+
+/* ═══════════════════════════════════════════════
+   🌅  MORNING BRIEFING — 8am push notification
+═══════════════════════════════════════════════ */
+function scheduleMorningBriefing() {
+    const now = new Date();
+    const target = new Date(now);
+    target.setHours(8, 0, 0, 0);
+    if (now >= target) target.setDate(target.getDate() + 1);
+    const delay = target - now;
+
+    setTimeout(() => {
+        const todayStr = isoDate();
+        const pendingTasks = (state.data.tasks || []).filter(t => t.status !== 'completed' && t.due_date === todayStr).slice(0, 3);
+        const pendingHabits = (state.data.habits || []).filter(h => {
+            if (!h.frequency || h.frequency === 'daily') return true;
+            const d = new Date().getDay();
+            const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d];
+            return h.frequency === 'weekly' && h.days ? h.days.split(',').map(s => s.trim()).includes(day) : true;
+        });
+
+        const taskNames = pendingTasks.map(t => t.title).join(', ') || 'No tasks due today';
+        const body = `${pendingHabits.length} habits to do. Tasks: ${taskNames}`;
+
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('☀️ Good morning! Your daily briefing:', { body, icon: '/icon-192.png' });
+        }
+        // Also re-schedule for tomorrow
+        scheduleMorningBriefing();
+    }, delay);
+}
+
+// Auto-trigger Weekly Review on Sundays (once per session)
+(function checkWeeklyReview() {
+    const day = new Date().getDay(); // 0 = Sunday
+    const lastShown = localStorage.getItem('weeklyReviewShown');
+    const todayStr = isoDate();
+    if (day === 0 && lastShown !== todayStr) {
+        setTimeout(() => {
+            openWeeklyReview();
+            localStorage.setItem('weeklyReviewShown', todayStr);
+        }, 3000);
+    }
+})();
 
 
-
-// --- ROUTING LISTENER ---
 window.addEventListener('hashchange', () => {
     const view = window.location.hash.slice(1);
     if (view && view !== state.view) {

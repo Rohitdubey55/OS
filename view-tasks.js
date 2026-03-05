@@ -255,6 +255,10 @@ function renderTasks(filter = '') {
           <h2 class="page-title">Tasks</h2>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn secondary" onclick="window._taskFiltersOpen=!window._taskFiltersOpen;renderTasks(_getSearchValue())" style="position:relative;">
+            ${renderIcon('tags', null, 'style="width:14px;margin-right:4px;"')}Filters
+            ${(_taskPriorityFilter !== 'All' || _taskCategory !== 'All') ? `<span style="position:absolute;top:-4px;right:-4px;width:8px;height:8px;background:var(--primary);border-radius:50%;"></span>` : ''}
+          </button>
           <button class="btn secondary" onclick="openCategoryManager()">
             ${renderIcon('tags', null, 'style="width:14px;margin-right:4px;"')}Categories
           </button>
@@ -289,42 +293,44 @@ function renderTasks(filter = '') {
         </div>
       </div>
 
-      <!-- ── FILTERS ── -->
-      <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
-        <!-- Status -->
-        <div class="segmented-control" style="flex:0 0 auto;">
-          <button class="range-btn ${!_showCompletedTasks ? 'active' : ''}"
-            onclick="_showCompletedTasks=false;renderTasks(_getSearchValue())">Active</button>
-          <button class="range-btn ${_showCompletedTasks ? 'active' : ''}"
-            onclick="_showCompletedTasks=true;renderTasks(_getSearchValue())">Done</button>
+      <!-- ── COLLAPSIBLE FILTERS ── -->
+      <div id="task-filter-panel" style="overflow:hidden; transition:max-height 0.3s ease, opacity 0.3s ease; max-height:${window._taskFiltersOpen ? '200px' : '0'}; opacity:${window._taskFiltersOpen ? '1' : '0'}; margin-bottom:${window._taskFiltersOpen ? '12px' : '0'};">
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:10px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px;">
+          <!-- Status -->
+          <div class="segmented-control" style="flex:0 0 auto;">
+            <button class="range-btn ${!_showCompletedTasks ? 'active' : ''}"
+              onclick="_showCompletedTasks=false;renderTasks(_getSearchValue())">Active</button>
+            <button class="range-btn ${_showCompletedTasks ? 'active' : ''}"
+              onclick="_showCompletedTasks=true;renderTasks(_getSearchValue())">Done</button>
+          </div>
+
+          <!-- Priority dot filters -->
+          <div style="display:flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border-color);border-radius:20px;padding:5px 10px;">
+            <button onclick="_taskPriorityFilter='All';renderTasks(_getSearchValue())"
+              style="font-size:11px;font-weight:600;background:none;border:none;cursor:pointer;padding:0 4px;color:${_taskPriorityFilter === 'All' ? 'var(--primary)' : 'var(--text-muted)'};">All</button>
+            ${['P1', 'P2', 'P3'].map(p => `
+              <button class="filter-dot-btn ${_taskPriorityFilter === p ? 'active' : ''}"
+                style="background:${PRIORITY_COLOR[p]}; color:${PRIORITY_COLOR[p]};"
+                onclick="_taskPriorityFilter='${p}';renderTasks(_getSearchValue())"
+                title="${PRIORITY_LABEL[p]}"></button>
+            `).join('')}
+          </div>
+
+          <!-- Category -->
+          <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
+            onchange="_taskCategory=this.value;renderTasks(_getSearchValue())">
+            ${allCats.map(c => `<option value="${c}" ${c === _taskCategory ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+
+          <!-- Sort -->
+          <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
+            onchange="_taskSort=this.value;renderTasks(_getSearchValue())">
+            <option value="priority" ${_taskSort === 'priority' ? 'selected' : ''}>↑ Priority</option>
+            <option value="date"     ${_taskSort === 'date' ? 'selected' : ''}>📅 Date</option>
+            <option value="category" ${_taskSort === 'category' ? 'selected' : ''}>🏷 Group</option>
+            <option value="title"    ${_taskSort === 'title' ? 'selected' : ''}>A–Z</option>
+          </select>
         </div>
-
-        <!-- Priority dot filters -->
-        <div style="display:flex;align-items:center;gap:5px;background:var(--surface-1);border:1px solid var(--border-color);border-radius:20px;padding:5px 10px;">
-          <button onclick="_taskPriorityFilter='All';renderTasks(_getSearchValue())"
-            style="font-size:11px;font-weight:600;background:none;border:none;cursor:pointer;padding:0 4px;color:${_taskPriorityFilter === 'All' ? 'var(--primary)' : 'var(--text-muted)'};">All</button>
-          ${['P1', 'P2', 'P3'].map(p => `
-            <button class="filter-dot-btn ${_taskPriorityFilter === p ? 'active' : ''}"
-              style="background:${PRIORITY_COLOR[p]}; color:${PRIORITY_COLOR[p]};"
-              onclick="_taskPriorityFilter='${p}';renderTasks(_getSearchValue())"
-              title="${PRIORITY_LABEL[p]}"></button>
-          `).join('')}
-        </div>
-
-        <!-- Category -->
-        <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
-          onchange="_taskCategory=this.value;renderTasks(_getSearchValue())">
-          ${allCats.map(c => `<option value="${c}" ${c === _taskCategory ? 'selected' : ''}>${c}</option>`).join('')}
-        </select>
-
-        <!-- Sort -->
-        <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
-          onchange="_taskSort=this.value;renderTasks(_getSearchValue())">
-          <option value="priority" ${_taskSort === 'priority' ? 'selected' : ''}>↑ Priority</option>
-          <option value="date"     ${_taskSort === 'date' ? 'selected' : ''}>${renderIcon('calendar', null, '')} Date</option>
-          <option value="category" ${_taskSort === 'category' ? 'selected' : ''}>${renderIcon('tags', null, '')} Group</option>
-          <option value="title"    ${_taskSort === 'title' ? 'selected' : ''}>A–Z</option>
-        </select>
       </div>
 
       <!-- ── OVERDUE BANNER ── -->

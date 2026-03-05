@@ -6,6 +6,8 @@ const DEFAULT_DASH_CONFIG = [
   { id: 'aiBriefing', label: 'Daily Briefing', visible: true },
   { id: 'vision', label: 'Vision Banner', visible: true },
   { id: 'kpis', label: 'KPI Cards', visible: true },
+  { id: 'budget', label: 'Budget Alert', visible: true },
+  { id: 'pinnedNotes', label: 'Pinned Notes', visible: true },
   { id: 'tasks', label: 'High Priority Tasks', visible: true },
   { id: 'habits', label: 'Habit Tracker', visible: true }
 ];
@@ -447,6 +449,70 @@ function renderDashboard() {
          </div>
       </div>`;
     },
+
+    // ─── BUDGET ALERT WIDGET ───
+    budget: () => {
+      const settings = state.data.settings?.[0] || {};
+      const monthlyBudget = Number(settings.monthly_budget) || 0;
+      if (!monthlyBudget) return ''; // Don't show if no budget set
+      const currentMonth = new Date().getMonth();
+      const monthExp = (state.data.expenses || [])
+        .filter(e => e.type === 'expense' && new Date(e.date).getMonth() === currentMonth)
+        .reduce((s, e) => s + Number(e.amount), 0);
+      const pct = Math.min(100, Math.round((monthExp / monthlyBudget) * 100));
+      const isWarning = pct >= 80;
+      const isOver = pct >= 100;
+      const barColor = isOver ? '#EF4444' : isWarning ? '#F59E0B' : '#10B981';
+      const remaining = Math.max(0, monthlyBudget - monthExp);
+      return `
+      <div class="widget-card" style="padding:0;overflow:hidden;">
+        <div style="padding:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;">
+              ${isOver ? '🚨' : isWarning ? '⚠️' : '💰'} Monthly Budget
+            </div>
+            <div style="font-size:12px;color:var(--text-muted);">₹${monthExp.toLocaleString()} / ₹${monthlyBudget.toLocaleString()}</div>
+          </div>
+          <div style="height:8px;background:var(--surface-3);border-radius:4px;overflow:hidden;margin-bottom:8px;">
+            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width 0.8s ease;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;">
+            <span style="color:${barColor};font-weight:600;">${pct}% used</span>
+            <span style="color:var(--text-muted);">₹${remaining.toLocaleString()} left</span>
+          </div>
+          ${isWarning ? `<div style="margin-top:8px;padding:6px 10px;background:${isOver ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)'};border-radius:8px;font-size:12px;color:${isOver ? '#DC2626' : '#D97706'};font-weight:600;">
+            ${isOver ? '🚨 Budget exceeded! Watch your spending.' : '⚠️ Approaching your monthly limit.'}
+          </div>` : ''}
+        </div>
+        <div style="padding:0 16px 12px;">
+          <button class="btn" style="width:100%;font-size:12px;padding:6px;" onclick="showQuickLog('expense')">+ Quick Expense</button>
+        </div>
+      </div>`;
+    },
+
+    // ─── PINNED NOTES WIDGET ───
+    pinnedNotes: () => {
+      const notes = (state.data.notes || []).filter(n => n.pinned === true || n.pinned === 'true');
+      if (notes.length === 0) return '';
+      return `
+      <div class="widget-card collapsed">
+        <div class="widget-header" onclick="toggleWidget(this)">
+          <div class="widget-title">📌 Pinned Notes</div>
+          <div style="display:flex;align-items:center;gap:10px" onclick="event.stopPropagation()">
+            <button class="btn icon" onclick="showQuickLog('note'); event.stopPropagation()" title="Quick Note">+</button>
+            ${renderIcon('down', null, 'class="widget-chevron" style="width:20px"')}
+          </div>
+        </div>
+        <div class="widget-body">
+          ${notes.slice(0, 3).map(n => `
+            <div style="padding:10px;background:var(--surface-2);border-radius:10px;margin-bottom:8px;cursor:pointer;" onclick="routeTo('notes')">
+              <div style="font-weight:600;font-size:13px;margin-bottom:2px;">${n.title || 'Untitled'}</div>
+              <div style="font-size:12px;color:var(--text-muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${n.content || ''}</div>
+            </div>`).join('')}
+          ${notes.length > 3 ? `<div style="font-size:12px;color:var(--primary);cursor:pointer;text-align:center;" onclick="routeTo('notes')">+${notes.length - 3} more notes</div>` : ''}
+        </div>
+      </div>`;
+    },
   };
 
   // --- BUILD VISIBLE SECTIONS ---
@@ -483,11 +549,13 @@ function renderDashboard() {
   main.innerHTML = `
     <div class="dash-wrapper">
       
-      <div class="quick-actions" style="margin: 4px 0 8px 0; display:flex; justify-content:space-between; gap:12px; padding:4px 4px; overflow:visible;">
-        <button class="qa-btn round-icon" onclick="openTaskModal()" title="Add Task" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('priority', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
-        <button class="qa-btn round-icon" onclick="openFinanceAction()" title="Add Expense" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('wallet', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
-        <button class="qa-btn round-icon" onclick="routeTo('calendar'); setTimeout(()=>openEventModal(),500)" title="New Event" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('calendar', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
-        <button class="qa-btn round-icon" onclick="openHabitModal()" title="New Habit" style="width:60px; height:60px; border-radius:16px; padding:0; display:flex; align-items:center; justify-content:center; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; overflow:visible;" onmouseover="this.style.boxShadow='0 2px 6px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.08), 0 20px 40px rgba(0,0,0,0.06)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.04)'; this.style.transform='translateY(0)'">${renderIcon('streak', null, 'style="width:24px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.1))"')}</button>
+      <div class="quick-actions" style="margin: 4px 0 8px 0; display:flex; justify-content:space-between; gap:8px; padding:4px 4px; overflow:visible;">
+        <button class="qa-btn round-icon" onclick="openTaskModal()" title="Add Task" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted); overflow:visible;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('priority', null, 'style="width:20px;"')} <span>Task</span></button>
+        <button class="qa-btn round-icon" onclick="showQuickLog('expense')" title="Quick Expense" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('wallet', null, 'style="width:20px;"')} <span>Expense</span></button>
+        <button class="qa-btn round-icon" onclick="showQuickLog('habit')" title="Quick Habit" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('streak', null, 'style="width:20px;"')} <span>Habit</span></button>
+        <button class="qa-btn round-icon" onclick="showQuickLog('note')" title="Quick Note" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('entries', null, 'style="width:20px;"')} <span>Note</span></button>
+        <button class="qa-btn round-icon" onclick="openFocusMode()" title="Focus Mode" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:linear-gradient(135deg,var(--primary),#818cf8); border:none; box-shadow: 0 4px 12px rgba(99,102,241,0.4); color:white; transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:700;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ⚡ <span>Focus</span></button>
+        <button class="qa-btn round-icon" onclick="openWeeklyReview()" title="Weekly Review" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> 📊 <span>Review</span></button>
       </div>
 
       <div class="dash-grid">
