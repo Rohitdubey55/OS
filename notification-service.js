@@ -12,6 +12,18 @@ window.notificationState = {
     defaultMethod: 'both' // browser/in-app/both
 };
 
+// --- CHIMES STATE (Global) ---
+window.chimeState = window.chimeState || {
+    enabled: false,
+    interval: 60,
+    sound: 'chime.wav',
+    quietStart: 22,
+    quietEnd: 8,
+    speakTime: true,
+    waterReminder: true,
+    customMessage: 'Time to drink some water and stretch!'
+};
+
 // Initialize notification service
 async function initNotificationService() {
     console.log('Initializing notification service...');
@@ -517,6 +529,9 @@ function startReminderPolling() {
             checkAndTriggerReminders();
         }
 
+        // Chimes polling
+        checkAndTriggerChimes();
+
         // Habit summary polling checking the specific minute
         if (notificationState.enabled) {
             const hTimeStr = notificationState.habitSummaryTime || (state.data?.settings?.[0]?.habit_summary_time) || '08:00';
@@ -535,8 +550,9 @@ function startReminderPolling() {
         }
     }, 60000);
 
-    // Check & summarise immediately on start
+    // Initial checks on start
     checkAndTriggerReminders();
+    checkAndTriggerChimes();
 
     // Slight delay so state.data has loaded, then sync native alarms
     setTimeout(() => {
@@ -972,6 +988,104 @@ async function sendUpcomingHabitSummary() {
         console.log('[MorningBriefing] Scheduled native notification');
     } catch (e) {
         console.error('[MorningBriefing] Error:', e);
+    }
+}
+
+// --- CHIMES & REMINDERS ---
+// --- CENTRALIZED AUDIO UTILITY (iOS Compatible) ---
+window.playNativeSound = async function (filename) {
+    if (!filename || filename === 'none') return;
+
+    // 1. Native Capacitor Audio (iOS/Android)
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeAudio) {
+        try {
+            const assetId = filename.replace('.wav', '');
+            await window.Capacitor.Plugins.NativeAudio.preload({
+                assetId: assetId,
+                assetPath: 'assets/sounds/' + filename,
+                audioChannelNum: 1,
+                isUrl: false
+            });
+            await window.Capacitor.Plugins.NativeAudio.play({ assetId: assetId });
+            console.log(`[Audio] Native play success: ${filename}`);
+            return;
+        } catch (e) {
+            console.error(`[Audio] NativeAudio failed for ${filename}, falling back:`, e);
+        }
+    }
+
+    // 2. Web Audio Fallback (Browser)
+    try {
+        const audio = new Audio('assets/sounds/' + filename);
+        await audio.play();
+        console.log(`[Audio] Web play success: ${filename}`);
+    } catch (e) {
+        console.error(`[Audio] Web playback failed for ${filename}:`, e);
+    }
+};
+
+async function checkAndTriggerChimes() {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+
+    if (!window.chimeState || !window.chimeState.enabled) return;
+
+    const interval = window.chimeState.interval || 60;
+    const qStart = window.chimeState.quietStart;
+    const qEnd = window.chimeState.quietEnd;
+
+    // Quiet hours cross midnight (e.g. 22 to 08)
+    let isQuiet = false;
+    if (qStart > qEnd) {
+        if (hour >= qStart || hour < qEnd) isQuiet = true;
+    } else {
+        if (hour >= qStart && hour < qEnd) isQuiet = true;
+    }
+
+    if (isQuiet) return;
+
+    if (minute % interval !== 0) return;
+
+    const cacheKey = `chime_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_${hour}_${minute}`;
+    if (localStorage.getItem(cacheKey)) return;
+    localStorage.setItem(cacheKey, 'true');
+
+    console.log(`[Chimes] Triggering interval chime for ${hour}:${minute}`);
+
+    let timeString = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    let msg = `It is ${timeString}.`;
+    let subMsg = window.chimeState.waterReminder ? window.chimeState.customMessage : '';
+
+    // 1. Play native sound (iOS Fixed)
+    if (window.chimeState.sound && window.chimeState.sound !== 'none') {
+        window.playNativeSound(window.chimeState.sound);
+    }
+
+    // 2. TTS (SSML Fixed)
+    if (window.chimeState.speakTime && 'speechSynthesis' in window) {
+        const textToSpeak = (msg + " " + subMsg).trim();
+        const utter = new SpeechSynthesisUtterance(textToSpeak);
+        utter.rate = 1.0;
+        utter.pitch = 1.0;
+        window.speechSynthesis.speak(utter);
+    }
+
+    // 3. UI Background Toast
+    const finalMsg = window.chimeState.waterReminder ? window.chimeState.customMessage : msg;
+    showInAppNotification("🔔 " + finalMsg, "info");
+
+    // 4. Native Push Notification
+    if (window.LocalNotifications && notificationState.permission === 'granted') {
+        window.LocalNotifications.schedule({
+            notifications: [{
+                id: 40000 + hour + minute,
+                title: "🔔 " + msg,
+                body: finalMsg,
+                schedule: { at: new Date(Date.now() + 500) },
+                sound: window.chimeState.sound === 'none' ? null : window.chimeState.sound
+            }]
+        });
     }
 }
 

@@ -297,6 +297,18 @@ function renderSettings() {
         <div class="dash-toggles" id="dashTogglesList">
            ${renderDashboardTogglesOrdered()}
         </div>
+        
+        <!-- KPI Visibility Toggles -->
+        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+          <div style="font-size: 14px; font-weight: 700; color: var(--text-1); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            ${typeof renderIcon === 'function' ? renderIcon('bar-chart-2', null, 'style="width:18px;"') : '📊'} KPI Visibility
+          </div>
+          <p class="section-description" style="margin-bottom: 16px;">Toggle which KPIs to show on the dashboard.</p>
+          <div id="kpiTogglesList">
+            ${renderKpiToggles()}
+          </div>
+        </div>
+        
         <button class="btn primary" onclick="saveAllSettings('dashboard')" style="margin-top:12px">Save Dashboard Layout</button>
         </div>
       </details>
@@ -432,10 +444,24 @@ function renderSettings() {
             <div style="display:flex; gap:10px">
                 <select id="notificationSound" class="input" style="flex:1">
                     <option value="default">Default (System Ringtone)</option>
-                    <option value="chime.wav">Chime</option>
-                    <option value="beep.wav">Beep</option>
-                    <option value="classic.wav">Classic Alarm</option>
                     <option value="none">Silent</option>
+                    <optgroup label="Short Alerts">
+                        <option value="chime.wav">Chime</option>
+                        <option value="beep.wav">Beep</option>
+                        <option value="classic.wav">Classic Alarm</option>
+                    </optgroup>
+                    <optgroup label="Long Alarms">
+                        <option value="alarm_fast_10s.wav">Fast Alarm (10s)</option>
+                        <option value="digital_clock_20s.wav">Digital Clock (20s)</option>
+                        <option value="siren_30s.wav">Siren (30s)</option>
+                        <option value="gentle_wake_30s.wav">Gentle Wake (30s)</option>
+                        <option value="meditation_bell_30s.wav">Meditation Bell (30s)</option>
+                        <option value="sonar_10s.wav">Sonar (10s)</option>
+                        <option value="emergency_20s.wav">Emergency (20s)</option>
+                        <option value="slow_pulse_10s.wav">Slow Pulse (10s)</option>
+                        <option value="space_ambient_30s.wav">Space Ambient (30s)</option>
+                        <option value="marimba_trill_20s.wav">Marimba Trill (20s)</option>
+                    </optgroup>
                 </select>
                 <button class="btn secondary" onclick="playTestSound()" style="padding: 0 16px;">Test</button>
             </div>
@@ -623,6 +649,78 @@ function renderDashboardTogglesOrdered() {
          </div>
       </label>
   `).join('');
+}
+
+function renderKpiToggles() {
+  const baseConfig = typeof DEFAULT_KPI_CONFIG !== 'undefined' ? DEFAULT_KPI_CONFIG : [
+    { id: 'netWorth', label: 'Net Worth', visible: true, category: 'financial' },
+    { id: 'monthSpend', label: 'Month Spend', visible: true, category: 'financial' },
+    { id: 'tasksDone', label: 'Tasks Done', visible: true, category: 'productivity' }
+  ];
+
+  let kpiData = [];
+  const s = state.data.settings?.[0] || {};
+  try {
+    if (s.kpi_config) {
+      let parsed = s.kpi_config;
+      if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+      kpiData = parsed;
+    }
+  } catch (e) { }
+
+  // Group by category
+  const categories = {
+    financial: { label: '💰 Financial', items: [] },
+    productivity: { label: '✅ Productivity', items: [] },
+    habits: { label: '🔥 Habits', items: [] },
+    lifestyle: { label: '👤 Lifestyle', items: [] },
+    predictive: { label: '🔮 Predictive', items: [] }
+  };
+
+  // Merge saved config with base config
+  let orderedKpis = [];
+  if (kpiData && kpiData.length > 0) {
+    const savedIds = kpiData.map(k => k.id);
+    baseConfig.forEach(b => {
+      const saved = kpiData.find(k => k.id === b.id);
+      orderedKpis.push({ ...b, visible: saved ? saved.visible : b.visible });
+    });
+    baseConfig.forEach(b => {
+      if (!savedIds.includes(b.id)) orderedKpis.push({ ...b, visible: true });
+    });
+  } else {
+    orderedKpis = baseConfig.map(b => ({ ...b }));
+  }
+
+  // Group by category
+  orderedKpis.forEach(k => {
+    if (categories[k.category]) {
+      categories[k.category].items.push(k);
+    }
+  });
+
+  let html = '';
+  Object.entries(categories).forEach(([catKey, cat]) => {
+    if (cat.items.length === 0) return;
+    html += `<div style="margin-bottom: 16px;">
+      <div style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">${cat.label}</div>`;
+
+    cat.items.forEach(k => {
+      html += `<label class="dash-toggle-item" data-id="${k.id}" data-label="${k.label}" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface-2); border-radius: 8px; margin-bottom: 6px;">
+         <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+            <div class="toggle-label" style="margin: 0;">
+                <input type="checkbox" class="kpi-checkbox" value="${k.id}" ${k.visible !== false ? 'checked' : ''}>
+            </div>
+            <div>
+               <div class="toggle-name" style="font-weight: 500; font-size: 13px;">${k.label}</div>
+            </div>
+         </div>
+      </label>`;
+    });
+    html += '</div>';
+  });
+
+  return html;
 }
 function renderColorOption(color, activeColor) {
   const isActive = (activeColor || '#4F46E5').toLowerCase() === color.toLowerCase();
@@ -1133,6 +1231,21 @@ window.saveAllSettings = async function (section = 'all') {
 
   if (section === 'all' || section === 'dashboard') {
     newSettings.dashboard_config = dashLayoutJSON;
+
+    // Also save KPI config
+    const kpiItemsDOM = Array.from(document.querySelectorAll('.kpi-checkbox'));
+    const kpiConfigArray = kpiItemsDOM.map(cb => {
+      const id = cb.value;
+      const visible = cb.checked;
+      // Get label from parent element
+      const parent = cb.closest('.dash-toggle-item');
+      const label = parent?.dataset.label || id;
+      // Get category from DEFAULT_KPI_CONFIG
+      const kpiInfo = (typeof DEFAULT_KPI_CONFIG !== 'undefined' ? DEFAULT_KPI_CONFIG : []).find(k => k.id === id);
+      return { id, label, visible, category: kpiInfo?.category || 'other' };
+    });
+    const kpiConfigJSON = JSON.stringify(kpiConfigArray);
+    newSettings.kpi_config = kpiConfigJSON;
   }
 
   if (section === 'all' || section === 'notifications') {
@@ -1344,36 +1457,8 @@ window.playTestSound = async function () {
   }
 
   // It's a custom wav file
-  if (window.Capacitor && window.Capacitor.Plugins.NativeAudio) {
-    try {
-      const assetName = val.replace('.wav', '');
-      await window.Capacitor.Plugins.NativeAudio.preload({
-        assetId: assetName,
-        assetPath: val,
-        audioChannelNum: 1,
-        isUrl: false
-      });
-      await window.Capacitor.Plugins.NativeAudio.play({ assetId: assetName });
-      showToast(`Playing ${val}...`, 'info');
-    } catch (e) {
-      console.error("NativeAudio failed, falling back", e);
-    }
-  } else {
-    // Fallback to web audio
-    const audio = new Audio('assets/sounds/' + val);
-    audio.play().catch(e => {
-      console.error('Audio playback failed', e);
-      showToast('Preview playing natively...', 'info');
-      if (window.LocalNotifications) {
-        window.LocalNotifications.schedule({
-          notifications: [{
-            title: "Test", body: "Sound Preview", id: 8889,
-            schedule: { at: new Date(Date.now() + 1000) }, sound: val
-          }]
-        });
-      }
-    });
-  }
+  await window.playNativeSound(val);
+  showToast(`Playing ${val}...`, 'info');
 };
 
 function padZero(num) {

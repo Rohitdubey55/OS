@@ -89,6 +89,12 @@ function formatReminderDateTime(date) {
     });
 }
 
+function getDaysLeft(target) {
+    if (!target) return 0;
+    const diff = new Date(target) - new Date();
+    return Math.max(0, Math.ceil(diff / 86400000));
+}
+
 
 
 // --- LONG PRESS ACTION HELPER ---
@@ -301,6 +307,7 @@ async function routeTo(viewName) {
             else if (viewName === 'people') renderPeople();
             else if (viewName === 'gym') renderGym();
             else if (viewName === 'notes') renderNotes();
+            else if (viewName === 'chimes') renderChimesView();
         } catch (e) {
             console.error('Error rendering view ' + viewName + ':', e);
             main.innerHTML = '<div style="padding:20px; color:red">Error loading view: ' + viewName + '<br><small>' + e.message + '</small></div>';
@@ -811,17 +818,23 @@ function scheduleMorningBriefing() {
 }
 
 // Auto-trigger Weekly Review on Sundays (once per session)
-(function checkWeeklyReview() {
+function checkWeeklyReview() {
     const day = new Date().getDay(); // 0 = Sunday
     const lastShown = localStorage.getItem('weeklyReviewShown');
-    const todayStr = isoDate();
+    const todayStr = (typeof isoDate === 'function') ? isoDate() : new Date().toISOString().slice(0, 10);
     if (day === 0 && lastShown !== todayStr) {
         setTimeout(() => {
-            openWeeklyReview();
-            localStorage.setItem('weeklyReviewShown', todayStr);
+            if (typeof openWeeklyReview === 'function') {
+                openWeeklyReview();
+                localStorage.setItem('weeklyReviewShown', todayStr);
+            }
         }, 3000);
     }
-})();
+}
+
+// Still call it immediately for new sessions (if it's Sunday)
+checkWeeklyReview();
+
 
 
 window.addEventListener('hashchange', () => {

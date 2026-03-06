@@ -217,8 +217,7 @@
 
 
 
-        <div id="toast"
-            style="position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:var(--text-1); color:var(--surface-base); padding:10px 20px; border-radius:30px; opacity:0; pointer-events:none; transition:opacity 0.3s; font-size:14px; z-index:200">
+        <div id="toast">
             Action Saved</div>
 
 
@@ -312,6 +311,12 @@
                         <i data-icon="notebook" style="color:var(--success)"></i>
                     </button>
                 </div>
+                <div class="fab-menu-item" onclick="routeTo('chimes'); closeFABMenu()">
+                    <span class="fab-menu-label">Chimes</span>
+                    <button class="fab-menu-button" style="background:var(--surface-sunken)">
+                        <i data-icon="bell" style="color:var(--warning)"></i>
+                    </button>
+                </div>
                 <!-- Back Button -->
                 <div class="fab-menu-item" onclick="showFabStage1()">
                     <span class="fab-menu-label">Back</span>
@@ -397,6 +402,7 @@
     <script src="view-settings.js"></script>
     <script src="view-gym.js"></script>
     <script src="view-notes.js"></script>
+    <script src="view-chimes.js"></script>
     <script src="notification-service.js?v=3"></script>
     <script src="command-palette.js"></script>
 

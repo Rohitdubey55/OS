@@ -12,6 +12,18 @@ window.notificationState = {
     defaultMethod: 'both' // browser/in-app/both
 };
 
+// --- CHIMES STATE (Global) ---
+window.chimeState = window.chimeState || {
+    enabled: false,
+    interval: 60,
+    sound: 'chime.wav',
+    quietStart: 22,
+    quietEnd: 8,
+    speakTime: true,
+    waterReminder: true,
+    customMessage: 'Time to drink some water and stretch!'
+};
+
 // Initialize notification service
 async function initNotificationService() {
     console.log('Initializing notification service...');
@@ -517,6 +529,9 @@ function startReminderPolling() {
             checkAndTriggerReminders();
         }
 
+        // Chimes polling
+        checkAndTriggerChimes();
+
         // Habit summary polling checking the specific minute
         if (notificationState.enabled) {
             const hTimeStr = notificationState.habitSummaryTime || (state.data?.settings?.[0]?.habit_summary_time) || '08:00';
@@ -535,8 +550,9 @@ function startReminderPolling() {
         }
     }, 60000);
 
-    // Check & summarise immediately on start
+    // Initial checks on start
     checkAndTriggerReminders();
+    checkAndTriggerChimes();
 
     // Slight delay so state.data has loaded, then sync native alarms
     setTimeout(() => {
@@ -904,24 +920,22 @@ async function sendUpcomingHabitSummary() {
         if (!window.LocalNotifications) return;
 
         const habits = (state && state.data && state.data.habits) || [];
-        if (habits.length === 0) return;
+        const tasks = (state && state.data && state.data.tasks) || [];
 
         const now = new Date();
         const in24 = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
         const upcoming = [];
 
+        // 1. Gather Habits
         habits.forEach(habit => {
             if (!habit.reminder_time) return;
-
             const t = parseHabitTime(habit.reminder_time);
             if (!t) return;
 
-            // Build a Date for today at the habit's time
             const habitToday = new Date(now);
             habitToday.setHours(t.hours, t.minutes, 0, 0);
 
-            // If already passed today, check tomorrow's occurrence
             let habitTime = habitToday;
             if (habitTime <= now) {
                 const habitTomorrow = new Date(habitToday);
@@ -931,45 +945,147 @@ async function sendUpcomingHabitSummary() {
 
             if (habitTime <= in24) {
                 const timeLabel = `${String(t.hours).padStart(2, '0')}:${String(t.minutes).padStart(2, '0')}`;
-                const emoji = habit.emoji || '⭐';
+                const emoji = habit.icon || '🔥';
                 const name = habit.habit_name || 'Habit';
-                upcoming.push({ habitTime, line: `${emoji} ${name} ${timeLabel}` });
+                upcoming.push({ time: habitTime, line: `${emoji} ${name} (${timeLabel})` });
             }
         });
 
-        if (upcoming.length === 0) return;
+        // 2. Gather High Priority Tasks
+        const highTasks = tasks.filter(t => t.status !== 'completed' && t.priority === 'P1');
+        const taskLines = highTasks.slice(0, 3).map(t => `📌 ${t.title}`);
 
-        // Sort by time
-        upcoming.sort((a, b) => a.habitTime - b.habitTime);
+        if (upcoming.length === 0 && taskLines.length === 0) return;
 
-        const bodyText = upcoming.map(u => u.line).join('\n');
+        // Sort habits by time
+        upcoming.sort((a, b) => a.time - b.time);
 
-        // Request permissions if needed
+        let bodyText = '';
+        if (taskLines.length > 0) {
+            bodyText += 'Top Tasks:\n' + taskLines.join('\n') + '\n\n';
+        }
+        if (upcoming.length > 0) {
+            bodyText += 'Habits:\n' + upcoming.map(u => u.line).join('\n');
+        }
+
+        // Request permissions
         const permStatus = await window.LocalNotifications.checkPermissions();
         if (permStatus.display !== 'granted') {
             await window.LocalNotifications.requestPermissions();
         }
 
-        let soundOption = (window.notificationState && window.notificationState.sound) ? window.notificationState.sound : 'default';
-        let config = {
-            title: "📅 Habits Today",
-            body: bodyText,
-            id: 999999
-        };
-
-        if (soundOption === 'none') {
-            config.sound = null;
-        } else if (soundOption !== 'default' && soundOption !== 'alert') {
-            config.sound = soundOption;
-        }
-
         await window.LocalNotifications.schedule({
-            notifications: [config]
+            notifications: [{
+                id: 1000001,
+                title: '🌅 Your Morning Briefing',
+                body: bodyText,
+                schedule: { at: new Date(Date.now() + 500) },
+                sound: (window.notificationState && window.notificationState.sound === 'none') ? null : 'default',
+                actionTypeId: 'OPEN_DASHBOARD'
+            }]
         });
 
-        console.log('[HabitSummary] Scheduled native summary notification');
+        console.log('[MorningBriefing] Scheduled native notification');
     } catch (e) {
-        console.error('[HabitSummary] Error:', e);
+        console.error('[MorningBriefing] Error:', e);
+    }
+}
+
+// --- CHIMES & REMINDERS ---
+// --- CENTRALIZED AUDIO UTILITY (iOS Compatible) ---
+window.playNativeSound = async function (filename) {
+    if (!filename || filename === 'none') return;
+
+    // 1. Native Capacitor Audio (iOS/Android)
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeAudio) {
+        try {
+            const assetId = filename.replace('.wav', '');
+            await window.Capacitor.Plugins.NativeAudio.preload({
+                assetId: assetId,
+                assetPath: 'assets/sounds/' + filename,
+                audioChannelNum: 1,
+                isUrl: false
+            });
+            await window.Capacitor.Plugins.NativeAudio.play({ assetId: assetId });
+            console.log(`[Audio] Native play success: ${filename}`);
+            return;
+        } catch (e) {
+            console.error(`[Audio] NativeAudio failed for ${filename}, falling back:`, e);
+        }
+    }
+
+    // 2. Web Audio Fallback (Browser)
+    try {
+        const audio = new Audio('assets/sounds/' + filename);
+        await audio.play();
+        console.log(`[Audio] Web play success: ${filename}`);
+    } catch (e) {
+        console.error(`[Audio] Web playback failed for ${filename}:`, e);
+    }
+};
+
+async function checkAndTriggerChimes() {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+
+    if (!window.chimeState || !window.chimeState.enabled) return;
+
+    const interval = window.chimeState.interval || 60;
+    const qStart = window.chimeState.quietStart;
+    const qEnd = window.chimeState.quietEnd;
+
+    // Quiet hours cross midnight (e.g. 22 to 08)
+    let isQuiet = false;
+    if (qStart > qEnd) {
+        if (hour >= qStart || hour < qEnd) isQuiet = true;
+    } else {
+        if (hour >= qStart && hour < qEnd) isQuiet = true;
+    }
+
+    if (isQuiet) return;
+
+    if (minute % interval !== 0) return;
+
+    const cacheKey = `chime_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_${hour}_${minute}`;
+    if (localStorage.getItem(cacheKey)) return;
+    localStorage.setItem(cacheKey, 'true');
+
+    console.log(`[Chimes] Triggering interval chime for ${hour}:${minute}`);
+
+    let timeString = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    let msg = `It is ${timeString}.`;
+    let subMsg = window.chimeState.waterReminder ? window.chimeState.customMessage : '';
+
+    // 1. Play native sound (iOS Fixed)
+    if (window.chimeState.sound && window.chimeState.sound !== 'none') {
+        window.playNativeSound(window.chimeState.sound);
+    }
+
+    // 2. TTS (SSML Fixed)
+    if (window.chimeState.speakTime && 'speechSynthesis' in window) {
+        const textToSpeak = (msg + " " + subMsg).trim();
+        const utter = new SpeechSynthesisUtterance(textToSpeak);
+        utter.rate = 1.0;
+        utter.pitch = 1.0;
+        window.speechSynthesis.speak(utter);
+    }
+
+    // 3. UI Background Toast
+    const finalMsg = window.chimeState.waterReminder ? window.chimeState.customMessage : msg;
+    showInAppNotification("🔔 " + finalMsg, "info");
+
+    // 4. Native Push Notification
+    if (window.LocalNotifications && notificationState.permission === 'granted') {
+        window.LocalNotifications.schedule({
+            notifications: [{
+                id: 40000 + hour + minute,
+                title: "🔔 " + msg,
+                body: finalMsg,
+                schedule: { at: new Date(Date.now() + 500) },
+                sound: window.chimeState.sound === 'none' ? null : window.chimeState.sound
+            }]
+        });
     }
 }
 

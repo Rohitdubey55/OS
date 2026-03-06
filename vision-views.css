@@ -610,11 +610,43 @@
     align-items: center;
     justify-content: center;
     animation: fadeIn 0.2s ease;
+    overflow: hidden;
+    /* Prevent modal itself from swiping */
 }
 
 .vision-video-inner {
-    width: min(90vw, 700px);
+    width: min(95vw, 900px);
+    /* Slightly wider for immersive gallery */
     position: relative;
+    overflow: hidden;
+}
+
+/* ── Fullscreen Gallery in Modal ──────────────────────────── */
+.vision-modal-gallery {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    width: 100%;
+    height: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.vision-modal-gallery::-webkit-scrollbar {
+    display: none;
+}
+
+.vision-modal-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    scroll-snap-align: start;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
 }
 
 .vision-video-inner video {
@@ -933,4 +965,79 @@
     cursor: pointer;
     border: 3px solid white;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Video Gallery ────────────────────────────────────────── */
+.vision-video-gallery {
+    display: flex;
+    overflow: hidden;
+    /* Disable swiping/scrolling */
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background: #000;
+}
+
+.vision-video-slide {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background: #000;
+}
+
+/* ── Navigation Buttons ───────────────────────────────────── */
+.vision-video-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 30;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.vision-video-nav-btn:active {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-50%) scale(0.9);
+}
+
+.vision-video-nav-btn.prev {
+    left: 16px;
+}
+
+.vision-video-nav-btn.next {
+    right: 16px;
+}
+
+.vision-video-nav-btn svg {
+    width: 24px;
+    height: 24px;
+}
+
+.vision-dot-btn {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 0;
+}
+
+.vision-dot-btn.active {
+    background: white;
+    transform: scale(1.3);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
 }

@@ -14,9 +14,11 @@ const ICON_MAPPINGS = {
   'calendar': { lucide: 'calendar', emoji: '📅', material: 'event', remix: 'calendar-line', tabler: 'calendar', fontawesome: 'fa-calendar', heroicons: 'calendar', feather: 'calendar' },
   'yearly': { lucide: 'calendar-days', emoji: '📆', material: 'calendar_month', remix: 'calendar-event-line', tabler: 'calendar-event', fontawesome: 'fa-calendar-days', heroicons: 'calendar-days', feather: 'calendar' },
   'insights': { lucide: 'bar-chart-3', emoji: '📊', material: 'insights', remix: 'bar-chart-2-line', tabler: 'chart-bar', fontawesome: 'fa-chart-bar', heroicons: 'chart-bar', feather: 'bar-chart-2' },
+  'bar-chart-2': { lucide: 'bar-chart-2', emoji: '📊', material: 'bar_chart', remix: 'bar-chart-2-line', tabler: 'chart-bar', fontawesome: 'fa-chart-bar', heroicons: 'chart-bar', feather: 'bar-chart-2' },
   'tags': { lucide: 'tags', emoji: '🏷️', material: 'label', remix: 'price-tag-3-line', tabler: 'tags', fontawesome: 'fa-tags', heroicons: 'tag', feather: 'tag' },
 
   // UI Elements
+  'chevron-left': { lucide: 'chevron-left', emoji: '◀', material: 'chevron_left', remix: 'arrow-left-s-line', tabler: 'chevron-left', fontawesome: 'fa-chevron-left', heroicons: 'chevron-left', feather: 'chevron-left' },
   'chevron-right': { lucide: 'chevron-right', emoji: '▶', material: 'chevron_right', remix: 'arrow-right-s-line', tabler: 'chevron-right', fontawesome: 'fa-chevron-right', heroicons: 'chevron-right', feather: 'chevron-right' },
   'quick-write': { lucide: 'edit-3', emoji: '✍️', material: 'draw', remix: 'quill-pen-line', tabler: 'writing', fontawesome: 'fa-pen', heroicons: 'pencil-square', feather: 'edit-3' },
   'empty-illustration': { lucide: 'inbox', emoji: '📭', material: 'inbox', remix: 'inbox-line', tabler: 'inbox', fontawesome: 'fa-inbox', heroicons: 'inbox-stack', feather: 'inbox' },
@@ -94,6 +96,7 @@ const ICON_MAPPINGS = {
 
   // Notifications
   'reminder': { lucide: 'bell', emoji: '🔔', material: 'notifications', remix: 'notification-line', tabler: 'bell', fontawesome: 'fa-bell', heroicons: 'bell', feather: 'bell' },
+  'bell': { lucide: 'bell', emoji: '🔔', material: 'notifications', remix: 'notification-line', tabler: 'bell', fontawesome: 'fa-bell', heroicons: 'bell', feather: 'bell' },
   'task-due': { lucide: 'clipboard-list', emoji: '📋', material: 'task', remix: 'questionnaire-line', tabler: 'clipboard-list', fontawesome: 'fa-clipboard-list', heroicons: 'clipboard-document-list', feather: 'clipboard' },
 
   // UI Elements
@@ -106,6 +109,8 @@ const ICON_MAPPINGS = {
   'refresh': { lucide: 'refresh-cw', emoji: '🔄', material: 'refresh', remix: 'refresh-line', tabler: 'refresh', fontawesome: 'fa-rotate-right', heroicons: 'arrow-path', feather: 'refresh-cw' },
   'info': { lucide: 'alert-circle', emoji: 'ℹ️', material: 'info', remix: 'information-line', tabler: 'info-circle', fontawesome: 'fa-circle-info', heroicons: 'information-circle', feather: 'info' },
   'chat': { lucide: 'message-circle', emoji: '💬', material: 'chat', remix: 'chat-4-line', tabler: 'message-circle', fontawesome: 'fa-comment', heroicons: 'chat-bubble-left', feather: 'message-circle' },
+  'message-square': { lucide: 'message-square', emoji: '💬', material: 'chat', remix: 'message-3-line', tabler: 'message-square', fontawesome: 'fa-comment', heroicons: 'chat-bubble-left', feather: 'message-square' },
+  'play': { lucide: 'play', emoji: '▶️', material: 'play_arrow', remix: 'play-line', tabler: 'play', fontawesome: 'fa-play', heroicons: 'play', feather: 'play' },
   'send': { lucide: 'send', emoji: '✈️', material: 'send', remix: 'send-plane-line', tabler: 'send', fontawesome: 'fa-paper-plane', heroicons: 'paper-airplane', feather: 'send' },
   'hash': { lucide: 'hash', emoji: '#', material: 'tag', remix: 'hashtag', tabler: 'hash', fontawesome: 'fa-hashtag', heroicons: 'hashtag', feather: 'hash' },
   'check-circle': { lucide: 'check-circle', emoji: '✅', material: 'check_circle', remix: 'checkbox-circle-line', tabler: 'circle-check', fontawesome: 'fa-circle-check', heroicons: 'check-circle', feather: 'check-circle' },
@@ -120,7 +125,7 @@ const ICON_MAPPINGS = {
   'tag': { lucide: 'tag', emoji: '🏷️', material: 'local_offer', remix: 'price-tag-line', tabler: 'tag', fontawesome: 'fa-tag', heroicons: 'tag', feather: 'tag' },
   'clock': { lucide: 'clock', emoji: '🕒', material: 'schedule', remix: 'time-line', tabler: 'clock', fontawesome: 'fa-clock', heroicons: 'clock', feather: 'clock' },
   'search': { lucide: 'search', emoji: '🔍', material: 'search', remix: 'search-line', tabler: 'search', fontawesome: 'fa-magnifying-glass', heroicons: 'magnifying-glass', feather: 'search' },
-  'x': { lucide: 'x', emoji: '❌', material: 'close', remix: 'close-line', tabler: 'x', fontawesome: 'fa-xmark', heroicons: 'x-mark', feather: 'x' },
+  'x': { lucide: 'x', emoji: '✕', material: 'close', remix: 'close-line', tabler: 'x', fontawesome: 'fa-xmark', heroicons: 'x-mark', feather: 'x' },
   'warning': { lucide: 'alert-triangle', emoji: '⚠️', material: 'warning', remix: 'error-warning-line', tabler: 'alert-triangle', fontawesome: 'fa-triangle-exclamation', heroicons: 'exclamation-triangle', feather: 'alert-triangle' },
   'repeat': { lucide: 'repeat', emoji: '🔁', material: 'repeat', remix: 'repeat-line', tabler: 'repeat', fontawesome: 'fa-repeat', heroicons: 'arrow-path', feather: 'repeat' },
   'up': { lucide: 'chevron-up', emoji: '🔼', material: 'expand_less', remix: 'arrow-up-s-line', tabler: 'chevron-up', fontawesome: 'fa-chevron-up', heroicons: 'chevron-up', feather: 'chevron-up' },
@@ -136,6 +141,10 @@ const ICON_MAPPINGS = {
   'locked': { lucide: 'lock', emoji: '🔒', material: 'lock', remix: 'lock-line', tabler: 'lock', fontawesome: 'fa-lock', heroicons: 'lock-closed', feather: 'lock' },
   'birthday': { lucide: 'cake', emoji: '🎂', material: 'cake', remix: 'cake-line', tabler: 'cake', fontawesome: 'fa-birthday-cake', heroicons: 'cake', feather: 'gift' },
   'chart': { lucide: 'trending-up', emoji: '📈', material: 'show_chart', remix: 'line-chart-line', tabler: 'trending-up', fontawesome: 'fa-chart-line', heroicons: 'arrow-trending-up', feather: 'trending-up' },
+  'trending-up': { lucide: 'trending-up', emoji: '📈', material: 'trending_up', remix: 'trending-up-line', tabler: 'trending-up', fontawesome: 'fa-chart-line', heroicons: 'arrow-trending-up', feather: 'trending-up' },
+  'trending-down': { lucide: 'trending-down', emoji: '📉', material: 'trending_down', remix: 'trending-down-line', tabler: 'trending-down', fontawesome: 'fa-chart-line', heroicons: 'arrow-trending-down', feather: 'trending-down' },
+  'zap': { lucide: 'zap', emoji: '⚡', material: 'bolt', remix: 'flashlight-line', tabler: 'bolt', fontawesome: 'fa-bolt', heroicons: 'bolt', feather: 'zap' },
+  'alert-triangle': { lucide: 'alert-triangle', emoji: '⚠️', material: 'warning', remix: 'error-warning-line', tabler: 'alert-triangle', fontawesome: 'fa-triangle-exclamation', heroicons: 'exclamation-triangle', feather: 'alert-triangle' },
   'frequency': { lucide: 'calendar-check', emoji: '📅', material: 'event_available', remix: 'calendar-check-line', tabler: 'calendar-check', fontawesome: 'fa-calendar-check', heroicons: 'calendar-check', feather: 'calendar' },
   'brain': { lucide: 'brain', emoji: '🧠', material: 'psychology', remix: 'brain-line', tabler: 'brain', fontawesome: 'fa-brain', heroicons: 'cpu-chip', feather: 'cpu' },
   'template': { lucide: 'file-text', emoji: '📋', material: 'description', remix: 'file-text-line', tabler: 'file-description', fontawesome: 'fa-file-lines', heroicons: 'document-text', feather: 'file-text' },
@@ -154,6 +163,22 @@ const ICON_MAPPINGS = {
   'moon': { lucide: 'moon', emoji: '🌙', material: 'dark_mode', remix: 'moon-line', tabler: 'moon', fontawesome: 'fa-moon', heroicons: 'moon', feather: 'moon' },
   'plus-circle': { lucide: 'plus-circle', emoji: '➕', material: 'add_circle', remix: 'add-circle-line', tabler: 'circle-plus', fontawesome: 'fa-circle-plus', heroicons: 'plus-circle', feather: 'plus-circle' },
   'dollar-sign': { lucide: 'dollar-sign', emoji: '💵', material: 'attach_money', remix: 'money-dollar-circle-line', tabler: 'coin-dollar', fontawesome: 'fa-dollar-sign', heroicons: 'currency-dollar', feather: 'dollar-sign' },
+  'percent': { lucide: 'percent', emoji: '%', material: 'percent', remix: 'percent-line', tabler: 'percentage', fontawesome: 'fa-percent', heroicons: 'percent', feather: 'percent' },
+  'flag': { lucide: 'flag', emoji: '🚩', material: 'flag', remix: 'flag-line', tabler: 'flag', fontawesome: 'fa-flag', heroicons: 'flag', feather: 'flag' },
+  'award': { lucide: 'award', emoji: '🏆', material: 'emoji_events', remix: 'award-line', tabler: 'award', fontawesome: 'fa-award', heroicons: 'award', feather: 'award' },
+  'layers': { lucide: 'layers', emoji: '🥞', material: 'layers', remix: 'stack-line', tabler: 'layers-intersect', fontawesome: 'fa-layer-group', heroicons: 'layers', feather: 'layers' },
+  'user-plus': { lucide: 'user-plus', emoji: '➕👤', material: 'person_add', remix: 'user-add-line', tabler: 'user-plus', fontawesome: 'fa-user-plus', heroicons: 'user-plus', feather: 'user-plus' },
+  'trophy': { lucide: 'trophy', emoji: '🏆', material: 'emoji_events', remix: 'trophy-line', tabler: 'trophy', fontawesome: 'fa-trophy', heroicons: 'trophy', feather: 'award' },
+  'trash': { lucide: 'trash-2', emoji: '🗑️', material: 'delete', remix: 'delete-bin-line', tabler: 'trash', fontawesome: 'fa-trash', heroicons: 'trash', feather: 'trash-2' },
+  'file-text': { lucide: 'file-text', emoji: '📖', material: 'notes', remix: 'text-spacing', tabler: 'file-text', fontawesome: 'fa-file-text', heroicons: 'document-text', feather: 'file-text' },
+  'link': { lucide: 'link', emoji: '🔗', material: 'link', remix: 'link', tabler: 'link', fontawesome: 'fa-link', heroicons: 'link', feather: 'link' },
+  'check-square': { lucide: 'check-square', emoji: '✓', material: 'task_alt', remix: 'checkbox-line', tabler: 'check', fontawesome: 'fa-square-check', heroicons: 'check-badge', feather: 'check-square' },
+  'plus': { lucide: 'plus', emoji: '+', material: 'add', remix: 'add-line', tabler: 'plus', fontawesome: 'fa-plus', heroicons: 'plus', feather: 'plus' },
+  'image': { lucide: 'image', emoji: '🖼️', material: 'image', remix: 'image-line', tabler: 'photo', fontawesome: 'fa-image', heroicons: 'photo', feather: 'image' },
+  'video': { lucide: 'video', emoji: '📹', material: 'videocam', remix: 'video-line', tabler: 'video', fontawesome: 'fa-video', heroicons: 'video-camera', feather: 'video' },
+  'sparkles': { lucide: 'sparkles', emoji: '✨', material: 'auto_awesome', remix: 'sparkling-line', tabler: 'sparkles', fontawesome: 'fa-sparkles', heroicons: 'sparkles', feather: 'star' },
+  'briefcase': { lucide: 'briefcase', emoji: '💼', material: 'work', remix: 'briefcase-line', tabler: 'briefcase', fontawesome: 'fa-briefcase', heroicons: 'briefcase', feather: 'briefcase' },
+  'gem': { lucide: 'gem', emoji: '💎', material: 'diamond', remix: 'vip-diamond-line', tabler: 'diamond', fontawesome: 'fa-gem', heroicons: 'diamond', feather: 'pocket' },
 };
 
 // Available Icon Packs
@@ -233,7 +258,9 @@ function getIcon(iconName, pack = null) {
 
   if (!mapping) {
     console.warn(`Icon mapping not found for: ${iconName}, falling back to emoji`);
-    // Fallback to emoji for unmapped icons
+    // Fallback based on pack
+    if (iconPack === 'lucide') return 'circle-help';
+    if (iconPack === 'feather') return 'help-circle';
     return '•';
   }
 
@@ -247,6 +274,8 @@ function getIcon(iconName, pack = null) {
 
   // If still no icon, return a fallback
   if (!icon) {
+    if (iconPack === 'lucide') return 'circle-help';
+    if (iconPack === 'feather') return 'help-circle';
     icon = '•';
   }
 

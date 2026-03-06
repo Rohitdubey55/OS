@@ -4,7 +4,7 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "build": "rm -rf www && mkdir www && npx esbuild capacitor-init.js --bundle --minify --outfile=www/capacitor-bundle.js && cp *.html *.js *.css *.png *.svg www/ 2>/dev/null || true && cp -r styles components tools_views plans www/ 2>/dev/null || true"
+    "build": "rm -rf www && mkdir www && npx esbuild capacitor-init.js --bundle --minify --outfile=www/capacitor-bundle.js && cp *.html *.js *.css *.png *.svg www/ 2>/dev/null || true && cp -r styles components tools_views plans assets www/ 2>/dev/null || true"
   },
   "repository": {
     "type": "git",

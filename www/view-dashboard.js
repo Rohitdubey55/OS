@@ -13,6 +13,81 @@ const DEFAULT_DASH_CONFIG = [
   { id: 'habits', label: 'Habit Tracker', visible: true }
 ];
 
+// Default KPI visibility config
+const DEFAULT_KPI_CONFIG = [
+  { id: 'netWorth', label: 'Net Worth', visible: true, category: 'financial' },
+  { id: 'monthSpend', label: 'Month Spend', visible: true, category: 'financial' },
+  { id: 'tasksDone', label: 'Tasks Done', visible: true, category: 'productivity' },
+  { id: 'monthlyBurnRate', label: 'Burn Rate', visible: true, category: 'financial' },
+  { id: 'incomeExpenseRatio', label: 'Income/Spend', visible: true, category: 'financial' },
+  { id: 'investmentReturns', label: 'Inv. Returns', visible: true, category: 'financial' },
+  { id: 'ytdSpending', label: 'YTD Spend', visible: true, category: 'financial' },
+  { id: 'taskVelocity', label: 'Task Velocity', visible: true, category: 'productivity' },
+  { id: 'priorityDist', label: 'Priority Mix', visible: true, category: 'productivity' },
+  { id: 'habitConsistency', label: 'Habit Score', visible: true, category: 'habits' },
+  { id: 'bestHabit', label: 'Best Habit', visible: true, category: 'habits' },
+  { id: 'strugglingHabits', label: 'Struggling', visible: true, category: 'habits' },
+  { id: 'habitDiversity', label: 'Habits Active', visible: true, category: 'habits' },
+  { id: 'weeklyPattern', label: 'Best Day', visible: true, category: 'habits' },
+  { id: 'networkGrowth', label: 'New Contacts', visible: true, category: 'lifestyle' },
+  { id: 'interactionFreq', label: 'Contact Freq', visible: true, category: 'lifestyle' },
+  { id: 'notesVolume', label: 'Notes', visible: true, category: 'lifestyle' },
+  { id: 'projectedBalance', label: 'Proj. Balance', visible: true, category: 'predictive' },
+  { id: 'goalRisk', label: 'Goal Risk', visible: true, category: 'predictive' }
+];
+
+function getKpiConfig() {
+  const settings = state.data.settings?.[0];
+  if (settings && settings.kpi_config) {
+    try {
+      let parsed = settings.kpi_config;
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch (e) { parsed = null; }
+      }
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const savedIds = parsed.map(s => s.id);
+        const merged = [...parsed];
+        DEFAULT_KPI_CONFIG.forEach(d => {
+          if (!savedIds.includes(d.id)) merged.push({ ...d });
+        });
+        return merged;
+      }
+    } catch (e) { console.log('Invalid kpi_config:', e); }
+  }
+  return DEFAULT_KPI_CONFIG.map(s => ({ ...s }));
+}
+
+async function saveKpiConfig(config) {
+  const settings = state.data.settings?.[0] || {};
+  const cleanConfig = config.map(s => ({
+    id: s.id,
+    label: s.label,
+    visible: s.visible,
+    category: s.category
+  }));
+  const configStr = JSON.stringify(cleanConfig);
+
+  try {
+    const local = JSON.parse(localStorage.getItem('localSettingsOverride') || '{}');
+    local.kpi_config = configStr;
+    localStorage.setItem('localSettingsOverride', JSON.stringify(local));
+  } catch (e) { console.error('Local save failed', e); }
+
+  if (state.data.settings && state.data.settings[0]) {
+    state.data.settings[0].kpi_config = configStr;
+  }
+
+  try {
+    if (settings.id) {
+      await apiCall('update', 'settings', { kpi_config: configStr }, settings.id);
+    } else {
+      await apiCall('create', 'settings', { kpi_config: configStr });
+    }
+  } catch (e) { console.error('API save failed', e); }
+}
+
 // Persistent Widget States (Collapsed/Expanded)
 window.dashWidgetStates = window.dashWidgetStates || {};
 
@@ -88,8 +163,6 @@ function renderDashboard() {
   const main = document.getElementById('main');
   const config = getDashConfig();
 
-  // Check for Weekly Review (Sundays)
-  checkWeeklyReview();
 
   // --- DATA AGGREGATION ---
   const tasks = state.data.tasks || [];
@@ -345,46 +418,164 @@ function renderDashboard() {
     },
 
     kpis: () => {
-      return `
-      <div class="kpi-grid kpi-scroll" style="display:flex; flex-direction:row; gap:16px; overflow-x:auto; padding:6px 6px 16px 6px; margin: 0 0 8px 0; scrollbar-width:none; -ms-overflow-style:none;">
+      // Get KPI visibility config
+      const kpiConfig = getKpiConfig();
+      const visibleKpis = kpiConfig.filter(k => k.visible);
+
+      // --- ADVANCED KPI CALCULATIONS ---
+      const currentYear = new Date().getFullYear();
+      const currentMonth = new Date().getMonth();
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
+
+      // Financial KPIs
+      const monthIncome = expenses
+        .filter(e => e.type === 'income' && new Date(e.date).getMonth() === currentMonth)
+        .reduce((s, e) => s + Number(e.amount), 0);
+
+      const avgDailySpend = monthExp > 0 ? Math.round(monthExp / (today.getDate())) : 0;
+
+      const incomeExpenseRatio = monthIncome > 0 ? Math.round((monthIncome - monthExp) / monthIncome * 100) : 0;
+
+      // Investment returns (if assets have purchase value)
+      const totalInvestments = assets.filter(a => a.type === 'investment' || a.category?.toLowerCase().includes('investment'));
+      const invCurrentValue = totalInvestments.reduce((s, a) => s + Number(a.value || 0), 0);
+      const invPurchaseValue = totalInvestments.reduce((s, a) => s + Number(a.purchase_value || a.value || 0), 0);
+      const invReturns = invPurchaseValue > 0 ? Math.round((invCurrentValue - invPurchaseValue) / invPurchaseValue * 100) : 0;
+
+      // YTD Spending
+      const ytdSpending = expenses
+        .filter(e => e.type === 'expense' && new Date(e.date).getFullYear() === currentYear)
+        .reduce((s, e) => s + Number(e.amount), 0);
+
+      // Productivity KPIs
+      const completedTasks = tasks.filter(t => t.status === 'completed');
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      const tasksThisWeek = completedTasks.filter(t => t.completed_at && new Date(t.completed_at) >= weekAgo).length;
+      const taskVelocity = tasksThisWeek; // Tasks completed this week
+
+      // Priority distribution
+      const p1Tasks = pending.filter(t => t.priority === 'P1').length;
+      const p2Tasks = pending.filter(t => t.priority === 'P2').length;
+      const p3Tasks = pending.filter(t => t.priority === 'P3').length;
+      const totalPending = p1Tasks + p2Tasks + p3Tasks;
+      const p1Percent = totalPending > 0 ? Math.round(p1Tasks / totalPending * 100) : 0;
+
+      // Habit KPIs
+      const habits = state.data.habits || [];
+      const habitCompletions = habits.map(h => {
+        if (!h.history) return { id: h.id, name: h.habit_name || h.name, completed: 0, total: 30 };
+        try {
+          const hist = typeof h.history === 'string' ? JSON.parse(h.history) : h.history;
+          const thisMonth = hist.filter(d => d.startsWith(currentYear + '-' + String(currentMonth + 1).padStart(2, '0'))).length;
+          return { id: h.id, name: h.habit_name || h.name, completed: thisMonth, total: 30 };
+        } catch (e) { return { id: h.id, name: h.habit_name || h.name, completed: 0, total: 30 }; }
+      });
+
+      const avgHabitScore = habitCompletions.length > 0
+        ? Math.round(habitCompletions.reduce((s, h) => s + (h.completed / h.total * 100), 0) / habitCompletions.length)
+        : 0;
+
+      const bestHabit = habitCompletions.length > 0
+        ? habitCompletions.reduce((best, h) => h.completed > (best?.completed || 0) ? h : best, habitCompletions[0])
+        : null;
+
+      const strugglingHabits = habitCompletions.filter(h => h.completed / h.total < 0.5).length;
+      const habitDiversity = habits.length;
+
+      // Weekly pattern - find best day
+      const dayStats = {};
+      habits.forEach(h => {
+        if (!h.history) return;
+        try {
+          const hist = typeof h.history === 'string' ? JSON.parse(h.history) : h.history;
+          hist.forEach(date => {
+            const day = new Date(date).toLocaleDateString('en-US', { weekday: 'short' });
+            dayStats[day] = (dayStats[day] || 0) + 1;
+          });
+        } catch (e) { }
+      });
+      const bestDay = Object.entries(dayStats).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+      // Lifestyle KPIs
+      const people = state.data.people || [];
+      const monthStart = new Date(currentYear, currentMonth, 1);
+      const newContacts = people.filter(p => p.created_at && new Date(p.created_at) >= monthStart).length;
+
+      // Interaction frequency (avg days between contacts)
+      const contactsWithHistory = people.filter(p => p.interactions && p.interactions.length > 0);
+      let avgInteractionDays = 0;
+      if (contactsWithHistory.length > 0) {
+        const totalDays = contactsWithHistory.reduce((s, p) => {
+          const inters = typeof p.interactions === 'string' ? JSON.parse(p.interactions) : p.interactions;
+          if (inters.length < 2) return s;
+          const sorted = inters.sort();
+          const daysDiff = (new Date(sorted[sorted.length - 1]) - new Date(sorted[0])) / (1000 * 60 * 60 * 24);
+          return s + (daysDiff / (inters.length - 1));
+        }, 0);
+        avgInteractionDays = Math.round(totalDays / contactsWithHistory.length);
+      }
+
+      // Notes volume
+      const notes = state.data.notes || [];
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - 7);
+      const notesThisWeek = notes.filter(n => n.created_at && new Date(n.created_at) >= weekStart).length;
+
+      // Predictive KPIs
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const projectedMonthEnd = monthIncome - (avgDailySpend * daysInMonth);
+
+      // Goal deadline risk
+      const activeGoals = goals.filter(g => g.status !== 'achieved' && g.target_date);
+      const atRiskGoals = activeGoals.filter(g => {
+        if (!g.target_date || !g.progress) return false;
+        const daysLeft = getDaysLeft(g.target_date);
+        const progressNeeded = 100 - g.progress;
+        const dailyNeeded = progressNeeded / (daysLeft || 1);
+        return dailyNeeded > 5; // More than 5% per day = risk
+      }).length;
+
+      // Render KPI card helper
+      const renderKpiCard = (id, label, value, subValue, icon, color, route) => {
+        if (!visibleKpis.find(k => k.id === id)) return '';
+        return `<div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="${route ? "routeTo('" + route + "')" : ''}">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start">
+            <div class="kpi-icon" style="background:${color}-soft; color:var(--${color}); width:36px; height:36px; border-radius: 12px;">${icon}</div>
+          </div>
+          <div style="margin-top:16px;">
+            <div class="kpi-value" style="font-size:20px; font-weight: 700;">${value}</div>
+            <div class="kpi-label" style="font-size:12px; margin-top: 4px;">${label}</div>
+            ${subValue ? `<div class="kpi-sub" style="font-size:10px; color:var(--text-muted); margin-top:2px;">${subValue}</div>` : ''}
+          </div>
+        </div>`;
+      };
+
+      return `<div class="kpi-grid kpi-scroll" style="display:flex; flex-direction:row; gap:16px; overflow-x:auto; padding:6px 6px 16px 6px; margin: 0 0 8px 0; scrollbar-width:none; -ms-overflow-style:none;">
         <style>
           .kpi-scroll::-webkit-scrollbar { display: none; }
           .kpi-scroll .kpi-card:hover { transform: translateY(-6px); transition: transform 0.3s ease; }
         </style>
-        
-        <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('finance')">
-           <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="background:var(--primary-soft); color:var(--primary); width:36px; height:36px; border-radius: 12px;">${renderIcon('wallet', null, 'style="width:18px;"')}</div>
-           </div>
-           <div style="margin-top:16px;">
-             <div class="kpi-value" style="font-size:20px; font-weight: 700;">₹${netWorth.toLocaleString()}</div>
-             <div class="kpi-label" style="font-size:12px; margin-top: 4px;">Net Worth</div>
-           </div>
-        </div>
-
-        <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('finance')">
-           <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="background:var(--danger-soft); color:var(--danger); width:36px; height:36px; border-radius: 12px;">${renderIcon('loss', null, 'style="width:18px;"')}</div>
-             <div style="width:50px; height:24px;"><canvas id="sparkSpend"></canvas></div>
-           </div>
-           <div style="margin-top:16px;">
-             <div class="kpi-value" style="font-size:20px; font-weight: 700;">₹${monthExp.toLocaleString()}</div>
-             <div class="kpi-label" style="font-size:12px; margin-top: 4px;">Month Spend</div>
-           </div>
-        </div>
-
-        <div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="routeTo('tasks')">
-           <div style="display:flex; justify-content:space-between; align-items:flex-start">
-             <div class="kpi-icon" style="width:36px; height:36px; border-radius: 12px;">${renderIcon('check-circle', null, 'style="width:18px;"')}</div>
-           </div>
-           <div style="margin-top:16px;">
-             <div class="kpi-value" style="font-size:20px; font-weight: 700;">${completionRate}%</div>
-             <div class="kpi-label" style="font-size:12px; margin-top: 4px;">Tasks Done</div>
-             <div class="progress-container" style="margin-top:12px; height:6px; border-radius: 3px; background: rgba(0,0,0,0.08);">
-               <div class="progress-fill" style="width:${completionRate}%; height: 100%; border-radius: 3px;"></div>
-             </div>
-           </div>
-        </div>
+        ${renderKpiCard('netWorth', 'Net Worth', '₹' + netWorth.toLocaleString(), null, renderIcon('money', null, 'style="width:18px;"'), 'primary', 'finance')}
+        ${renderKpiCard('monthSpend', 'Month Spend', '₹' + monthExp.toLocaleString(), null, renderIcon('loss', null, 'style="width:18px;"'), 'danger', 'finance')}
+        ${renderKpiCard('tasksDone', 'Tasks Done', completionRate + '%', null, renderIcon('check-circle', null, 'style="width:18px;"'), 'primary', 'tasks')}
+        ${renderKpiCard('monthlyBurnRate', 'Burn Rate', '₹' + avgDailySpend.toLocaleString(), '/day avg', renderIcon('trending-down', null, 'style="width:18px;"'), 'warning', 'finance')}
+        ${renderKpiCard('incomeExpenseRatio', 'Savings Rate', incomeExpenseRatio + '%', monthIncome > 0 ? '₹' + (monthIncome - monthExp).toLocaleString() + ' saved' : 'No income', renderIcon('percent', null, 'style="width:18px;"'), incomeExpenseRatio >= 0 ? 'success' : 'danger', 'finance')}
+        ${renderKpiCard('investmentReturns', 'Inv. Returns', (invReturns > 0 ? '+' : '') + invReturns + '%', '₹' + invCurrentValue.toLocaleString(), renderIcon('chart', null, 'style="width:18px;"'), invReturns >= 0 ? 'success' : 'danger', 'finance')}
+        ${renderKpiCard('ytdSpending', 'YTD Spend', '₹' + ytdSpending.toLocaleString(), null, renderIcon('calendar', null, 'style="width:18px;"'), 'primary', 'finance')}
+        ${renderKpiCard('taskVelocity', 'Task Velocity', taskVelocity + ' tasks', 'this week', renderIcon('zap', null, 'style="width:18px;"'), 'primary', 'tasks')}
+        ${renderKpiCard('priorityDist', 'Priority Mix', p1Percent + '% P1', p2Tasks + ' P2, ' + p3Tasks + ' P3', renderIcon('flag', null, 'style="width:18px;"'), 'warning', 'tasks')}
+        ${renderKpiCard('habitConsistency', 'Habit Score', avgHabitScore + '%', null, renderIcon('activity', null, 'style="width:18px;"'), 'primary', 'habits')}
+        ${renderKpiCard('bestHabit', 'Best Habit', bestHabit?.name?.substring(0, 12) || 'N/A', bestHabit ? bestHabit.completed + '/30 days' : '', renderIcon('award', null, 'style="width:18px;"'), 'success', 'habits')}
+        ${renderKpiCard('strugglingHabits', 'Struggling', strugglingHabits + ' habits', 'below 50%', renderIcon('alert-triangle', null, 'style="width:18px;"'), strugglingHabits > 0 ? 'warning' : 'success', 'habits')}
+        ${renderKpiCard('habitDiversity', 'Habits Active', habitDiversity, 'tracked', renderIcon('layers', null, 'style="width:18px;"'), 'primary', 'habits')}
+        ${renderKpiCard('weeklyPattern', 'Best Day', bestDay, 'for habits', renderIcon('calendar', null, 'style="width:18px;"'), 'success', 'habits')}
+        ${renderKpiCard('networkGrowth', 'New Contacts', newContacts, 'this month', renderIcon('user-plus', null, 'style="width:18px;"'), 'primary', 'people')}
+        ${renderKpiCard('interactionFreq', 'Contact Freq', avgInteractionDays > 0 ? avgInteractionDays + ' days' : 'N/A', 'avg interval', renderIcon('clock', null, 'style="width:18px;"'), 'primary', 'people')}
+        ${renderKpiCard('notesVolume', 'Notes', notesThisWeek, 'this week', renderIcon('file-text', null, 'style="width:18px;"'), 'primary', 'notes')}
+        ${renderKpiCard('projectedBalance', 'Proj. Balance', '₹' + projectedMonthEnd.toLocaleString(), 'month end', renderIcon('trending-up', null, 'style="width:18px;"'), projectedMonthEnd >= 0 ? 'success' : 'danger', 'finance')}
+        ${renderKpiCard('goalRisk', 'Goal Risk', atRiskGoals + ' at risk', 'deadline warning', renderIcon('alert-circle', null, 'style="width:18px;"'), atRiskGoals > 0 ? 'danger' : 'success', 'vision')}
       </div>`;
     },
 
@@ -1129,70 +1320,3 @@ window.generateDashboardInsight = async function () {
     lucide.createIcons();
   }
 };
-
-// --- WEEKLY REVIEW ---
-function checkWeeklyReview() {
-  const now = new Date();
-  if (now.getDay() !== 0) return; // Only Sundays
-
-  const weekNum = getWeekNumber(now);
-  const lastReview = localStorage.getItem('lastWeeklyReviewWeek');
-  if (lastReview === String(weekNum)) return;
-
-  setTimeout(showWeeklyReview, 2000); // Show after a delay
-}
-
-function getWeekNumber(d) {
-  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
-
-function showWeeklyReview() {
-  const now = new Date();
-  const weekNum = getWeekNumber(now);
-  localStorage.setItem('lastWeeklyReviewWeek', String(weekNum));
-
-  // Stats aggregation
-  const tasks = state.data.tasks || [];
-  const completedThisWeek = tasks.filter(t => t.status === 'completed').length;
-
-  const habits = state.data.habit_logs || [];
-  const totalStreaks = (state.data.habits || []).reduce((sum, h) => sum + (h.streak || 0), 0);
-
-  const expenses = state.data.expenses || [];
-  const weekSpend = expenses
-    .filter(e => e.type === 'expense')
-    .reduce((s, e) => s + Number(e.amount), 0);
-
-  const modal = document.getElementById('universalModal');
-  const box = modal.querySelector('.modal-box');
-
-  box.innerHTML = `
-    <div style="text-align:center; padding:20px 0;">
-      <div style="font-size:48px; margin-bottom:16px;">📊</div>
-      <h2 style="font-size:24px; font-weight:800; margin-bottom:8px;">Your Weekly Review</h2>
-      <p style="color:var(--text-muted); margin-bottom:32px;">Here's what you accomplished this week.</p>
-      
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:32px;">
-        <div style="background:var(--surface-2); padding:16px; border-radius:16px;">
-          <div style="font-size:24px; font-weight:700; color:var(--primary);">${completedThisWeek}</div>
-          <div style="font-size:12px; font-weight:600; color:var(--text-muted);">Tasks Done</div>
-        </div>
-        <div style="background:var(--surface-2); padding:16px; border-radius:16px;">
-          <div style="font-size:24px; font-weight:700; color:var(--warning);">${totalStreaks}</div>
-          <div style="font-size:12px; font-weight:600; color:var(--text-muted);">Total Streaks</div>
-        </div>
-        <div style="background:var(--surface-2); padding:16px; border-radius:16px; grid-column: span 2;">
-          <div style="font-size:24px; font-weight:700; color:var(--danger);">₹${weekSpend.toLocaleString()}</div>
-          <div style="font-size:12px; font-weight:600; color:var(--text-muted);">Total Spend</div>
-        </div>
-      </div>
-      
-      <button class="btn primary" style="width:100%; padding:14px;" onclick="document.getElementById('universalModal').classList.add('hidden'); triggerConfettiBurst();">Awesome!</button>
-    </div>
-  `;
-
-  modal.classList.remove('hidden');
-}
