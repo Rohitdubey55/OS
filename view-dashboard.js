@@ -9,6 +9,7 @@ const DEFAULT_DASH_CONFIG = [
   { id: 'kpis', label: 'KPI Cards', visible: true },
   { id: 'budget', label: 'Budget Alert', visible: true },
   { id: 'pinnedNotes', label: 'Pinned Notes', visible: true },
+  { id: 'yearProgress', label: 'Year/Life Progress', visible: true },
   { id: 'tasks', label: 'High Priority Tasks', visible: true },
   { id: 'habits', label: 'Habit Tracker', visible: true }
 ];
@@ -196,6 +197,38 @@ function renderDashboard() {
 
   // --- SECTION RENDERERS ---
   const sectionRenderers = {
+    yearProgress: () => {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), 0, 1);
+      const diff = now - start;
+      const oneDay = 1000 * 60 * 60 * 24;
+      const daysPassed = Math.floor(diff / oneDay);
+      const isLeap = (now.getFullYear() % 4 === 0 && now.getFullYear() % 100 !== 0) || (now.getFullYear() % 400 === 0);
+      const totalDays = isLeap ? 366 : 365;
+
+      return `
+      <div class="widget-card year-progress-widget" id="yearProgressCard" data-widget-id="yearProgress" style="margin-bottom: 16px; background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border: 1px solid var(--border-color); border-radius: 20px; overflow: hidden; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+         <div style="position: absolute; top:0; left:0; width:100%; height:4px; background: var(--surface-3);">
+            <div style="height:100%; width: ${(daysPassed / totalDays) * 100}%; background: var(--primary); border-radius: 4px;"></div>
+         </div>
+         <div class="widget-body" style="display:flex; align-items:center; justify-content:space-between; padding: 20px;">
+            <div style="display:flex; align-items:center; gap: 14px;">
+                <div style="width: 44px; height: 44px; border-radius: 14px; background: var(--primary-soft); color: var(--primary); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
+                   ${renderIcon('calendar', null, 'style="width:22px;"')}
+                </div>
+                <div>
+                  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); font-weight: 700;">Year Progress</div>
+                  <div style="font-size: 22px; font-weight: 800; margin-top: 2px; color: var(--text-main);"><span style="color:var(--primary);">${daysPassed}</span><span style="font-size:16px; color:var(--text-muted);">/${totalDays}</span></div>
+                </div>
+            </div>
+            <button class="btn primary ui-polish hover-lift" onclick="routeTo('lifeCalendar')" style="padding: 10px 18px; border-radius: 12px; font-size: 13px; font-weight: 700; display:flex; align-items:center; gap:8px; box-shadow: 0 4px 12px var(--primary-glow);">
+               View Life ${renderIcon('insights', null, 'style="width:16px; color:white;"')}
+            </button>
+         </div>
+      </div>
+      `;
+    },
+
     theNow: () => {
       // Tasks: P1 or due today
       const nowTasks = pending.filter(t => t.priority === 'P1' || (t.due_date && t.due_date <= todayStr)).slice(0, 3);

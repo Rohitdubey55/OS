@@ -85,6 +85,12 @@ function renderSettings() {
         </div>
 
         <div style="margin-bottom:16px">
+          <label class="setting-label">Date of Birth</label>
+          <input type="date" class="input" id="userDob" value="${settings.dob || ''}">
+          <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Used for Life Calendar and Year Progress calculation.</p>
+        </div>
+
+        <div style="margin-bottom:16px">
           <label class="setting-label">Morning Message</label>
           <input type="text" class="input" id="morningMessage" value="${settings.morning_message}" placeholder="Review your plan for the day">
           <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Shown in the morning (before 12 PM)</p>
@@ -1149,6 +1155,7 @@ window.updateCategorySummary = function () {
 window.saveAllSettings = async function (section = 'all') {
   // Profile fields
   const name = document.getElementById('userName')?.value || '';
+  const dob = document.getElementById('userDob')?.value || '';
   const morning = document.getElementById('morningMessage')?.value || '';
   const afternoon = document.getElementById('afternoonMessage')?.value || '';
   const evening = document.getElementById('eveningMessage')?.value || '';
@@ -1202,6 +1209,7 @@ window.saveAllSettings = async function (section = 'all') {
 
   if (section === 'all' || section === 'profile') {
     newSettings.name = name;
+    newSettings.dob = dob;
     newSettings.morning_message = morning;
     newSettings.afternoon_message = afternoon;
     newSettings.evening_message = evening;

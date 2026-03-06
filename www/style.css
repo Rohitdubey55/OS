@@ -976,8 +976,6 @@ body.spacious {
     border-radius: 12px;
     border: 1px solid transparent;
     /* Cleaner border handling */
-    background: var(--surface-2);
-    cursor: pointer;
     font-size: 14px;
     /* Slightly larger for readability */
     font-weight: 500;
@@ -4349,4 +4347,52 @@ input:checked+.slider:before {
   margin: 0;
   font-size: 20px;
   font-weight: 700;
+}
+/* --- LIFE CALENDAR & YEAR PROGRESS OPTIONS --- */
+.life-grid-container {
+    background: var(--surface-1);
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid var(--border-color);
+}
+
+.week-square {
+    width: 6px;
+    height: 6px;
+    border-radius: 1px;
+    flex-shrink: 0;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.week-square:hover {
+    transform: scale(1.5);
+    z-index: 2;
+    box-shadow: 0 0 4px rgba(0,0,0,0.3);
+}
+
+.week-square.past {
+    background-color: var(--surface-3); /* Changed from purely White, looks better in both modes */
+}
+
+.week-square.current {
+    background-color: #10B981; /* Glowing Green */
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    animation: pulse-green 2s infinite;
+}
+
+.week-square.future {
+    background-color: var(--surface-sunken); /* Dark/Blackish depending on theme */
+    border: 1px solid var(--border-color);
+}
+
+.week-square.large-square {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+@keyframes pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
