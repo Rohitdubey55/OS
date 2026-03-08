@@ -7,7 +7,7 @@ const SCHEMA = {
   "tasks": ["id", "title", "due_date", "due_time", "priority", "status", "notes", "description", "category", "tags", "vision_id", "recurrence", "recurrence_days", "recurrence_end", "completed_dates", "duration", "subtasks", "pomodoro_estimate", "pomodoro_length"],
   "expenses": ["id", "date", "amount", "category", "description", "type"],
   "habits": ["id", "habit_name", "frequency", "streak", "reminder_time", "emoji", "pomodoro_sessions", "pomodoro_length"],
-  "habit_logs": ["id", "habit_id", "date", "status"],
+  "habit_logs": ["id", "habit_id", "date", "status", "pomodoro_completed"],
   "diary": ["id", "date", "content", "mood", "tags"],
   "vision_board": ["id", "category", "title", "description", "image_url", "target_date", "progress", "status", "notes", "linked_habits", "created_at", "updated_at", "video_url", "month_focus"],
   "settings": ["id", "name", "dob", "morning_message", "afternoon_message", "evening_message", "weekly_budget", "monthly_budget", "category_budgets", "theme_color", "theme_mode", "orientation_lock", "ai_api_key", "ai_model", "nav_layout", "dashboard_config", "kpi_config", "notification_enabled", "notification_sound", "notification_method", "quiet_hours_start", "quiet_hours_end", "diary_default_mood", "diary_show_tasks", "diary_show_habits", "diary_show_expenses", "task_default_view", "task_categories"],

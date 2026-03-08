@@ -581,7 +581,7 @@ window.toggleHabitOptimistic = async function (id) {
     }
 
     renderHabits(); // Instant re-render
-    await apiCall('create', 'habit_logs', { habit_id: id, date: today, completed: true });
+    await apiCall('create', 'habit_logs', { habit_id: id, date: today, status: 'completed', pomodoro_completed: false });
   }
 
   // Background sync to stay in sync with server

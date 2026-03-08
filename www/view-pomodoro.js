@@ -1323,7 +1323,7 @@ function updateTimerDisplay() {
     }
 }
 
-function completePhase() {
+async function completePhase() {
     clearInterval(pomodoroState.timerInterval);
 
     // Play completion sound
@@ -1334,10 +1334,10 @@ function completePhase() {
         pomodoroState.sessionsCompleted++;
 
         // Save session to log
-        savePomodoroSession();
+        await savePomodoroSession();
 
         // Check if linked to habit/task
-        completeLinkedItem();
+        await completeLinkedItem();
 
         // Switch to break
         if (pomodoroState.sessionsCompleted % pomodoroSettings.long_break_interval === 0) {
@@ -1371,7 +1371,9 @@ async function savePomodoroSession() {
     const session = {
         date: new Date().toISOString().slice(0, 10),
         type: pomodoroState.currentPhase === 'work' ? 'work' : 'break',
-        duration: pomodoroState.currentPhase === 'work' ? pomodoroSettings.work_duration : (pomodoroState.currentPhase === 'shortBreak' ? pomodoroSettings.short_break : pomodoroSettings.long_break),
+        duration: pomodoroState.currentPhase === 'work' ?
+            (pomodoroState.linkedDuration || pomodoroSettings.work_duration) :
+            (pomodoroState.currentPhase === 'shortBreak' ? pomodoroSettings.short_break : pomodoroSettings.long_break),
         habit_id: pomodoroState.linkedItemType === 'habit' ? pomodoroState.linkedItemId : null,
         task_id: pomodoroState.linkedItemType === 'task' ? pomodoroState.linkedItemId : null,
         completed: true
