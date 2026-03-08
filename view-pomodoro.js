@@ -1287,7 +1287,23 @@ function updateTimerDisplay() {
     if (timeEl) {
         const minutes = Math.floor(pomodoroState.timeRemaining / 60);
         const seconds = pomodoroState.timeRemaining % 60;
-        timeEl.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        const mins = String(minutes).padStart(2, '0');
+        const secs = String(seconds).padStart(2, '0');
+
+        timeEl.textContent = `${mins}:${secs}`;
+
+        // Update Immersive Flip Clock
+        const minTen = document.getElementById('minTen');
+        const minOne = document.getElementById('minOne');
+        const secTen = document.getElementById('secTen');
+        const secOne = document.getElementById('secOne');
+        const immersivePhase = document.querySelector('.fullscreen-phase');
+
+        if (minTen) minTen.textContent = mins[0];
+        if (minOne) minOne.textContent = mins[1];
+        if (secTen) secTen.textContent = secs[0];
+        if (secOne) secOne.textContent = secs[1];
+        if (immersivePhase) immersivePhase.textContent = pomodoroState.currentPhase === 'work' ? 'FOCUS' : 'BREAK';
 
         // Final minute styling
         if (pomodoroState.timeRemaining <= 60) {
