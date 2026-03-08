@@ -71,6 +71,10 @@ function renderHabits() {
           z-index: 1;
         }
         .habit-card-new.pending { animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+        @keyframes bentoIn {
+          from { opacity: 0; transform: translateY(20px) scale(0.95); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
         .habit-card-header {
           padding: 8px 12px;
           display: flex;
@@ -101,8 +105,73 @@ function renderHabits() {
         .swipe-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; font-size: 24px; padding: 0 24px; color: white; z-index: 0; pointer-events: none; opacity: 0; }
         .swipe-bg-done { background: var(--success); justify-content: flex-start; }
         .swipe-bg-delete { background: var(--danger); justify-content: flex-end; }
-        .streak-pill { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--surface-2); border-radius: 20px; font-size: 10px; font-weight: 700; color: var(--text-2); border: 1px solid var(--border-color); }
+        
+        /* Premium Streak Pill */
+        .streak-pill { 
+          display: flex; 
+          align-items: center; 
+          gap: 4px; 
+          padding: 3px 8px; 
+          background: var(--surface-2); 
+          border-radius: 20px; 
+          font-size: 10px; 
+          font-weight: 700; 
+          color: var(--text-2); 
+          border: 1px solid var(--border-color);
+          transition: all 0.3s ease;
+        }
+        .streak-7 { background: linear-gradient(135deg, #FF9D6C, #FF6B35); color: white; border: none; box-shadow: 0 2px 8px rgba(255,107,53,0.3); }
+        .streak-30 { background: linear-gradient(135deg, #F7931E, #FF9D6C); color: white; border: none; box-shadow: 0 0 15px rgba(247,147,30,0.5); animation: pulse-gold 2s infinite; }
+        @keyframes pulse-gold {
+          0% { box-shadow: 0 0 0 0 rgba(247,147,30, 0.6); }
+          70% { box-shadow: 0 0 0 10px rgba(247,147,30, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(247,147,30, 0); }
+        }
+
         .habit-card-warning { border: 1px solid #EF4444 !important; }
+
+        /* Scorecard Styles Restoration */
+        .habit-scorecard-container {
+          display: flex;
+          justify-content: space-between;
+          gap: 6px;
+          margin-bottom: 16px;
+          background: var(--surface-2);
+          border-radius: 16px;
+          padding: 10px;
+          border: 1px solid var(--border-color);
+        }
+        .scorecard-item {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 10px;
+          background: var(--surface-1);
+          aspect-ratio: 1;
+          max-width: 45px;
+          position: relative;
+          border: 1px solid var(--border-color);
+        }
+        .score-circle-container { position: relative; width: 32px; height: 32px; }
+        .score-circle-bg { fill: none; stroke: var(--surface-3); stroke-width: 3; }
+        .score-circle-progress { 
+          fill: none; 
+          stroke: var(--primary); 
+          stroke-width: 3; 
+          stroke-linecap: round; 
+          transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1); 
+        }
+        .score-percent {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-size: 8px;
+          font-weight: 800;
+          color: var(--text-1);
+        }
+        .scorecard-item.today { border-color: var(--primary); box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.2); }
       </style>
 
       <div class="habit-wrapper">
@@ -174,7 +243,7 @@ function renderHabits() {
                       </div>
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
-                      <div class="streak-pill">
+                      <div class="streak-pill ${stats.streak >= 30 ? 'streak-30' : (stats.streak >= 7 ? 'streak-7' : '')}">
                         ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : '⭐')} ${stats.streak}
                       </div>
                       ${renderIcon('down', null, 'class="collapse-icon"')}
