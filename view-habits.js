@@ -16,6 +16,23 @@ function getTodayDayName() {
   return DAY_NAMES[d === 0 ? 6 : d - 1]; // Convert to Mon-based
 }
 
+function isHabitTimeInFuture(reminder_time) {
+  if (!reminder_time) return false;
+  const now = new Date();
+  const habitTime = new Date(now);
+  const rt = String(reminder_time);
+
+  if (rt.startsWith('1899-12-30T')) {
+    habitTime.setHours(parseInt(rt.slice(11, 13), 10), parseInt(rt.slice(14, 16), 10), 0, 0);
+  } else if (rt.match(/^\d{2}:\d{2}/)) {
+    const parts = rt.split(':');
+    habitTime.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+  } else {
+    return false;
+  }
+  return habitTime > now;
+}
+
 function isHabitScheduledToday(h) {
   if (!h.frequency || h.frequency === 'daily') return true;
   if (h.frequency === 'weekly' && h.days) {
@@ -50,6 +67,37 @@ function renderHabits() {
     if (!isDoneA && isDoneB) return -1;
     return 0;
   });
+
+  // Determine the "next upcoming" habit: soonest future reminder among pending habits,
+  // falling back to the first pending habit if none have a future reminder time.
+  let nextUpHabitId = null;
+  if (_habitShowTodayOnly) {
+    const pendingHabits = habits.filter(h =>
+      !logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(today))
+    );
+    let soonestDiff = Infinity;
+    pendingHabits.forEach(h => {
+      if (h.reminder_time) {
+        const now = new Date();
+        const habitTime = new Date(now);
+        const rt = String(h.reminder_time);
+        if (rt.startsWith('1899-12-30T')) {
+          habitTime.setHours(parseInt(rt.slice(11, 13), 10), parseInt(rt.slice(14, 16), 10), 0, 0);
+        } else if (rt.match(/^\d{2}:\d{2}/)) {
+          const parts = rt.split(':');
+          habitTime.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+        }
+        const diff = habitTime.getTime() - now.getTime();
+        if (diff > 0 && diff < soonestDiff) {
+          soonestDiff = diff;
+          nextUpHabitId = h.id;
+        }
+      }
+    });
+    if (!nextUpHabitId && pendingHabits.length > 0) {
+      nextUpHabitId = pendingHabits[0].id;
+    }
+  }
 
   const categoryEmojis = {
     'Health': 'health', 'Fitness': 'fitness', 'Learning': 'learning',
@@ -129,6 +177,49 @@ function renderHabits() {
         }
 
         .habit-card-warning { border: 1px solid #EF4444 !important; }
+
+        /* Missed habit warning strip */
+        .habit-missed-banner {
+          font-size: 9px;
+          font-weight: 700;
+          color: #EF4444;
+          background: rgba(239, 68, 68, 0.07);
+          padding: 4px 12px;
+          border-top: 1px solid rgba(239, 68, 68, 0.18);
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          letter-spacing: 0.01em;
+        }
+
+        /* Next upcoming habit highlight */
+        .habit-next-up {
+          border: 2px solid var(--primary) !important;
+          background: linear-gradient(160deg, var(--surface-1) 70%, rgba(var(--primary-rgb, 99,102,241), 0.06)) !important;
+          animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both, next-up-pulse 1.8s ease-in-out 0.6s infinite;
+        }
+        @keyframes next-up-pulse {
+          0%   { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 99,102,241), 0.65), 0 3px 14px rgba(var(--primary-rgb, 99,102,241), 0.2); }
+          55%  { box-shadow: 0 0 0 10px rgba(var(--primary-rgb, 99,102,241), 0),  0 6px 22px rgba(var(--primary-rgb, 99,102,241), 0.35); }
+          100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 99,102,241), 0),  0 3px 14px rgba(var(--primary-rgb, 99,102,241), 0.2); }
+        }
+        .up-next-badge {
+          font-size: 8px;
+          font-weight: 800;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          color: var(--primary);
+          background: rgba(var(--primary-rgb, 99,102,241), 0.12);
+          border: 1px solid rgba(var(--primary-rgb, 99,102,241), 0.3);
+          padding: 2px 6px;
+          border-radius: 4px;
+          margin-left: 6px;
+          animation: badge-pop 1.8s ease-in-out 0.6s infinite;
+        }
+        @keyframes badge-pop {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: 0.7; transform: scale(0.95); }
+        }
 
         /* Scorecard Styles Restoration */
         .habit-scorecard-container {
@@ -233,12 +324,12 @@ function renderHabits() {
               <div class="swipe-reveal-container">
                 <div class="swipe-bg swipe-bg-done">✅</div>
                 <div class="swipe-bg swipe-bg-delete">🗑️</div>
-                <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${!isDoneToday ? 'pending' : ''} ${stats.consecutiveMissed >= 3 ? 'habit-card-warning' : ''}" id="habit-card-${h.id}">
+                <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${!isDoneToday ? 'pending' : ''} ${stats.consecutiveMissed >= 3 && !isHabitTimeInFuture(h.reminder_time) ? 'habit-card-warning' : ''} ${String(h.id) === String(nextUpHabitId) ? 'habit-next-up' : ''}" id="habit-card-${h.id}">
                   <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
                     <div class="habit-title-wrapper">
                       <div class="habit-emoji-circle">${h.emoji || '✨'}</div>
                       <div>
-                        <div class="habit-title-lg">${h.habit_name} ${comingInText}</div>
+                        <div class="habit-title-lg">${h.habit_name} ${comingInText}${String(h.id) === String(nextUpHabitId) ? '<span class="up-next-badge">Up Next</span>' : ''}</div>
                         <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
                       </div>
                     </div>
@@ -249,7 +340,7 @@ function renderHabits() {
                       ${renderIcon('down', null, 'class="collapse-icon"')}
                     </div>
                   </div>
-
+                  ${stats.consecutiveMissed >= 3 && String(h.id) !== String(nextUpHabitId) && !isHabitTimeInFuture(h.reminder_time) ? `<div class="habit-missed-banner">🔗 Don't break the chain! ${stats.consecutiveMissed} day${stats.consecutiveMissed > 1 ? 's' : ''} missed in a row</div>` : ''}
                   <div class="habit-card-body">
                     <div style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:10px;">
                       ${stats.dateButtonsHtml}
@@ -563,10 +654,13 @@ function calculateHabitStats(logs, today, habit) {
 
   // Calculate missed scheduled times (for warning)
   let consecutiveMissed = 0;
+  const isFutureToday = isHabitTimeInFuture(habit?.reminder_time);
+
   for (let i = 0; i < 30; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const iso = d.toISOString().slice(0, 10);
+    const isToday = i === 0;
 
     let isScheduled = true;
     if (habit && habit.frequency === 'weekly' && habit.days) {
@@ -575,11 +669,18 @@ function calculateHabitStats(logs, today, habit) {
       isScheduled = habit.days.split(',').map(s => s.trim()).includes(dayName);
     }
 
-    if (isScheduled && !unique.includes(iso)) {
-      consecutiveMissed++;
-      if (consecutiveMissed >= 3) break;
-    } else if (isScheduled && unique.includes(iso)) {
-      break; // Found a completion, stop counting
+    if (isScheduled) {
+      const isDone = unique.includes(iso);
+      if (isDone) {
+        break; // Found a completion, stop counting
+      } else {
+        // If it's today and the time hasn't passed yet, don't count it as a "missed scheduled time" yet
+        if (isToday && isFutureToday) {
+          continue;
+        }
+        consecutiveMissed++;
+        if (consecutiveMissed >= 3) break;
+      }
     }
   }
 
