@@ -44,7 +44,14 @@ function renderHabits() {
     });
   }
 
-  // 2. Sort - Removed as requested
+  // 2. Sort - Move completed to bottom
+  habits.sort((a, b) => {
+    const isDoneA = logs.some(l => String(l.habit_id) === String(a.id) && (l.date || '').startsWith(today));
+    const isDoneB = logs.some(l => String(l.habit_id) === String(b.id) && (l.date || '').startsWith(today));
+    if (isDoneA && !isDoneB) return 1;
+    if (!isDoneA && isDoneB) return -1;
+    return 0;
+  });
 
 
   // Common Emoji Map (Fallback if user doesn't select one)
