@@ -514,6 +514,11 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
           </span>
           ${!_itemSelectionMode ? `
           <div style="display:flex;align-items:center;gap:1px;flex-shrink:0;margin-top:-1px;">
+            ${t.pomodoro_estimate > 0 ? `
+            <button class="btn icon" style="width:22px;height:22px;padding:2px;color:var(--primary);" onclick="event.stopPropagation(); quickStartPomodoro('task', '${t.id}')" title="Start Pomodoro">
+              ${renderIcon('timer', null, 'style="width:11px;"')}
+            </button>
+            ` : ''}
             <button class="btn icon" style="width:22px;height:22px;padding:2px;" onclick="event.stopPropagation();openEditTask('${t.id}')" title="Edit">
               ${renderIcon('edit', null, 'style="width:11px;"')}
             </button>
@@ -534,6 +539,10 @@ function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
           <span class="task-meta-chip" style="${isOverdue ? 'color:var(--danger);border-color:rgba(239,68,68,0.3);background:rgba(239,68,68,0.07);' : ''}">
             ${renderIcon(isOverdue ? 'alert-circle' : 'calendar', null, 'style="width:9px;"')}
             ${dateLabel}${isOverdue ? ` ${renderIcon('warning', null, 'style="width:10px;vertical-align:middle;margin-left:2px;"')}` : ''}
+          </span>` : ''}
+          ${t.pomodoro_estimate > 0 ? `
+          <span class="task-meta-chip" style="color:var(--primary);border-color:var(--primary-soft);">
+            ${renderIcon('timer', null, 'style="width:9px;"')} ${t.pomodoro_estimate} sessions
           </span>` : ''}
           ${subtasks.length > 0 ? `
           <span class="task-meta-chip" style="${doneSubCount === subtasks.length && subtasks.length > 0 ? 'color:var(--success);border-color:rgba(16,185,129,0.3);' : ''}">
@@ -773,6 +782,22 @@ window.openTaskModal = function () {
         <input type="time" class="input" id="mTaskTime" title="Start Time">
         <input type="number" class="input" id="mTaskDuration" placeholder="Duration (mins)" style="width:110px;" value="30" min="5" step="5" title="Duration in minutes">
       </div>
+      
+      <div style="padding:12px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border-color);">
+        <label style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
+            <i data-icon="timer" style="width:14px"></i> Pomodoro Estimate
+        </label>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;">
+            <div style="flex:1;">
+                <span style="font-size:12px; color:var(--text-2); display:block;">Est. sessions</span>
+                <input type="number" class="input" id="mTaskPomoEstimate" placeholder="0" value="0" style="width:100%" min="0">
+            </div>
+            <div style="flex:1;">
+                <span style="font-size:12px; color:var(--text-2); display:block;">Session Length (min)</span>
+                <input type="number" class="input" id="mTaskPomoLength" placeholder="25" value="25" style="width:100%" min="5" step="5">
+            </div>
+        </div>
+      </div>
       <div>
         <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Recurrence</label>
         <select class="input" id="mTaskRecurrence" onchange="taskRecurrenceChanged()" style="margin-top:6px;">
@@ -865,6 +890,22 @@ window.openEditTask = function (id) {
         <input type="date" class="input" id="mTaskDate" value="${t.due_date || ''}">
         <input type="time" class="input" id="mTaskTime" value="${parseDueTimeForInput(t.due_time)}" title="Start Time">
         <input type="number" class="input" id="mTaskDuration" placeholder="Duration (mins)" style="width:110px;" value="${t.duration || 30}" min="5" step="5" title="Duration in minutes">
+      </div>
+
+      <div style="padding:12px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border-color);">
+        <label style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
+            <i data-icon="timer" style="width:14px"></i> Pomodoro Estimate
+        </label>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;">
+            <div style="flex:1;">
+                <span style="font-size:12px; color:var(--text-2); display:block;">Est. sessions</span>
+                <input type="number" class="input" id="mTaskPomoEstimate" placeholder="0" value="${t.pomodoro_estimate || 0}" style="width:100%" min="0">
+            </div>
+            <div style="flex:1;">
+                <span style="font-size:12px; color:var(--text-2); display:block;">Session Length (min)</span>
+                <input type="number" class="input" id="mTaskPomoLength" placeholder="25" value="${t.pomodoro_length || 25}" style="width:100%" min="5" step="5">
+            </div>
+        </div>
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Recurrence</label>

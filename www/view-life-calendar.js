@@ -1,6 +1,14 @@
 /* view-life-calendar.js */
 
 let currentCalendarView = 'lifetime'; // 'lifetime' or 'thisyear'
+let lifeTimerInterval = null;
+
+function clearLifeTimer() {
+    if (lifeTimerInterval) {
+        clearInterval(lifeTimerInterval);
+        lifeTimerInterval = null;
+    }
+}
 
 function renderLifeCalendar() {
     const settings = state.data.settings?.[0] || {};
@@ -19,26 +27,42 @@ function renderLifeCalendar() {
 
     const dob = new Date(dobStr);
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const birthYear = dob.getFullYear();
 
     // Calculate weeks passed since birth
     const diffTime = Math.abs(now - dob);
     const diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
-    const ageYears = Math.floor(diffWeeks / 52);
 
-    // Header with Toggle
+    const totalWeeks = 50 * 52;
+    const remainingWeeks = totalWeeks - diffWeeks;
+
+    // Header with Toggle (Dual-Layer Sticky Fix)
     let html = `
-    <div class="calendar-header" style="position: sticky; top: 0; background: var(--bg-main); z-index: 10; padding: 16px 20px; border-bottom: 1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center;">
-       <div>
-         <h1 style="font-size: 24px; margin:0; line-height:1.2;">Time Flow</h1>
-         <div style="font-size: 13px; color: var(--text-muted);">Age: ${ageYears} &nbsp;&bull;&nbsp; ${diffWeeks} weeks lived</div>
+    <div class="memento-sticky-wrapper" style="position: sticky; top: 0; z-index: 100; background: var(--backdrop); backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px); border-bottom: 2px solid var(--border-color);">
+       <div class="calendar-header animate-enter">
+       <div class="calendar-header-row">
+         <div class="calendar-header-text">
+            <h1 class="memento-title-text">Memento Mori</h1>
+            <div class="weeks-lived-text">${diffWeeks} Weeks Lived.</div>
+            <div class="remaining-text">${remainingWeeks} Unwritten Remaining.</div>
+         </div>
+         
+         <div class="life-timer-box">
+            <div class="timer-unit-container" id="lifeTimerContainer">
+               <!-- To be filled by JS -->
+            </div>
+         </div>
        </div>
-       <div style="display:flex; background: var(--surface-2); padding: 4px; border-radius: 12px; gap:4px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);">
-          <button class="btn ${currentCalendarView === 'thisyear' ? 'primary' : 'ghost'}" style="${currentCalendarView === 'thisyear' ? 'box-shadow: 0 2px 8px var(--primary-glow);' : ''} padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight:600;" onclick="switchCalendarView('thisyear')">This Year</button>
-          <button class="btn ${currentCalendarView === 'lifetime' ? 'primary' : 'ghost'}" style="${currentCalendarView === 'lifetime' ? 'box-shadow: 0 2px 8px var(--primary-glow);' : ''} padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight:600;" onclick="switchCalendarView('lifetime')">Lifetime</button>
+
+       <div style="display:flex; justify-content:center;">
+          <div class="view-toggle-container">
+             <button class="toggle-btn ${currentCalendarView === 'thisyear' ? 'active' : ''}" onclick="switchCalendarView('thisyear')">This Year</button>
+             <button class="toggle-btn ${currentCalendarView === 'lifetime' ? 'active' : ''}" onclick="switchCalendarView('lifetime')">Lifetime</button>
+          </div>
        </div>
     </div>
+    </div>
+    
+    <div class="animation-narrator" id="animationNarrator"></div>
     
     <div class="calendar-content" style="padding: 20px; max-width: 800px; margin: 0 auto; overflow-x: auto;">
   `;
@@ -52,6 +76,70 @@ function renderLifeCalendar() {
     html += `</div>`;
 
     document.getElementById('main').innerHTML = html;
+
+    // Initialize Timer
+    startLifeTimer(dob);
+
+    // Initialize Animation Status Overlay
+    const hasAnimated = sessionStorage.getItem('mementoAnimated') === 'true';
+    if (currentCalendarView === 'lifetime' && !hasAnimated) {
+        orchestrateNarrator(diffWeeks);
+        sessionStorage.setItem('mementoAnimated', 'true');
+    }
+}
+
+function startLifeTimer(dob) {
+    clearLifeTimer();
+    const updateTimer = () => {
+        const now = new Date();
+        const diff = now - dob;
+
+        const years = Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+        const days = Math.floor((diff % (1000 * 60 * 60 * 24 * 365.25)) / (1000 * 60 * 60 * 24));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        const container = document.getElementById('lifeTimerContainer');
+        if (container) {
+            container.innerHTML = `
+                <div class="timer-unit">
+                    <span class="timer-val">${years}</span>
+                    <span class="timer-label">Years</span>
+                </div>
+                <div class="timer-unit">
+                    <span class="timer-val">${days}</span>
+                    <span class="timer-label">Days</span>
+                </div>
+                <div class="timer-unit">
+                    <span class="timer-val">${String(seconds).padStart(2, '0')}</span>
+                    <span class="timer-label">Secs</span>
+                </div>
+            `;
+        } else {
+            clearLifeTimer();
+        }
+    };
+    updateTimer();
+    lifeTimerInterval = setInterval(updateTimer, 1000);
+}
+
+function orchestrateNarrator(weeksLived) {
+    const narrator = document.getElementById('animationNarrator');
+    if (!narrator) return;
+
+    // Past weeks fall (building the past)
+    narrator.innerText = "Foundation Complete.";
+    narrator.classList.add('visible');
+
+    // Wait for past to finish falling (lived * 0.004s)
+    setTimeout(() => {
+        if (!document.getElementById('animationNarrator')) return;
+        narrator.innerText = "Now Shapes the Next Chapter.";
+        // Close after a few seconds
+        setTimeout(() => {
+            if (!document.getElementById('animationNarrator')) return;
+            narrator.classList.remove('visible');
+        }, 5000);
+    }, (weeksLived * 4) + 1000);
 }
 
 window.switchCalendarView = function (viewType) {
@@ -62,16 +150,17 @@ window.switchCalendarView = function (viewType) {
 function renderLifetimeGrid(weeksLived) {
     const TOTAL_YEARS = 50;
     const WEEKS_PER_YEAR = 52;
+    const hasAnimated = sessionStorage.getItem('mementoAnimated') === 'true';
 
-    let gridHtml = `
-  <div style="margin-bottom: 16px; font-size: 13px; color: var(--text-secondary); text-align: center;">Each square represents one week of your life. 50 Years total.</div>
-  <div class="life-grid-container" style="display: flex; flex-direction: column; gap: 4px;">`;
+    let gridHtml = `<div class="life-grid-container animate-enter stagger-2" style="display: flex; flex-direction: column; gap: 3px;">`;
+
+    const currYearIdx = Math.floor(weeksLived / WEEKS_PER_YEAR);
+    const currWeekIdx = weeksLived % WEEKS_PER_YEAR;
 
     for (let year = 0; year < TOTAL_YEARS; year++) {
-        // Only show year label every 5 years for a cleaner look
-        let yearLabel = (year % 5 === 0) ? `<div style="width: 24px; font-size: 10px; color: var(--text-muted); text-align: right; padding-right: 6px; user-select:none;">${year}</div>` : `<div style="width: 24px;"></div>`;
+        let yearLabel = (year % 10 === 0) ? `<div style="width: 16px; font-size: 9px; color: var(--text-muted); text-align: right; padding-right: 4px; user-select:none;">${year}</div>` : `<div style="width: 16px;"></div>`;
 
-        gridHtml += `<div style="display: flex; gap: 4px; align-items: center; justify-content:center; flex-wrap:nowrap;">`;
+        gridHtml += `<div style="display: flex; gap: 2px; align-items: center; justify-content:center; flex-wrap:nowrap;">`;
         gridHtml += yearLabel;
 
         for (let week = 0; week < WEEKS_PER_YEAR; week++) {
@@ -79,23 +168,45 @@ function renderLifetimeGrid(weeksLived) {
             let statusClass = 'future';
             let titleParams = `Age ${year}, Week ${week + 1}`;
 
+            let animationClass = '';
+            let animationDelay = 0;
+            let inlineStyle = '';
+
             if (absoluteWeek < weeksLived) {
                 statusClass = 'past';
                 titleParams += " (Past)";
+                if (!hasAnimated) {
+                    animationClass = 'animate-fall';
+                    animationDelay = absoluteWeek * 0.004;
+                }
             } else if (absoluteWeek === weeksLived) {
                 statusClass = 'current';
                 titleParams += " (Current Week)";
+                if (!hasAnimated) {
+                    animationClass = 'animate-fall';
+                    animationDelay = absoluteWeek * 0.004;
+                }
             } else {
+                statusClass = 'future';
                 titleParams += " (Future)";
+                if (!hasAnimated) {
+                    animationClass = 'animate-laser';
+                    const dy = (currYearIdx - year) * 7;
+                    const dx = (currWeekIdx - week) * 6;
+                    inlineStyle = `--dx: ${dx}px; --dy: ${dy}px; `;
+                    animationDelay = (weeksLived * 0.004) + ((absoluteWeek - weeksLived) * 0.008) + 0.2;
+                }
             }
 
-            gridHtml += `<div class="week-square ${statusClass}" title="${titleParams}"></div>`;
+            gridHtml += `<div class="week-square ${statusClass} ${animationClass}" title="${titleParams}" style="${inlineStyle} animation-delay: ${animationDelay}s;"></div>`;
         }
         gridHtml += `</div>`;
     }
 
     gridHtml += `</div>
   
+  <div style="margin-top: 16px; font-size: 11px; color: var(--text-secondary); text-align: center; font-style: italic; opacity: 0.8;" class="animate-enter stagger-3">Each square represents one week of your life. 50 years total.</div>
+
   <div style="display:flex; justify-content:center; gap: 16px; margin-top: 24px; font-size: 12px; color: var(--text-muted);">
      <div style="display:flex; align-items:center; gap:6px;"><div class="week-square past"></div> Past</div>
      <div style="display:flex; align-items:center; gap:6px;"><div class="week-square current"></div> Current</div>
@@ -117,14 +228,11 @@ function renderThisYearGrid(now) {
 
     for (let week = 0; week < WEEKS_PER_YEAR; week++) {
         let statusClass = 'future';
-
         if (week < currentWeekNum) {
             statusClass = 'past';
         } else if (week === currentWeekNum) {
             statusClass = 'current';
         }
-
-        // Scale up slightly for the 'This Year' view because there are fewer squares
         gridHtml += `<div class="week-square ${statusClass} large-square" title="Week ${week + 1}"></div>`;
     }
 

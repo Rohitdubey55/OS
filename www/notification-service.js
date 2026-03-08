@@ -457,8 +457,14 @@ function checkAndTriggerReminders() {
                     id: 'habit_' + habit.id,
                     title: (habit.emoji || getIcon('default')) + ' ' + (habit.habit_name || 'Habit Reminder'),
                     description: 'Time for your habit: ' + (habit.habit_name || ''),
-                    reminder_datetime: now.toISOString()
+                    reminder_datetime: now.toISOString(),
+                    habit_name: habit.habit_name // Ensure it passes down
                 });
+
+                // Since app is open, fire foreground intrusive alarm!
+                if (typeof window.openActiveHabitAlarm === 'function') {
+                    window.openActiveHabitAlarm(habit.id, habit.habit_name);
+                }
             }
         }
     });
@@ -553,16 +559,18 @@ function startReminderPolling() {
     // Initial checks on start
     checkAndTriggerReminders();
     checkAndTriggerChimes();
-
-    // Slight delay so state.data has loaded, then sync native alarms
-    setTimeout(() => {
-        syncNativeNotifications(); // Export all habits to actual OS alarms
-    }, 8000);
 }
 
 // Sync all future habits/tasks natively so the phone rings when the app is closed
 async function syncNativeNotifications() {
     if (!window.LocalNotifications || !notificationState.enabled) return;
+
+    // Race condition fix: If settings haven't loaded from the sheet yet, delay sync
+    if (!state.data.settings || state.data.settings.length === 0) {
+        console.log('[Native Sync] Settings not loaded yet, delaying sync 2s...');
+        setTimeout(syncNativeNotifications, 2000);
+        return;
+    }
 
     try {
         // Always request/check permissions — ask the user if not yet granted
@@ -589,6 +597,16 @@ async function syncNativeNotifications() {
         let payload = [];
         let soundOption = (window.notificationState && window.notificationState.sound) ? window.notificationState.sound : 'default';
 
+        // Helper to get correct sound path for Capacitor LocalNotifications
+        // Note: Sound files are in the app bundle root
+        function getNativeSoundPath(soundName) {
+            if (!soundName || soundName === 'none') return null;
+            if (soundName === 'default' || soundName === 'alert') return 'default';
+
+            // For custom sounds on iOS, convert .wav to .caf (iOS preferred format)
+            return soundName.replace('.wav', '.caf');
+        }
+
         // 1. Habits
         const habits = state.data.habits || [];
         habits.forEach(habit => {
@@ -614,6 +632,13 @@ async function syncNativeNotifications() {
 
             if (isNaN(hours) || isNaN(minutes)) return;
 
+            // Ensure we don't schedule an alarm if it's already marked completed today
+            const logs = state.data.habit_logs || [];
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const isDoneToday = logs.some(l => String(l.habit_id) === String(habit.id) && String(l.date).startsWith(todayStr));
+
+            if (isDoneToday) return; // Skip if already crushed today!
+
             // Schedule for today
             const scheduleDate = new Date();
             scheduleDate.setHours(hours, minutes, 0, 0);
@@ -623,26 +648,32 @@ async function syncNativeNotifications() {
                 scheduleDate.setDate(scheduleDate.getDate() + 1);
             }
 
-            const numericId = parseInt(String(habit.id).replace(/\D/g, '') || String(Math.floor(Math.random() * 8000)), 10) + 10000;
-            const message = (habit.emoji || getIcon('default')) + ' Time for your habit: ' + (habit.habit_name || '');
+            // BURST MODE: Schedule 10 notifications spaced 1 minute apart
+            for (let i = 0; i < 10; i++) {
+                const burstDate = new Date(scheduleDate.getTime() + (i * 60 * 1000));
 
-            let config = {
-                title: "⏰ Habit Alarm",
-                body: message,
-                id: numericId,
-                schedule: { at: scheduleDate, allowWhileIdle: true },
-            };
+                // Unique numeric ID for each burst: (habitId * 100) + 10000 + i
+                const numericRoot = parseInt(String(habit.id).replace(/\D/g, '') || String(Math.floor(Math.random() * 8000)), 10);
+                const burstId = (numericRoot * 100) + 10000 + i;
 
-            // Always set an explicit sound — empty string = iOS system default
-            if (soundOption === 'none') {
-                config.sound = null;
-            } else if (soundOption !== 'default' && soundOption !== 'alert') {
-                config.sound = soundOption; // custom .wav
-            } else {
-                config.sound = ''; // iOS system default alert sound
+                const message = (habit.emoji || getIcon('default')) + ' Time for your habit: ' + (habit.habit_name || '');
+
+                let config = {
+                    title: "⏰ Habit Alarm (" + (i + 1) + "/10)",
+                    body: message + " (Tap to dismiss!)",
+                    id: burstId,
+                    schedule: {
+                        at: burstDate,
+                        allowWhileIdle: false
+                    },
+                    extra: { habit_id: habit.id, habit_name: habit.habit_name }
+                };
+
+                // Always set an explicit sound using helper
+                config.sound = getNativeSoundPath(soundOption);
+
+                payload.push(config);
             }
-
-            payload.push(config);
         });
 
         // 2. Tasks with due_time
@@ -679,17 +710,11 @@ async function syncNativeNotifications() {
                     title: "📋 Task Due",
                     body: task.title || 'Task Due',
                     id: numericId,
-                    schedule: { at: dueDate, allowWhileIdle: true }
+                    schedule: { at: dueDate }
                 };
 
-                // Always set an explicit sound — empty string = iOS system default
-                if (soundOption === 'none') {
-                    config.sound = null;
-                } else if (soundOption !== 'default' && soundOption !== 'alert') {
-                    config.sound = soundOption; // custom .wav
-                } else {
-                    config.sound = ''; // iOS system default alert sound
-                }
+                // Always set an explicit sound using helper
+                config.sound = getNativeSoundPath(soundOption);
 
                 payload.push(config);
             }
@@ -719,17 +744,11 @@ async function syncNativeNotifications() {
                     title: "📅 Upcoming Event",
                     body: (evt.title || 'Event') + ' starts in 10 minutes',
                     id: numericId,
-                    schedule: { at: alertTime, allowWhileIdle: true }
+                    schedule: { at: alertTime }
                 };
 
-                // Always set an explicit sound — empty string = iOS system default
-                if (soundOption === 'none') {
-                    config.sound = null;
-                } else if (soundOption !== 'default' && soundOption !== 'alert') {
-                    config.sound = soundOption; // custom .wav
-                } else {
-                    config.sound = ''; // iOS system default alert sound
-                }
+                // Always set an explicit sound using helper
+                config.sound = getNativeSoundPath(soundOption);
 
                 payload.push(config);
             }
@@ -857,13 +876,18 @@ async function sendToAppInventor(reminder) {
             title: "Reminder",
             body: message,
             id: numericId,
-            schedule: { at: scheduleDate }
+            schedule: { at: scheduleDate },
+            extra: {
+                habit_id: reminder.habit_name ? reminder.id.replace('habit_', '') : undefined,
+                habit_name: reminder.habit_name
+            }
         };
 
         if (soundOption === 'none') {
             config.sound = null;
-        } else if (soundOption !== 'default' && soundOption !== 'alert') {
-            config.sound = soundOption;
+        } else {
+            // Use helper to get correct sound path for iOS (.wav -> .caf)
+            config.sound = getNativeSoundPath(soundOption);
         }
 
         await window.LocalNotifications.schedule({
@@ -980,7 +1004,7 @@ async function sendUpcomingHabitSummary() {
                 title: '🌅 Your Morning Briefing',
                 body: bodyText,
                 schedule: { at: new Date(Date.now() + 500) },
-                sound: (window.notificationState && window.notificationState.sound === 'none') ? null : 'default',
+                sound: getNativeSoundPath(window.notificationState?.sound),
                 actionTypeId: 'OPEN_DASHBOARD'
             }]
         });
@@ -1083,7 +1107,7 @@ async function checkAndTriggerChimes() {
                 title: "🔔 " + msg,
                 body: finalMsg,
                 schedule: { at: new Date(Date.now() + 500) },
-                sound: window.chimeState.sound === 'none' ? null : window.chimeState.sound
+                sound: getNativeSoundPath(window.chimeState?.sound)
             }]
         });
     }

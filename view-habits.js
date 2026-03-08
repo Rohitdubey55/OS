@@ -401,17 +401,25 @@ function renderHabits() {
                     </div>
                   </div>
             
-                  <div class="habit-action-row">
-                    <button class="habit-action-btn secondary" onclick="event.stopPropagation(); openEditHabit('${h.id}')">
+                  <div class="habit-action-row" style="display:flex; flex-wrap:wrap; gap:8px;">
+                    <button class="habit-action-btn secondary" onclick="event.stopPropagation(); openEditHabit('${h.id}')" style="flex:1">
                       ${renderIcon('edit', null, 'style="width:14px;"')} Edit
                     </button>
                     <button class="habit-action-btn secondary" onclick="event.stopPropagation(); deleteHabit('${h.id}')">
                       ${renderIcon('delete', null, 'style="width:14px;"')}
                     </button>
+                    
+                    ${h.pomodoro_sessions > 0 ? `
+                    <button class="habit-action-btn secondary" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')" style="width:100%; gap:6px; background:var(--surface-3); margin-top:4px; display:flex; align-items:center; justify-content:center;">
+                      ${renderIcon('timer', null, 'style="width:16px;"')} Focus Mode
+                    </button>
+                    ` : ''}
+
                     ${scheduledToday || _backDateMode ? `
                     <button class="habit-action-btn primary ${isDoneSelectedDate ? 'done' : ''}" 
-                            onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}">
-                      ${isDoneSelectedDate ? `${renderIcon('save', null, 'style="width:14px;"')} Done` : `${renderIcon('circle', null, 'style="width:14px;"')} Mark Done`}
+                            onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}"
+                            style="width:100%; margin-top:4px;">
+                      ${isDoneSelectedDate ? renderIcon('check', null, 'style="width:16px; margin-right:4px;"') + ' Completed' : 'Mark Done'}
                     </button>
                     ` : ''}
                   </div>
@@ -542,6 +550,21 @@ window.toggleHabitOptimistic = async function (id) {
     // Haptic interaction
     if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
 
+    // Cancel aggressive repeating native alarm (BURST MODE: 10 individual notifications)
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+      try {
+        const numericRoot = parseInt(String(id).replace(/\D/g, '') || "0", 10);
+        const notificationsToCancel = [];
+        for (let i = 0; i < 10; i++) {
+          notificationsToCancel.push({ id: (numericRoot * 100) + 10000 + i });
+        }
+        await window.Capacitor.Plugins.LocalNotifications.cancel({ notifications: notificationsToCancel });
+        console.log('[Native] Cancelled 10 burst notifications for habit ID:', id);
+      } catch (e) {
+        console.warn('Failed to cancel native alarm', e);
+      }
+    }
+
     // Psychological Pattern: Variable Rewards / Operant Conditioning
     // Calculate new streak to see if we hit a milestone
     const hBlogs = state.data.habit_logs.filter(l => String(l.habit_id) === String(id));
@@ -591,6 +614,18 @@ window.markAllHabitsDone = async function () {
   // Optimistic update
   pending.forEach(h => {
     state.data.habit_logs.push({ id: 'temp-' + Date.now() + h.id, habit_id: h.id, date: today, completed: true });
+
+    // Cancel aggressive repeating native alarm individually
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+      try {
+        const numericRoot = parseInt(String(h.id).replace(/\D/g, '') || "0", 10);
+        const notificationsToCancel = [];
+        for (let i = 0; i < 10; i++) {
+          notificationsToCancel.push({ id: (numericRoot * 100) + 10000 + i });
+        }
+        window.Capacitor.Plugins.LocalNotifications.cancel({ notifications: notificationsToCancel }).catch(() => { });
+      } catch (e) { }
+    }
   });
   renderHabits();
   showToast(`Marked ${pending.length} habit${pending.length > 1 ? 's' : ''} as done!`);
@@ -801,6 +836,22 @@ window.openHabitModal = function () {
         <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:8px; display:block;">Which days?</label>
         ${getDayPickerHtml()}
       </div>
+      
+      <div style="margin-top:16px; padding:12px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border-color);">
+        <label style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
+            <i data-icon="timer" style="width:14px"></i> Pomodoro Integration
+        </label>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;">
+            <div style="flex:1;">
+              <span style="font-size:12px; color:var(--text-2); display:block;">Sessions / day</span>
+              <input type="number" class="input" id="mHabitPomoSessions" placeholder="0" value="0" style="width:100%" min="0">
+            </div>
+            <div style="flex:1;">
+              <span style="font-size:12px; color:var(--text-2); display:block;">Length (min)</span>
+              <input type="number" class="input" id="mHabitPomoLength" placeholder="25" value="25" style="width:100%" min="5" step="5">
+            </div>
+        </div>
+      </div>
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
           <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
           <button class="btn primary" data-action="save-habit-modal">Save Habit</button>
@@ -808,7 +859,9 @@ window.openHabitModal = function () {
     `;
 
   modal.classList.remove('hidden');
-}
+};
+
+
 
 // Helper to parse reminder_time from various formats to HH:mm
 function parseReminderTimeToHHMM(val) {
@@ -879,6 +932,22 @@ window.openEditHabit = function (id) {
     <div id="dayPickerWrap" style="display:${isWeekly ? 'block' : 'none'}">
       <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:8px; display:block;">Which days?</label>
       ${getDayPickerHtml(h.days || '')}
+    </div>
+
+    <div style="margin-top:16px; padding:12px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border-color);">
+      <label style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
+          <i data-icon="timer" style="width:14px"></i> Pomodoro Integration
+      </label>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;">
+          <div style="flex:1;">
+            <span style="font-size:12px; color:var(--text-2); display:block;">Sessions / day</span>
+            <input type="number" class="input" id="mHabitPomoSessions" placeholder="0" value="${h.pomodoro_sessions || 0}" style="width:100%" min="0">
+          </div>
+          <div style="flex:1;">
+            <span style="font-size:12px; color:var(--text-2); display:block;">Length (min)</span>
+            <input type="number" class="input" id="mHabitPomoLength" placeholder="25" value="${h.pomodoro_length || 25}" style="width:100%" min="5" step="5">
+          </div>
+      </div>
     </div>
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
       <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>

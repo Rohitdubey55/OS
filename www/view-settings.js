@@ -300,7 +300,7 @@ function renderSettings() {
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Toggle and rearrange dashboard widgets.</p>
         
-        <div class="dash-toggles" id="dashTogglesList">
+        <div class="dash-toggles" id="dashTogglesList" style="max-height: 280px; overflow-y: auto; padding-right: 8px;">
            ${renderDashboardTogglesOrdered()}
         </div>
         
@@ -310,12 +310,14 @@ function renderSettings() {
             ${typeof renderIcon === 'function' ? renderIcon('bar-chart-2', null, 'style="width:18px;"') : '📊'} KPI Visibility
           </div>
           <p class="section-description" style="margin-bottom: 16px;">Toggle which KPIs to show on the dashboard.</p>
-          <div id="kpiTogglesList">
+          <div id="kpiTogglesList" style="max-height: 280px; overflow-y: auto; padding-right: 8px;">
             ${renderKpiToggles()}
           </div>
         </div>
         
-        <button class="btn primary" onclick="saveAllSettings('dashboard')" style="margin-top:12px">Save Dashboard Layout</button>
+        <div style="padding-top: 20px; margin-top: 20px; border-top: 1px solid var(--border-color); padding-bottom: 20px;">
+          <button class="btn primary" onclick="saveAllSettings('dashboard')" style="width:100%; padding:14px; height:auto;">Save Dashboard Layout</button>
+        </div>
         </div>
       </details>
 
@@ -686,13 +688,12 @@ function renderKpiToggles() {
   // Merge saved config with base config
   let orderedKpis = [];
   if (kpiData && kpiData.length > 0) {
-    const savedIds = kpiData.map(k => k.id);
-    baseConfig.forEach(b => {
-      const saved = kpiData.find(k => k.id === b.id);
-      orderedKpis.push({ ...b, visible: saved ? saved.visible : b.visible });
+    kpiData.forEach(item => {
+      const baseInfo = baseConfig.find(b => b.id === item.id);
+      if (baseInfo) orderedKpis.push({ ...baseInfo, visible: item.visible });
     });
     baseConfig.forEach(b => {
-      if (!savedIds.includes(b.id)) orderedKpis.push({ ...b, visible: true });
+      if (!orderedKpis.some(ok => ok.id === b.id)) orderedKpis.push({ ...b, visible: true });
     });
   } else {
     orderedKpis = baseConfig.map(b => ({ ...b }));
@@ -1195,7 +1196,7 @@ window.saveAllSettings = async function (section = 'all') {
   const navLayoutJSON = JSON.stringify(navLayoutArray);
 
   // Read dashboard toggles correctly
-  const dashItemsDOM = Array.from(document.querySelectorAll('.dash-toggle-item'));
+  const dashItemsDOM = Array.from(document.querySelectorAll('#dashTogglesList .dash-toggle-item'));
   const dashLayoutArray = dashItemsDOM.map(el => {
     const isVisible = el.querySelector('.dash-checkbox').checked;
     // ensure label is preserved
@@ -1338,7 +1339,7 @@ window.saveAllSettings = async function (section = 'all') {
     await refreshData('settings');
   }
 
-  showToast('Settings Saved!');
+  showToast('Save Successful!', 'success');
 };
 
 window.testGeminiAPI = async function () {

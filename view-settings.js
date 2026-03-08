@@ -300,7 +300,7 @@ function renderSettings() {
         <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
         <p class="section-description">Toggle and rearrange dashboard widgets.</p>
         
-        <div class="dash-toggles" id="dashTogglesList">
+        <div class="dash-toggles" id="dashTogglesList" style="max-height: 280px; overflow-y: auto; padding-right: 8px;">
            ${renderDashboardTogglesOrdered()}
         </div>
         
@@ -310,12 +310,14 @@ function renderSettings() {
             ${typeof renderIcon === 'function' ? renderIcon('bar-chart-2', null, 'style="width:18px;"') : '📊'} KPI Visibility
           </div>
           <p class="section-description" style="margin-bottom: 16px;">Toggle which KPIs to show on the dashboard.</p>
-          <div id="kpiTogglesList">
+          <div id="kpiTogglesList" style="max-height: 280px; overflow-y: auto; padding-right: 8px;">
             ${renderKpiToggles()}
           </div>
         </div>
         
-        <button class="btn primary" onclick="saveAllSettings('dashboard')" style="margin-top:12px">Save Dashboard Layout</button>
+        <div style="padding-top: 20px; margin-top: 20px; border-top: 1px solid var(--border-color); padding-bottom: 20px;">
+          <button class="btn primary" onclick="saveAllSettings('dashboard')" style="width:100%; padding:14px; height:auto;">Save Dashboard Layout</button>
+        </div>
         </div>
       </details>
 
@@ -451,22 +453,22 @@ function renderSettings() {
                 <select id="notificationSound" class="input" style="flex:1">
                     <option value="default">Default (System Ringtone)</option>
                     <option value="none">Silent</option>
-                    <optgroup label="Short Alerts">
-                        <option value="chime.wav">Chime</option>
-                        <option value="beep.wav">Beep</option>
-                        <option value="classic.wav">Classic Alarm</option>
+                     <optgroup label="Short Alerts">
+                        <option value="chime">Chime</option>
+                        <option value="beep">Beep</option>
+                        <option value="classic">Classic Alarm</option>
                     </optgroup>
                     <optgroup label="Long Alarms">
-                        <option value="alarm_fast_10s.wav">Fast Alarm (10s)</option>
-                        <option value="digital_clock_20s.wav">Digital Clock (20s)</option>
-                        <option value="siren_30s.wav">Siren (30s)</option>
-                        <option value="gentle_wake_30s.wav">Gentle Wake (30s)</option>
-                        <option value="meditation_bell_30s.wav">Meditation Bell (30s)</option>
-                        <option value="sonar_10s.wav">Sonar (10s)</option>
-                        <option value="emergency_20s.wav">Emergency (20s)</option>
-                        <option value="slow_pulse_10s.wav">Slow Pulse (10s)</option>
-                        <option value="space_ambient_30s.wav">Space Ambient (30s)</option>
-                        <option value="marimba_trill_20s.wav">Marimba Trill (20s)</option>
+                        <option value="alarm_fast_10s">Fast Alarm (10s)</option>
+                        <option value="digital_clock_20s">Digital Clock (20s)</option>
+                        <option value="siren_30s">Siren (30s)</option>
+                        <option value="gentle_wake_30s">Gentle Wake (30s)</option>
+                        <option value="meditation_bell_30s">Meditation Bell (30s)</option>
+                        <option value="sonar_10s">Sonar (10s)</option>
+                        <option value="emergency_20s">Emergency (20s)</option>
+                        <option value="slow_pulse_10s">Slow Pulse (10s)</option>
+                        <option value="space_ambient_30s">Space Ambient (30s)</option>
+                        <option value="marimba_trill_20s">Marimba Trill (20s)</option>
                     </optgroup>
                 </select>
                 <button class="btn secondary" onclick="playTestSound()" style="padding: 0 16px;">Test</button>
@@ -686,13 +688,12 @@ function renderKpiToggles() {
   // Merge saved config with base config
   let orderedKpis = [];
   if (kpiData && kpiData.length > 0) {
-    const savedIds = kpiData.map(k => k.id);
-    baseConfig.forEach(b => {
-      const saved = kpiData.find(k => k.id === b.id);
-      orderedKpis.push({ ...b, visible: saved ? saved.visible : b.visible });
+    kpiData.forEach(item => {
+      const baseInfo = baseConfig.find(b => b.id === item.id);
+      if (baseInfo) orderedKpis.push({ ...baseInfo, visible: item.visible });
     });
     baseConfig.forEach(b => {
-      if (!savedIds.includes(b.id)) orderedKpis.push({ ...b, visible: true });
+      if (!orderedKpis.some(ok => ok.id === b.id)) orderedKpis.push({ ...b, visible: true });
     });
   } else {
     orderedKpis = baseConfig.map(b => ({ ...b }));
@@ -1195,7 +1196,7 @@ window.saveAllSettings = async function (section = 'all') {
   const navLayoutJSON = JSON.stringify(navLayoutArray);
 
   // Read dashboard toggles correctly
-  const dashItemsDOM = Array.from(document.querySelectorAll('.dash-toggle-item'));
+  const dashItemsDOM = Array.from(document.querySelectorAll('#dashTogglesList .dash-toggle-item'));
   const dashLayoutArray = dashItemsDOM.map(el => {
     const isVisible = el.querySelector('.dash-checkbox').checked;
     // ensure label is preserved
@@ -1338,7 +1339,7 @@ window.saveAllSettings = async function (section = 'all') {
     await refreshData('settings');
   }
 
-  showToast('Settings Saved!');
+  showToast('Save Successful!', 'success');
 };
 
 window.testGeminiAPI = async function () {

@@ -305,6 +305,12 @@
                         <i data-icon="dumbbell" style="color:var(--primary)"></i>
                     </button>
                 </div>
+                <div class="fab-menu-item" onclick="routeTo('pomodoro'); closeFABMenu()">
+                    <span class="fab-menu-label">Pomodoro</span>
+                    <button class="fab-menu-button pomodoro">
+                        <i data-icon="timer" style="color:var(--primary)"></i>
+                    </button>
+                </div>
                 <div class="fab-menu-item" onclick="routeTo('notes'); closeFABMenu()">
                     <span class="fab-menu-label">Note Taking</span>
                     <button class="fab-menu-button notes">
@@ -401,6 +407,7 @@
 
     <script src="view-settings.js"></script>
     <script src="view-gym.js"></script>
+    <script src="view-pomodoro.js"></script>
     <script src="view-notes.js"></script>
     <script src="view-chimes.js"></script>
     <script src="notification-service.js?v=3"></script>
@@ -426,7 +433,7 @@
         });</script>
 
     <audio id="alarmSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
-        preload="auto"></audio>
+        preload="none"></audio>
 </body>
 
 </html>

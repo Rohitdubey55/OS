@@ -234,6 +234,9 @@ function addLongPressListener(selector, callback) {
 // --- ROUTING ---
 
 async function routeTo(viewName) {
+    // Cleanup any active intervals from specialized views
+    if (typeof clearLifeTimer === 'function') clearLifeTimer();
+
 
     // Hash Routing
     if (window.location.hash !== '#' + viewName) {
@@ -309,6 +312,7 @@ async function routeTo(viewName) {
             else if (viewName === 'notes') renderNotes();
             else if (viewName === 'chimes') renderChimesView();
             else if (viewName === 'lifeCalendar') renderLifeCalendar();
+            else if (viewName === 'pomodoro') renderPomodoro();
         } catch (e) {
             console.error('Error rendering view ' + viewName + ':', e);
             main.innerHTML = '<div style="padding:20px; color:red">Error loading view: ' + viewName + '<br><small>' + e.message + '</small></div>';
@@ -385,10 +389,162 @@ async function initApp() {
             if (navigator.vibrate) navigator.vibrate(50);
         });
     } catch (e) { console.error('Error initializing long press:', e); }
-
 }
 
+// --- ACTIVE HABIT ALARM (Forces Typing to Dismiss) ---
+// Moved to main.js to ensure it's globally available before any specific view script loads
+window.openActiveHabitAlarm = function (habitId, habitName) {
+    // Remove existing if any
+    const existing = document.getElementById('activeHabitAlarmOverlay');
+    if (existing) existing.remove();
 
+    const overlay = document.createElement('div');
+    overlay.id = 'activeHabitAlarmOverlay';
+    overlay.style.cssText = `
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      background: var(--surface-1); z-index: 100000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px; text-align: center; animation: pulse-bg 2s infinite alternate;
+    `;
+
+    // Start blaring sound via Native Audio to bypass iOS WebKit AutoPlay Sandbox
+    let hasNativeAudio = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeAudio;
+    let fallbackAudio = null;
+
+    // Use user-selected sound or default to urgency alarm
+    let activeSound = (window.notificationState && window.notificationState.sound && window.notificationState.sound !== 'default')
+        ? window.notificationState.sound
+        : 'alarm_fast_10s.wav';
+
+    // For iOS, convert .wav to .caf format
+    if (activeSound.includes('.wav')) {
+        activeSound = activeSound.replace('.wav', '.caf');
+    } else if (!activeSound.includes('.')) {
+        activeSound += '.caf';
+    }
+
+    if (hasNativeAudio) {
+        window.Capacitor.Plugins.NativeAudio.preload({
+            assetId: 'habit_alarm',
+            assetPath: 'assets/sounds/' + activeSound,
+            audioChannelNum: 1,
+            isUrl: false
+        }).catch(e => {
+            console.error("NativeAudio preload failed", e);
+            fallbackAudio = new Audio('assets/sounds/' + activeSound);
+            fallbackAudio.loop = true;
+            fallbackAudio.play().catch(err => console.error("Fallback audio play blocked", err));
+        });
+    } else {
+        fallbackAudio = new Audio('assets/sounds/' + activeSound);
+        fallbackAudio.loop = true;
+        fallbackAudio.play().catch(e => console.error("Audio auto-play blocked", e));
+    }
+
+    overlay.innerHTML = `
+      <style>
+        @keyframes pulse-bg { 0% { background: var(--surface-1); } 100% { background: #fee2e2; } }
+        .alarm-title { font-size: 32px; font-weight: 800; color: #ef4444; margin-bottom: 16px; animation: shake 0.5s infinite; }
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+        .alarm-input { width: 100%; max-width: 300px; padding: 16px; font-size: 18px; text-align: center; border-radius: 12px; border: 2px solid #ef4444; margin-bottom: 24px; }
+        .alarm-label { color: var(--text-2); font-size: 14px; margin-bottom: 8px; font-weight: 600; }
+      </style>
+      <div style="font-size: 64px; margin-bottom: 16px;">⏰</div>
+      <div class="alarm-title">It's Time!</div>
+      <div style="font-size: 20px; font-weight: 600; margin-bottom: 32px;">${habitName}</div>
+      <div class="alarm-label">Type the habit name above exactly to dismiss:</div>
+      <div style="font-weight: 800; font-size: 16px; margin-bottom: 16px; user-select: none; background: var(--surface-2); padding: 8px 16px; border-radius: 8px;">${habitName}</div>
+      <input type="text" id="alarmDismissInput" class="alarm-input" placeholder="Type here..." autocomplete="off">
+      <button id="alarmEmergencyBtn" class="btn secondary" style="opacity: 0.5; margin-top: 32px;">Emergency Override (Skip)</button>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Enforce infinite looping for fallback audio explicitly in case standard .loop fails on older Safari
+    if (fallbackAudio) {
+        fallbackAudio.addEventListener('ended', function () {
+            this.currentTime = 0;
+            this.play();
+        }, false);
+    }
+
+    const input = document.getElementById('alarmDismissInput');
+    input.focus();
+
+    input.addEventListener('input', function () {
+        if (this.value === habitName) {
+            if (hasNativeAudio) {
+                window.Capacitor.Plugins.NativeAudio.stop({ assetId: 'habit_alarm' }).catch(() => { });
+                window.Capacitor.Plugins.NativeAudio.unload({ assetId: 'habit_alarm' }).catch(() => { });
+            }
+            if (fallbackAudio) fallbackAudio.pause();
+            overlay.remove();
+            // Auto-mark it as done
+            if (typeof window.toggleHabitOptimistic === 'function') {
+                window.toggleHabitOptimistic(habitId);
+            }
+            showToast("Habit crushed! 💪", "success");
+        }
+    });
+
+    // Assign audio object to local variable so arrow functions can access it
+    const btn = document.getElementById('alarmEmergencyBtn');
+    btn.onclick = () => {
+        if (hasNativeAudio) {
+            window.Capacitor.Plugins.NativeAudio.stop({ assetId: 'habit_alarm' }).catch(() => { });
+            window.Capacitor.Plugins.NativeAudio.unload({ assetId: 'habit_alarm' }).catch(() => { });
+        }
+        if (fallbackAudio) fallbackAudio.pause();
+        overlay.remove();
+    };
+};
+
+// IMMEDIATELY ATTACH LISTENER (Prevents missing events on cold start)
+// If Capacitor is loading injecting late, we poll for a split second to attach right when it's ready.
+(function attachCapacitorListener() {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
+        window.Capacitor.Plugins.LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
+            console.log('Notification action performed (Cold Start Safe Hook)', notificationAction);
+            try {
+                let extra = notificationAction.notification.extra;
+                console.log('[Notification Debug] Raw extra:', extra);
+
+                if (typeof extra === 'string') {
+                    try { extra = JSON.parse(extra); } catch (e) { }
+                }
+
+                if (extra && extra.habit_id && extra.habit_name) {
+                    console.log('[Notification Debug] Habit Match! Name:', extra.habit_name);
+                    setTimeout(() => {
+                        if (state.view !== 'habits') routeTo('habits');
+                        setTimeout(() => {
+                            if (typeof window.openActiveHabitAlarm === 'function') {
+                                window.openActiveHabitAlarm(extra.habit_id, extra.habit_name);
+                            }
+                        }, 800);
+                    }, 1000);
+                } else if (notificationAction.notification.title === '⏰ Habit Alarm' || (notificationAction.notification.body && notificationAction.notification.body.includes('Time for your habit'))) {
+                    console.log('[Notification Debug] Match via Title/Body fallback!');
+                    const bodyStr = notificationAction.notification.body || '';
+                    const nameParts = bodyStr.split('Time for your habit: ');
+                    const derivedName = nameParts.length > 1 ? nameParts[1].trim() : 'Habit';
+                    const derivedId = 'system_recovered_id';
+                    setTimeout(() => {
+                        if (state.view !== 'habits') routeTo('habits');
+                        setTimeout(() => {
+                            if (typeof window.openActiveHabitAlarm === 'function') {
+                                window.openActiveHabitAlarm(derivedId, derivedName);
+                            }
+                        }, 800);
+                    }, 1000);
+                }
+            } catch (e) { console.error("[Notification Debug] Action error", e); }
+        });
+    } else {
+        // Poll for Capacitor (in case script ordering places this before capacitor.js)
+        setTimeout(attachCapacitorListener, 100);
+    }
+})();
 
 function showToast(msg, type = 'default', undoCallback = null) {
     let t = document.getElementById('toast');
@@ -1391,6 +1547,10 @@ document.addEventListener('click', async (e) => {
 
         const durationEl = document.getElementById('mHabitDuration');
         const duration = durationEl ? parseInt(durationEl.value, 10) || 45 : 45;
+        const pomoEl = document.getElementById('mHabitPomoSessions');
+        const pomoSessions = pomoEl ? parseInt(pomoEl.value, 10) || 0 : 0;
+        const pomoLenEl = document.getElementById('mHabitPomoLength');
+        const pomoLength = pomoLenEl ? parseInt(pomoLenEl.value, 10) || 25 : 25;
 
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
@@ -1401,6 +1561,8 @@ document.addEventListener('click', async (e) => {
             reminder_time: time,
             duration: duration,
             emoji: emoji,
+            pomodoro_sessions: pomoSessions,
+            pomodoro_length: pomoLength,
             created_at: new Date().toISOString()
         };
         console.log('[Habit Save] Final payload:', habitPayload);
@@ -1436,6 +1598,8 @@ document.addEventListener('click', async (e) => {
         const duration = parseInt(document.getElementById('mTaskDuration')?.value) || 30;
         const recurrence = document.getElementById('mTaskRecurrence')?.value || 'none';
         const recurrenceEnd = document.getElementById('mTaskRecurrenceEnd')?.value || '';
+        const pomoEstimate = parseInt(document.getElementById('mTaskPomoEstimate')?.value) || 0;
+        const pomoLength = parseInt(document.getElementById('mTaskPomoLength')?.value) || 25;
         let recurrenceDays = '';
         if (recurrence === 'weekly') {
             const checkedBoxes = document.getElementById('universalModal').querySelectorAll('.task-day-check:checked');
@@ -1455,6 +1619,8 @@ document.addEventListener('click', async (e) => {
             priority: prio, due_date: date || '', due_time: time || '',
             duration: duration,
             recurrence, recurrence_days: recurrenceDays, recurrence_end: recurrenceEnd,
+            pomodoro_estimate: pomoEstimate,
+            pomodoro_length: pomoLength,
             status: 'pending',
             created_at: new Date().toISOString()
         });
@@ -1498,6 +1664,8 @@ document.addEventListener('click', async (e) => {
 
         const recurrence = document.getElementById('mTaskRecurrence')?.value || 'none';
         const recurrenceEnd = document.getElementById('mTaskRecurrenceEnd')?.value || '';
+        const pomoEstimate = parseInt(document.getElementById('mTaskPomoEstimate')?.value) || 0;
+        const pomoLength = parseInt(document.getElementById('mTaskPomoLength')?.value) || 25;
 
         let recurrenceDays = '';
         if (recurrence === 'weekly') {
@@ -1519,7 +1687,9 @@ document.addEventListener('click', async (e) => {
             subtasks: JSON.stringify(subtasks),
             priority: prio, due_date: date || '', due_time: time,
             duration: duration,
-            recurrence, recurrence_days: recurrenceDays, recurrence_end: recurrenceEnd
+            recurrence, recurrence_days: recurrenceDays, recurrence_end: recurrenceEnd,
+            pomodoro_estimate: pomoEstimate,
+            pomodoro_length: pomoLength
         }, editId);
 
         await refreshData('tasks');
@@ -1618,6 +1788,10 @@ document.addEventListener('click', async (e) => {
 
         const durationEl = document.getElementById('mHabitDuration');
         const duration = durationEl ? parseInt(durationEl.value, 10) || 45 : 45;
+        const pomoEl = document.getElementById('mHabitPomoSessions');
+        const pomoSessions = pomoEl ? parseInt(pomoEl.value, 10) || 0 : 0;
+        const pomoLenEl = document.getElementById('mHabitPomoLength');
+        const pomoLength = pomoLenEl ? parseInt(pomoLenEl.value, 10) || 25 : 25;
 
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
@@ -1627,7 +1801,9 @@ document.addEventListener('click', async (e) => {
             days: freq === 'weekly' ? days : '',
             reminder_time: time,
             duration: duration,
-            emoji: emoji
+            emoji: emoji,
+            pomodoro_sessions: pomoSessions,
+            pomodoro_length: pomoLength
         };
         console.log('[Habit Update] Final payload:', updatePayload);
         await apiCall('update', 'habits', updatePayload, editId);
@@ -1852,6 +2028,14 @@ async function loadAllData() {
         }
         if (typeof updateTabVisibility === 'function') {
             updateTabVisibility();
+        }
+
+        // Authoritative load for notifications
+        if (typeof loadNotificationSettings === 'function') {
+            loadNotificationSettings();
+            if (typeof syncNativeNotifications === 'function') {
+                syncNativeNotifications();
+            }
         }
     }
 
@@ -2333,15 +2517,19 @@ function playAlarmSound() {
 
     const settings = state.data.settings?.[0] || { volume: 100, sound: 'classic' };
 
-    // Map sound names to files (using mixkit assets for demo)
+    // Map sound names to files
     const sounds = {
-        'classic': 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
-        'digital': 'https://assets.mixkit.co/active_storage/sfx/2190/2190-preview.mp3',
-        'gentle': 'https://assets.mixkit.co/active_storage/sfx/1126/1126-preview.mp3',
-        'system': 'https://assets.mixkit.co/active_storage/sfx/995/995-preview.mp3'
+        'classic': 'assets/sounds/classic.wav',
+        'digital': 'assets/sounds/digital_clock_20s.wav',
+        'gentle': 'assets/sounds/gentle_wake_30s.wav',
+        'chime': 'assets/sounds/chime.wav',
+        'beep': 'assets/sounds/beep.wav',
+        'system': 'default'
     };
 
-    const src = sounds[settings.sound] || sounds['classic'];
+    let src = sounds[settings.sound] || ('assets/sounds/' + settings.sound);
+    if (!src.includes('.') && src !== 'default') src += '.wav';
+
     if (audio.src !== src) audio.src = src;
 
     audio.volume = (settings.volume || 100) / 100;

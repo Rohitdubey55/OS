@@ -1,5 +1,96 @@
 const SPREADSHEET_ID = "1m1r9fZ9cO8izkb-YIs-iz5hZljTpm3p0PzD-LiS0hZM";
 
+/* -------- AUTOMATIC SCHEMA INITIALIZATION -------- */
+// Defines the exact required columns for every single module in PersonalOS
+const SCHEMA = {
+  "planner_events": ["id", "title", "start_datetime", "end_datetime", "category"],
+  "tasks": ["id", "title", "due_date", "due_time", "priority", "status", "notes", "description", "category", "tags", "vision_id", "recurrence", "recurrence_days", "recurrence_end", "completed_dates", "duration", "subtasks", "pomodoro_estimate", "pomodoro_length"],
+  "expenses": ["id", "date", "amount", "category", "description", "type"],
+  "habits": ["id", "habit_name", "frequency", "streak", "reminder_time", "emoji", "pomodoro_sessions", "pomodoro_length"],
+  "habit_logs": ["id", "habit_id", "date", "status"],
+  "diary": ["id", "date", "content", "mood", "tags"],
+  "vision_board": ["id", "category", "title", "description", "image_url", "target_date", "progress", "status", "notes", "linked_habits", "created_at", "updated_at", "video_url", "month_focus"],
+  "settings": ["id", "name", "dob", "morning_message", "afternoon_message", "evening_message", "weekly_budget", "monthly_budget", "category_budgets", "theme_color", "theme_mode", "orientation_lock", "ai_api_key", "ai_model", "nav_layout", "dashboard_config", "kpi_config", "notification_enabled", "notification_sound", "notification_method", "quiet_hours_start", "quiet_hours_end", "diary_default_mood", "diary_show_tasks", "diary_show_habits", "diary_show_expenses", "task_default_view", "task_categories"],
+  "funds": ["id", "name", "balance", "type", "currency"],
+  "assets": ["id", "name", "value", "purchase_date", "notes"],
+  "people": ["id", "name", "relationship", "birthday", "last_contact", "notes"],
+  "people_debts": ["id", "person_id", "amount", "type", "date", "notes"],
+  "reminders": ["id", "title", "reminder_datetime", "is_active", "linked_item_id"],
+  "diary_templates": ["id", "title", "content", "category", "is_default", "sort_order"],
+  "diary_tags": ["id", "name", "color", "usage_count", "created_at"],
+  "diary_achievements": ["id", "type", "name", "description", "target_value", "unlocked_at"],
+  "gym_workouts": ["id", "date", "exercise_name", "workout_type", "duration_minutes", "sets", "reps", "weight", "notes"],
+  "gym_exercises": ["id", "name", "muscle_group", "equipment", "description"],
+  "notes": ["id", "title", "content", "category", "created_at", "updated_at", "is_pinned", "tags"],
+  "vision_images": ["id", "vision_id", "file_id", "url", "name", "uploaded_at"],
+  "pomodoro_settings": ["id", "work_duration", "short_break", "long_break", "long_break_interval", "sound_work", "sound_break", "auto_start_break", "background_mode"],
+  "pomodoro_sessions": ["id", "date", "type", "duration", "habit_id", "task_id", "completed"],
+  "pomodoro_badges": ["id", "user_id", "badge_type", "unlocked_at", "total_sessions"]
+};
+
+/**
+ * Utility to force-sync all schemas. 
+ * Can be run manually from the script editor if headers get out of sync.
+ */
+function resyncAllSchemas() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  
+  Object.keys(SCHEMA).forEach(sheetName => {
+    Logger.log(`Checking ${sheetName}...`);
+    ensureSheetExists(sheetName);
+  });
+  
+  return "Resync complete. Check execution logs in Apps Script for details.";
+}
+
+/**
+ * Ensures a sheet exists and has the correct headers based on the SCHEMA.
+ * If the sheet exists but is missing columns, it appends the missing headers.
+ * If the sheet doesn't exist, it creates it and writes the headers.
+ */
+function ensureSheetExists(sheetName) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(sheetName);
+  
+  // 1. Create sheet if missing
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+  
+  const requiredHeaders = SCHEMA[sheetName];
+  if (!requiredHeaders) return sheet;
+
+  // 2. Identify and add missing headers (Self-Healing)
+  if (sheet.getLastColumn() === 0) {
+    // Brand new sheet
+    sheet.appendRow(requiredHeaders);
+  } else {
+    // Existing sheet: check for missing columns
+    const currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const missingHeaders = requiredHeaders.filter(h => !currentHeaders.includes(h));
+    
+    if (missingHeaders.length > 0) {
+      console.log(`Self-Healing: Adding missing columns to ${sheetName}: ${missingHeaders.join(', ')}`);
+      const nextCol = sheet.getLastColumn() + 1;
+      const headerRange = sheet.getRange(1, nextCol, 1, missingHeaders.length);
+      headerRange.setValues([missingHeaders]);
+    }
+  }
+
+  // 3. Aesthetic formatting for the header row
+  const headerRange = sheet.getRange(1, 1, 1, sheet.getLastColumn());
+  headerRange.setFontWeight("bold");
+  headerRange.setBackground("#f3f4f6"); // Light gray background
+  sheet.setFrozenRows(1);
+  
+  // Auto-resize columns for better readability if it's a new or healed sheet
+  try {
+     sheet.autoResizeColumns(1, sheet.getLastColumn());
+  } catch(e) {}
+  
+  return sheet;
+}
+
 function doGet(e) {
   try {
     if (!e.parameter.action || !e.parameter.sheet) {
@@ -48,11 +139,9 @@ function doPost(e) {
   }
 }
 
+// Helper to abstract getting/creating a sheet safely
 function getSheet(sheetName) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) throw new Error("Sheet not found: " + sheetName);
-  return sheet;
+  return ensureSheetExists(sheetName);
 }
 
 function getData(sheetName) {
