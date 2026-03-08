@@ -707,23 +707,73 @@ window.triggerConfettiBurst = window.triggerConfetti; // Alias for compatibility
 /* ─── SWIPE ACTION HELPER ─── */
 window.addSwipeAction = function (el, onSwipeLeft, onSwipeRight) {
     let startX = 0, startY = 0, moved = false;
-    el.addEventListener('touchstart', e => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; moved = false; }, { passive: true });
+    let threshold = 60;
+
+    el.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        moved = false;
+        el.style.transition = '';
+    }, { passive: true });
+
     el.addEventListener('touchmove', e => {
         const dx = e.touches[0].clientX - startX;
         const dy = e.touches[0].clientY - startY;
         if (Math.abs(dy) > Math.abs(dx)) return; // ignore vertical scrolls
+
         moved = true;
-        if (dx < -30 && onSwipeLeft) el.style.transform = `translateX(${Math.max(dx, -80)}px)`;
-        if (dx > 30 && onSwipeRight) el.style.transform = `translateX(${Math.min(dx, 80)}px)`;
+        const container = el.closest('.swipe-reveal-container');
+        const bgDone = container ? container.querySelector('.swipe-bg-done') : null;
+        const bgDelete = container ? container.querySelector('.swipe-bg-delete') : null;
+
+        if (dx > 0 && onSwipeRight) {
+            el.style.transform = `translateX(${Math.min(dx, 100)}px)`;
+            if (bgDone) {
+                bgDone.style.opacity = Math.min(dx / threshold, 1);
+                bgDone.style.transform = `scale(${Math.min(0.5 + dx / (threshold * 2), 1.2)})`;
+            }
+            if (bgDelete) bgDelete.style.opacity = '0';
+        } else if (dx < 0 && onSwipeLeft) {
+            el.style.transform = `translateX(${Math.max(dx, -100)}px)`;
+            if (bgDelete) {
+                bgDelete.style.opacity = Math.min(Math.abs(dx) / threshold, 1);
+                bgDelete.style.transform = `scale(${Math.min(0.5 + Math.abs(dx) / (threshold * 2), 1.2)})`;
+            }
+            if (bgDone) bgDone.style.opacity = '0';
+        }
     }, { passive: true });
+
     el.addEventListener('touchend', e => {
         const dx = e.changedTouches[0].clientX - startX;
-        el.style.transition = 'transform 0.2s ease';
+        el.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
         el.style.transform = 'translateX(0)';
-        setTimeout(() => el.style.transition = '', 200);
+
+        const container = el.closest('.swipe-reveal-container');
+        if (container) {
+            const bgs = container.querySelectorAll('.swipe-bg');
+            bgs.forEach(bg => {
+                bg.style.transition = 'opacity 0.3s, transform 0.3s';
+                bg.style.opacity = '0';
+                bg.style.transform = 'scale(0.5)';
+            });
+        }
+
+        setTimeout(() => {
+            el.style.transition = '';
+            if (container) {
+                container.querySelectorAll('.swipe-bg').forEach(bg => bg.style.transition = '');
+            }
+        }, 300);
+
         if (!moved) return;
-        if (dx < -60 && onSwipeLeft) { setTimeout(onSwipeLeft, 150); }
-        if (dx > 60 && onSwipeRight) { setTimeout(onSwipeRight, 150); }
+        if (dx < -threshold && onSwipeLeft) {
+            if (window.Capacitor && window.Capacitor.Plugins.Haptics) window.Capacitor.Plugins.Haptics.impact({ style: 'medium' });
+            setTimeout(onSwipeLeft, 200);
+        }
+        if (dx > threshold && onSwipeRight) {
+            if (window.Capacitor && window.Capacitor.Plugins.Haptics) window.Capacitor.Plugins.Haptics.impact({ style: 'medium' });
+            setTimeout(onSwipeRight, 200);
+        }
     });
 };
 

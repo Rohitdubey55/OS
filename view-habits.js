@@ -86,36 +86,85 @@ function renderHabits() {
             0 16px 32px rgba(0,0,0,0.08),
             0 32px 64px rgba(0,0,0,0.12);
         }
+        .habit-card-new {
+          background: var(--surface-1);
+          border-radius: 12px;
+          margin-bottom: 10px;
+          border: 1px solid var(--border-color);
+          overflow: hidden;
+          position: relative;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .habit-card-new.pending {
+          animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        }
         .habit-card-header {
+          padding: 10px 14px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          cursor: pointer;
+        }
+        .habit-title-wrapper {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          padding: 16px 20px;
-          cursor: pointer;
-          background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
-          user-select: none;
+          gap: 10px;
         }
-        .habit-card-body {
-          display: none;
-          padding: 16px;
-          border-top: 1px solid var(--border-color);
-        }
-        .habit-card-new.habit-expanded .habit-card-body {
-          display: block;
-        }
-        .habit-emoji-lg {
-          font-size: 32px;
-          margin-right: 12px;
+        .habit-emoji-circle {
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--surface-2);
+          border-radius: 10px;
+          font-size: 16px;
+          flex-shrink: 0;
         }
         .habit-title-lg {
-          font-size: 18px;
           font-weight: 700;
+          font-size: 0.95rem;
           color: var(--text-1);
+          letter-spacing: -0.01em;
         }
         .habit-meta {
-          font-size: 12px;
+          font-size: 10px;
           color: var(--text-muted);
           margin-top: 2px;
+        }
+        /* Swipe Actions Styles */
+        .swipe-reveal-container {
+          position: relative;
+          overflow: hidden;
+          border-radius: 12px;
+          margin-bottom: 10px;
+        }
+        .swipe-bg {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          font-size: 24px;
+          padding: 0 24px;
+          color: white;
+          z-index: 0;
+          pointer-events: none;
+        }
+        .swipe-bg-done {
+          background: var(--success);
+          justify-content: flex-start;
+        }
+        .swipe-bg-delete {
+          background: var(--danger);
+          justify-content: flex-end;
+        }
+        .habit-card-new {
+          margin-bottom: 0; /* Let container handle margin */
+          z-index: 1;
         }
         .streak-pill {
           display: flex;
@@ -402,35 +451,35 @@ function renderHabits() {
     }
 
     return `
-              <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${stats.consecutiveMissed >= 3 ? 'habit-card-warning' : ''}" id="habit-card-${h.id}" ${stats.consecutiveMissed >= 3 ? 'style="border:2px solid #EF4444 !important; background:linear-gradient(135deg, #FEF2F2, #FEE2E2) !important;"' : ''}>
-              
-                <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
-                  <div style="display:flex; align-items:center;">
-                    ${habitIconHtml}
-                    <div>
-                      <div class="habit-title-lg" style="display:flex; align-items:center;">${h.habit_name} ${comingInText}</div>
-                      <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
+              <div class="swipe-reveal-container">
+                <div class="swipe-bg swipe-bg-done">✅</div>
+                <div class="swipe-bg swipe-bg-delete">🗑️</div>
+                <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${!isDoneToday ? 'pending' : ''} ${stats.consecutiveMissed >= 3 ? 'habit-card-warning' : ''}" id="habit-card-${h.id}">
+                
+                  <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
+                    <div class="habit-title-wrapper">
+                      <div class="habit-emoji-circle">${h.emoji || '✨'}</div>
+                      <div>
+                        <div class="habit-title-lg">${h.habit_name} ${comingInText}</div>
+                        <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
+                      </div>
                     </div>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                      <div class="streak-pill ${stats.streak >= 30 ? 'milestone-30' : (stats.streak >= 7 ? 'milestone-7' : '')}" style="${stats.streak >= 7 ? 'background:linear-gradient(135deg, #FEF08A, #F59E0B); color:#78350F;' : ''} ${stats.streak >= 30 ? 'box-shadow: 0 0 15px rgba(245, 158, 11, 0.5); animation: pulse-gold 2s infinite;' : ''}">
+                        ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : renderIcon('streak', null, 'style="width:14px;"'))} ${stats.streak}
                   </div>
-                  <div style="display:flex; align-items:center; gap:12px;">
-                    <div class="streak-pill ${stats.streak >= 30 ? 'milestone-30' : (stats.streak >= 7 ? 'milestone-7' : '')}" style="${stats.streak >= 7 ? 'background:linear-gradient(135deg, #FEF08A, #F59E0B); color:#78350F;' : ''} ${stats.streak >= 30 ? 'box-shadow: 0 0 15px rgba(245, 158, 11, 0.5); animation: pulse-gold 2s infinite;' : ''}">
-                      ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : renderIcon('streak', null, 'style="width:16px;"'))} ${stats.streak}
-                    </div>
-                    ${renderIcon('down', null, 'class="collapse-icon" style="width:20px; color:var(--text-muted);"')}
-                  </div>
-                </div>
 
                 ${scheduledToday && !isDoneToday && new Date().getHours() >= 20 ? `
-                  <div style="padding: 0 16px 12px 16px; font-size: 11px; font-weight: 700; color: #EF4444; letter-spacing: 0.5px; text-transform: uppercase;">
-                     <i data-lucide="alert-circle" style="width:12px; vertical-align:middle; margin-right:4px;"></i> Don't break the chain!
+                  <div style="padding: 0 16px 8px 16px; font-size: 10px; font-weight: 700; color: #EF4444; letter-spacing: 0.5px; text-transform: uppercase;">
+                       Don't break the chain!
                   </div>
                 ` : ''}
 
-                <div class="habit-card-body">
+                <div class="habit-card-body" style="padding: 0 14px 14px 14px;">
                   ${h.frequency === 'weekly' && daysList.length > 0 ? `
-                  <div style="display:flex; gap:4px; margin-bottom:12px; flex-wrap:wrap;">
+                  <div style="display:flex; gap:4px; margin-bottom:10px; flex-wrap:wrap;">
                     ${DAY_NAMES.map(d => `
-                      <span style="font-size:11px; padding:4px 10px; border-radius:12px; font-weight:600;
+                      <span style="font-size:10px; padding:3px 8px; border-radius:10px; font-weight:600;
                         background:${daysList.includes(d) ? (d === todayDay ? 'var(--primary)' : 'var(--primary-soft)') : 'var(--surface-2)'};
                         color:${daysList.includes(d) ? (d === todayDay ? 'white' : 'var(--primary)') : 'var(--text-muted)'};">
                         ${d}
@@ -439,60 +488,44 @@ function renderHabits() {
                   </div>
                   ` : ''}
 
-                  <!-- Back Date Picker inside card -->
-                  <div style="margin-bottom:12px; padding:10px; background:var(--surface-2); border-radius:8px; display:none;">
-                    
-                    ${_backDateMode ? `
-                    <input type="date" class="input" id="backDateInput" value="${_selectedBackDate}" max="${today}" 
-                           onchange="_selectedBackDate=this.value; renderHabits()" style="flex:1; max-width:200px; margin-top:8px;">
-                    ` : ''}
-                  </div>
-            
-                  <!-- Date buttons instead of heatmap dots -->
-                  <div class="date-buttons-container" style="margin-bottom:12px;">
-                    <div class="stat-mini" style="margin-bottom:6px; font-weight:600;">Last 14 Days</div>
-                    <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                  <div class="date-buttons-container" style="margin-bottom:10px;">
+                    <div style="display:flex; gap:3px; flex-wrap:wrap;">
                       ${stats.dateButtonsHtml}
                     </div>
                   </div>
             
-                  <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-                    <div style="text-align:center;">
-                      <div style="font-size:24px; font-weight:800; color:var(--text-1);">${stats.total}</div>
-                      <div style="font-size:11px; color:var(--text-muted);">Total Days</div>
+                  <div style="display:flex; justify-content:space-between; margin-bottom:12px; background:var(--surface-2); padding:8px; border-radius:10px;">
+                    <div style="text-align:center; flex:1;">
+                      <div style="font-size:18px; font-weight:800; color:var(--text-1);">${stats.total}</div>
+                      <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase;">Total</div>
                     </div>
-                    <div style="text-align:center;">
-                      <div style="font-size:24px; font-weight:800; color:var(--primary);">${stats.completionRate}%</div>
-                      <div style="font-size:11px; color:var(--text-muted);">Success Rate</div>
+                    <div style="text-align:center; flex:1; border-left:1px solid var(--border-color);">
+                      <div style="font-size:18px; font-weight:800; color:var(--primary);">${stats.completionRate}%</div>
+                      <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase;">Success</div>
                     </div>
                   </div>
             
-                  <div class="habit-action-row" style="display:flex; flex-wrap:wrap; gap:8px;">
-                    <button class="habit-action-btn secondary" onclick="event.stopPropagation(); openEditHabit('${h.id}')" style="flex:1">
-                      ${renderIcon('edit', null, 'style="width:14px;"')} Edit
-                    </button>
-                    <button class="habit-action-btn secondary" onclick="event.stopPropagation(); deleteHabit('${h.id}')">
-                      ${renderIcon('delete', null, 'style="width:14px;"')}
+                  <div class="habit-action-row" style="display:flex; flex-wrap:wrap; gap:6px;">
+                    <button class="btn secondary small" onclick="event.stopPropagation(); openEditHabit('${h.id}')" style="flex:1; padding:6px; font-size:11px;">
+                      ${renderIcon('edit', null, 'style="width:12px;"')} Edit
                     </button>
                     
                     ${h.pomodoro_sessions > 0 ? `
-                    <button class="habit-action-btn secondary" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')" style="width:100%; gap:6px; background:var(--surface-3); margin-top:4px; display:flex; align-items:center; justify-content:center;">
-                      ${renderIcon('timer', null, 'style="width:16px;"')} Focus Mode
+                    <button class="btn secondary small" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')" style="flex:1; padding:6px; font-size:11px; background:var(--surface-3);">
+                      Focus
                     </button>
                     ` : ''}
 
-                    ${scheduledToday || _backDateMode ? `
-                    <button class="habit-action-btn primary ${isDoneSelectedDate ? 'done' : ''}" 
+                    <button class="btn primary small ${isDoneSelectedDate ? 'done' : ''}" 
                             onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}"
-                            style="width:100%; margin-top:4px;">
-                      ${isDoneSelectedDate ? renderIcon('check', null, 'style="width:16px; margin-right:4px;"') + ' Completed' : 'Mark Done'}
+                            style="flex:2; padding:6px; font-size:11px;">
+                      ${isDoneSelectedDate ? 'Completed' : 'Mark Done'}
                     </button>
-                    ` : ''}
                   </div>
                 </div>
-          
               </div>
-            `;
+            </div>
+    `;
   }).join('')}
         </div>
       </div>
