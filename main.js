@@ -710,6 +710,7 @@ window.addSwipeAction = function (el, onSwipeLeft, onSwipeRight) {
     let threshold = 60;
 
     el.addEventListener('touchstart', e => {
+        console.log('[Swipe] touchstart on', el.id);
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         moved = false;
@@ -745,6 +746,7 @@ window.addSwipeAction = function (el, onSwipeLeft, onSwipeRight) {
 
     el.addEventListener('touchend', e => {
         const dx = e.changedTouches[0].clientX - startX;
+        console.log('[Swipe] touchend dx:', dx, 'threshold:', threshold);
         el.style.transition = 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
         el.style.transform = 'translateX(0)';
 
@@ -767,10 +769,12 @@ window.addSwipeAction = function (el, onSwipeLeft, onSwipeRight) {
 
         if (!moved) return;
         if (dx < -threshold && onSwipeLeft) {
+            console.log('[Swipe] Triggering swipe left');
             if (window.Capacitor && window.Capacitor.Plugins.Haptics) window.Capacitor.Plugins.Haptics.impact({ style: 'medium' });
             setTimeout(onSwipeLeft, 200);
         }
         if (dx > threshold && onSwipeRight) {
+            console.log('[Swipe] Triggering swipe right');
             if (window.Capacitor && window.Capacitor.Plugins.Haptics) window.Capacitor.Plugins.Haptics.impact({ style: 'medium' });
             setTimeout(onSwipeRight, 200);
         }

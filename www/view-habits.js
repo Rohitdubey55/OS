@@ -358,12 +358,17 @@ function renderHabits() {
 }
 
 function _attachHabitSwipes() {
-  if (typeof window.addSwipeAction !== 'function') return;
-  document.querySelectorAll('.habit-card-new').forEach(row => {
+  if (typeof window.addSwipeAction !== 'function') {
+    console.log('[Habits] addSwipeAction not found!');
+    return;
+  }
+  const cards = document.querySelectorAll('.habit-card-new');
+  console.log('[Habits] Found ' + cards.length + ' habit cards for swipes');
+  cards.forEach(row => {
     const habitId = row.id.replace('habit-card-', '');
     window.addSwipeAction(row,
-      () => window.deleteHabit(habitId),
-      () => window.toggleHabitOptimistic(habitId)
+      () => { console.log('[Habits] Swipe left on ' + habitId); window.deleteHabit(habitId); },
+      () => { console.log('[Habits] Swipe right on ' + habitId); window.toggleHabitOptimistic(habitId); }
     );
   });
 }

@@ -561,6 +561,15 @@ function startReminderPolling() {
     checkAndTriggerChimes();
 }
 
+// Returns the correct sound filename for Capacitor LocalNotifications on iOS.
+// Must be module-level so all scheduling functions can call it.
+function getNativeSoundPath(soundName) {
+    if (!soundName || soundName === 'none') return null;
+    if (soundName === 'default' || soundName === 'alert') return 'default';
+    // iOS requires .caf format; convert .wav filenames automatically
+    return soundName.replace('.wav', '.caf');
+}
+
 // Sync all future habits/tasks natively so the phone rings when the app is closed
 async function syncNativeNotifications() {
     if (!window.LocalNotifications || !notificationState.enabled) return;
@@ -596,16 +605,6 @@ async function syncNativeNotifications() {
         const now = new Date();
         let payload = [];
         let soundOption = (window.notificationState && window.notificationState.sound) ? window.notificationState.sound : 'default';
-
-        // Helper to get correct sound path for Capacitor LocalNotifications
-        // Note: Sound files are in the app bundle root
-        function getNativeSoundPath(soundName) {
-            if (!soundName || soundName === 'none') return null;
-            if (soundName === 'default' || soundName === 'alert') return 'default';
-
-            // For custom sounds on iOS, convert .wav to .caf (iOS preferred format)
-            return soundName.replace('.wav', '.caf');
-        }
 
         // 1. Habits
         const habits = state.data.habits || [];
@@ -664,7 +663,7 @@ async function syncNativeNotifications() {
                     id: burstId,
                     schedule: {
                         at: burstDate,
-                        allowWhileIdle: false
+                        allowWhileIdle: false // Remove to avoid iOS crash
                     },
                     extra: { habit_id: habit.id, habit_name: habit.habit_name }
                 };
