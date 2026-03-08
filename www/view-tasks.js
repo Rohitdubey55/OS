@@ -10,7 +10,7 @@ let _expandedTaskIds = new Set();       // tasks expanded to show subtasks
 let _collapsedCategories = new Set();   // category groups collapsed
 let _taskCategory = 'All';
 let _taskPriorityFilter = 'All';
-let _showCompletedTasks = false;
+let _showCompletedTasks = true;
 
 // Priority palette - use CSS variables for theme support
 const PRIORITY_COLOR = { P1: 'var(--danger, #EF4444)', P2: 'var(--warning, #F59E0B)', P3: 'var(--success, #10B981)' };
@@ -335,13 +335,7 @@ function renderTasks(filter = '') {
       <!-- ── COLLAPSIBLE FILTERS ── -->
       <div id="task-filter-panel" style="overflow:hidden; transition:max-height 0.3s ease, opacity 0.3s ease; max-height:${window._taskFiltersOpen ? '200px' : '0'}; opacity:${window._taskFiltersOpen ? '1' : '0'}; margin-bottom:${window._taskFiltersOpen ? '12px' : '0'};">
         <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:10px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px;">
-          <!-- Status -->
-          <div class="segmented-control" style="flex:0 0 auto;">
-            <button class="range-btn ${!_showCompletedTasks ? 'active' : ''}"
-              onclick="_showCompletedTasks=false;renderTasks(_getSearchValue())">Active</button>
-            <button class="range-btn ${_showCompletedTasks ? 'active' : ''}"
-              onclick="_showCompletedTasks=true;renderTasks(_getSearchValue())">Done</button>
-          </div>
+
 
           <!-- Priority dot filters -->
           <div style="display:flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border-color);border-radius:20px;padding:5px 10px;">
@@ -403,7 +397,7 @@ function renderTasks(filter = '') {
       }).join('') + `</div>`}
 
       <!-- ── COMPLETED ── -->
-      ${_showCompletedTasks && completed.length > 0 ? renderBentoSection('__completed__',
+      ${completed.length > 0 ? renderBentoSection('__completed__',
         `${renderIcon('check-circle', null, 'style="width:13px;"')} Completed`,
         completed, false) : ''}
 

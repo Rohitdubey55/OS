@@ -44,10 +44,8 @@ function renderHabits() {
     });
   }
 
-  // 2. Sort
-  if (_habitSort === 'time') {
-    habits.sort((a, b) => (a.reminder_time || '23:59').localeCompare(b.reminder_time || '23:59'));
-  }
+  // 2. Sort - Removed as requested
+
 
   // Common Emoji Map (Fallback if user doesn't select one)
   const categoryEmojis = {
@@ -318,11 +316,6 @@ function renderHabits() {
               ${DAY_NAMES.map(d => `<option value="${d}" ${_habitDayFilter === d ? 'selected' : ''}>${d}</option>`).join('')}
             </select>
             ` : ''}
-
-            <select class="input small" onchange="_habitSort=this.value; renderHabits()" style="width: auto;">
-              <option value="default" ${_habitSort === 'default' ? 'selected' : ''}>Default</option>
-              <option value="time" ${_habitSort === 'time' ? 'selected' : ''}>By Time</option>
-            </select>
 
             <button class="btn primary circle small" onclick="openHabitModal()" title="Add Habit">
               ${renderIcon('plus', null, 'style="width:20px"')}
