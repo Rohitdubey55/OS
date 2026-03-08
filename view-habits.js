@@ -31,7 +31,6 @@ function renderHabits() {
   const today = new Date().toISOString().slice(0, 10);
   const todayDay = getTodayDayName();
 
-  // 1. Filter by Day
   if (_habitShowTodayOnly) {
     habits = habits.filter(h => isHabitScheduledToday(h));
   } else if (_habitDayFilter !== 'All') {
@@ -44,7 +43,6 @@ function renderHabits() {
     });
   }
 
-  // 2. Sort - Move completed to bottom
   habits.sort((a, b) => {
     const isDoneA = logs.some(l => String(l.habit_id) === String(a.id) && (l.date || '').startsWith(today));
     const isDoneB = logs.some(l => String(l.habit_id) === String(b.id) && (l.date || '').startsWith(today));
@@ -53,8 +51,6 @@ function renderHabits() {
     return 0;
   });
 
-
-  // Common Emoji Map (Fallback if user doesn't select one)
   const categoryEmojis = {
     'Health': 'health', 'Fitness': 'fitness', 'Learning': 'learning',
     'Productivity': 'productivity', 'Spiritual': 'spiritual', 'Other': 'default'
@@ -62,328 +58,72 @@ function renderHabits() {
 
   document.getElementById('main').innerHTML = `
       <style>
-        /* Floating Habit Cards with Multi-layer Shadows */
-        .habit-card-new {
-          background: var(--surface-1);
-          border-radius: 20px;
-          padding: 0;
-          margin-bottom: 16px;
-          position: relative;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 
-            0 2px 4px rgba(0,0,0,0.02),
-            0 4px 8px rgba(0,0,0,0.04),
-            0 8px 16px rgba(0,0,0,0.06),
-            0 16px 32px rgba(0,0,0,0.08);
-          border: 1px solid rgba(255,255,255,0.1);
-          overflow: hidden;
-        }
-        .habit-card-new:hover {
-          transform: translateY(-4px);
-          box-shadow: 
-            0 4px 8px rgba(0,0,0,0.04),
-            0 8px 16px rgba(0,0,0,0.06),
-            0 16px 32px rgba(0,0,0,0.08),
-            0 32px 64px rgba(0,0,0,0.12);
-        }
+        .habit-wrapper { padding: 12px; padding-bottom: 100px; }
+        .habit-grid { display: grid; gap: 8px; }
         .habit-card-new {
           background: var(--surface-1);
           border-radius: 12px;
-          margin-bottom: 10px;
           border: 1px solid var(--border-color);
           overflow: hidden;
           position: relative;
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+          box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+          z-index: 1;
         }
-        .habit-card-new.pending {
-          animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-        }
+        .habit-card-new.pending { animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
         .habit-card-header {
-          padding: 10px 14px;
+          padding: 8px 12px;
           display: flex;
           justify-content: space-between;
           align-items: center;
           cursor: pointer;
         }
-        .habit-title-wrapper {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
+        .habit-title-wrapper { display: flex; align-items: center; gap: 10px; }
         .habit-emoji-circle {
-          width: 32px;
-          height: 32px;
+          width: 34px;
+          height: 34px;
           display: flex;
           align-items: center;
           justify-content: center;
           background: var(--surface-2);
-          border-radius: 10px;
-          font-size: 16px;
+          border-radius: 8px;
+          font-size: 18px;
           flex-shrink: 0;
-        }
-        .habit-title-lg {
-          font-weight: 700;
-          font-size: 0.95rem;
-          color: var(--text-1);
-          letter-spacing: -0.01em;
-        }
-        .habit-meta {
-          font-size: 10px;
-          color: var(--text-muted);
-          margin-top: 2px;
-        }
-        /* Swipe Actions Styles */
-        .swipe-reveal-container {
-          position: relative;
-          overflow: hidden;
-          border-radius: 12px;
-          margin-bottom: 10px;
-        }
-        .swipe-bg {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          font-size: 24px;
-          padding: 0 24px;
-          color: white;
-          z-index: 0;
-          pointer-events: none;
-        }
-        .swipe-bg-done {
-          background: var(--success);
-          justify-content: flex-start;
-        }
-        .swipe-bg-delete {
-          background: var(--danger);
-          justify-content: flex-end;
-        }
-        .habit-card-new {
-          margin-bottom: 0; /* Let container handle margin */
-          z-index: 1;
-        }
-        .streak-pill {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          background: linear-gradient(135deg, #FF6B35, #F7931E);
-          color: white;
-          padding: 6px 14px;
-          border-radius: 20px;
-          font-weight: 700;
-          font-size: 14px;
-          box-shadow: 0 2px 8px rgba(255,107,53,0.3);
-        }
-        @keyframes pulse-gold {
-          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
-          70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
-          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-        }
-        .habit-action-row {
-          display: flex;
-          gap: 8px;
-          margin-top: 12px;
-        }
-        .habit-action-btn {
-          flex: 1;
-          padding: 10px;
-          border-radius: 12px;
-          border: none;
-          font-weight: 600;
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.2s;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-        }
-        .habit-action-btn.primary {
-          background: var(--primary);
-          color: white;
-        }
-        .habit-action-btn.primary:hover {
-          filter: brightness(1.1);
-          transform: scale(1.02);
-        }
-        .habit-action-btn.primary.done {
-          background: var(--success);
-        }
-        .habit-action-btn.secondary {
-          background: var(--surface-2);
-          color: var(--text-1);
-        }
-        .habit-action-btn.secondary:hover {
-          background: var(--surface-3);
-        }
-        .back-date-picker {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px;
-          background: var(--surface-2);
-          border-radius: 12px;
-          margin-bottom: 12px;
-        }
-        .back-date-picker input {
-          flex: 1;
-        }
-        .heatmap-cell-new {
-          width: 20px;
-          height: 20px;
-          border-radius: 4px;
-          background: var(--surface-3);
-          transition: all 0.2s;
-          cursor: pointer;
-        }
-        .heatmap-cell-new.filled {
-          background: linear-gradient(135deg, var(--primary), var(--primary-dark, #3730A3));
-        }
-        .heatmap-cell-new.skipped {
-          background: var(--surface-2);
-          opacity: 0.5;
-        }
-        .heatmap-cell-new:hover {
-          transform: scale(1.2);
-        }
-        .date-btn {
-          font-family: inherit;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-        .date-btn:hover {
-          transform: scale(1.05);
-          filter: brightness(0.95);
-        }
-        .date-btn.filled {
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .date-btn.missed:hover {
-          background: linear-gradient(135deg, var(--primary-soft, #E0E7FF), var(--primary)) !important;
-          color: white !important;
-          border-color: var(--primary) !important;
-        }
-        .back-date-picker-inline {
-          display: flex;
-          flex-direction: column;
-        }
-        .back-date-picker-inline label {
-          cursor: pointer;
-        }
-        .habit-card-warning {
-          border: 2px solid #EF4444 !important;
-          animation: pulse-warning 2s infinite;
-        }
-        @keyframes pulse-warning {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-          50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-        }
-        .collapse-icon {
-          transition: transform 0.3s;
-        }
-        .habit-expanded .collapse-icon {
-          transform: rotate(180deg);
-        }
-        /* Scorecard Styles */
-        .habit-scorecard-container {
-          display: flex;
-          justify-content: space-between;
-          gap: 6px;
-          padding: 12px 0;
-          margin-bottom: 16px;
-          background: var(--surface-2);
-          border-radius: 16px;
-          padding: 12px;
           border: 1px solid var(--border-color);
         }
-        .scorecard-item {
-          flex: 1;
-          aspect-ratio: 1/1;
-          background: var(--surface-1);
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 1px solid rgba(255,255,255,0.05);
-          position: relative;
-          max-width: 45px;
-        }
-        .scorecard-item.today {
-          background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
-          border: 1px solid var(--primary-soft);
-          box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-          transform: scale(1.05);
-          z-index: 1;
-        }
-        .score-day {
-          font-size: 11px;
-          font-weight: 700;
-          color: var(--text-3);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 8px;
-        }
-        .score-circle-container {
-          position: relative;
-          width: 32px;
-          height: 32px;
-        }
-        .score-circle-bg {
-          fill: none;
-          stroke: var(--surface-3);
-          stroke-width: 3;
-        }
-        .score-circle-progress {
-          fill: none;
-          stroke: var(--primary);
-          stroke-width: 3;
-          stroke-linecap: round;
-          transition: stroke-dashoffset 1s ease-out;
-        }
-        .score-percent {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          font-size: 8px;
-          font-weight: 800;
-          color: var(--text-1);
-        }
+        .habit-title-lg { font-weight: 700; font-size: 0.95rem; color: var(--text-1); letter-spacing: -0.01em; display:flex; align-items:center; }
+        .habit-meta { font-size: 9px; color: var(--text-muted); margin-top: 1px; }
+        .habit-card-body { display: none; padding: 0 12px 12px 12px; border-top: 1px solid var(--border-color); padding-top: 10px; }
+        .habit-expanded .habit-card-body { display: block; }
+        .collapse-icon { transition: transform 0.3s; width: 14px; color: var(--text-muted); }
+        .habit-expanded .collapse-icon { transform: rotate(180deg); }
+        .swipe-reveal-container { position: relative; overflow: hidden; border-radius: 12px; margin-bottom: 8px; }
+        .swipe-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; font-size: 24px; padding: 0 24px; color: white; z-index: 0; pointer-events: none; opacity: 0; }
+        .swipe-bg-done { background: var(--success); justify-content: flex-start; }
+        .swipe-bg-delete { background: var(--danger); justify-content: flex-end; }
+        .streak-pill { display: flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--surface-2); border-radius: 20px; font-size: 10px; font-weight: 700; color: var(--text-2); border: 1px solid var(--border-color); }
+        .habit-card-warning { border: 1px solid #EF4444 !important; }
       </style>
 
       <div class="habit-wrapper">
         <div class="header-row" style="flex-wrap:wrap; gap:10px; margin-top:8px;">
-          <h2 class="page-title" style="margin:0; flex:1">Habit Tracker</h2>
-          
+          <h2 class="page-title" style="margin:0; flex:1">Habits</h2>
           <div style="display:flex; gap:8px; align-items:center;">
-            
             <div class="segmented-control">
                 <button class="range-btn ${_habitShowTodayOnly ? 'active' : ''}" onclick="_habitShowTodayOnly=true; renderHabits()">Today</button>
                 <button class="range-btn ${!_habitShowTodayOnly ? 'active' : ''}" onclick="_habitShowTodayOnly=false; renderHabits()">All</button>
             </div>
-
-            ${!_habitShowTodayOnly ? `
-            <select class="input small" onchange="_habitDayFilter=this.value; renderHabits()" style="width: auto;">
-              <option value="All" ${_habitDayFilter === 'All' ? 'selected' : ''}>All Days</option>
+            ${!_habitShowTodayOnly ? `<select class="input small" onchange="_habitDayFilter=this.value; renderHabits()" style="width: auto;">
+              <option value="All" ${_habitDayFilter === 'All' ? 'selected' : ''}>All</option>
               ${DAY_NAMES.map(d => `<option value="${d}" ${_habitDayFilter === d ? 'selected' : ''}>${d}</option>`).join('')}
-            </select>
-            ` : ''}
-
-            <button class="btn primary circle small" onclick="openHabitModal()" title="Add Habit">
-              ${renderIcon('plus', null, 'style="width:20px"')}
-            </button>
+            </select>` : ''}
+            <button class="btn primary circle small" onclick="openHabitModal()">${renderIcon('plus', null, 'style="width:18px"')}</button>
           </div>
         </div>
 
         ${renderHabitScorecard()}    
 
-        <!-- Back Date Mode Toggle - Now inside each card -->
-
-        <div class="habit-grid" style="display:block;">
+        <div class="habit-grid">
           ${habits.length === 0 ? '<div class="empty-state">No habits found.</div>' : ''}
           ${habits.map(h => {
     const hLogs = logs.filter(l => String(l.habit_id) === String(h.id));
@@ -391,62 +131,32 @@ function renderHabits() {
     const isDoneToday = hLogs.some(l => (l.date || '').startsWith(today));
     const isDoneSelectedDate = _backDateMode ? hLogs.some(l => (l.date || '').startsWith(_selectedBackDate)) : isDoneToday;
     const scheduledToday = isHabitScheduledToday(h);
-
-    // Resolve icon from emoji or category
-    const iconName = resolveLegacyEmoji(h.emoji) || categoryEmojis[h.category] || 'default';
-    const habitIconHtml = renderIcon(iconName, null, 'class="habit-emoji-lg"');
-
-    const daysList = h.days ? h.days.split(',').map(s => s.trim()) : [];
     const isExpanded = _expandedHabitId === h.id;
 
-    // Parse Time
     let displayTime = h.frequency || 'Daily';
     if (h.reminder_time) {
       const rt = String(h.reminder_time);
-      if (rt.startsWith('1899-12-30T')) {
-        const timePart = rt.slice(11, 16);
-        if (timePart.match(/^\d{2}:\d{2}$/)) {
-          displayTime = `@ ${timePart}`;
-        }
-      } else if (rt.includes('T') && !rt.startsWith('1899')) {
-        const dt = new Date(rt);
-        if (!isNaN(dt.getTime())) {
-          displayTime = `@ ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
-        }
-      } else if (rt.match(/^\d{2}:\d{2}/)) {
-        displayTime = `@ ${rt.slice(0, 5)}`;
-      }
+      if (rt.startsWith('1899-12-30T')) displayTime = `@ ${rt.slice(11, 16)}`;
+      else if (rt.match(/^\d{2}:\d{2}/)) displayTime = `@ ${rt.slice(0, 5)}`;
     }
 
-    // Calculate "Coming in X hours"
     let comingInText = '';
     if (scheduledToday && !isDoneToday && h.reminder_time) {
       const now = new Date();
       const habitTime = new Date(now);
-
       const rt = String(h.reminder_time);
       if (rt.startsWith('1899-12-30T')) {
         habitTime.setHours(parseInt(rt.slice(11, 13), 10), parseInt(rt.slice(14, 16), 10), 0, 0);
-      } else if (rt.includes('T') && !rt.startsWith('1899')) {
-        const dt = new Date(rt);
-        habitTime.setHours(dt.getHours(), dt.getMinutes(), 0, 0);
       } else if (rt.match(/^\d{2}:\d{2}/)) {
         const parts = rt.split(':');
         habitTime.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
       }
-
       if (habitTime > now) {
         const diffMs = habitTime.getTime() - now.getTime();
         const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
         const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-        if (diffHrs > 0) {
-          comingInText = `<span style="background:rgba(245, 158, 11, 0.15); color:#D97706; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; margin-left:6px;">in ${diffHrs}h ${diffMins}m</span>`;
-        } else if (diffMins > 0) {
-          comingInText = `<span style="background:rgba(245, 158, 11, 0.15); color:#D97706; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; margin-left:6px;">in ${diffMins}m</span>`;
-        } else {
-          comingInText = `<span style="background:rgba(245, 158, 11, 0.15); color:#D97706; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; margin-left:6px;">Now</span>`;
-        }
+        const text = diffHrs > 0 ? `${diffHrs}h ${diffMins}m` : `${diffMins}m`;
+        comingInText = `<span style="background:rgba(245, 158, 11, 0.1); color:#D97706; padding:2px 4px; border-radius:4px; font-size:9px; font-weight:700; margin-left:4px;">in ${text}</span>`;
       }
     }
 
@@ -455,7 +165,6 @@ function renderHabits() {
                 <div class="swipe-bg swipe-bg-done">✅</div>
                 <div class="swipe-bg swipe-bg-delete">🗑️</div>
                 <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${!isDoneToday ? 'pending' : ''} ${stats.consecutiveMissed >= 3 ? 'habit-card-warning' : ''}" id="habit-card-${h.id}">
-                
                   <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
                     <div class="habit-title-wrapper">
                       <div class="habit-emoji-circle">${h.emoji || '✨'}</div>
@@ -464,79 +173,43 @@ function renderHabits() {
                         <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
                       </div>
                     </div>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                      <div class="streak-pill ${stats.streak >= 30 ? 'milestone-30' : (stats.streak >= 7 ? 'milestone-7' : '')}" style="${stats.streak >= 7 ? 'background:linear-gradient(135deg, #FEF08A, #F59E0B); color:#78350F;' : ''} ${stats.streak >= 30 ? 'box-shadow: 0 0 15px rgba(245, 158, 11, 0.5); animation: pulse-gold 2s infinite;' : ''}">
-                        ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : renderIcon('streak', null, 'style="width:14px;"'))} ${stats.streak}
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <div class="streak-pill">
+                        ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : '⭐')} ${stats.streak}
+                      </div>
+                      ${renderIcon('down', null, 'class="collapse-icon"')}
+                    </div>
                   </div>
 
-                ${scheduledToday && !isDoneToday && new Date().getHours() >= 20 ? `
-                  <div style="padding: 0 16px 8px 16px; font-size: 10px; font-weight: 700; color: #EF4444; letter-spacing: 0.5px; text-transform: uppercase;">
-                       Don't break the chain!
-                  </div>
-                ` : ''}
-
-                <div class="habit-card-body" style="padding: 0 14px 14px 14px;">
-                  ${h.frequency === 'weekly' && daysList.length > 0 ? `
-                  <div style="display:flex; gap:4px; margin-bottom:10px; flex-wrap:wrap;">
-                    ${DAY_NAMES.map(d => `
-                      <span style="font-size:10px; padding:3px 8px; border-radius:10px; font-weight:600;
-                        background:${daysList.includes(d) ? (d === todayDay ? 'var(--primary)' : 'var(--primary-soft)') : 'var(--surface-2)'};
-                        color:${daysList.includes(d) ? (d === todayDay ? 'white' : 'var(--primary)') : 'var(--text-muted)'};">
-                        ${d}
-                      </span>
-                    `).join('')}
-                  </div>
-                  ` : ''}
-
-                  <div class="date-buttons-container" style="margin-bottom:10px;">
-                    <div style="display:flex; gap:3px; flex-wrap:wrap;">
+                  <div class="habit-card-body">
+                    <div style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:10px;">
                       ${stats.dateButtonsHtml}
                     </div>
-                  </div>
-            
-                  <div style="display:flex; justify-content:space-between; margin-bottom:12px; background:var(--surface-2); padding:8px; border-radius:10px;">
-                    <div style="text-align:center; flex:1;">
-                      <div style="font-size:18px; font-weight:800; color:var(--text-1);">${stats.total}</div>
-                      <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase;">Total</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px; background:var(--surface-2); padding:8px; border-radius:10px; border:1px solid var(--border-color);">
+                      <div style="text-align:center; flex:1;">
+                        <div style="font-size:16px; font-weight:800;">${stats.total}</div>
+                        <div style="font-size:8px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Total</div>
+                      </div>
+                      <div style="text-align:center; flex:1; border-left:1px solid var(--border-color);">
+                        <div style="font-size:16px; font-weight:800; color:var(--primary);">${stats.completionRate}%</div>
+                        <div style="font-size:8px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Success</div>
+                      </div>
                     </div>
-                    <div style="text-align:center; flex:1; border-left:1px solid var(--border-color);">
-                      <div style="font-size:18px; font-weight:800; color:var(--primary);">${stats.completionRate}%</div>
-                      <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase;">Success</div>
+                    <div class="habit-action-row" style="display:flex; flex-wrap:wrap; gap:6px;">
+                      <button class="btn secondary small" onclick="event.stopPropagation(); openEditHabit('${h.id}')" style="flex:1; padding:6px; font-size:10px;">Edit</button>
+                      ${h.pomodoro_sessions > 0 ? `<button class="btn secondary small" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')" style="flex:1; padding:6px; font-size:10px;">Focus</button>` : ''}
+                      <button class="btn primary small ${isDoneSelectedDate ? 'done' : ''}" onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}" style="flex:2; padding:6px; font-size:10px;">${isDoneSelectedDate ? 'Done' : 'Mark Done'}</button>
                     </div>
-                  </div>
-            
-                  <div class="habit-action-row" style="display:flex; flex-wrap:wrap; gap:6px;">
-                    <button class="btn secondary small" onclick="event.stopPropagation(); openEditHabit('${h.id}')" style="flex:1; padding:6px; font-size:11px;">
-                      ${renderIcon('edit', null, 'style="width:12px;"')} Edit
-                    </button>
-                    
-                    ${h.pomodoro_sessions > 0 ? `
-                    <button class="btn secondary small" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')" style="flex:1; padding:6px; font-size:11px; background:var(--surface-3);">
-                      Focus
-                    </button>
-                    ` : ''}
-
-                    <button class="btn primary small ${isDoneSelectedDate ? 'done' : ''}" 
-                            onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}"
-                            style="flex:2; padding:6px; font-size:11px;">
-                      ${isDoneSelectedDate ? 'Completed' : 'Mark Done'}
-                    </button>
                   </div>
                 </div>
-              </div>
-            </div>
-    `;
+              </div>`;
   }).join('')}
         </div>
       </div>
     `;
-  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-  // Re-sync native alarms whenever habits are rendered (data is fresh)
-  if (typeof window.syncNativeNotifications === 'function') {
-    window.syncNativeNotifications();
-  }
 
-  // Attach swipe actions
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+  if (typeof window.syncNativeNotifications === 'function') window.syncNativeNotifications();
   _attachHabitSwipes();
 }
 
@@ -545,12 +218,8 @@ function _attachHabitSwipes() {
   document.querySelectorAll('.habit-card-new').forEach(row => {
     const habitId = row.id.replace('habit-card-', '');
     window.addSwipeAction(row,
-      () => { // Swipe Left -> Delete
-        window.deleteHabit(habitId);
-      },
-      () => { // Swipe Right -> Toggle Done
-        window.toggleHabitOptimistic(habitId);
-      }
+      () => window.deleteHabit(habitId),
+      () => window.toggleHabitOptimistic(habitId)
     );
   });
 }
