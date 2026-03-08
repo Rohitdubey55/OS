@@ -234,10 +234,81 @@ function renderHabits() {
         .habit-expanded .collapse-icon {
           transform: rotate(180deg);
         }
+        /* Scorecard Styles */
+        .habit-scorecard-container {
+          display: flex;
+          gap: 12px;
+          overflow-x: auto;
+          padding: 8px 4px 20px 4px;
+          margin-bottom: 24px;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .habit-scorecard-container::-webkit-scrollbar {
+          display: none;
+        }
+        .scorecard-item {
+          flex: 0 0 100px;
+          background: var(--surface-1);
+          border-radius: 16px;
+          padding: 12px 8px;
+          text-align: center;
+          border: 1px solid rgba(255,255,255,0.05);
+          box-shadow: var(--shadow-sm);
+          transition: all 0.3s ease;
+        }
+        .scorecard-item.today {
+          background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
+          border: 1px solid var(--primary-soft);
+          box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+          transform: scale(1.05);
+          z-index: 1;
+        }
+        .score-day {
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--text-3);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 8px;
+        }
+        .score-circle-container {
+          position: relative;
+          width: 50px;
+          height: 50px;
+          margin: 0 auto 8px;
+        }
+        .score-circle-bg {
+          fill: none;
+          stroke: var(--surface-3);
+          stroke-width: 4;
+        }
+        .score-circle-progress {
+          fill: none;
+          stroke: var(--primary);
+          stroke-width: 4;
+          stroke-linecap: round;
+          transition: stroke-dashoffset 1s ease-out;
+        }
+        .score-percent {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          font-size: 11px;
+          font-weight: 800;
+          color: var(--text-1);
+        }
+        .score-date {
+          font-size: 10px;
+          color: var(--text-muted);
+        }
       </style>
 
       <div class="habit-wrapper">
-        <div class="header-row" style="flex-wrap:wrap; gap:10px;">
+        ${renderHabitScorecard()}
+        
+        <div class="header-row" style="flex-wrap:wrap; gap:10px; margin-top:8px;">
           <h2 class="page-title" style="margin:0; flex:1">Habit Tracker</h2>
           
           <div style="display:flex; gap:8px; align-items:center;">
@@ -773,6 +844,73 @@ function calculateHabitStats(logs, today, habit) {
   const completionRate = scheduledDays > 0 ? Math.round((completedDays / scheduledDays) * 100) : 0;
 
   return { streak, dateButtonsHtml, total: unique.length, completionRate, consecutiveMissed };
+}
+
+/* --- SCORECARD RENDERER --- */
+function renderHabitScorecard() {
+  const habits = state.data.habits || [];
+  const logs = state.data.habit_logs || [];
+  const today = new Date();
+
+  let scorecardHtml = '<div class="habit-scorecard-container">';
+
+  // Last 7 days (reverse order: oldest to newest)
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days.push(d);
+  }
+
+  days.forEach(d => {
+    const isoDate = d.toISOString().slice(0, 10);
+    const dayName = DAY_NAMES[d.getDay() === 0 ? 6 : d.getDay() - 1];
+    const isToday = isoDate === today.toISOString().slice(0, 10);
+    const displayDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    // Calculate scheduled vs completed for this specific date
+    let scheduledCount = 0;
+    let completedCount = 0;
+
+    habits.forEach(h => {
+      // Logic from isHabitScheduledToday but for a specific date
+      let isScheduled = false;
+      if (!h.frequency || h.frequency === 'daily') {
+        isScheduled = true;
+      } else if (h.frequency === 'weekly' && h.days) {
+        const scheduledDays = h.days.split(',').map(s => s.trim());
+        if (scheduledDays.includes(dayName)) isScheduled = true;
+      }
+
+      if (isScheduled) {
+        scheduledCount++;
+        const isDone = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(isoDate));
+        if (isDone) completedCount++;
+      }
+    });
+
+    const percent = scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 0;
+    const circumference = 2 * Math.PI * 22; // r=22
+    const offset = circumference - (percent / 100) * circumference;
+
+    scorecardHtml += `
+      <div class="scorecard-item ${isToday ? 'today' : ''}">
+        <div class="score-day">${isToday ? 'Today' : dayName}</div>
+        <div class="score-circle-container">
+          <svg width="50" height="50" viewBox="0 0 50 50">
+            <circle class="score-circle-bg" cx="25" cy="25" r="22"></circle>
+            <circle class="score-circle-progress" cx="25" cy="25" r="22" 
+                    style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${offset}; ${percent === 100 ? 'stroke: var(--success);' : ''}"></circle>
+          </svg>
+          <div class="score-percent">${percent}%</div>
+        </div>
+        <div class="score-date">${displayDate}</div>
+      </div>
+    `;
+  });
+
+  scorecardHtml += '</div>';
+  return scorecardHtml;
 }
 
 /* --- DAY PICKER HTML --- */
