@@ -237,25 +237,26 @@ function renderHabits() {
         /* Scorecard Styles */
         .habit-scorecard-container {
           display: flex;
-          gap: 12px;
-          overflow-x: auto;
-          padding: 8px 4px 20px 4px;
-          margin-bottom: 24px;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: none;
-        }
-        .habit-scorecard-container::-webkit-scrollbar {
-          display: none;
+          justify-content: space-between;
+          gap: 6px;
+          padding: 12px 0;
+          margin-bottom: 16px;
+          background: var(--surface-2);
+          border-radius: 16px;
+          padding: 12px;
+          border: 1px solid var(--border-color);
         }
         .scorecard-item {
-          flex: 0 0 100px;
+          flex: 1;
+          aspect-ratio: 1/1;
           background: var(--surface-1);
-          border-radius: 16px;
-          padding: 12px 8px;
-          text-align: center;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           border: 1px solid rgba(255,255,255,0.05);
-          box-shadow: var(--shadow-sm);
-          transition: all 0.3s ease;
+          position: relative;
+          max-width: 45px;
         }
         .scorecard-item.today {
           background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%);
@@ -274,19 +275,18 @@ function renderHabits() {
         }
         .score-circle-container {
           position: relative;
-          width: 50px;
-          height: 50px;
-          margin: 0 auto 8px;
+          width: 32px;
+          height: 32px;
         }
         .score-circle-bg {
           fill: none;
           stroke: var(--surface-3);
-          stroke-width: 4;
+          stroke-width: 3;
         }
         .score-circle-progress {
           fill: none;
           stroke: var(--primary);
-          stroke-width: 4;
+          stroke-width: 3;
           stroke-linecap: round;
           transition: stroke-dashoffset 1s ease-out;
         }
@@ -295,19 +295,13 @@ function renderHabits() {
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
-          font-size: 11px;
+          font-size: 8px;
           font-weight: 800;
           color: var(--text-1);
-        }
-        .score-date {
-          font-size: 10px;
-          color: var(--text-muted);
         }
       </style>
 
       <div class="habit-wrapper">
-        ${renderHabitScorecard()}
-        
         <div class="header-row" style="flex-wrap:wrap; gap:10px; margin-top:8px;">
           <h2 class="page-title" style="margin:0; flex:1">Habit Tracker</h2>
           
@@ -319,23 +313,24 @@ function renderHabits() {
             </div>
 
             ${!_habitShowTodayOnly ? `
-            <select class="input" style="width:auto; margin:0; padding:0 8px; height:28px; font-size:12px; border-radius:8px; border:1px solid var(--border-color); background:var(--surface-1); box-shadow:0 1px 2px rgba(0,0,0,0.05);" onchange="_habitDayFilter=this.value; renderHabits()">
-               <option value="All" ${_habitDayFilter === 'All' ? 'selected' : ''}>All Days</option>
-               ${DAY_NAMES.map(d => `<option value="${d}" ${_habitDayFilter === d ? 'selected' : ''}>${d}</option>`).join('')}
+            <select class="input small" onchange="_habitDayFilter=this.value; renderHabits()" style="width: auto;">
+              <option value="All" ${_habitDayFilter === 'All' ? 'selected' : ''}>All Days</option>
+              ${DAY_NAMES.map(d => `<option value="${d}" ${_habitDayFilter === d ? 'selected' : ''}>${d}</option>`).join('')}
             </select>
             ` : ''}
 
-            <div class="segmented-control">
-                <button class="range-btn ${_habitSort === 'default' ? 'active' : ''}" onclick="_habitSort='default'; renderHabits()">Default</button>
-                <button class="range-btn ${_habitSort === 'time' ? 'active' : ''}" onclick="_habitSort='time'; renderHabits()">Time</button>
-            </div>
+            <select class="input small" onchange="_habitSort=this.value; renderHabits()" style="width: auto;">
+              <option value="default" ${_habitSort === 'default' ? 'selected' : ''}>Default</option>
+              <option value="time" ${_habitSort === 'time' ? 'selected' : ''}>By Time</option>
+            </select>
 
-            <button class="btn secondary small" onclick="markAllHabitsDone()" title="Mark all today's habits as done">
-              ${renderIcon('check-circle', null, 'style="width:14px; margin-right:4px"')}All Done
+            <button class="btn primary circle small" onclick="openHabitModal()" title="Add Habit">
+              ${renderIcon('plus', null, 'style="width:20px"')}
             </button>
-            <button class="btn primary small" onclick="openHabitModal()">${renderIcon('add', null, 'style="width:14px; margin-right:4px"')} Add Habit</button>
           </div>
         </div>
+
+        ${renderHabitScorecard()}    
 
         <!-- Back Date Mode Toggle - Now inside each card -->
 
@@ -890,21 +885,19 @@ function renderHabitScorecard() {
     });
 
     const percent = scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 0;
-    const circumference = 2 * Math.PI * 22; // r=22
+    const circumference = 2 * Math.PI * 13; // r=13 for smaller circle
     const offset = circumference - (percent / 100) * circumference;
 
     scorecardHtml += `
-      <div class="scorecard-item ${isToday ? 'today' : ''}">
-        <div class="score-day">${isToday ? 'Today' : dayName}</div>
+      <div class="scorecard-item ${isToday ? 'today' : ''}" title="${dayName}, ${displayDate}: ${percent}%">
         <div class="score-circle-container">
-          <svg width="50" height="50" viewBox="0 0 50 50">
-            <circle class="score-circle-bg" cx="25" cy="25" r="22"></circle>
-            <circle class="score-circle-progress" cx="25" cy="25" r="22" 
+          <svg width="32" height="32" viewBox="0 0 32 32">
+            <circle class="score-circle-bg" cx="16" cy="16" r="13"></circle>
+            <circle class="score-circle-progress" cx="16" cy="16" r="13" 
                     style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${offset}; ${percent === 100 ? 'stroke: var(--success);' : ''}"></circle>
           </svg>
           <div class="score-percent">${percent}%</div>
         </div>
-        <div class="score-date">${displayDate}</div>
       </div>
     `;
   });
