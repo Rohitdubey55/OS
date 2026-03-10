@@ -722,27 +722,31 @@ window.addSwipeAction = function (el, onSwipeLeft, onSwipeRight) {
         const dy = e.touches[0].clientY - startY;
         if (Math.abs(dy) > Math.abs(dx)) return; // ignore vertical scrolls
 
+        // Prevent the page from panning horizontally while swiping a card
+        e.preventDefault();
+
         moved = true;
         const container = el.closest('.swipe-reveal-container');
         const bgDone = container ? container.querySelector('.swipe-bg-done') : null;
         const bgDelete = container ? container.querySelector('.swipe-bg-delete') : null;
+        const progress = Math.min(Math.abs(dx) / threshold, 1);
 
         if (dx > 0 && onSwipeRight) {
-            el.style.transform = `translateX(${Math.min(dx, 100)}px)`;
+            el.style.transform = `translateX(${Math.min(dx, 120)}px)`;
             if (bgDone) {
-                bgDone.style.opacity = Math.min(dx / threshold, 1);
-                bgDone.style.transform = `scale(${Math.min(0.5 + dx / (threshold * 2), 1.2)})`;
+                bgDone.style.opacity = progress;
+                bgDone.style.transform = `scale(${0.6 + progress * 0.4})`;
             }
             if (bgDelete) bgDelete.style.opacity = '0';
         } else if (dx < 0 && onSwipeLeft) {
-            el.style.transform = `translateX(${Math.max(dx, -100)}px)`;
+            el.style.transform = `translateX(${Math.max(dx, -120)}px)`;
             if (bgDelete) {
-                bgDelete.style.opacity = Math.min(Math.abs(dx) / threshold, 1);
-                bgDelete.style.transform = `scale(${Math.min(0.5 + Math.abs(dx) / (threshold * 2), 1.2)})`;
+                bgDelete.style.opacity = progress;
+                bgDelete.style.transform = `scale(${0.6 + progress * 0.4})`;
             }
             if (bgDone) bgDone.style.opacity = '0';
         }
-    }, { passive: true });
+    }, { passive: false });
 
     el.addEventListener('touchend', e => {
         const dx = e.changedTouches[0].clientX - startX;

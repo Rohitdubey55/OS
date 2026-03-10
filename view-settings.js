@@ -1465,9 +1465,21 @@ window.playTestSound = async function () {
     return;
   }
 
-  // It's a custom wav file
-  await window.playNativeSound(val);
-  showToast(`Playing ${val}...`, 'info');
+  // It's a custom wav file — schedule a real notification so the sound goes through iOS notification system
+  if (window.LocalNotifications) {
+    await window.LocalNotifications.schedule({
+      notifications: [{
+        title: "🔔 Test Notification",
+        body: "This is how your habit alarms will sound",
+        id: 88889,
+        schedule: { at: new Date(Date.now() + 1000), allowWhileIdle: true },
+        sound: val.endsWith('.wav') ? val : val + '.wav'
+      }]
+    });
+    showToast('Notification arriving in 1 second...', 'info');
+  } else {
+    showToast(`Sound: ${val}`, 'info');
+  }
 };
 
 function padZero(num) {

@@ -176,12 +176,9 @@ const ICON_MAPPINGS = {
   'plus': { lucide: 'plus', emoji: '+', material: 'add', remix: 'add-line', tabler: 'plus', fontawesome: 'fa-plus', heroicons: 'plus', feather: 'plus' },
   'image': { lucide: 'image', emoji: '🖼️', material: 'image', remix: 'image-line', tabler: 'photo', fontawesome: 'fa-image', heroicons: 'photo', feather: 'image' },
   'video': { lucide: 'video', emoji: '📹', material: 'videocam', remix: 'video-line', tabler: 'video', fontawesome: 'fa-video', heroicons: 'video-camera', feather: 'video' },
+  'sparkles': { lucide: 'sparkles', emoji: '✨', material: 'auto_awesome', remix: 'sparkling-line', tabler: 'sparkles', fontawesome: 'fa-sparkles', heroicons: 'sparkles', feather: 'star' },
   'briefcase': { lucide: 'briefcase', emoji: '💼', material: 'work', remix: 'briefcase-line', tabler: 'briefcase', fontawesome: 'fa-briefcase', heroicons: 'briefcase', feather: 'briefcase' },
   'gem': { lucide: 'gem', emoji: '💎', material: 'diamond', remix: 'vip-diamond-line', tabler: 'diamond', fontawesome: 'fa-gem', heroicons: 'diamond', feather: 'pocket' },
-  'timer': { lucide: 'timer', emoji: '⏱️', material: 'timer', remix: 'timer-line', tabler: 'timer', fontawesome: 'fa-stopwatch', heroicons: 'clock', feather: 'clock' },
-  'maximize': { lucide: 'maximize-2', emoji: '⤢', material: 'fullscreen', remix: 'maximize-line', tabler: 'maximize', fontawesome: 'fa-expand', heroicons: 'arrows-pointing-out', feather: 'maximize' },
-  'pause': { lucide: 'pause', emoji: '⏸️', material: 'pause', remix: 'pause-line', tabler: 'pause', fontawesome: 'fa-pause', heroicons: 'pause', feather: 'pause' },
-  'rotate-ccw': { lucide: 'rotate-ccw', emoji: '🔄', material: 'restart_alt', remix: 'restart-line', tabler: 'rotate-clockwise', fontawesome: 'fa-rotate-left', heroicons: 'arrow-uturn-left', feather: 'rotate-ccw' },
 };
 
 // Available Icon Packs

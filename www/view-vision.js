@@ -305,11 +305,9 @@ function renderVisionCard(g, isAchieved = false) {
       <div class="vision-card-overlay"></div>
       <div class="vision-card-cat-tag">${g.category || 'Personal'}</div>
       ${hasVideo ? `<button class="vision-video-btn" onclick="event.stopPropagation();openVideoModal('${firstVideo}')">▶</button>` : ''}
-      ${videoUrls.length > 1 ? `<div class="vision-card-badge normal" style="top:auto;bottom:10px;right:10px;left:auto;background:rgba(0,0,0,0.7);color:white">+${videoUrls.length - 1} Videos</div>` : ''}
       <div class="vision-card-content">
         ${badge}
         <div class="vision-card-title">${g.title}</div>
-        ${g.target_date ? `<div class="vision-card-category">${formatDate(g.target_date)}</div>` : ''}
         <div class="vision-card-progress">
         <div class="vision-progress-fill" style="--progress-width:${g.progress || 0}%; width:${g.progress || 0}%"></div>
         </div>
@@ -441,99 +439,143 @@ window.openVisionDetail = async function (id) {
   const progress = g.progress || 0;
   const progressColor = progress >= 100 ? 'var(--success)' : (progress >= 50 ? 'var(--primary)' : 'var(--warning)');
 
-  box.innerHTML = `
-    <!-- Enhanced Hero Section with Floating Actions -->
-    <div class="vision-detail-hero" style="position:relative; ${hasVideo ? 'height:280px;' : 'height:240px;'}">
-      <!-- Floating Action Buttons -->
-      <div style="position:absolute; top:12px; right:12px; display:flex; gap:8px; z-index:20;">
-        <button onclick="event.stopPropagation(); document.getElementById('universalModal').classList.add('hidden'); setTimeout(() => openEditVision('${g.id}'), 100);"
-          style="width:40px; height:40px; border-radius:50%; border:none; background:rgba(0,0,0,0.5); color:white; cursor:pointer; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
-          ${renderIcon('edit', null, 'style="width:18px;"')}
-        </button>
-        <button onclick="event.stopPropagation(); if(confirm('Delete this vision goal?')) { document.getElementById('universalModal').classList.add('hidden'); setTimeout(() => deleteVision('${g.id}'), 100); }"
-          style="width:40px; height:40px; border-radius:50%; border:none; background:rgba(220,38,38,0.8); color:white; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-          ${renderIcon('trash', null, 'style="width:18px;"')}
-        </button>
-        ${g.status !== 'achieved' ? `
-        <button onclick="event.stopPropagation(); document.getElementById('universalModal').classList.add('hidden'); setTimeout(() => markVisionAchieved('${g.id}'), 100);"
-          style="width:40px; height:40px; border-radius:50%; border:none; background:rgba(34,197,94,0.9); color:white; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-          ${renderIcon('trophy', null, 'style="width:18px;"')}
-        </button>
-        ` : ''}
-      </div>
+  // 📝 NEW: Habit Scorecard calculation for Vision Header
+  let totalCompletions = 0;
+  let totalTarget = 0;
+  try {
+    if (g && g.linked_habits) {
+      let existingHabits = [];
+      if (String(g.linked_habits).trim().startsWith('[')) {
+        existingHabits = JSON.parse(g.linked_habits);
+      } else {
+        existingHabits = String(g.linked_habits).split(',').map(x => ({ id: x.trim(), target: 0 }));
+      }
+      existingHabits.forEach(hConfig => {
+        if (hConfig.target > 0) {
+          totalTarget += hConfig.target;
+          const startEpoch = new Date(hConfig.startDate || 0).getTime();
+          (state.data.habit_logs || []).forEach(log => {
+            if (String(log.habit_id) === String(hConfig.id) && log.completed) {
+              const logEpoch = new Date(log.date).getTime();
+              if (logEpoch >= startEpoch) totalCompletions++;
+            }
+          });
+        }
+      });
+    }
+  } catch (e) { console.error("Error calculating habit scorecard", e); }
 
+  const habitScorecardHtml = totalTarget > 0 ? `
+    <div class="vision-habit-scorecard" onclick="event.stopPropagation(); closeVisionDetail(); setTimeout(() => routeTo('habits'), 100);" title="View Habits">
+      <div class="vision-scorecard-value">
+        ${renderIcon('check-circle', null, 'style="width:14px; color:var(--success)"')}
+        ${totalCompletions}/${totalTarget}
+      </div>
+      <div class="vision-scorecard-label">Score</div>
+    </div>
+  ` : '';
+
+
+  box.innerHTML = `
+    <!-- Top Header (With Actions) -->
+    <div class="vision-detail-modal-header">
+      <div class="vision-header-info">
+        <div class="vision-detail-modal-title">${g.title}</div>
+        <div class="vision-detail-modal-meta">
+          <span style="background:var(--primary); color:white; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">${g.category || 'General'}</span>
+          ${statusBadge}
+        </div>
+      </div>
+      <div class="vision-header-actions" style="display:flex; flex-direction:column; align-items:center;">
+        <div style="display:flex; gap:8px;">
+          <button class="vision-header-icon-btn edit" onclick="event.stopPropagation(); closeVisionDetail(); setTimeout(() => openEditVision('${g.id}'), 100);" title="Edit">
+            ${renderIcon('edit', null, 'style="width:18px;"')}
+          </button>
+          <button class="vision-header-icon-btn delete" onclick="event.stopPropagation(); if(confirm('Delete?')) { closeVisionDetail(); setTimeout(() => deleteVision('${g.id}'), 100); }" title="Delete">
+            ${renderIcon('trash', null, 'style="width:18px;"')}
+          </button>
+          ${g.status !== 'achieved' ? `
+          <button class="vision-header-icon-btn achieve" onclick="event.stopPropagation(); closeVisionDetail(); setTimeout(() => markVisionAchieved('${g.id}'), 100);" title="Finish">
+            ${renderIcon('trophy', null, 'style="width:18px;"')}
+          </button>
+          ` : ''}
+        </div>
+        ${habitScorecardHtml}
+      </div>
+    </div>
+
+    <!-- Media Section (Dedicated Container) -->
+    <div class="vision-detail-media-container" style="background:#000;">
       ${hasVideo
-      ? `<div style="width:100%; height:100%; position:relative; overflow:hidden;">
+      ? `<div style="width:100%; height:100%; position:relative;">
           <div class="vision-video-gallery" id="visionGallery-${g.id}">
             ${videoUrls.map((u, i) => {
         const videoId = `vision-detail-video-${g.id}-${i}`;
         return `
               <div class="vision-video-slide">
-                <video id="${videoId}" style="width:100%;height:100%;object-fit:cover;" controls playsinline webkit-playsinline preload="auto" onclick="openVideoModal(${JSON.stringify(videoUrls).replace(/"/g, '&quot;')}, ${i})" poster="${g.image_url ? resolveMediaUrl(g.image_url) : ''}" data-vision-local="${u}">
-                </video>
+                <video id="${videoId}" 
+                       style="width:100%;height:100%;object-fit:cover;" 
+                       playsinline webkit-playsinline 
+                       loop 
+                       muted
+                       autoplay
+                       preload="auto" 
+                       onclick="const v=this; v.paused?v.play():v.pause();"
+                       poster="${g.image_url ? resolveMediaUrl(g.image_url) : ''}" 
+                       data-vision-local="${u}"></video>
+                
+                <!-- Audio Toggle Button -->
+                <button class="vision-video-audio-btn" 
+                        onclick="event.stopPropagation(); toggleVisionAudio('${videoId}', this);">
+                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-x"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                </button>
+
+                <!-- Captions Overlay (Notes) -->
+                ${g.notes ? `
+                <div class="vision-video-captions">
+                  ${g.notes}
+                </div>
+                ` : ''}
               </div>`;
       }).join('')}
           </div>
-
           ${videoUrls.length > 1 ? `
-            <button class="vision-video-nav-prev vision-video-nav-btn prev" onclick="event.stopPropagation(); navigateVisionGallery(-1)">
-              ${renderIcon('chevron-left', null, 'style="width:24px;height:24px"')}
-            </button>
-            <button class="vision-video-nav-next vision-video-nav-btn next" onclick="event.stopPropagation(); navigateVisionGallery(1)">
-              ${renderIcon('chevron-right', null, 'style="width:24px;height:24px"')}
-            </button>
+            <!-- Tap Navigation Overlays (Invisible) -->
+            <div style="position:absolute; inset:0; display:flex; z-index:25;">
+              <div onclick="event.stopPropagation(); navigateVisionGallery(-1);" style="flex:1; cursor:pointer;" aria-label="Previous"></div>
+              <div onclick="event.stopPropagation(); toggleCurrentVisionVideo();" style="flex:1.4; cursor:pointer;" aria-label="Play/Pause"></div>
+              <div onclick="event.stopPropagation(); navigateVisionGallery(1);" style="flex:1; cursor:pointer;" aria-label="Next"></div>
+            </div>
           ` : ''}
-
           ${videoDots}
-          <div style="position:absolute; top:16px; left:16px; background:rgba(0,0,0,0.6); color:white; padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600; backdrop-filter:blur(8px); pointer-events:none; z-index:20;">
-            ${videoUrls.length} Video${videoUrls.length > 1 ? 's' : ''}
-          </div>
         </div>`
       : `<img src="${imgUrl}" style="width:100%;height:100%;object-fit:cover" onerror="this.src='${getFallbackImage(g)}'">`}
-      
-      <!-- Gradient Overlay -->
-      <div style="position:absolute; bottom:0; left:0; right:0; height:120px; background:linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%); pointer-events:none;"></div>
-      <div style="position:absolute; bottom:16px; left:16px; right:16px;">
-        <div style="font-size:22px; font-weight:800; color:white; line-height:1.3; margin-bottom:8px; text-shadow:0 2px 8px rgba(0,0,0,0.5);">${g.title}</div>
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <span style="background:var(--primary); color:white; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">${g.category || 'General'}</span>
-          ${statusBadge}
-        </div>
+    </div>
+
+    <!-- Entrance Animation Progress Bar (Below Video) -->
+    <div class="vision-detail-progress-section">
+      <div class="vision-thick-progress-container">
+        <div id="visionDetailProgressFill" class="vision-progress-fill" style="width:0%; background:linear-gradient(90deg, ${progressColor} 0%, ${progressColor}cc 100%);"></div>
+        <span id="visionDetailProgressText" class="vision-progress-text">0%</span>
       </div>
     </div>
 
-    <!-- Enhanced Progress Section -->
-    <div style="background:var(--surface-2); border-radius:16px; padding:16px; margin:16px 0;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <span style="font-size:13px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:0.5px;">Progress</span>
-        <span style="font-size:24px; font-weight:800; color:${progressColor};">${progress}%</span>
-      </div>
-      <div style="height:12px; background:var(--surface-3); border-radius:6px; overflow:hidden;">
-        <div style="height:100%; width:${progress}%; background:linear-gradient(90deg, ${progressColor} 0%, ${progressColor}cc 100%); border-radius:6px; transition:width 0.5s ease;"></div>
-      </div>
-    </div>
+    <!-- Content Sections -->
+    <div style="padding: 0 24px 24px;">
 
-    <!-- Enhanced Notes Section -->
-    <div style="background:var(--surface-2); border-radius:16px; padding:16px; margin-bottom:16px;">
-      <div style="font-size:13px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
-        ${renderIcon('file-text', null, 'style="width:14px;"')} Notes
+      <!-- Timeline & Info -->
+      <div style="display:flex; gap:20px; margin-bottom:20px; flex-wrap:wrap;">
+        ${createdDate !== 'Unknown' ? `
+        <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted);">
+          ${renderIcon('calendar', null, 'style="width:14px;"')}
+          <span>Created: <strong style="color:var(--text-2);">${createdDate}</strong></span>
+        </div>` : ''}
+        ${updatedDate !== 'Unknown' && updatedDate !== createdDate ? `
+        <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted);">
+          ${renderIcon('clock', null, 'style="width:14px;"')}
+          <span>Updated: <strong style="color:var(--text-2);">${updatedDate}</strong></span>
+        </div>` : ''}
       </div>
-      <div style="font-size:14px; color:var(--text-1); line-height:1.6; ${!g.notes ? 'color:var(--text-muted); font-style:italic;' : ''}">
-        ${g.notes || 'No notes added yet.'}
-      </div>
-    </div>
-
-    <!-- Timeline Info -->
-    <div style="display:flex; gap:16px; margin-bottom:16px; flex-wrap:wrap;">
-      <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted);">
-        ${renderIcon('calendar', null, 'style="width:14px;"')}
-        <span>Created: <strong style="color:var(--text-2);">${createdDate}</strong></span>
-      </div>
-      <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-muted);">
-        ${renderIcon('clock', null, 'style="width:14px;"')}
-        <span>Updated: <strong style="color:var(--text-2);">${updatedDate}</strong></span>
-      </div>
-    </div>
 
     <!-- Linked Habits - Enhanced -->
     ${(() => {
@@ -593,22 +635,61 @@ window.openVisionDetail = async function (id) {
       </div>`;
     })()}
 
-    <!-- Action Buttons -->
-    <div style="display:flex; justify-content:stretch; gap:10px; flex-wrap:wrap; margin-top:8px;">
-      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')" style="flex:1; min-width:100px;">
-        ${renderIcon('x', null, 'style="width:14px;margin-right:6px"')} Close
-      </button>
-      <button class="btn primary" onclick="document.getElementById('universalModal').classList.add('hidden'); setTimeout(() => { openTaskModal(); setTimeout(() => { if(document.getElementById('mTaskVisionGoal')) document.getElementById('mTaskVisionGoal').value = '${g.id}'; }, 100); }, 300);" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:6px;">
-        ${renderIcon('plus', null, 'style="width:14px;"')} Quick Task
-      </button>
-      <button class="btn ${g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE' ? 'success' : ''}" onclick="toggleVisionFocus('${g.id}')" style="flex:1; min-width:120px; display:flex; align-items:center; justify-content:center; gap:6px;">
-        ${g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE'
-      ? `${renderIcon('star', null, 'style="width:14px; fill:var(--warning);"')}`
-      : `${renderIcon('star', null, 'style="width:14px;"')}`}
-        ${g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE' ? 'Focus On' : 'Set Focus'}
-      </button>
+      <!-- App Action Buttons -->
+      <div style="display:flex; gap:12px; margin-top:12px;">
+        <button class="btn" onclick="closeVisionDetail()" style="flex:1;">Close</button>
+        <button class="btn primary" onclick="closeVisionDetail(); setTimeout(() => { openTaskModal(); setTimeout(() => { if(document.getElementById('mTaskVisionGoal')) document.getElementById('mTaskVisionGoal').value = '${g.id}'; }, 100); }, 300);" style="flex:1.5;">+ Quick Task</button>
+        <button class="btn ${g.month_focus === true || String(g.month_focus).toLowerCase() === 'true' ? 'success' : ''}" onclick="toggleVisionFocus('${g.id}')" style="width:50px; display:flex; align-items:center; justify-content:center; padding:0;">
+          ${renderIcon('star', null, `style="width:20px; ${g.month_focus === true || String(g.month_focus).toLowerCase() === 'true' ? 'fill:var(--warning);' : ''}"`)}
+        </button>
+      </div>
     </div>
   `;
+
+  modal.classList.remove('hidden');
+
+  // Fluid Progress Animation Logic
+  const animateVisionNumber = (el, start, end, duration) => {
+    let startTimestamp = null;
+    const step = (timestamp) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progressRatio = Math.min((timestamp - startTimestamp) / duration, 1);
+      const val = Math.floor(progressRatio * (end - start) + start);
+      el.textContent = `${val}%`;
+      if (progressRatio < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        el.textContent = `${end}%`;
+      }
+    };
+    window.requestAnimationFrame(step);
+  };
+
+  setTimeout(() => {
+    const fill = document.getElementById('visionDetailProgressFill');
+    const text = document.getElementById('visionDetailProgressText');
+    if (fill && text) {
+      // Force Reflow to ensure 0% is registered
+      fill.style.transition = 'none';
+      fill.style.width = '0%';
+      fill.offsetHeight; // reflow
+
+      // Step 1: Charge to 100% (Visual & Numerical synchronized)
+      fill.style.transition = 'width 1.2s cubic-bezier(0.65, 0, 0.35, 1), background-color 0.8s ease';
+      fill.style.width = '100%';
+      fill.style.backgroundColor = 'var(--success)';
+      animateVisionNumber(text, 0, 100, 1200);
+
+      // Step 2: Pause at 100%, then Settle to Actual
+      setTimeout(() => {
+        fill.style.width = `${progress}%`;
+        // Transition back to status-based color
+        const finalColor = progress >= 100 ? 'var(--success)' : (progress >= 50 ? 'var(--primary)' : 'var(--warning)');
+        fill.style.backgroundColor = finalColor;
+        animateVisionNumber(text, 100, progress, 1200);
+      }, 1600);
+    }
+  }, 300);
 
   // Attach navigation logic
   if (hasVideo) {
@@ -619,12 +700,30 @@ window.openVisionDetail = async function (id) {
 
     window.scrollToVideo = function (index) {
       if (index < 0 || index >= total) return;
+
+      // Pause current video before switching
+      const prevVid = box.querySelector(`#vision-detail-video-${g.id}-${currentIdx}`);
+      if (prevVid) prevVid.pause();
+
       currentIdx = index;
       const width = gallery.offsetWidth;
       gallery.scrollTo({ left: index * width, behavior: 'smooth' });
+
+      // Play new video after switching
+      const nextVid = box.querySelector(`#vision-detail-video-${g.id}-${currentIdx}`);
+      if (nextVid) nextVid.play().catch(() => { });
+
       dots.forEach((dot, i) => {
         dot.classList.toggle('active', i === currentIdx);
       });
+    };
+
+    window.toggleCurrentVisionVideo = function () {
+      const v = box.querySelector(`#vision-detail-video-${g.id}-${currentIdx}`);
+      if (v) {
+        if (v.paused) v.play().catch(() => { });
+        else v.pause();
+      }
     };
 
     window.navigateVisionGallery = function (direction) {
@@ -636,8 +735,45 @@ window.openVisionDetail = async function (id) {
   }
 
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-  modal.classList.remove('hidden');
   initVisionMediaElements(box);
+
+  // Auto-hide navigation buttons after 2 seconds
+  setTimeout(() => {
+    const navBtns = box.querySelectorAll('.vision-video-nav-btn');
+    navBtns.forEach(btn => btn.classList.add('hidden-fade'));
+  }, 2000);
+};
+
+window.closeVisionDetail = function () {
+  const modal = document.getElementById('universalModal');
+  if (modal) {
+    const videos = modal.querySelectorAll('video');
+    videos.forEach(v => {
+      try {
+        v.pause();
+        v.currentTime = 0;
+        v.removeAttribute('src'); // Better cleanup
+        v.load();
+      } catch (e) { }
+    });
+    modal.classList.add('hidden');
+  }
+};
+
+/* ─── VISION VIDEO HELPERS ───────────────────────────────────────── */
+window.toggleVisionAudio = function (videoId, btnEl) {
+  const v = document.getElementById(videoId);
+  if (!v) return;
+  v.muted = !v.muted;
+
+  // Update icon reliably with raw SVG
+  if (btnEl) {
+    if (v.muted) {
+      btnEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-x"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>';
+    } else {
+      btnEl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume-2"><path d="M11 5L6 9H2v6h4l5 4V5z"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>';
+    }
+  }
 };
 
 /* ─── VIDEO MODAL ───────────────────────────────────────────────── */
@@ -653,42 +789,80 @@ window.openVideoModal = async function (urls, initialIndex = 0) {
   overlay.className = 'vision-video-modal';
   overlay.innerHTML = `
     <div class="vision-video-inner" style="width:100vw; height:100vh; max-width:none; border-radius:0;">
-      <button class="vision-video-close" onclick="closeVideoModal()" style="z-index:100;">✕</button>
       <div class="vision-modal-gallery" id="modalVideoGallery">
         ${videoUrls.map((u, i) => `
           <div class="vision-modal-slide">
-            <video id="modalVideoPlayer-${i}" controls preload="auto" style="width:100%; height:auto; max-height:100vh; outline:none;" data-vision-local="${u}"></video>
+            <video id="modalVideoPlayer-${i}" 
+                   controls 
+                   playsinline 
+                   webkit-playsinline 
+                   x5-playsinline
+                   preload="auto" 
+                   style="width:100%; height:auto; max-height:100vh; outline:none;" 
+                   data-vision-local="${u}"></video>
           </div>
         `).join('')}
       </div>
     </div>
   `;
+
+  // Create close button via JS so addEventListener works reliably on WKWebView
+  const closeBtn = document.createElement('button');
+  closeBtn.innerHTML = '✕';
+  closeBtn.setAttribute('style', [
+    'position:fixed',
+    'top:max(env(safe-area-inset-top, 16px) + 8px, 48px)',
+    'right:16px',
+    'z-index:20000',
+    'width:44px',
+    'height:44px',
+    'border-radius:50%',
+    'border:none',
+    'background:rgba(0,0,0,0.5)',
+    'backdrop-filter:blur(10px)',
+    '-webkit-backdrop-filter:blur(10px)',
+    'color:white',
+    'font-size:24px',
+    'font-weight:bold',
+    'cursor:pointer',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'box-shadow:0 4px 12px rgba(0,0,0,0.3)',
+  ].join(';'));
+  closeBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.closeVideoModal();
+  });
+  overlay.appendChild(closeBtn);
+
   document.body.appendChild(overlay);
-  overlay.addEventListener('click', e => { if (e.target.classList.contains('vision-modal-slide')) closeVideoModal(); });
 
   const gallery = overlay.querySelector('#modalVideoGallery');
-
-  // Initialize all videos in the gallery
   initVisionMediaElements(gallery);
 
-  // Scroll to the initial video
   setTimeout(() => {
     const slideWidth = gallery.offsetWidth;
     gallery.scrollTo({ left: initialIndex * slideWidth, behavior: 'auto' });
-
-    // Try to play and fullscreen the initial video
     const initialVid = gallery.querySelector(`#modalVideoPlayer-${initialIndex}`);
-    if (initialVid) {
-      initialVid.play().then(() => {
-        setTimeout(() => {
-          if (initialVid.webkitEnterFullscreen) initialVid.webkitEnterFullscreen();
-          else if (initialVid.requestFullscreen) initialVid.requestFullscreen();
-        }, 200);
-      }).catch(e => console.warn('Autoplay in modal failed:', e));
-    }
-  }, 50);
+    if (initialVid) initialVid.play().catch(() => { });
+  }, 100);
 
-  // Optional: Add intersection observer to play/pause videos as they come into view
+  // Aggressive Fix for iOS native fullscreen hijacking
+  gallery.querySelectorAll('video').forEach(v => {
+    v.addEventListener('webkitbeginfullscreen', (e) => {
+      e.preventDefault();
+      if (v.webkitExitFullscreen) v.webkitExitFullscreen();
+    }, false);
+
+    // Safety: close modal if video exits fullscreen (iOS sometimes triggers this)
+    v.addEventListener('webkitendfullscreen', () => {
+      window.closeVideoModal();
+    });
+  });
+
+  // Play/pause videos as they scroll into view
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       const vid = entry.target;
@@ -744,134 +918,141 @@ window.openEditVision = function (id) {
 function buildVisionForm(g) {
   const isEdit = !!g;
   return `
-    < h3 style = "margin-bottom:16px;font-size:18px;font-weight:800; display:flex; align-items:center; gap:8px;" > ${isEdit ? renderIcon('edit', null, 'style="width:20px;"') + ' Edit Goal' : renderIcon('target', null, 'style="width:20px;"') + ' New Vision Goal'}</h3 >
+    <div class="vision-detail-modal-header">
+      <div class="vision-detail-modal-title" style="font-size:18px;">
+        ${isEdit ? renderIcon('edit', null, 'style="width:20px;"') + ' Edit Goal' : renderIcon('target', null, 'style="width:20px;"') + ' New Vision Goal'}
+      </div>
+    </div>
 
-      <input class="input" id="mVisTitle" placeholder="Goal Title *" value="${isEdit ? escH(g.title) : ''}">
-
+    <div style="padding: 0 24px 24px;">
+      <!-- Section 1: Basic Info -->
+      <div class="vision-form-section">
+        <div class="vision-form-label">${renderIcon('type', null, 'style="width:14px;"')} Title & Category</div>
+        <input class="input" id="mVisTitle" placeholder="Goal Title *" value="${isEdit ? escH(g.title) : ''}" style="margin-bottom:12px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <select class="input" id="mVisCat">
             ${VISION_CATEGORIES.map(c => `<option value="${c}" ${isEdit && g.category === c ? 'selected' : ''}>${c}</option>`).join('')}
           </select>
           <input type="date" class="input" id="mVisDate" value="${isEdit ? (g.target_date || '') : ''}">
         </div>
+      </div>
 
-        <div style="margin-bottom:10px">
-          <label style="font-size:13px;font-weight:600;color:var(--text-2);display:flex;justify-content:space-between;margin-bottom:8px">
-            <span>Progress ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? '(Auto-calculated from habits)' : ''}</span>
-            <strong id="mVisProgressVal" style="color:var(--primary)">${isEdit ? (g.progress || 0) : 0}%</strong>
-          </label>
+      <!-- Section 2: Progress -->
+      <div class="vision-form-section">
+        <label class="vision-form-label">
+          <span>${renderIcon('trending-up', null, 'style="width:14px;"')} Progress</span>
+          <strong id="mVisProgressVal" style="color:var(--primary); margin-left:auto;">${isEdit ? (g.progress || 0) : 0}%</strong>
+        </label>
+        <div style="margin-top:8px;">
           <input type="range" id="mVisProgress" min="0" max="100" value="${isEdit ? (g.progress || 0) : 0}"
             ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? 'disabled' : ''}
-            oninput="document.getElementById('mVisProgressVal').textContent = this.value + '%'"
-            style="-webkit-appearance:none;appearance:none;width:calc(100% - 4px);display:block;margin:0 2px;height:6px;border-radius:3px;background:var(--surface-3);outline:none;cursor:${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? 'not-allowed; opacity: 0.5' : 'pointer'}">
+            oninput="document.getElementById('mVisProgressVal').textContent = this.value + '%'">
+          ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ?
+      `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Auto-calculated from habits</div>` : ''}
         </div>
+      </div>
 
-        <textarea class="input" id="mVisNotes" placeholder="Notes (optional)" style="height:80px;resize:vertical">${isEdit ? escH(g.notes || '') : ''}</textarea>
+      <!-- Section 3: Notes -->
+      <div class="vision-form-section">
+        <div class="vision-form-label">${renderIcon('file-text', null, 'style="width:14px;"')} Notes</div>
+        <textarea class="input" id="mVisNotes" placeholder="What's your vision? (optional)" style="height:100px;resize:none;">${isEdit ? escH(g.notes || '') : ''}</textarea>
+      </div>
 
-        <!-- Media Attachment Tabs -->
-        <div style="margin-top:14px;margin-bottom:6px;font-size:13px;font-weight:700;color:var(--text-2); display:flex; align-items:center; gap:4px;">${renderIcon('image', null, 'style="width:14px;"')} Attach Media</div>
+      <!-- Section 4: Media -->
+      <div class="vision-form-section">
+        <div class="vision-form-label">${renderIcon('image', null, 'style="width:14px;"')} Media Attachments</div>
         <div class="vision-modal-tabs">
-          <button class="vision-modal-tab active" id="vTabImg" onclick="switchVisionMediaTab('image')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('image', null, 'style="width:14px;"')} Image</button>
-          <button class="vision-modal-tab" id="vTabUrl" onclick="switchVisionMediaTab('url')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('link', null, 'style="width:14px;"')} Image URL</button>
-          <button class="vision-modal-tab" id="vTabVid" onclick="switchVisionMediaTab('video')" style="display:flex; align-items:center; gap:4px; justify-content:center;">${renderIcon('play', null, 'style="width:14px;"')} Video</button>
+          <button class="vision-modal-tab ${window._visionMediaTab === 'image' ? 'active' : ''}" id="vTabImg" onclick="switchVisionMediaTab('image')">Image</button>
+          <button class="vision-modal-tab ${window._visionMediaTab === 'url' ? 'active' : ''}" id="vTabUrl" onclick="switchVisionMediaTab('url')">URL</button>
+          <button class="vision-modal-tab ${window._visionMediaTab === 'video' ? 'active' : ''}" id="vTabVid" onclick="switchVisionMediaTab('video')">Video</button>
         </div>
 
-        <!-- Image Upload -->
-        <div id="vPanelImg">
-          <div class="vision-upload-zone" id="vImgZone" onclick="document.getElementById('vImgInput').click()">
+        <div id="vPanelImg" style="display:${window._visionMediaTab === 'image' ? 'block' : 'none'}">
+          <div class="vision-upload-zone" onclick="document.getElementById('vImgInput').click()">
             <input type="file" id="vImgInput" accept="image/*" hidden onchange="handleVisionMedia(this.files,'image')">
-              <span class="vision-upload-icon">${renderIcon('image', null, 'style="width:32px; color:var(--text-muted);"')}</span>
-              <div style="font-weight:600;margin-bottom:4px">Tap to select image</div>
-              <div class="vision-upload-hint">PNG, JPG, WebP · Max 8 MB</div>
+            <span class="vision-upload-icon">${renderIcon('upload-cloud', null, 'style="width:32px; color:var(--text-muted); opacity:0.5;"')}</span>
+            <div style="font-weight:600; font-size:14px;">Upload Image</div>
           </div>
           <div id="vImgPreviewWrap" class="vision-media-preview" style="display:none">
             <img id="vImgPreview" src="" alt="preview">
-              <button class="vision-media-remove" onclick="clearVisionMedia('image')">✕</button>
+            <button class="vision-media-remove" onclick="clearVisionMedia('image')">✕</button>
           </div>
-          ${isEdit && g.image_url && !g.image_url.startsWith('data:') ? `<p style="font-size:12px;color:var(--text-muted);margin-top:4px">Current: <a href="${escH(g.image_url)}" target="_blank" style="color:var(--primary)">Open existing image</a></p>` : ''}
         </div>
 
-        <!-- URL Tab -->
-        <div id="vPanelUrl" style="display:none">
+        <div id="vPanelUrl" style="display:${window._visionMediaTab === 'url' ? 'block' : 'none'}">
           <input type="url" id="mVisImg" class="input" placeholder="https://example.com/image.jpg" value="${isEdit ? escH(g?.image_url?.startsWith('data:') ? '' : (g.image_url || '')) : ''}">
         </div>
 
-        <!-- Video Upload -->
-        <div id="vPanelVid" style="display:none">
-          <div class="vision-upload-zone" id="vVidZone" onclick="document.getElementById('vVidInput').click()">
+        <div id="vPanelVid" style="display:${window._visionMediaTab === 'video' ? 'block' : 'none'}">
+          <div class="vision-upload-zone" onclick="document.getElementById('vVidInput').click()">
             <input type="file" id="vVidInput" accept="video/*" multiple hidden onchange="handleVisionMedia(this.files,'video')">
-              <span class="vision-upload-icon">${renderIcon('video', null, 'style="width:32px;height:32px;"')}</span>
-              <div style="font-weight:600;margin-bottom:4px">Tap to select video(s) from storage</div>
-              <div class="vision-upload-hint">MP4, MOV, WebM · Max 200 MB</div>
+            <span class="vision-upload-icon">${renderIcon('film', null, 'style="width:32px; color:var(--text-muted); opacity:0.5;"')}</span>
+            <div style="font-weight:600; font-size:14px;">Upload Video(s)</div>
           </div>
-          <div id="vVidPreviewWrap" class="vision-media-preview" style="display:none; flex-direction:column; gap:10px; margin-top:10px; padding:0; background:transparent;">
-            <!-- Previews generated dynamically -->
-          </div>
+          <div id="vVidPreviewWrap" class="vision-media-preview" style="display:none; flex-direction:column; gap:10px;"></div>
         </div>
+      </div>
 
-        <!-- Habit Linker -->
-        <div style="margin-top:14px">
-          <div style="font-size:13px;font-weight:700;color:var(--text-2);margin-bottom:8px">${renderIcon('link', null, 'style="width:16px;height:16px;margin-right:4px"')} Link Habits</div>
-          <div style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;padding:2px 0">
-            ${(() => {
+      <!-- Section 5: Habits & Focus -->
+      <div class="vision-form-section">
+        <div class="vision-form-label">${renderIcon('link', null, 'style="width:14px;"')} Link Habits</div>
+        <div style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto; padding-right:4px;">
+          ${(() => {
       const habits = state.data.habits || [];
-      // Support legacy string format ("id1,id2") or new JSON format [{"id":"id1", "target":25, "startDate":"2026..."}]
       let existingHabits = [];
       try {
         if (g && g.linked_habits) {
-          if (String(g.linked_habits).trim().startsWith('[')) {
-            existingHabits = JSON.parse(g.linked_habits);
-          } else {
-            // Legacy fallback
-            existingHabits = String(g.linked_habits).split(',').map(x => ({ id: x.trim(), target: 0 }));
-          }
+          existingHabits = String(g.linked_habits).trim().startsWith('[') ? JSON.parse(g.linked_habits) : String(g.linked_habits).split(',').map(x => ({ id: x.trim(), target: 25 }));
         }
-      } catch (e) { console.error("Error parsing linked habits", e); }
+      } catch (e) { console.error("Error parsing habits", e); }
 
       const existingIds = existingHabits.map(h => String(h.id));
+      if (!habits.length) return '<div style="font-size:13px; color:var(--text-muted); text-align:center; padding:10px;">No habits available</div>';
 
-      if (!habits.length) return '<span style="font-size:13px;color:var(--text-muted)">No habits found. Add habits first.</span>';
       return habits.map(h => {
         const isLinked = existingIds.includes(String(h.id));
         const linkedData = isLinked ? existingHabits.find(ex => String(ex.id) === String(h.id)) : null;
-        const targetVal = linkedData && linkedData.target ? linkedData.target : 25;
+        const targetVal = linkedData?.target || 25;
 
         return `
-            <div style="display:flex; flex-direction:column; gap:4px; padding:8px 12px; background:var(--surface-2); border-radius:10px; margin-bottom:4px;">
-              <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
-                <input type="checkbox" id="vHabitLink_${h.id}" value="${h.id}" ${isLinked ? 'checked' : ''} onchange="document.getElementById('vHabitTargetWrap_${h.id}').style.display = this.checked ? 'flex' : 'none'" style="width:16px;height:16px;accent-color:var(--primary)">
-                <span style="font-size:14px;font-weight:600">${h.habit_name}</span>
-                <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${h.category || ''}</span>
-              </label>
-              <div id="vHabitTargetWrap_${h.id}" style="display:${isLinked ? 'flex' : 'none'}; align-items:center; justify-content:space-between; margin-top:4px; padding-left:26px;">
-                <span style="font-size:12px; color:var(--text-muted);">Target Recurrence:</span>
-                <input type="number" id="vHabitTarget_${h.id}" value="${targetVal}" min="1" style="width:60px; padding:4px 8px; border-radius:6px; border:1px solid var(--border-color); background:var(--surface-1); font-size:12px;">
-              </div>
-            </div>
-          `;
+                <div style="background:var(--surface-1); border:1px solid var(--border-color); border-radius:12px; padding:12px;">
+                  <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                    <input type="checkbox" id="vHabitLink_${h.id}" value="${h.id}" ${isLinked ? 'checked' : ''} 
+                           onchange="document.getElementById('vHabitTargetWrap_${h.id}').style.display = this.checked ? 'flex' : 'none'" 
+                           style="width:18px; height:18px; accent-color:var(--primary);">
+                    <div style="flex:1;">
+                      <div style="font-size:14px; font-weight:700;">${h.habit_name}</div>
+                      <div style="font-size:11px; color:var(--text-muted);">${h.category || 'General'}</div>
+                    </div>
+                  </label>
+                  <div id="vHabitTargetWrap_${h.id}" style="display:${isLinked ? 'flex' : 'none'}; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border-color);">
+                    <span style="font-size:12px; font-weight:600; color:var(--text-2);">Target Recurrence:</span>
+                    <input type="number" id="vHabitTarget_${h.id}" value="${targetVal}" min="1" style="width:60px; height:32px; text-align:center; border-radius:8px; border:1px solid var(--border-color); background:var(--surface-2); font-size:13px; font-weight:700;">
+                  </div>
+                </div>`;
       }).join('');
-    })()
-    }
+    })()}
+        </div>
+
+        <label style="display:flex; align-items:center; gap:12px; margin-top:16px; padding:14px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:12px; cursor:pointer;">
+          <input type="checkbox" id="mVisMonthFocus" ${isEdit && (g.month_focus === true || String(g.month_focus).toLowerCase() === 'true') ? 'checked' : ''} style="width:20px; height:20px; accent-color:var(--primary);">
+          <div>
+            <div style="font-size:14px; font-weight:700;">Focus This Month</div>
+            <div style="font-size:11px; color:var(--text-muted);">Pin to top and manifestation views</div>
           </div>
-        </div>
-
-        <!-- Month Focus -->
-        <label style="display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 14px;background:var(--surface-2);border-radius:12px;cursor:pointer">
-          <input type="checkbox" id="mVisMonthFocus" ${isEdit && (g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE') ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--primary)">
-            <div>
-              <div style="font-size:13px;font-weight:700">⭐ Focus This Month</div>
-              <div style="font-size:11px;color:var(--text-muted)">Pin this goal to the Focus view</div>
-            </div>
+          <span style="margin-left:auto; font-size:18px;">⭐</span>
         </label>
+      </div>
 
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;flex-wrap:wrap">
-          <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-          ${isEdit && g.status !== 'achieved' ? `<button class="btn success" onclick="markVisionAchieved('${g.id}')">${renderIcon('trophy', null, 'style="width:16px;height:16px;margin-right:4px"')} Mark Achieved</button>` : ''}
-          <button class="btn primary" data-action="${isEdit ? 'update-vision-modal' : 'save-vision-modal'}" ${isEdit ? `data-edit-id="${g.id}"` : ''}>
-            ${isEdit ? 'Update Goal' : 'Save Goal'}
-          </button>
-        </div>
-        `;
+      <!-- Action Buttons -->
+      <div style="display:flex; gap:12px; margin-top:24px;">
+        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')" style="flex:1; height:48px;">Cancel</button>
+        <button class="btn primary" data-action="${isEdit ? 'update-vision-modal' : 'save-vision-modal'}" ${isEdit ? `data-edit-id="${g.id}"` : ''} style="flex:2; height:48px; font-weight:800;">
+          ${isEdit ? 'Save Changes' : 'Create Vision'}
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 function initVisionFormListeners() {

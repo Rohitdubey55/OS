@@ -453,22 +453,22 @@ function renderSettings() {
                 <select id="notificationSound" class="input" style="flex:1">
                     <option value="default">Default (System Ringtone)</option>
                     <option value="none">Silent</option>
-                    <optgroup label="Short Alerts">
-                        <option value="chime.wav">Chime</option>
-                        <option value="beep.wav">Beep</option>
-                        <option value="classic.wav">Classic Alarm</option>
+                     <optgroup label="Short Alerts">
+                        <option value="chime">Chime</option>
+                        <option value="beep">Beep</option>
+                        <option value="classic">Classic Alarm</option>
                     </optgroup>
                     <optgroup label="Long Alarms">
-                        <option value="alarm_fast_10s.wav">Fast Alarm (10s)</option>
-                        <option value="digital_clock_20s.wav">Digital Clock (20s)</option>
-                        <option value="siren_30s.wav">Siren (30s)</option>
-                        <option value="gentle_wake_30s.wav">Gentle Wake (30s)</option>
-                        <option value="meditation_bell_30s.wav">Meditation Bell (30s)</option>
-                        <option value="sonar_10s.wav">Sonar (10s)</option>
-                        <option value="emergency_20s.wav">Emergency (20s)</option>
-                        <option value="slow_pulse_10s.wav">Slow Pulse (10s)</option>
-                        <option value="space_ambient_30s.wav">Space Ambient (30s)</option>
-                        <option value="marimba_trill_20s.wav">Marimba Trill (20s)</option>
+                        <option value="alarm_fast_10s">Fast Alarm (10s)</option>
+                        <option value="digital_clock_20s">Digital Clock (20s)</option>
+                        <option value="siren_30s">Siren (30s)</option>
+                        <option value="gentle_wake_30s">Gentle Wake (30s)</option>
+                        <option value="meditation_bell_30s">Meditation Bell (30s)</option>
+                        <option value="sonar_10s">Sonar (10s)</option>
+                        <option value="emergency_20s">Emergency (20s)</option>
+                        <option value="slow_pulse_10s">Slow Pulse (10s)</option>
+                        <option value="space_ambient_30s">Space Ambient (30s)</option>
+                        <option value="marimba_trill_20s">Marimba Trill (20s)</option>
                     </optgroup>
                 </select>
                 <button class="btn secondary" onclick="playTestSound()" style="padding: 0 16px;">Test</button>
@@ -1465,9 +1465,21 @@ window.playTestSound = async function () {
     return;
   }
 
-  // It's a custom wav file
-  await window.playNativeSound(val);
-  showToast(`Playing ${val}...`, 'info');
+  // It's a custom wav file — schedule a real notification so the sound goes through iOS notification system
+  if (window.LocalNotifications) {
+    await window.LocalNotifications.schedule({
+      notifications: [{
+        title: "🔔 Test Notification",
+        body: "This is how your habit alarms will sound",
+        id: 88889,
+        schedule: { at: new Date(Date.now() + 1000), allowWhileIdle: true },
+        sound: val.endsWith('.wav') ? val : val + '.wav'
+      }]
+    });
+    showToast('Notification arriving in 1 second...', 'info');
+  } else {
+    showToast(`Sound: ${val}`, 'info');
+  }
 };
 
 function padZero(num) {

@@ -80,7 +80,25 @@ async function initNotificationService() {
 
 // Load notification settings from localStorage
 function loadNotificationSettings() {
-    // 1. Try to load from Google Sheets settings (authoritative source)
+    // 1. Always read localStorage first — it is updated immediately whenever the
+    //    user changes a setting, so it is the most reliable source of truth.
+    const saved = localStorage.getItem('notificationSettings');
+    if (saved) {
+        try {
+            const settings = JSON.parse(saved);
+            notificationState.enabled = settings.enabled !== false;
+            if (settings.sound) notificationState.sound = settings.sound;
+            if (settings.quietHoursStart) notificationState.quietHoursStart = settings.quietHoursStart;
+            if (settings.quietHoursEnd) notificationState.quietHoursEnd = settings.quietHoursEnd;
+            if (settings.defaultMethod) notificationState.defaultMethod = settings.defaultMethod;
+            if (settings.habitSummaryTime) notificationState.habitSummaryTime = settings.habitSummaryTime;
+        } catch (e) {
+            console.error('Error loading notification settings from localStorage:', e);
+        }
+    }
+
+    // 2. Let Google Sheets override individual fields that are explicitly set there.
+    //    Missing/empty sheet fields do NOT clobber the localStorage values.
     const sheetSettings = (typeof state !== 'undefined' && state.data && state.data.settings && state.data.settings[0]);
     if (sheetSettings) {
         if (typeof sheetSettings.notification_enabled !== 'undefined') {
@@ -100,23 +118,6 @@ function loadNotificationSettings() {
         }
         if (sheetSettings.habit_summary_time) {
             notificationState.habitSummaryTime = sheetSettings.habit_summary_time;
-        }
-        return; // Sheet loaded — no need for localStorage
-    }
-
-    // 2. Fall back to localStorage cache (fast path on startup before sheet loads)
-    const saved = localStorage.getItem('notificationSettings');
-    if (saved) {
-        try {
-            const settings = JSON.parse(saved);
-            notificationState.enabled = settings.enabled !== false;
-            notificationState.sound = settings.sound || 'default';
-            notificationState.quietHoursStart = settings.quietHoursStart || 22;
-            notificationState.quietHoursEnd = settings.quietHoursEnd || 8;
-            notificationState.defaultMethod = settings.defaultMethod || 'both';
-            notificationState.habitSummaryTime = settings.habitSummaryTime || '08:00';
-        } catch (e) {
-            console.error('Error loading notification settings:', e);
         }
     }
 }
@@ -563,11 +564,13 @@ function startReminderPolling() {
 
 // Returns the correct sound filename for Capacitor LocalNotifications on iOS.
 // Must be module-level so all scheduling functions can call it.
+// Only .wav files are bundled in the Xcode project (chime.wav, classic.wav, beep.wav).
+// iOS 10+ supports .wav directly — no .caf conversion needed.
 function getNativeSoundPath(soundName) {
     if (!soundName || soundName === 'none') return null;
     if (soundName === 'default' || soundName === 'alert') return 'default';
-    // iOS requires .caf format; convert .wav filenames automatically
-    return soundName.replace('.wav', '.caf');
+    // Ensure .wav extension so iOS can locate the file in the app bundle
+    return soundName.endsWith('.wav') ? soundName : soundName + '.wav';
 }
 
 // Sync all future habits/tasks natively so the phone rings when the app is closed
@@ -580,6 +583,10 @@ async function syncNativeNotifications() {
         setTimeout(syncNativeNotifications, 2000);
         return;
     }
+
+    // Re-read settings now that the sheet is confirmed loaded,
+    // so notificationState.sound reflects the user's latest choice.
+    loadNotificationSettings();
 
     try {
         // Always request/check permissions — ask the user if not yet granted

@@ -18,6 +18,16 @@
 		F5DAED922F555736003CA5A3 /* classic.wav in Resources */ = {isa = PBXBuildFile; fileRef = F5DAED912F555623003CA5A3 /* classic.wav */; };
 		F5DAED932F555736003CA5A3 /* chime.wav in Resources */ = {isa = PBXBuildFile; fileRef = F5DAED902F555623003CA5A3 /* chime.wav */; };
 		F5DAED942F555736003CA5A3 /* beep.wav in Resources */ = {isa = PBXBuildFile; fileRef = F5DAED8F2F555623003CA5A3 /* beep.wav */; };
+		5EAEA1B9DE8C4187ADF7239D /* alarm_fast_10s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 648FBA1AB1AE4371BA6EB457 /* alarm_fast_10s.wav */; };
+		2F4729AB583C49D0AD4EC84C /* digital_clock_20s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 3536C70142CC4321972876A1 /* digital_clock_20s.wav */; };
+		DF7619FAC8A946EDB19CCC33 /* emergency_20s.wav in Resources */ = {isa = PBXBuildFile; fileRef = E799069CD2DC4483A90A83BF /* emergency_20s.wav */; };
+		6F74AC0B5CEC4AE096699942 /* gentle_wake_30s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 500EE85A5EAC40BB88F1BE84 /* gentle_wake_30s.wav */; };
+		F41AD7D93AAB4A949E6E8E76 /* marimba_trill_20s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 0C5CE7F597A84B378733D8A1 /* marimba_trill_20s.wav */; };
+		F01E5984E4C24D5C84D50AA7 /* meditation_bell_30s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 9A3C8BE41FF543F1B57B4811 /* meditation_bell_30s.wav */; };
+		34054AF7DF1F437DB036D8ED /* siren_30s.wav in Resources */ = {isa = PBXBuildFile; fileRef = FAEB17D623C843D199D3BAC8 /* siren_30s.wav */; };
+		D0BAAC3C3EF1499BA56F99E7 /* slow_pulse_10s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 172F118A82004D84A89EE187 /* slow_pulse_10s.wav */; };
+		85B32266A8CF4D09926070E2 /* sonar_10s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 2B2DCA9F97E74B7E91000B88 /* sonar_10s.wav */; };
+		E986A584F09846F9BCEED100 /* space_ambient_30s.wav in Resources */ = {isa = PBXBuildFile; fileRef = 641AA4B127DF449799D2FE79 /* space_ambient_30s.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +44,16 @@
 		F5DAED8F2F555623003CA5A3 /* beep.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = beep.wav; sourceTree = "<group>"; };
 		F5DAED902F555623003CA5A3 /* chime.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = chime.wav; sourceTree = "<group>"; };
 		F5DAED912F555623003CA5A3 /* classic.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = classic.wav; sourceTree = "<group>"; };
+		648FBA1AB1AE4371BA6EB457 /* alarm_fast_10s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = alarm_fast_10s.wav; sourceTree = "<group>"; };
+		3536C70142CC4321972876A1 /* digital_clock_20s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = digital_clock_20s.wav; sourceTree = "<group>"; };
+		E799069CD2DC4483A90A83BF /* emergency_20s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = emergency_20s.wav; sourceTree = "<group>"; };
+		500EE85A5EAC40BB88F1BE84 /* gentle_wake_30s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = gentle_wake_30s.wav; sourceTree = "<group>"; };
+		0C5CE7F597A84B378733D8A1 /* marimba_trill_20s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = marimba_trill_20s.wav; sourceTree = "<group>"; };
+		9A3C8BE41FF543F1B57B4811 /* meditation_bell_30s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = meditation_bell_30s.wav; sourceTree = "<group>"; };
+		FAEB17D623C843D199D3BAC8 /* siren_30s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = siren_30s.wav; sourceTree = "<group>"; };
+		172F118A82004D84A89EE187 /* slow_pulse_10s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = slow_pulse_10s.wav; sourceTree = "<group>"; };
+		2B2DCA9F97E74B7E91000B88 /* sonar_10s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = sonar_10s.wav; sourceTree = "<group>"; };
+		641AA4B127DF449799D2FE79 /* space_ambient_30s.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = space_ambient_30s.wav; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,6 +75,16 @@
 				F5DAED8F2F555623003CA5A3 /* beep.wav */,
 				F5DAED902F555623003CA5A3 /* chime.wav */,
 				F5DAED912F555623003CA5A3 /* classic.wav */,
+				648FBA1AB1AE4371BA6EB457 /* alarm_fast_10s.wav */,
+				3536C70142CC4321972876A1 /* digital_clock_20s.wav */,
+				E799069CD2DC4483A90A83BF /* emergency_20s.wav */,
+				500EE85A5EAC40BB88F1BE84 /* gentle_wake_30s.wav */,
+				0C5CE7F597A84B378733D8A1 /* marimba_trill_20s.wav */,
+				9A3C8BE41FF543F1B57B4811 /* meditation_bell_30s.wav */,
+				FAEB17D623C843D199D3BAC8 /* siren_30s.wav */,
+				172F118A82004D84A89EE187 /* slow_pulse_10s.wav */,
+				2B2DCA9F97E74B7E91000B88 /* sonar_10s.wav */,
+				641AA4B127DF449799D2FE79 /* space_ambient_30s.wav */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
 			);
@@ -151,6 +181,16 @@
 				F5DAED922F555736003CA5A3 /* classic.wav in Resources */,
 				F5DAED932F555736003CA5A3 /* chime.wav in Resources */,
 				F5DAED942F555736003CA5A3 /* beep.wav in Resources */,
+				5EAEA1B9DE8C4187ADF7239D /* alarm_fast_10s.wav in Resources */,
+				2F4729AB583C49D0AD4EC84C /* digital_clock_20s.wav in Resources */,
+				DF7619FAC8A946EDB19CCC33 /* emergency_20s.wav in Resources */,
+				6F74AC0B5CEC4AE096699942 /* gentle_wake_30s.wav in Resources */,
+				F41AD7D93AAB4A949E6E8E76 /* marimba_trill_20s.wav in Resources */,
+				F01E5984E4C24D5C84D50AA7 /* meditation_bell_30s.wav in Resources */,
+				34054AF7DF1F437DB036D8ED /* siren_30s.wav in Resources */,
+				D0BAAC3C3EF1499BA56F99E7 /* slow_pulse_10s.wav in Resources */,
+				85B32266A8CF4D09926070E2 /* sonar_10s.wav in Resources */,
+				E986A584F09846F9BCEED100 /* space_ambient_30s.wav in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,

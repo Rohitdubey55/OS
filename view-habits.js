@@ -162,9 +162,19 @@ function renderHabits() {
 
     return `
               <div class="swipe-reveal-container">
-                <div class="swipe-bg swipe-bg-done">✅</div>
-                <div class="swipe-bg swipe-bg-delete">🗑️</div>
-                <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${!isDoneToday ? 'pending' : ''} ${stats.consecutiveMissed >= 3 && !isHabitTimeInFuture(h.reminder_time) ? 'habit-card-warning' : ''} ${String(h.id) === String(nextUpHabitId) ? 'habit-next-up' : ''}" id="habit-card-${h.id}">
+                <div class="swipe-bg swipe-bg-done">
+                  <div class="swipe-bg-inner">
+                    <span class="swipe-bg-icon">✅</span>
+                    <span class="swipe-bg-label">Mark Done</span>
+                  </div>
+                </div>
+                <div class="swipe-bg swipe-bg-delete">
+                  <div class="swipe-bg-inner">
+                    <span class="swipe-bg-icon">🗑️</span>
+                    <span class="swipe-bg-label">Delete</span>
+                  </div>
+                </div>
+                <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${isDoneToday ? 'done' : 'pending'} ${stats.consecutiveMissed >= 3 && !isHabitTimeInFuture(h.reminder_time) ? 'habit-card-warning' : ''} ${String(h.id) === String(nextUpHabitId) ? 'habit-next-up' : ''}" id="habit-card-${h.id}">
                   <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
                     <div class="habit-title-wrapper">
                       <div class="habit-emoji-circle">${h.emoji || '✨'}</div>

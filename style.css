@@ -5752,7 +5752,15 @@ input:checked+.slider:before {
 }
 
 .habit-card-new.pending {
-  animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.habit-card-new.done {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+  background: var(--surface-2);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 @keyframes bentoIn {
@@ -5845,12 +5853,32 @@ input:checked+.slider:before {
   height: 100%;
   display: flex;
   align-items: center;
-  font-size: 24px;
-  padding: 0 24px;
+  padding: 0 20px;
   color: white;
   z-index: 0;
   pointer-events: none;
   opacity: 0;
+  transition: opacity 0.05s;
+}
+
+.swipe-bg-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.swipe-bg-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.swipe-bg-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.9;
 }
 
 .swipe-bg-done {
@@ -5929,7 +5957,7 @@ input:checked+.slider:before {
 .habit-next-up {
   border: 2px solid var(--primary) !important;
   background: linear-gradient(160deg, var(--surface-1) 70%, rgba(var(--primary-rgb), 0.06)) !important;
-  animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both, next-up-pulse 1.8s ease-in-out 0.6s infinite;
+  animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), next-up-pulse 1.8s ease-in-out 0.6s infinite;
 }
 
 @keyframes next-up-pulse {

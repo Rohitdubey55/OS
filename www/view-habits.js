@@ -16,6 +16,23 @@ function getTodayDayName() {
   return DAY_NAMES[d === 0 ? 6 : d - 1]; // Convert to Mon-based
 }
 
+function isHabitTimeInFuture(reminder_time) {
+  if (!reminder_time) return false;
+  const now = new Date();
+  const habitTime = new Date(now);
+  const rt = String(reminder_time);
+
+  if (rt.startsWith('1899-12-30T')) {
+    habitTime.setHours(parseInt(rt.slice(11, 13), 10), parseInt(rt.slice(14, 16), 10), 0, 0);
+  } else if (rt.match(/^\d{2}:\d{2}/)) {
+    const parts = rt.split(':');
+    habitTime.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+  } else {
+    return false;
+  }
+  return habitTime > now;
+}
+
 function isHabitScheduledToday(h) {
   if (!h.frequency || h.frequency === 'daily') return true;
   if (h.frequency === 'weekly' && h.days) {
@@ -88,166 +105,6 @@ function renderHabits() {
   };
 
   document.getElementById('main').innerHTML = `
-      <style>
-        .habit-wrapper { padding: 12px; padding-bottom: 100px; }
-        .habit-grid { display: grid; gap: 8px; }
-        .habit-card-new {
-          background: var(--surface-1);
-          border-radius: 12px;
-          border: 1px solid var(--border-color);
-          overflow: hidden;
-          position: relative;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-          z-index: 1;
-        }
-        .habit-card-new.pending { animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-        @keyframes bentoIn {
-          from { opacity: 0; transform: translateY(20px) scale(0.95); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .habit-card-header {
-          padding: 8px 12px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          cursor: pointer;
-        }
-        .habit-title-wrapper { display: flex; align-items: center; gap: 10px; }
-        .habit-emoji-circle {
-          width: 34px;
-          height: 34px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--surface-2);
-          border-radius: 8px;
-          font-size: 18px;
-          flex-shrink: 0;
-          border: 1px solid var(--border-color);
-        }
-        .habit-title-lg { font-weight: 700; font-size: 0.95rem; color: var(--text-1); letter-spacing: -0.01em; display:flex; align-items:center; }
-        .habit-meta { font-size: 9px; color: var(--text-muted); margin-top: 1px; }
-        .habit-card-body { display: none; padding: 0 12px 12px 12px; border-top: 1px solid var(--border-color); padding-top: 10px; }
-        .habit-expanded .habit-card-body { display: block; }
-        .collapse-icon { transition: transform 0.3s; width: 14px; color: var(--text-muted); }
-        .habit-expanded .collapse-icon { transform: rotate(180deg); }
-        .swipe-reveal-container { position: relative; overflow: hidden; border-radius: 12px; margin-bottom: 8px; }
-        .swipe-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; font-size: 24px; padding: 0 24px; color: white; z-index: 0; pointer-events: none; opacity: 0; }
-        .swipe-bg-done { background: var(--success); justify-content: flex-start; }
-        .swipe-bg-delete { background: var(--danger); justify-content: flex-end; }
-        
-        /* Premium Streak Pill */
-        .streak-pill { 
-          display: flex; 
-          align-items: center; 
-          gap: 4px; 
-          padding: 3px 8px; 
-          background: var(--surface-2); 
-          border-radius: 20px; 
-          font-size: 10px; 
-          font-weight: 700; 
-          color: var(--text-2); 
-          border: 1px solid var(--border-color);
-          transition: all 0.3s ease;
-        }
-        .streak-7 { background: linear-gradient(135deg, #FF9D6C, #FF6B35); color: white; border: none; box-shadow: 0 2px 8px rgba(255,107,53,0.3); }
-        .streak-30 { background: linear-gradient(135deg, #F7931E, #FF9D6C); color: white; border: none; box-shadow: 0 0 15px rgba(247,147,30,0.5); animation: pulse-gold 2s infinite; }
-        @keyframes pulse-gold {
-          0% { box-shadow: 0 0 0 0 rgba(247,147,30, 0.6); }
-          70% { box-shadow: 0 0 0 10px rgba(247,147,30, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(247,147,30, 0); }
-        }
-
-        .habit-card-warning { border: 1px solid #EF4444 !important; }
-
-        /* Missed habit warning strip */
-        .habit-missed-banner {
-          font-size: 9px;
-          font-weight: 700;
-          color: #EF4444;
-          background: rgba(239, 68, 68, 0.07);
-          padding: 4px 12px;
-          border-top: 1px solid rgba(239, 68, 68, 0.18);
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          letter-spacing: 0.01em;
-        }
-
-        /* Next upcoming habit highlight */
-        .habit-next-up {
-          border: 2px solid var(--primary) !important;
-          background: linear-gradient(160deg, var(--surface-1) 70%, rgba(var(--primary-rgb, 99,102,241), 0.06)) !important;
-          animation: bentoIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both, next-up-pulse 1.8s ease-in-out 0.6s infinite;
-        }
-        @keyframes next-up-pulse {
-          0%   { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 99,102,241), 0.65), 0 3px 14px rgba(var(--primary-rgb, 99,102,241), 0.2); }
-          55%  { box-shadow: 0 0 0 10px rgba(var(--primary-rgb, 99,102,241), 0),  0 6px 22px rgba(var(--primary-rgb, 99,102,241), 0.35); }
-          100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 99,102,241), 0),  0 3px 14px rgba(var(--primary-rgb, 99,102,241), 0.2); }
-        }
-        .up-next-badge {
-          font-size: 8px;
-          font-weight: 800;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: var(--primary);
-          background: rgba(var(--primary-rgb, 99,102,241), 0.12);
-          border: 1px solid rgba(var(--primary-rgb, 99,102,241), 0.3);
-          padding: 2px 6px;
-          border-radius: 4px;
-          margin-left: 6px;
-          animation: badge-pop 1.8s ease-in-out 0.6s infinite;
-        }
-        @keyframes badge-pop {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50%       { opacity: 0.7; transform: scale(0.95); }
-        }
-
-        /* Scorecard Styles Restoration */
-        .habit-scorecard-container {
-          display: flex;
-          justify-content: space-between;
-          gap: 6px;
-          margin-bottom: 16px;
-          background: var(--surface-2);
-          border-radius: 16px;
-          padding: 10px;
-          border: 1px solid var(--border-color);
-        }
-        .scorecard-item {
-          flex: 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 10px;
-          background: var(--surface-1);
-          aspect-ratio: 1;
-          max-width: 45px;
-          position: relative;
-          border: 1px solid var(--border-color);
-        }
-        .score-circle-container { position: relative; width: 32px; height: 32px; }
-        .score-circle-bg { fill: none; stroke: var(--surface-3); stroke-width: 3; }
-        .score-circle-progress { 
-          fill: none; 
-          stroke: var(--primary); 
-          stroke-width: 3; 
-          stroke-linecap: round; 
-          transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1); 
-        }
-        .score-percent {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          font-size: 8px;
-          font-weight: 800;
-          color: var(--text-1);
-        }
-        .scorecard-item.today { border-color: var(--primary); box-shadow: 0 0 10px rgba(var(--primary-rgb), 0.2); }
-      </style>
-
       <div class="habit-wrapper">
         <div class="header-row" style="flex-wrap:wrap; gap:10px; margin-top:8px;">
           <h2 class="page-title" style="margin:0; flex:1">Habits</h2>
@@ -305,9 +162,19 @@ function renderHabits() {
 
     return `
               <div class="swipe-reveal-container">
-                <div class="swipe-bg swipe-bg-done">✅</div>
-                <div class="swipe-bg swipe-bg-delete">🗑️</div>
-                <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${!isDoneToday ? 'pending' : ''} ${stats.consecutiveMissed >= 3 ? 'habit-card-warning' : ''} ${String(h.id) === String(nextUpHabitId) ? 'habit-next-up' : ''}" id="habit-card-${h.id}">
+                <div class="swipe-bg swipe-bg-done">
+                  <div class="swipe-bg-inner">
+                    <span class="swipe-bg-icon">✅</span>
+                    <span class="swipe-bg-label">Mark Done</span>
+                  </div>
+                </div>
+                <div class="swipe-bg swipe-bg-delete">
+                  <div class="swipe-bg-inner">
+                    <span class="swipe-bg-icon">🗑️</span>
+                    <span class="swipe-bg-label">Delete</span>
+                  </div>
+                </div>
+                <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${isDoneToday ? 'done' : 'pending'} ${stats.consecutiveMissed >= 3 && !isHabitTimeInFuture(h.reminder_time) ? 'habit-card-warning' : ''} ${String(h.id) === String(nextUpHabitId) ? 'habit-next-up' : ''}" id="habit-card-${h.id}">
                   <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
                     <div class="habit-title-wrapper">
                       <div class="habit-emoji-circle">${h.emoji || '✨'}</div>
@@ -323,8 +190,7 @@ function renderHabits() {
                       ${renderIcon('down', null, 'class="collapse-icon"')}
                     </div>
                   </div>
-
-                  ${stats.consecutiveMissed >= 3 && String(h.id) !== String(nextUpHabitId) ? `<div class="habit-missed-banner">🔗 Don't break the chain! ${stats.consecutiveMissed} day${stats.consecutiveMissed > 1 ? 's' : ''} missed in a row</div>` : ''}
+                  ${stats.consecutiveMissed >= 3 && String(h.id) !== String(nextUpHabitId) && !isHabitTimeInFuture(h.reminder_time) ? `<div class="habit-missed-banner">🔗 Don't break the chain! ${stats.consecutiveMissed} day${stats.consecutiveMissed > 1 ? 's' : ''} missed in a row</div>` : ''}
                   <div class="habit-card-body">
                     <div style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:10px;">
                       ${stats.dateButtonsHtml}
@@ -643,10 +509,13 @@ function calculateHabitStats(logs, today, habit) {
 
   // Calculate missed scheduled times (for warning)
   let consecutiveMissed = 0;
+  const isFutureToday = isHabitTimeInFuture(habit?.reminder_time);
+
   for (let i = 0; i < 30; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const iso = d.toISOString().slice(0, 10);
+    const isToday = i === 0;
 
     let isScheduled = true;
     if (habit && habit.frequency === 'weekly' && habit.days) {
@@ -655,11 +524,18 @@ function calculateHabitStats(logs, today, habit) {
       isScheduled = habit.days.split(',').map(s => s.trim()).includes(dayName);
     }
 
-    if (isScheduled && !unique.includes(iso)) {
-      consecutiveMissed++;
-      if (consecutiveMissed >= 3) break;
-    } else if (isScheduled && unique.includes(iso)) {
-      break; // Found a completion, stop counting
+    if (isScheduled) {
+      const isDone = unique.includes(iso);
+      if (isDone) {
+        break; // Found a completion, stop counting
+      } else {
+        // If it's today and the time hasn't passed yet, don't count it as a "missed scheduled time" yet
+        if (isToday && isFutureToday) {
+          continue;
+        }
+        consecutiveMissed++;
+        if (consecutiveMissed >= 3) break;
+      }
     }
   }
 
