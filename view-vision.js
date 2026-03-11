@@ -1513,7 +1513,10 @@ const VISION_TDP_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Rout
 
 async function getActiveTDP() {
   const plans = state.data.vision_tdp || [];
-  return plans.find(p => p.status === 'active');
+  console.log('[TDP Debug] All plans:', plans);
+  const active = plans.find(p => p.status === 'active');
+  console.log('[TDP Debug] Active plan:', active);
+  return active;
 }
 
 function calculateTDPProgress(plan) {
@@ -1556,7 +1559,7 @@ async function checkAndAutoRenewTDP() {
     // Archive expired plan
     active.status = 'archived';
     await apiPost('vision_tdp', active);
-    showNotice('Your 10 Days Plan has ended. Create a new one!');
+    showToast('Your 10 Days Plan has ended. Create a new one!');
     renderVision();
   }
 }
@@ -1762,9 +1765,16 @@ async function createNewTDP() {
     }
   }
 
-  await apiPost('vision_tdp', newPlan);
+  console.log('[TDP Debug] Sending new plan to API:', newPlan);
+  const postRes = await apiPost('vision_tdp', newPlan);
+  console.log('[TDP Debug] API Post Result:', postRes);
+
+  console.log('[TDP Debug] Triggering loadAllData to sync state...');
+  await loadAllData();
+  console.log('[TDP Debug] loadAllData complete. State vision_tdp:', state.data.vision_tdp);
+
   closeTDPModal();
-  showNotice('New 10 Days Plan created!');
+  showToast('New 10 Days Plan created!');
   renderVision();
 }
 

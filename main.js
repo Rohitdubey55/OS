@@ -186,7 +186,12 @@ async function apiCall(action, sheet, payload = {}, id = null) {
         const json = await res.json();
         console.log(`API Response [${action} ${sheet}]:`, json);
 
-        if (!json.success) throw new Error(json.message);
+        if (!json.success) {
+            console.error(`[API Debug] Action failed [${action} ${sheet}]:`, json.message);
+            throw new Error(json.message);
+        }
+
+        console.log(`[API Debug] Action success [${action} ${sheet}]. Data type:`, Array.isArray(json.data) ? `Array(${json.data.length})` : typeof json.data);
 
         // For 'get' requests, return the data array directly for compatibility
         if (action === 'get') {
