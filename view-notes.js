@@ -12,13 +12,13 @@ let notesComposeCategory = 'personal';
 
 /* ── Categories ── */
 const NOTE_CATS = {
-    all: { label: 'All', icon: '📋', color: '#6366F1' },
-    personal: { label: 'Personal', icon: '👤', color: '#818CF8' },
-    work: { label: 'Work', icon: '💼', color: '#F59E0B' },
-    ideas: { label: 'Ideas', icon: '💡', color: '#10B981' },
-    goals: { label: 'Goals', icon: '🎯', color: '#EF4444' },
-    journal: { label: 'Journal', icon: '📔', color: '#EC4899' },
-    learning: { label: 'Learning', icon: '📚', color: '#3B82F6' },
+    all:      { label: 'All',      icon: '○', color: '#6366F1' },
+    personal: { label: 'Personal', icon: '○', color: '#818CF8' },
+    work:     { label: 'Work',     icon: '○', color: '#F59E0B' },
+    ideas:    { label: 'Ideas',    icon: '○', color: '#10B981' },
+    goals:    { label: 'Goals',    icon: '○', color: '#EF4444' },
+    journal:  { label: 'Journal',  icon: '○', color: '#EC4899' },
+    learning: { label: 'Learning', icon: '○', color: '#3B82F6' },
 };
 
 /* ── Formatting ── */
@@ -66,20 +66,13 @@ function renderNotes() {
             var k = entry[0]; var v = entry[1];
             return '<button class="nc-filter-pill' + (k === 'all' ? ' active' : '') + '" ' +
                 'data-cat="' + k + '" onclick="ncFilterBy(\'' + k + '\')" ' +
-                'style="--pill-color:' + v.color + '">' + v.icon + ' ' + v.label + '</button>';
-        }).join(''),
-        '  </div>',
-        '  <div class="nc-feed" id="ncFeed"><div class="nc-loading">Loading notes…</div></div>',
-        '  <div class="nc-cat-picker-popup hidden" id="ncCatPickerPopup">',
-        '    ' + Object.entries(NOTE_CATS).filter(function (e) { return e[0] !== 'all'; }).map(function (entry) {
-            var k = entry[0]; var v = entry[1];
-            return '<button class="nc-cat-option" onclick="ncSetComposeCategory(\'' + k + '\')">' +
-                v.icon + ' ' + v.label + '</button>';
+                'style="--pill-color:' + v.color + '">' +
+                '<span class="nc-pill-dot"></span>' + v.label + '</button>';
         }).join(''),
         '  </div>',
         '  <div class="nc-compose" id="ncCompose">',
         '    <button class="nc-compose-cat-btn" id="ncComposeCatBtn" onclick="ncToggleCatPicker()" title="Category">',
-        '      <span id="ncComposeCatIcon">' + NOTE_CATS.personal.icon + '</span>',
+        '      <span id="ncComposeCatIcon">○</span>',
         '    </button>',
         '    <input class="nc-compose-input" id="ncComposeInput" type="text"',
         '      placeholder="Quick note… (Enter to send)"',
@@ -91,9 +84,20 @@ function renderNotes() {
         '      <i data-lucide="send" style="width:18px;height:18px"></i>',
         '    </button>',
         '  </div>',
+        '  <div class="nc-cat-picker-popup hidden" id="ncCatPickerPopup">',
+        '    ' + Object.entries(NOTE_CATS).filter(function (e) { return e[0] !== 'all'; }).map(function (entry) {
+            var k = entry[0]; var v = entry[1];
+            return '<button class="nc-cat-option" onclick="ncSetComposeCategory(\'' + k + '\')">' +
+                v.icon + ' ' + v.label + '</button>';
+        }).join(''),
+        '  </div>',
+        '  <div class="nc-feed" id="ncFeed"><div class="nc-loading">Loading notes…</div></div>',
         '</div>',
         '<div class="nc-editor-overlay hidden" id="ncEditorOverlay">',
         '  <div class="nc-editor-sheet" id="ncEditorSheet"></div>',
+        '</div>',
+        '<div class="nc-view-overlay hidden" id="ncViewOverlay">',
+        '  <div class="nc-view-sheet" id="ncViewSheet"></div>',
         '</div>'
     ].join('\n');
 
@@ -105,17 +109,18 @@ function renderNotes() {
    DATA
 ═══════════════════════════════ */
 async function loadNotesData() {
+    // Show cached data immediately — no loading spinner if we have data
+    if (state.data.notes && state.data.notes.length > 0) {
+        notesData = state.data.notes;
+        ncRenderFeed();
+        ncUpdateCount();
+        return;
+    }
     try {
         if (typeof initToolsSheets === 'function') await initToolsSheets();
-
-        if (state.data.notes && state.data.notes.length > 0) {
-            notesData = state.data.notes;
-        } else {
-            const res = await apiGet('notes');
-            notesData = res || [];
-            state.data.notes = notesData;
-        }
-
+        const res = await apiGet('notes');
+        notesData = res || [];
+        state.data.notes = notesData;
         ncRenderFeed();
         ncUpdateCount();
     } catch (err) {
@@ -180,37 +185,31 @@ function ncRenderFeed() {
 function ncBubbleHTML(note) {
     var cat = NOTE_CATS[note.category] || NOTE_CATS.personal;
     var isActive = String(note.id) === String(activeNoteId);
-    var tags = note.tags ? note.tags.split(',').map(function (t) { return t.trim(); }).filter(Boolean) : [];
-    var preview = note.content ? note.content.replace(/[#*>\-_]/g, '').substring(0, 120) + (note.content.length > 120 ? '…' : '') : '';
+    var rawPreview = note.content ? note.content.replace(/[#*>`\-_]/g, '').replace(/\n+/g, ' ').trim() : '';
+    var preview = rawPreview.length > 90 ? rawPreview.substring(0, 90) + '…' : rawPreview;
     var titleHtml = notesSearch ? notesHighlight(escapeHtml(note.title || 'Untitled'), notesSearch) : escapeHtml(note.title || 'Untitled');
     var previewHtml = notesSearch && preview ? notesHighlight(escapeHtml(preview), notesSearch) : escapeHtml(preview);
     var timeStr = ncTimeStr(note.updated_at || note.created_at);
-    var wc = notesWordCount(note.content);
 
     return '<div class="nc-bubble' + (isActive ? ' active' : '') + (note.is_pinned ? ' pinned' : '') + '" ' +
         'style="--bubble-color:' + cat.color + '" ' +
-        'onclick="ncOpenEditor(\'' + note.id + '\')" id="ncB_' + note.id + '">' +
-        '<div class="nc-bubble-accent"></div>' +
+        'onclick="ncOpenView(\'' + note.id + '\')" id="ncB_' + note.id + '">' +
         '<div class="nc-bubble-body">' +
-        '<div class="nc-bubble-top">' +
-        '<span class="nc-bubble-cat-icon">' + cat.icon + '</span>' +
+        '<div class="nc-bubble-head">' +
         '<span class="nc-bubble-title">' + titleHtml + '</span>' +
-        (note.is_pinned ? '<span class="nc-bubble-pin" title="Pinned">📌</span>' : '') +
+        (note.is_pinned ? '<span class="nc-bubble-pin">📌</span>' : '') +
+        '<span class="nc-bubble-time">' + timeStr + '</span>' +
+        '<button class="nc-bubble-edit-btn" onclick="event.stopPropagation();ncOpenEditor(\'' + note.id + '\')" title="Edit">✏️</button>' +
         '<button class="nc-bubble-del" onclick="ncDeleteNote(event,\'' + note.id + '\')" title="Delete">×</button>' +
         '</div>' +
-        (preview ? '<div class="nc-bubble-preview">' + previewHtml + '</div>' : '') +
-        '<div class="nc-bubble-footer">' +
-        '<div class="nc-bubble-tags">' +
-        tags.slice(0, 3).map(function (t) { return '<span class="nc-bubble-tag">#' + escapeHtml(t) + '</span>'; }).join('') +
-        '</div>' +
-        '<span class="nc-bubble-meta">' + timeStr + (wc ? ' · ' + wc + 'w' : '') + '</span>' +
-        '</div>' +
+        (preview ? '<p class="nc-bubble-preview">' + previewHtml + '</p>' : '') +
         '</div>' +
         '</div>';
 }
 
 /* ═══════════════════════════════
-   EDITOR OVERLAY
+   EDITOR OVERLAY - SaaS Quality
+   Fixed: click outside, escape key
 ═══════════════════════════════ */
 function ncOpenEditor(id) {
     if (notesSaveTimer) { clearTimeout(notesSaveTimer); notesSaveTimer = null; saveNoteNow(true); }
@@ -220,7 +219,17 @@ function ncOpenEditor(id) {
     if (!note) return;
     ncRenderEditor(note);
     var overlay = document.getElementById('ncEditorOverlay');
-    if (overlay) overlay.classList.remove('hidden');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        // Add click-outside-to-close
+        overlay.onclick = function (e) {
+            if (e.target === overlay) {
+                ncCloseEditor();
+            }
+        };
+    }
+    // Add escape key to close
+    document.addEventListener('keydown', ncEditorKeyHandler);
     setTimeout(function () {
         var t = document.getElementById('ncEditorTitle');
         if (t) t.focus();
@@ -246,12 +255,29 @@ function ncOpenNewEditor() {
     };
     ncRenderEditor(note);
     var overlay = document.getElementById('ncEditorOverlay');
-    if (overlay) overlay.classList.remove('hidden');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        // Add click-outside-to-close
+        overlay.onclick = function (e) {
+            if (e.target === overlay) {
+                ncCloseEditor();
+            }
+        };
+    }
+    // Add escape key to close
+    document.addEventListener('keydown', ncEditorKeyHandler);
     if (composeInput) composeInput.value = '';
     setTimeout(function () {
         var t = document.getElementById('ncEditorTitle');
         if (t) { t.focus(); if (initialTitle) { t.select(); } }
     }, 80);
+}
+
+// Handle escape key to close editor
+function ncEditorKeyHandler(e) {
+    if (e.key === 'Escape') {
+        ncCloseEditor();
+    }
 }
 
 function ncRenderEditor(note) {
@@ -270,7 +296,7 @@ function ncRenderEditor(note) {
     sheet.innerHTML = [
         '<div class="nc-ed-handle"></div>',
         '<div class="nc-ed-topbar">',
-        '  <button class="nc-ed-close" onclick="ncCloseEditor()">← Back</button>',
+        '  <button class="nc-ed-close" onclick="ncCloseEditor()"><i data-lucide="x" style="width:16px;height:16px"></i> Close</button>',
         '  <div class="nc-ed-topbar-right">',
         '    <span class="nc-ed-save-badge" id="ncEdSaveBadge"></span>',
         '    <button class="nc-ed-action" onclick="ncTogglePin(\'' + (note.id || '') + '\')" title="Pin">' + (note.is_pinned ? '📌' : '📍') + '</button>',
@@ -315,10 +341,116 @@ function ncRenderEditor(note) {
     if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons({ root: sheet });
 }
 
-function ncCloseEditor() {
-    if (notesSaveTimer) { clearTimeout(notesSaveTimer); notesSaveTimer = null; saveNoteNow(true); }
-    var overlay = document.getElementById('ncEditorOverlay');
+/* ═══════════════════════════════
+   NOTE VIEW (read-only)
+═══════════════════════════════ */
+function ncOpenView(id) {
+    var note = notesData.find(function (n) { return String(n.id) === String(id); });
+    if (!note) return;
+    var overlay = document.getElementById('ncViewOverlay');
+    var sheet = document.getElementById('ncViewSheet');
+    if (!overlay || !sheet) return;
+
+    var cat = NOTE_CATS[note.category] || NOTE_CATS.personal;
+    var timeStr = ncTimeStr(note.updated_at || note.created_at);
+    var wc = notesWordCount(note.content);
+    var bodyHtml = ncRenderMarkdown(note.content || '');
+    var tags = note.tags ? note.tags.split(',').map(function (t) { return t.trim(); }).filter(Boolean) : [];
+
+    sheet.innerHTML = [
+        '<div class="nc-view-topbar">',
+        '  <button class="nc-view-back" onclick="ncCloseView()">',
+        '    <i data-lucide="arrow-left" style="width:20px;height:20px"></i>',
+        '  </button>',
+        '  <div class="nc-view-topbar-right">',
+        '    <button class="nc-view-edit-btn" onclick="ncCloseView();ncOpenEditor(\'' + note.id + '\')">',
+        '      <i data-lucide="edit-3" style="width:15px;height:15px"></i> Edit',
+        '    </button>',
+        '  </div>',
+        '</div>',
+        '<div class="nc-view-scroll">',
+        '  <div class="nc-view-header">',
+        '    <div class="nc-view-cat-chip" style="color:' + cat.color + ';background:' + cat.color + '18">' + cat.label + '</div>',
+        '    <h1 class="nc-view-title">' + escapeHtml(note.title || 'Untitled') + '</h1>',
+        '    <div class="nc-view-meta">' + timeStr + (wc ? ' &nbsp;·&nbsp; ' + wc + ' words' : '') + '</div>',
+        (tags.length ? '    <div class="nc-view-tags">' + tags.map(function (t) { return '<span class="nc-view-tag">#' + escapeHtml(t) + '</span>'; }).join('') + '</div>' : ''),
+        '  </div>',
+        '  <div class="nc-view-body">' + bodyHtml + '</div>',
+        '</div>'
+    ].join('\n');
+
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons({ root: sheet });
+    overlay.classList.remove('hidden');
+    document.addEventListener('keydown', ncViewKeyHandler);
+}
+
+function ncCloseView() {
+    var overlay = document.getElementById('ncViewOverlay');
     if (overlay) overlay.classList.add('hidden');
+    document.removeEventListener('keydown', ncViewKeyHandler);
+}
+
+function ncViewKeyHandler(e) {
+    if (e.key === 'Escape') ncCloseView();
+}
+
+function ncRenderMarkdown(text) {
+    if (!text) return '<p class="nc-view-empty">No content yet.</p>';
+    var lines = text.split('\n');
+    var html = '';
+    var inUl = false;
+    lines.forEach(function (line) {
+        if (line.match(/^### /)) {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            html += '<h3>' + ncInlineMd(line.slice(4)) + '</h3>';
+        } else if (line.match(/^## /)) {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            html += '<h2>' + ncInlineMd(line.slice(3)) + '</h2>';
+        } else if (line.match(/^# /)) {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            html += '<h1>' + ncInlineMd(line.slice(2)) + '</h1>';
+        } else if (line.match(/^> /)) {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            html += '<blockquote>' + ncInlineMd(line.slice(2)) + '</blockquote>';
+        } else if (line.match(/^- \[x\] /i)) {
+            if (!inUl) { html += '<ul class="nc-md-checklist">'; inUl = true; }
+            html += '<li class="checked">&#10003; ' + ncInlineMd(line.slice(6)) + '</li>';
+        } else if (line.match(/^- \[ \] /)) {
+            if (!inUl) { html += '<ul class="nc-md-checklist">'; inUl = true; }
+            html += '<li>' + ncInlineMd(line.slice(6)) + '</li>';
+        } else if (line.match(/^- /)) {
+            if (!inUl) { html += '<ul>'; inUl = true; }
+            html += '<li>' + ncInlineMd(line.slice(2)) + '</li>';
+        } else if (line.trim() === '---') {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            html += '<hr class="nc-md-hr">';
+        } else if (line.trim() === '') {
+            if (inUl) { html += '</ul>'; inUl = false; }
+        } else {
+            if (inUl) { html += '</ul>'; inUl = false; }
+            html += '<p>' + ncInlineMd(line) + '</p>';
+        }
+    });
+    if (inUl) html += '</ul>';
+    return html;
+}
+
+function ncInlineMd(text) {
+    return escapeHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*([^*\n]+?)\*/g, '<em>$1</em>')
+        .replace(/`([^`\n]+?)`/g, '<code class="nc-md-code">$1</code>');
+}
+
+function ncCloseEditor() {
+    // Remove event listeners
+    document.removeEventListener('keydown', ncEditorKeyHandler);
+    var overlay = document.getElementById('ncEditorOverlay');
+    if (overlay) {
+        overlay.onclick = null;
+        overlay.classList.add('hidden');
+    }
+    if (notesSaveTimer) { clearTimeout(notesSaveTimer); notesSaveTimer = null; saveNoteNow(true); }
     activeNoteId = null;
     notesIsNew = false;
     loadNotesData();
@@ -624,7 +756,7 @@ function notesHighlight(html, query) {
 }
 
 function ncDayKey(dateStr) {
-    if (!dateStr) return 'Unknown';
+    if (!dateStr) return 'Older';
     var d = new Date(dateStr);
     var now = new Date();
     var diff = Math.floor((now - d) / 86400000);

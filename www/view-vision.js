@@ -168,11 +168,34 @@ let visionState = {
 const VISION_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine'];
 
 async function renderVision() {
+  await checkAndAutoRenewTDP();
   const goals = state.data.vision || [];
   await preloadLocalMedia(goals);
   let filtered = filterVisions(goals);
   filtered = sortVisions(filtered);
   const stats = calculateVisionStats(goals);
+
+  const activeTDP = await getActiveTDP();
+  const tdpInfo = getTDPDayInfo(activeTDP);
+  const tdpProg = calculateTDPProgress(activeTDP);
+
+  let tdpHtml = `
+    <div class="tdp-header-row animate-enter">
+      <button class="tdp-btn" onclick="openTDPModal()">
+        <span class="tdp-btn-label">10 Days Plan</span>
+        <span class="tdp-btn-status">${activeTDP ? 'Day ' + tdpInfo.day : 'Start TDP'}</span>
+      </button>
+      <div class="tdp-progress-wrap">
+        <div class="tdp-progress-meta">
+          <span>${activeTDP ? tdpProg.percentage + '% Complete' : 'Planning block not started'}</span>
+          <span>${activeTDP ? tdpInfo.remaining + ' days left' : ''}</span>
+        </div>
+        <div class="tdp-progress-bar">
+          <div class="tdp-progress-fill" style="width: ${activeTDP ? tdpProg.percentage : 0}%"></div>
+        </div>
+      </div>
+    </div>
+  `;
 
   document.getElementById('main').innerHTML = `
     <div class="vision-wrapper">
@@ -185,6 +208,8 @@ async function renderVision() {
         </div>
         <button class="btn primary" onclick="openVisionModal()">+ Add Goal</button>
       </div>
+
+      ${tdpHtml}
 
       <!-- ── Toolbar ── -->
       <div class="vision-toolbar">
@@ -1482,3 +1507,380 @@ window.openVisionImageSheet = window.openVisionModal;
 window.playVisionVideo = window.openVideoModal;
 window.stopVisionVideo = window.closeVideoModal;
 window.sendUpcomingHabitSummary = window.sendUpcomingHabitSummary || function () { };
+
+/* ── 10 Days Plan (TDP) Feature Implementation ────────────────────────── */
+const VISION_TDP_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine'];
+
+async function getActiveTDP() {
+  const plans = state.data.vision_tdp || [];
+  console.log('[TDP Debug] All plans:', plans);
+  const active = plans.find(p => p.status === 'active');
+  console.log('[TDP Debug] Active plan:', active);
+  return active;
+}
+
+function calculateTDPProgress(plan) {
+  if (!plan || !plan.categories_json) return { total: 0, completed: 0, percentage: 0 };
+  let cats = {};
+  try {
+    cats = typeof plan.categories_json === 'string' ? JSON.parse(plan.categories_json) : plan.categories_json;
+  } catch (e) { return { total: 0, completed: 0, percentage: 0 }; }
+
+  let total = 0, completed = 0;
+  Object.values(cats).forEach(items => {
+    (items || []).forEach(item => {
+      total++;
+      if (item.completed) completed++;
+    });
+  });
+  return { total, completed, percentage: total > 0 ? Math.round((completed / total) * 100) : 0 };
+}
+
+function getTDPDayInfo(plan) {
+  if (!plan) return { day: 0, remaining: 0 };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(plan.start_date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(plan.end_date);
+  end.setHours(0, 0, 0, 0);
+
+  const day = Math.floor((today - start) / 86400000) + 1;
+  const remaining = Math.ceil((end - today) / 86400000);
+  return { day: Math.max(0, day), remaining: Math.max(0, remaining) };
+}
+
+async function checkAndAutoRenewTDP() {
+  const active = await getActiveTDP();
+  if (!active) return;
+
+  const info = getTDPDayInfo(active);
+  if (info.remaining < 0 || (new Date() > new Date(active.end_date) && info.remaining === 0)) {
+    // Archive expired plan
+    active.status = 'archived';
+    await apiPost('vision_tdp', active);
+    showToast('Your 10 Days Plan has ended. Create a new one!');
+    renderVision();
+  }
+}
+
+async function openTDPModal(tab = 'current') {
+  const active = await getActiveTDP();
+
+  // Create Modal Overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'tdp-modal-overlay';
+  overlay.id = 'tdpModalOverlay';
+  overlay.onclick = (e) => { if (e.target === overlay) closeTDPModal(); };
+
+  document.body.appendChild(overlay);
+  renderTDPModalContent(active, tab);
+}
+
+function closeTDPModal() {
+  const el = document.getElementById('tdpModalOverlay');
+  if (el) el.remove();
+}
+
+async function renderTDPModalContent(active, tab) {
+  const overlay = document.getElementById('tdpModalOverlay');
+  if (!overlay) return;
+
+  // Auto-fetch if current tab and no plan provided
+  if (tab === 'current' && !active) {
+    active = await getActiveTDP();
+  }
+
+  let bodyHtml = '';
+  if (tab === 'current') {
+    if (active) {
+      bodyHtml = renderCurrentTDP(active);
+    } else {
+      bodyHtml = renderNoActiveTDP();
+    }
+  } else if (tab === 'previous') {
+    bodyHtml = renderPreviousTDPs();
+  } else if (tab === 'create') {
+    bodyHtml = renderCreateTDPView();
+  }
+
+  overlay.innerHTML = `
+    <div class="tdp-modal animate-enter">
+      <div class="tdp-modal-header">
+        <div class="tdp-modal-title">${renderIcon('calendar', null, 'style="width:20px"')} 10 Days Plan</div>
+        <button class="tdp-close" onclick="closeTDPModal()">${renderIcon('x', null, 'style="width:20px"')}</button>
+      </div>
+      <div class="tdp-tabs">
+        <button class="tdp-tab ${tab === 'current' ? 'active' : ''}" onclick="renderTDPModalContent(null, 'current')">Current</button>
+        <button class="tdp-tab ${tab === 'previous' ? 'active' : ''}" onclick="renderTDPModalContent(null, 'previous')">Previous Plans</button>
+      </div>
+      <div class="tdp-modal-body">
+        ${bodyHtml}
+      </div>
+    </div>
+  `;
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function renderNoActiveTDP() {
+  return `
+    <div style="text-align:center; padding:40px 20px;">
+      <div style="font-size:48px; margin-bottom:16px;">📅</div>
+      <h3 style="margin-bottom:8px;">No Active Plan</h3>
+      <p style="color:var(--text-muted); margin-bottom:24px;">Start your next 10-day sprint across all vision categories.</p>
+      <button class="btn primary" onclick="renderTDPModalContent(null, 'create')">Create First Plan</button>
+    </div>
+  `;
+}
+
+function renderCurrentTDP(plan) {
+  const info = getTDPDayInfo(plan);
+  const prog = calculateTDPProgress(plan);
+  const cats = JSON.parse(plan.categories_json);
+
+  return `
+    <div class="tdp-current-header" style="margin-bottom:24px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:12px;">
+        <div>
+          <div style="font-size:12px; font-weight:700; color:var(--primary); text-transform:uppercase;">Day ${info.day} of 10</div>
+          <div style="font-size:18px; font-weight:800;">${formatDate(plan.start_date)} - ${formatDate(plan.end_date)}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:18px; font-weight:800; color:var(--primary);">${prog.percentage}%</div>
+          <div style="font-size:11px; color:var(--text-muted);">${prog.completed}/${prog.total} Items</div>
+        </div>
+      </div>
+      <div class="tdp-progress-bar"><div class="tdp-progress-fill" style="width:${prog.percentage}%"></div></div>
+    </div>
+
+    ${VISION_TDP_CATEGORIES.map(cat => `
+      <div class="tdp-cat-section">
+        <div class="tdp-cat-header">
+          <div class="tdp-cat-title">${cat}</div>
+          <div style="font-size:11px; color:var(--text-muted);">${(cats[cat] || []).filter(i => i.completed).length}/${(cats[cat] || []).length}</div>
+        </div>
+        <div class="tdp-cat-list">
+          ${(cats[cat] || []).map((item, idx) => `
+            <div class="tdp-list-item ${item.completed ? 'done' : ''}" onclick="toggleTDPItem('${plan.id}', '${cat}', ${idx})">
+              <div class="tdp-checkbox"></div>
+              <div class="tdp-item-text">${item.text}</div>
+              <button class="btn-icon" onclick="event.stopPropagation(); deleteTDPItem('${plan.id}', '${cat}', ${idx})">${renderIcon('trash', null, 'style="width:14px"')}</button>
+            </div>
+          `).join('')}
+          <div class="tdp-add-wrap">
+            <input type="text" class="tdp-add-input" placeholder="+ Add item to ${cat}..." onkeypress="if(event.key==='Enter') addTDPItem('${plan.id}', '${cat}', this.value)">
+          </div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+async function toggleTDPItem(planId, cat, idx) {
+  const plan = state.data.vision_tdp.find(p => String(p.id) === String(planId));
+  if (!plan) return;
+  const cats = JSON.parse(plan.categories_json);
+  cats[cat][idx].completed = !cats[cat][idx].completed;
+  plan.categories_json = JSON.stringify(cats);
+
+  // Optimistic UI
+  renderTDPModalContent(plan, 'current');
+  renderVision();
+
+  try {
+    await apiPost('vision_tdp', plan);
+    showToast('Saved on sheet');
+  } catch (e) {
+    console.error('Failed to save TDP item toggle:', e);
+    showToast('Failed to save to sheet');
+    // Reload data to sync back if error
+    await loadAllData();
+    renderVision();
+  }
+}
+
+async function addTDPItem(planId, cat, text) {
+  if (!text.trim()) return;
+  const plan = state.data.vision_tdp.find(p => String(p.id) === String(planId));
+  if (!plan) return;
+  const cats = JSON.parse(plan.categories_json);
+  if (!cats[cat]) cats[cat] = [];
+  cats[cat].push({ text, completed: false });
+  plan.categories_json = JSON.stringify(cats);
+
+  // Optimistic UI
+  renderTDPModalContent(plan, 'current');
+  renderVision();
+
+  try {
+    await apiPost('vision_tdp', plan);
+    showToast('Saved on sheet');
+  } catch (e) {
+    console.error('Failed to add TDP item:', e);
+    showToast('Failed to save to sheet');
+    await loadAllData();
+    renderVision();
+  }
+}
+
+async function deleteTDPItem(planId, cat, idx) {
+  const plan = state.data.vision_tdp.find(p => String(p.id) === String(planId));
+  if (!plan) return;
+  const cats = JSON.parse(plan.categories_json);
+  cats[cat].splice(idx, 1);
+  plan.categories_json = JSON.stringify(cats);
+
+  // Optimistic UI
+  renderTDPModalContent(plan, 'current');
+  renderVision();
+
+  try {
+    await apiPost('vision_tdp', plan);
+    showToast('Saved on sheet');
+  } catch (e) {
+    console.error('Failed to delete TDP item:', e);
+    showToast('Failed to save to sheet');
+    await loadAllData();
+    renderVision();
+  }
+}
+
+function renderCreateTDPView() {
+  const nextStart = new Date();
+  nextStart.setHours(0, 0, 0, 0);
+  const dateStr = nextStart.toISOString().split('T')[0];
+
+  return `
+    <div class="tdp-create-header">
+      <h3 style="margin-bottom:4px;">New 10 Days Plan</h3>
+      <p style="font-size:13px; opacity:0.9;">Choose your start date and set your focus for the next block.</p>
+    </div>
+    <div class="tdp-date-picker-row">
+      <label style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Start Date</label>
+      <input type="date" id="tdpNewStartDate" class="tdp-date-input" value="${dateStr}" onchange="updateTDPPreview()">
+    </div>
+    <div id="tdpPreview" style="margin-bottom:24px; font-size:14px; color:var(--text-2); background:var(--surface-2); padding:12px; border-radius:12px; border:1px solid var(--border-color);">
+      Ends on: <strong>${formatDate(new Date(nextStart.getTime() + 9 * 86400000))}</strong>
+    </div>
+    
+    <div style="display:flex; gap:12px;">
+      <button class="btn" style="flex:1" onclick="renderTDPModalContent(null, 'current')">Cancel</button>
+      <button class="btn primary" style="flex:2" onclick="createNewTDP()">Create Plan</button>
+    </div>
+  `;
+}
+
+function updateTDPPreview() {
+  const val = document.getElementById('tdpNewStartDate').value;
+  if (!val) return;
+  const end = new Date(new Date(val).getTime() + 9 * 86400000);
+  document.getElementById('tdpPreview').innerHTML = `Ends on: <strong>${formatDate(end)}</strong>`;
+}
+
+async function createNewTDP() {
+  const start = document.getElementById('tdpNewStartDate').value;
+  if (!start) return;
+
+  const endDate = new Date(new Date(start).getTime() + 9 * 86400000);
+  const end = endDate.toISOString().split('T')[0];
+
+  const categories = {};
+  VISION_TDP_CATEGORIES.forEach(c => categories[c] = []);
+
+  const newPlan = {
+    start_date: start,
+    end_date: end,
+    status: 'active',
+    categories_json: JSON.stringify(categories),
+    created_at: new Date().toISOString()
+  };
+
+  // Archive existing active if any
+  const plans = state.data.vision_tdp || [];
+  for (const p of plans) {
+    if (p.status === 'active') {
+      p.status = 'archived';
+      await apiPost('vision_tdp', p);
+    }
+  }
+
+  console.log('[TDP Debug] Sending new plan to API:', newPlan);
+  const postRes = await apiPost('vision_tdp', newPlan);
+  console.log('[TDP Debug] API Post Result:', postRes);
+
+  console.log('[TDP Debug] Triggering loadAllData to sync state...');
+  await loadAllData();
+  console.log('[TDP Debug] loadAllData complete. State vision_tdp:', state.data.vision_tdp);
+
+  closeTDPModal();
+  showToast('New 10 Days Plan created!');
+  renderVision();
+}
+
+function renderPreviousTDPs() {
+  const plans = (state.data.vision_tdp || []).filter(p => p.status === 'archived').sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+
+  if (plans.length === 0) return `<div style="text-align:center; color:var(--text-muted); padding:40px;">No archived plans yet.</div>`;
+
+  return plans.map(p => {
+    const prog = calculateTDPProgress(p);
+    return `
+      <div class="tdp-archive-card" onclick="viewArchivedTDP('${p.id}')">
+        <div class="tdp-archive-meta">
+          <div class="tdp-archive-dates">${formatDate(p.start_date)} - ${formatDate(p.end_date)}</div>
+          <div class="tdp-archive-percent">${prog.percentage}% Complete (${prog.completed}/${prog.total})</div>
+        </div>
+        ${renderIcon('chevron-right', null, 'style="width:16px; color:var(--text-muted)"')}
+      </div>
+    `;
+  }).join('');
+}
+
+function viewArchivedTDP(planId) {
+  const plan = state.data.vision_tdp.find(p => String(p.id) === String(planId));
+  if (!plan) return;
+
+  const prog = calculateTDPProgress(plan);
+  const cats = JSON.parse(plan.categories_json);
+
+  const overlay = document.getElementById('tdpModalOverlay');
+  overlay.innerHTML = `
+    <div class="tdp-modal animate-enter">
+      <div class="tdp-modal-header">
+        <div class="tdp-modal-title"><button class="btn-icon" onclick="renderTDPModalContent(null, 'previous')">${renderIcon('arrow-left', null, 'style="width:18px"')}</button> Archived Plan</div>
+    < button class= "tdp-close" onclick = "closeTDPModal()" > ${renderIcon('x', null, 'style="width:20px"')}</button >
+      </div >
+    <div class="tdp-modal-body">
+      <div class="tdp-current-header" style="margin-bottom:24px; opacity:0.8;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:12px;">
+          <div>
+            <div style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Archived</div>
+            <div style="font-size:18px; font-weight:800;">${formatDate(plan.start_date)} - ${formatDate(plan.end_date)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:18px; font-weight:800; color:var(--text-muted);">${prog.percentage}%</div>
+            <div style="font-size:11px; color:var(--text-muted);">${prog.completed}/${prog.total} Items</div>
+          </div>
+        </div>
+        <div class="tdp-progress-bar"><div class="tdp-progress-fill" style="width:${prog.percentage}%; background:var(--text-muted)"></div></div>
+      </div>
+
+      ${VISION_TDP_CATEGORIES.map(cat => `
+          <div class="tdp-cat-section" style="opacity:0.7">
+            <div class="tdp-cat-title" style="color:var(--text-muted); margin-bottom:12px;">${cat}</div>
+            <div class="tdp-cat-list">
+              ${(cats[cat] || []).map(item => `
+                <div class="tdp-list-item ${item.completed ? 'done' : ''}" style="cursor:default">
+                  <div class="tdp-checkbox">${item.completed ? renderIcon('check', null, 'style="width:12px"') : ''}</div>
+                  <div class="tdp-item-text">${item.text}</div>
+                </div>
+              `).join('')}
+              ${(cats[cat] || []).length === 0 ? '<div style="font-size:12px; color:var(--text-muted); padding:8px;">No items.</div>' : ''}
+            </div>
+          </div>
+        `).join('')}
+    </div>
+    </div >
+    `;
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}

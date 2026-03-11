@@ -9,123 +9,123 @@
 
 const GYM_BUILTIN_EXERCISES = [
   // Chest
-  { name: 'Bench Press',           muscle_group: 'Chest',      category: 'strength' },
-  { name: 'Incline Bench Press',   muscle_group: 'Chest',      category: 'strength' },
-  { name: 'Decline Bench Press',   muscle_group: 'Chest',      category: 'strength' },
-  { name: 'Push-ups',              muscle_group: 'Chest',      category: 'strength' },
-  { name: 'Cable Fly',             muscle_group: 'Chest',      category: 'strength' },
-  { name: 'Dumbbell Fly',          muscle_group: 'Chest',      category: 'strength' },
-  { name: 'Chest Dip',             muscle_group: 'Chest',      category: 'strength' },
+  { name: 'Bench Press', muscle_group: 'Chest', category: 'strength' },
+  { name: 'Incline Bench Press', muscle_group: 'Chest', category: 'strength' },
+  { name: 'Decline Bench Press', muscle_group: 'Chest', category: 'strength' },
+  { name: 'Push-ups', muscle_group: 'Chest', category: 'strength' },
+  { name: 'Cable Fly', muscle_group: 'Chest', category: 'strength' },
+  { name: 'Dumbbell Fly', muscle_group: 'Chest', category: 'strength' },
+  { name: 'Chest Dip', muscle_group: 'Chest', category: 'strength' },
   // Back
-  { name: 'Deadlift',              muscle_group: 'Back',       category: 'strength' },
-  { name: 'Pull-ups',              muscle_group: 'Back',       category: 'strength' },
-  { name: 'Lat Pulldown',          muscle_group: 'Back',       category: 'strength' },
-  { name: 'Seated Cable Row',      muscle_group: 'Back',       category: 'strength' },
-  { name: 'Barbell Row',           muscle_group: 'Back',       category: 'strength' },
-  { name: 'Dumbbell Row',          muscle_group: 'Back',       category: 'strength' },
-  { name: 'T-Bar Row',             muscle_group: 'Back',       category: 'strength' },
-  { name: 'Face Pull',             muscle_group: 'Back',       category: 'strength' },
+  { name: 'Deadlift', muscle_group: 'Back', category: 'strength' },
+  { name: 'Pull-ups', muscle_group: 'Back', category: 'strength' },
+  { name: 'Lat Pulldown', muscle_group: 'Back', category: 'strength' },
+  { name: 'Seated Cable Row', muscle_group: 'Back', category: 'strength' },
+  { name: 'Barbell Row', muscle_group: 'Back', category: 'strength' },
+  { name: 'Dumbbell Row', muscle_group: 'Back', category: 'strength' },
+  { name: 'T-Bar Row', muscle_group: 'Back', category: 'strength' },
+  { name: 'Face Pull', muscle_group: 'Back', category: 'strength' },
   // Shoulders
-  { name: 'Overhead Press',        muscle_group: 'Shoulders',  category: 'strength' },
+  { name: 'Overhead Press', muscle_group: 'Shoulders', category: 'strength' },
   { name: 'Dumbbell Shoulder Press', muscle_group: 'Shoulders', category: 'strength' },
-  { name: 'Lateral Raise',         muscle_group: 'Shoulders',  category: 'strength' },
-  { name: 'Front Raise',           muscle_group: 'Shoulders',  category: 'strength' },
-  { name: 'Rear Delt Fly',         muscle_group: 'Shoulders',  category: 'strength' },
-  { name: 'Arnold Press',          muscle_group: 'Shoulders',  category: 'strength' },
-  { name: 'Upright Row',           muscle_group: 'Shoulders',  category: 'strength' },
+  { name: 'Lateral Raise', muscle_group: 'Shoulders', category: 'strength' },
+  { name: 'Front Raise', muscle_group: 'Shoulders', category: 'strength' },
+  { name: 'Rear Delt Fly', muscle_group: 'Shoulders', category: 'strength' },
+  { name: 'Arnold Press', muscle_group: 'Shoulders', category: 'strength' },
+  { name: 'Upright Row', muscle_group: 'Shoulders', category: 'strength' },
   // Biceps
-  { name: 'Barbell Curl',          muscle_group: 'Biceps',     category: 'strength' },
-  { name: 'Dumbbell Curl',         muscle_group: 'Biceps',     category: 'strength' },
-  { name: 'Hammer Curl',           muscle_group: 'Biceps',     category: 'strength' },
-  { name: 'Preacher Curl',         muscle_group: 'Biceps',     category: 'strength' },
-  { name: 'Cable Curl',            muscle_group: 'Biceps',     category: 'strength' },
-  { name: 'Concentration Curl',    muscle_group: 'Biceps',     category: 'strength' },
+  { name: 'Barbell Curl', muscle_group: 'Biceps', category: 'strength' },
+  { name: 'Dumbbell Curl', muscle_group: 'Biceps', category: 'strength' },
+  { name: 'Hammer Curl', muscle_group: 'Biceps', category: 'strength' },
+  { name: 'Preacher Curl', muscle_group: 'Biceps', category: 'strength' },
+  { name: 'Cable Curl', muscle_group: 'Biceps', category: 'strength' },
+  { name: 'Concentration Curl', muscle_group: 'Biceps', category: 'strength' },
   // Triceps
-  { name: 'Tricep Dips',           muscle_group: 'Triceps',    category: 'strength' },
-  { name: 'Skull Crushers',        muscle_group: 'Triceps',    category: 'strength' },
-  { name: 'Cable Pushdown',        muscle_group: 'Triceps',    category: 'strength' },
+  { name: 'Tricep Dips', muscle_group: 'Triceps', category: 'strength' },
+  { name: 'Skull Crushers', muscle_group: 'Triceps', category: 'strength' },
+  { name: 'Cable Pushdown', muscle_group: 'Triceps', category: 'strength' },
   { name: 'Overhead Tricep Extension', muscle_group: 'Triceps', category: 'strength' },
-  { name: 'Close-Grip Bench Press', muscle_group: 'Triceps',   category: 'strength' },
-  { name: 'Tricep Kickback',       muscle_group: 'Triceps',    category: 'strength' },
+  { name: 'Close-Grip Bench Press', muscle_group: 'Triceps', category: 'strength' },
+  { name: 'Tricep Kickback', muscle_group: 'Triceps', category: 'strength' },
   // Quads
-  { name: 'Squat',                 muscle_group: 'Quads',      category: 'strength' },
-  { name: 'Leg Press',             muscle_group: 'Quads',      category: 'strength' },
-  { name: 'Lunges',                muscle_group: 'Quads',      category: 'strength' },
-  { name: 'Leg Extension',         muscle_group: 'Quads',      category: 'strength' },
-  { name: 'Goblet Squat',          muscle_group: 'Quads',      category: 'strength' },
-  { name: 'Bulgarian Split Squat', muscle_group: 'Quads',      category: 'strength' },
-  { name: 'Hack Squat',            muscle_group: 'Quads',      category: 'strength' },
+  { name: 'Squat', muscle_group: 'Quads', category: 'strength' },
+  { name: 'Leg Press', muscle_group: 'Quads', category: 'strength' },
+  { name: 'Lunges', muscle_group: 'Quads', category: 'strength' },
+  { name: 'Leg Extension', muscle_group: 'Quads', category: 'strength' },
+  { name: 'Goblet Squat', muscle_group: 'Quads', category: 'strength' },
+  { name: 'Bulgarian Split Squat', muscle_group: 'Quads', category: 'strength' },
+  { name: 'Hack Squat', muscle_group: 'Quads', category: 'strength' },
   // Hamstrings
-  { name: 'Romanian Deadlift',     muscle_group: 'Hamstrings', category: 'strength' },
-  { name: 'Leg Curl',              muscle_group: 'Hamstrings', category: 'strength' },
-  { name: 'Stiff-Leg Deadlift',    muscle_group: 'Hamstrings', category: 'strength' },
+  { name: 'Romanian Deadlift', muscle_group: 'Hamstrings', category: 'strength' },
+  { name: 'Leg Curl', muscle_group: 'Hamstrings', category: 'strength' },
+  { name: 'Stiff-Leg Deadlift', muscle_group: 'Hamstrings', category: 'strength' },
   // Glutes
-  { name: 'Hip Thrust',            muscle_group: 'Glutes',     category: 'strength' },
-  { name: 'Glute Bridge',          muscle_group: 'Glutes',     category: 'strength' },
-  { name: 'Sumo Squat',            muscle_group: 'Glutes',     category: 'strength' },
+  { name: 'Hip Thrust', muscle_group: 'Glutes', category: 'strength' },
+  { name: 'Glute Bridge', muscle_group: 'Glutes', category: 'strength' },
+  { name: 'Sumo Squat', muscle_group: 'Glutes', category: 'strength' },
   // Calves
-  { name: 'Calf Raise',            muscle_group: 'Calves',     category: 'strength' },
-  { name: 'Seated Calf Raise',     muscle_group: 'Calves',     category: 'strength' },
+  { name: 'Calf Raise', muscle_group: 'Calves', category: 'strength' },
+  { name: 'Seated Calf Raise', muscle_group: 'Calves', category: 'strength' },
   // Core
-  { name: 'Plank',                 muscle_group: 'Core',       category: 'strength' },
-  { name: 'Crunches',              muscle_group: 'Core',       category: 'strength' },
-  { name: 'Russian Twist',         muscle_group: 'Core',       category: 'strength' },
-  { name: 'Leg Raise',             muscle_group: 'Core',       category: 'strength' },
-  { name: 'Ab Rollout',            muscle_group: 'Core',       category: 'strength' },
-  { name: 'Cable Crunch',          muscle_group: 'Core',       category: 'strength' },
-  { name: 'Hanging Knee Raise',    muscle_group: 'Core',       category: 'strength' },
-  { name: 'Side Plank',            muscle_group: 'Core',       category: 'strength' },
+  { name: 'Plank', muscle_group: 'Core', category: 'strength' },
+  { name: 'Crunches', muscle_group: 'Core', category: 'strength' },
+  { name: 'Russian Twist', muscle_group: 'Core', category: 'strength' },
+  { name: 'Leg Raise', muscle_group: 'Core', category: 'strength' },
+  { name: 'Ab Rollout', muscle_group: 'Core', category: 'strength' },
+  { name: 'Cable Crunch', muscle_group: 'Core', category: 'strength' },
+  { name: 'Hanging Knee Raise', muscle_group: 'Core', category: 'strength' },
+  { name: 'Side Plank', muscle_group: 'Core', category: 'strength' },
   // Cardio
-  { name: 'Treadmill Run',         muscle_group: 'Cardio',     category: 'cardio' },
-  { name: 'Stationary Bike',       muscle_group: 'Cardio',     category: 'cardio' },
-  { name: 'Rowing Machine',        muscle_group: 'Cardio',     category: 'cardio' },
-  { name: 'Jump Rope',             muscle_group: 'Cardio',     category: 'cardio' },
-  { name: 'Stairmaster',           muscle_group: 'Cardio',     category: 'cardio' },
-  { name: 'Elliptical',            muscle_group: 'Cardio',     category: 'cardio' },
+  { name: 'Treadmill Run', muscle_group: 'Cardio', category: 'cardio' },
+  { name: 'Stationary Bike', muscle_group: 'Cardio', category: 'cardio' },
+  { name: 'Rowing Machine', muscle_group: 'Cardio', category: 'cardio' },
+  { name: 'Jump Rope', muscle_group: 'Cardio', category: 'cardio' },
+  { name: 'Stairmaster', muscle_group: 'Cardio', category: 'cardio' },
+  { name: 'Elliptical', muscle_group: 'Cardio', category: 'cardio' },
   // Full Body
-  { name: 'Kettlebell Swing',      muscle_group: 'Full Body',  category: 'hiit' },
-  { name: 'Burpees',               muscle_group: 'Full Body',  category: 'hiit' },
-  { name: 'Clean and Press',       muscle_group: 'Full Body',  category: 'strength' },
+  { name: 'Kettlebell Swing', muscle_group: 'Full Body', category: 'hiit' },
+  { name: 'Burpees', muscle_group: 'Full Body', category: 'hiit' },
+  { name: 'Clean and Press', muscle_group: 'Full Body', category: 'strength' },
 ];
 
 const GYM_MUSCLE_COLORS = {
-  'Chest':      '#6366F1',
-  'Back':       '#3B82F6',
-  'Shoulders':  '#8B5CF6',
-  'Biceps':     '#EC4899',
-  'Triceps':    '#F43F5E',
-  'Quads':      '#10B981',
+  'Chest': '#6366F1',
+  'Back': '#3B82F6',
+  'Shoulders': '#8B5CF6',
+  'Biceps': '#EC4899',
+  'Triceps': '#F43F5E',
+  'Quads': '#10B981',
   'Hamstrings': '#059669',
-  'Glutes':     '#F59E0B',
-  'Calves':     '#84CC16',
-  'Core':       '#EF4444',
-  'Cardio':     '#06B6D4',
-  'Full Body':  '#F97316',
+  'Glutes': '#F59E0B',
+  'Calves': '#84CC16',
+  'Core': '#EF4444',
+  'Cardio': '#06B6D4',
+  'Full Body': '#F97316',
 };
 
 const GYM_CATEGORY_ICONS = {
   strength: '🏋️',
-  cardio:   '🏃',
-  hiit:     '⚡',
+  cardio: '🏃',
+  hiit: '⚡',
 };
 
 /* ═══════════════════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════════════════ */
 
-let gymPlans            = [];
-let gymSessions         = [];
-let gymCustomExercises  = [];
-let gymActiveTab        = 'today';
-let gymTodaySession     = null;   // parsed session object (workout_json)
-let gymTodaySessionRow  = null;   // raw API row for today
+let gymPlans = [];
+let gymSessions = [];
+let gymCustomExercises = [];
+let gymActiveTab = 'today';
+let gymTodaySession = null;   // parsed session object (workout_json)
+let gymTodaySessionRow = null;   // raw API row for today
 let gymSelectedHistoryDate = null;
-let gymLibrarySearch    = '';
-let gymLibraryMuscle    = 'All';
-let gymPlanBuilder      = null;   // { id, name, exercises[] } while in builder
+let gymLibrarySearch = '';
+let gymLibraryMuscle = 'All';
+let gymPlanBuilder = null;   // { id, name, exercises[] } while in builder
 let gymSessionSaveTimer = null;
 let gymExPickerCallback = null;   // function called when exercise picked
-let gymElapsedInterval  = null;   // interval id for elapsed timer
+let gymElapsedInterval = null;   // interval id for elapsed timer
 
 /* ═══════════════════════════════════════════════════════
    ENTRY POINT
@@ -167,15 +167,27 @@ async function gymLoadData() {
   try {
     if (typeof initToolsSheets === 'function') await initToolsSheets();
 
-    const [plansRes, sessionsRes, customRes] = await Promise.all([
-      apiGet('gym_plans'),
-      apiGet('gym_sessions'),
-      apiGet('gym_exercises'),
-    ]);
+    // Prefer pre-loaded global state if available
+    if (state.data.gym_plans && state.data.gym_plans.length > 0) {
+      gymPlans = state.data.gym_plans;
+      gymSessions = state.data.gym_sessions || [];
+      gymCustomExercises = state.data.gym_exercises || [];
+    } else {
+      const [plansRes, sessionsRes, customRes] = await Promise.all([
+        apiGet('gym_plans'),
+        apiGet('gym_sessions'),
+        apiGet('gym_exercises'),
+      ]);
 
-    gymPlans           = plansRes    || [];
-    gymSessions        = sessionsRes || [];
-    gymCustomExercises = customRes   || [];
+      gymPlans = plansRes || [];
+      gymSessions = sessionsRes || [];
+      gymCustomExercises = customRes || [];
+
+      // Cache back to state
+      state.data.gym_plans = gymPlans;
+      state.data.gym_sessions = gymSessions;
+      state.data.gym_exercises = gymCustomExercises;
+    }
 
     // Resolve today's session
     const todayStr = gymTodayStr();
@@ -184,12 +196,12 @@ async function gymLoadData() {
       gymTodaySessionRow = rawToday;
       try {
         gymTodaySession = JSON.parse(rawToday.workout_json || '{"exercises":[]}');
-      } catch(e) {
+      } catch (e) {
         gymTodaySession = { exercises: [] };
       }
     } else {
       gymTodaySessionRow = null;
-      gymTodaySession    = null;
+      gymTodaySession = null;
     }
 
     // Default history date
@@ -231,8 +243,8 @@ function gymRenderTab(tab) {
   const c = document.getElementById('gymContent');
   if (!c) return;
 
-  if (tab === 'today')        gymRenderToday(c);
-  else if (tab === 'plans')   gymRenderPlans(c);
+  if (tab === 'today') gymRenderToday(c);
+  else if (tab === 'plans') gymRenderPlans(c);
   else if (tab === 'library') gymRenderLibrary(c);
 }
 
@@ -254,7 +266,7 @@ function gymRenderToday(container) {
 function gymRenderNoPlan(container) {
   const planCards = gymPlans.map(p => {
     let exercises = [];
-    try { exercises = JSON.parse(p.exercises_json || '[]'); } catch(e) {}
+    try { exercises = JSON.parse(p.exercises_json || '[]'); } catch (e) { }
     const muscles = [...new Set(exercises.map(e => e.muscle_group))].filter(Boolean);
     const chips = muscles.slice(0, 4).map(m =>
       `<span class="gym-muscle-chip" style="--chip-color:${GYM_MUSCLE_COLORS[m] || '#6366F1'}">${m}</span>`
@@ -294,19 +306,19 @@ async function gymStartFromPlan(planId) {
   if (!plan) return;
 
   let exercises = [];
-  try { exercises = JSON.parse(plan.exercises_json || '[]'); } catch(e) {}
+  try { exercises = JSON.parse(plan.exercises_json || '[]'); } catch (e) { }
 
   // Copy exercises and add done:false to each set
   const workoutExercises = exercises.map((ex, idx) => ({
-    name:         ex.name,
+    name: ex.name,
     muscle_group: ex.muscle_group,
-    category:     ex.category || 'strength',
-    order:        idx,
+    category: ex.category || 'strength',
+    order: idx,
     sets: (ex.sets || []).map(s => ({ reps: s.reps || 0, weight: s.weight || 0, done: false })),
   }));
 
   const workout = {
-    exercises:  workoutExercises,
+    exercises: workoutExercises,
     started_at: new Date().toISOString(),
   };
 
@@ -324,23 +336,23 @@ async function gymCreateSession(planId, planName, workout) {
   try {
     const res = await apiPost({
       action: 'create',
-      sheet:  'gym_sessions',
+      sheet: 'gym_sessions',
       payload: {
-        date:         todayStr,
-        plan_id:      planId,
-        plan_name:    planName,
+        date: todayStr,
+        plan_id: planId,
+        plan_name: planName,
         workout_json: JSON.stringify(workout),
-        completed:    false,
+        completed: false,
       }
     });
     if (res.success) {
       gymTodaySessionRow = { id: res.id, date: todayStr, plan_id: planId, plan_name: planName, workout_json: JSON.stringify(workout), completed: false };
-      gymTodaySession    = workout;
+      gymTodaySession = workout;
       gymSessions.push(gymTodaySessionRow);
       gymRenderTab('today');
       toast('Workout started! 💪');
     }
-  } catch(err) {
+  } catch (err) {
     console.error('gymCreateSession error:', err);
     toast('Failed to start session');
   }
@@ -350,12 +362,12 @@ async function gymCreateSession(planId, planName, workout) {
 function gymRenderActiveWorkout(container) {
   if (!gymTodaySession) return;
 
-  const session   = gymTodaySession;
+  const session = gymTodaySession;
   const exercises = session.exercises || [];
   const totalSets = exercises.reduce((s, ex) => s + (ex.sets || []).length, 0);
-  const doneSets  = exercises.reduce((s, ex) => s + (ex.sets || []).filter(st => st.done).length, 0);
-  const pct       = totalSets ? Math.round((doneSets / totalSets) * 100) : 0;
-  const planName  = gymTodaySessionRow.plan_name || 'Workout';
+  const doneSets = exercises.reduce((s, ex) => s + (ex.sets || []).filter(st => st.done).length, 0);
+  const pct = totalSets ? Math.round((doneSets / totalSets) * 100) : 0;
+  const planName = gymTodaySessionRow.plan_name || 'Workout';
 
   const exCards = exercises.map((ex, ei) => gymRenderExerciseCard(ex, ei)).join('');
 
@@ -387,9 +399,9 @@ function gymRenderActiveWorkout(container) {
 }
 
 function gymRenderExerciseCard(ex, ei) {
-  const color  = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
-  const icon   = GYM_CATEGORY_ICONS[ex.category || 'strength'] || '💪';
-  const sets   = ex.sets || [];
+  const color = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
+  const icon = GYM_CATEGORY_ICONS[ex.category || 'strength'] || '💪';
+  const sets = ex.sets || [];
 
   const setRows = sets.map((set, si) => `
     <div class="gym-set-row ${set.done ? 'done' : ''}" id="gymSetRow-${ei}-${si}">
@@ -436,7 +448,7 @@ function gymUpdateSet(ei, si, field, value) {
   if (!gymTodaySession) return;
   gymTodaySession.exercises[ei].sets[si][field] = field === 'weight'
     ? parseFloat(value) || 0
-    : parseInt(value)  || 0;
+    : parseInt(value) || 0;
   gymScheduleSave();
 }
 
@@ -452,12 +464,12 @@ function gymRefreshSetRow(ei, si) {
 function gymRefreshProgress() {
   const exercises = gymTodaySession.exercises || [];
   const totalSets = exercises.reduce((s, ex) => s + ex.sets.length, 0);
-  const doneSets  = exercises.reduce((s, ex) => s + ex.sets.filter(st => st.done).length, 0);
-  const pct       = totalSets ? Math.round((doneSets / totalSets) * 100) : 0;
+  const doneSets = exercises.reduce((s, ex) => s + ex.sets.filter(st => st.done).length, 0);
+  const pct = totalSets ? Math.round((doneSets / totalSets) * 100) : 0;
 
-  const bar   = document.getElementById('gymProgressBar');
+  const bar = document.getElementById('gymProgressBar');
   const label = document.getElementById('gymProgressLabel');
-  if (bar)   bar.style.width   = pct + '%';
+  if (bar) bar.style.width = pct + '%';
   if (label) label.textContent = `${doneSets} / ${totalSets} sets done`;
 }
 
@@ -470,7 +482,7 @@ function gymAddSet(ei) {
 
   const list = document.getElementById(`gymSetsList-${ei}`);
   if (!list) return;
-  const si   = ex.sets.length - 1;
+  const si = ex.sets.length - 1;
   const frag = document.createElement('div');
   frag.innerHTML = `
     <div class="gym-set-row" id="gymSetRow-${ei}-${si}">
@@ -584,11 +596,11 @@ function gymPickExercise(name, muscleGroup, category) {
   // Default: add to today's workout
   if (!gymTodaySession) return;
   gymTodaySession.exercises.push({
-    name:         name,
+    name: name,
     muscle_group: muscleGroup,
-    category:     category || 'strength',
-    order:        gymTodaySession.exercises.length,
-    sets:         [{ reps: 0, weight: 0, done: false }],
+    category: category || 'strength',
+    order: gymTodaySession.exercises.length,
+    sets: [{ reps: 0, weight: 0, done: false }],
   });
   gymScheduleSave();
   gymCloseExPicker();
@@ -609,17 +621,17 @@ function gymScheduleSave() {
 async function gymSaveSession(completed = false) {
   if (!gymTodaySessionRow || !gymTodaySession) return;
   const payload = {
-    date:         gymTodaySessionRow.date,
-    plan_id:      gymTodaySessionRow.plan_id,
-    plan_name:    gymTodaySessionRow.plan_name,
+    date: gymTodaySessionRow.date,
+    plan_id: gymTodaySessionRow.plan_id,
+    plan_name: gymTodaySessionRow.plan_name,
     workout_json: JSON.stringify(gymTodaySession),
-    completed:    completed,
+    completed: completed,
   };
   try {
     await apiPost({ action: 'update', sheet: 'gym_sessions', id: gymTodaySessionRow.id, payload });
-    gymTodaySessionRow.completed    = completed;
+    gymTodaySessionRow.completed = completed;
     gymTodaySessionRow.workout_json = payload.workout_json;
-  } catch(err) {
+  } catch (err) {
     console.error('gymSaveSession error:', err);
   }
 }
@@ -638,15 +650,15 @@ async function gymCompleteWorkout() {
 /* ── Session summary ── */
 function gymRenderSessionSummary(container) {
   const session = gymTodaySession || (() => {
-    try { return JSON.parse(gymTodaySessionRow.workout_json || '{"exercises":[]}'); } catch(e) { return { exercises: [] }; }
+    try { return JSON.parse(gymTodaySessionRow.workout_json || '{"exercises":[]}'); } catch (e) { return { exercises: [] }; }
   })();
 
-  const exercises  = session.exercises || [];
-  const totalSets  = exercises.reduce((s, ex) => s + ex.sets.length, 0);
-  const doneSets   = exercises.reduce((s, ex) => s + ex.sets.filter(st => st.done).length, 0);
-  const totalVol   = exercises.reduce((s, ex) =>
+  const exercises = session.exercises || [];
+  const totalSets = exercises.reduce((s, ex) => s + ex.sets.length, 0);
+  const doneSets = exercises.reduce((s, ex) => s + ex.sets.filter(st => st.done).length, 0);
+  const totalVol = exercises.reduce((s, ex) =>
     s + ex.sets.filter(st => st.done).reduce((sv, st) => sv + (st.reps || 0) * (st.weight || 0), 0), 0);
-  const startedAt  = session.started_at ? new Date(session.started_at) : null;
+  const startedAt = session.started_at ? new Date(session.started_at) : null;
   const completedAt = session.completed_at ? new Date(session.completed_at) : new Date();
   const durationMin = startedAt ? Math.round((completedAt - startedAt) / 60000) : null;
 
@@ -691,7 +703,7 @@ function gymRenderSessionSummary(container) {
 }
 
 function gymResetToday() {
-  gymTodaySession    = null;
+  gymTodaySession = null;
   gymTodaySessionRow = null;
   gymSessions = gymSessions.filter(s => s.date !== gymTodayStr());
   gymRenderTab('today');
@@ -705,12 +717,12 @@ function gymStartElapsedTimer() {
     if (!el) { clearInterval(gymElapsedInterval); return; }
     if (!gymTodaySession?.started_at) { el.textContent = '--:--'; return; }
     const diff = Math.floor((Date.now() - new Date(gymTodaySession.started_at).getTime()) / 1000);
-    const h    = Math.floor(diff / 3600);
-    const m    = Math.floor((diff % 3600) / 60);
-    const s    = diff % 60;
+    const h = Math.floor(diff / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    const s = diff % 60;
     el.textContent = h > 0
-      ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
-      : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+      : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
   update();
   gymElapsedInterval = setInterval(update, 1000);
@@ -723,9 +735,9 @@ function gymStartElapsedTimer() {
 function gymRenderPlans(container) {
   const cards = gymPlans.map(p => {
     let exercises = [];
-    try { exercises = JSON.parse(p.exercises_json || '[]'); } catch(e) {}
+    try { exercises = JSON.parse(p.exercises_json || '[]'); } catch (e) { }
     const muscles = [...new Set(exercises.map(e => e.muscle_group))].filter(Boolean);
-    const chips   = muscles.slice(0, 5).map(m =>
+    const chips = muscles.slice(0, 5).map(m =>
       `<span class="gym-muscle-chip" style="--chip-color:${GYM_MUSCLE_COLORS[m] || '#6366F1'}">${m}</span>`
     ).join('');
     return `
@@ -764,7 +776,7 @@ async function gymDeletePlan(id) {
       gymRenderPlans(document.getElementById('gymContent'));
       toast('Plan deleted');
     }
-  } catch(err) {
+  } catch (err) {
     toast('Failed to delete plan');
   }
 }
@@ -775,7 +787,7 @@ function gymOpenBuilder(planId) {
     const plan = gymPlans.find(p => String(p.id) === String(planId));
     if (!plan) return;
     let exercises = [];
-    try { exercises = JSON.parse(plan.exercises_json || '[]'); } catch(e) {}
+    try { exercises = JSON.parse(plan.exercises_json || '[]'); } catch (e) { }
     gymPlanBuilder = { id: plan.id, name: plan.name, exercises: exercises.map(e => JSON.parse(JSON.stringify(e))) };
   } else {
     gymPlanBuilder = { id: null, name: '', exercises: [] };
@@ -790,8 +802,8 @@ function gymRenderBuilder() {
   const { name, exercises } = gymPlanBuilder;
 
   const exCards = exercises.map((ex, ei) => {
-    const color  = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
-    const sets   = ex.sets || [];
+    const color = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
+    const sets = ex.sets || [];
     const setRows = sets.map((set, si) => `
       <div class="gym-builder-set-row">
         <span class="gym-set-num">Set ${si + 1}</span>
@@ -892,11 +904,11 @@ function gymCloseBuilder() {
 function gymBuilderAddExercise(name, muscleGroup, category) {
   if (!gymPlanBuilder) return;
   gymPlanBuilder.exercises.push({
-    name:         name,
+    name: name,
     muscle_group: muscleGroup,
-    category:     category || 'strength',
-    order:        gymPlanBuilder.exercises.length,
-    sets:         [{ reps: 10, weight: 0 }],
+    category: category || 'strength',
+    order: gymPlanBuilder.exercises.length,
+    sets: [{ reps: 10, weight: 0 }],
   });
   gymRenderBuilder();
 }
@@ -932,11 +944,11 @@ function gymBuilderUpdateSet(ei, si, field, value) {
   if (!gymPlanBuilder) return;
   gymPlanBuilder.exercises[ei].sets[si][field] = field === 'weight'
     ? parseFloat(value) || 0
-    : parseInt(value)  || 0;
+    : parseInt(value) || 0;
 }
 
 function gymFilterBuilderPicker(query) {
-  const q    = query.toLowerCase().trim();
+  const q = query.toLowerCase().trim();
   const list = document.getElementById('gymBuilderPickerList');
   if (!list) return;
   list.querySelectorAll('.gym-ex-item').forEach(item => {
@@ -958,7 +970,7 @@ async function gymSavePlan() {
   gymPlanBuilder.exercises.forEach((ex, i) => { ex.order = i; });
 
   const payload = {
-    name:           name,
+    name: name,
     exercises_json: JSON.stringify(gymPlanBuilder.exercises),
   };
 
@@ -979,7 +991,7 @@ async function gymSavePlan() {
     }
     gymCloseBuilder();
     gymRenderPlans(document.getElementById('gymContent'));
-  } catch(err) {
+  } catch (err) {
     console.error('gymSavePlan error:', err);
     toast('Failed to save plan');
   }
@@ -994,7 +1006,7 @@ function gymRenderWeekStrip() {
   if (!strip) return;
 
   const today = gymTodayStr();
-  const days  = [];
+  const days = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
@@ -1009,9 +1021,9 @@ function gymRenderWeekStrip() {
 
   strip.innerHTML = days.map(d => {
     const hasSessions = !!sessionsByDate[d];
-    const isToday     = d === today;
-    const dayName     = new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
-    const dayNum      = new Date(d + 'T00:00:00').getDate();
+    const isToday = d === today;
+    const dayName = new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+    const dayNum = new Date(d + 'T00:00:00').getDate();
     return `
       <div class="gym-strip-day ${hasSessions ? 'has-workout' : ''} ${isToday ? 'today' : ''}"
            onclick="gymOpenHistoryModal('${d}')">
@@ -1044,11 +1056,11 @@ function gymOpenHistoryModal(d) {
   } else {
     const sessionCards = sessions.map(s => {
       let workout = { exercises: [] };
-      try { workout = JSON.parse(s.workout_json || '{"exercises":[]}'); } catch(e) {}
+      try { workout = JSON.parse(s.workout_json || '{"exercises":[]}'); } catch (e) { }
       const exercises = workout.exercises || [];
       const totalSets = exercises.reduce((acc, ex) => acc + ex.sets.length, 0);
-      const doneSets  = exercises.reduce((acc, ex) => acc + ex.sets.filter(st => st.done).length, 0);
-      const totalVol  = exercises.reduce((acc, ex) =>
+      const doneSets = exercises.reduce((acc, ex) => acc + ex.sets.filter(st => st.done).length, 0);
+      const totalVol = exercises.reduce((acc, ex) =>
         acc + ex.sets.filter(st => st.done).reduce((sv, st) => sv + (st.reps || 0) * (st.weight || 0), 0), 0);
       const exRows = exercises.map(ex => {
         const color = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
@@ -1117,12 +1129,12 @@ function gymRenderHistoryDetail(d, sessionsByDate) {
 
   const sessionCards = sessions.map(s => {
     let workout = { exercises: [] };
-    try { workout = JSON.parse(s.workout_json || '{"exercises":[]}'); } catch(e) {}
+    try { workout = JSON.parse(s.workout_json || '{"exercises":[]}'); } catch (e) { }
 
-    const exercises  = workout.exercises || [];
-    const totalSets  = exercises.reduce((acc, ex) => acc + ex.sets.length, 0);
-    const doneSets   = exercises.reduce((acc, ex) => acc + ex.sets.filter(st => st.done).length, 0);
-    const totalVol   = exercises.reduce((acc, ex) =>
+    const exercises = workout.exercises || [];
+    const totalSets = exercises.reduce((acc, ex) => acc + ex.sets.length, 0);
+    const doneSets = exercises.reduce((acc, ex) => acc + ex.sets.filter(st => st.done).length, 0);
+    const totalVol = exercises.reduce((acc, ex) =>
       acc + ex.sets.filter(st => st.done).reduce((sv, st) => sv + (st.reps || 0) * (st.weight || 0), 0), 0);
 
     const exRows = exercises.map(ex => {
@@ -1195,8 +1207,8 @@ function gymRenderLibraryGrid() {
   const grid = document.getElementById('gymLibGrid');
   if (!grid) return;
 
-  const q       = gymLibrarySearch.toLowerCase().trim();
-  const muscle  = gymLibraryMuscle;
+  const q = gymLibrarySearch.toLowerCase().trim();
+  const muscle = gymLibraryMuscle;
 
   const customIds = new Set(gymCustomExercises.map(e => e.name.toLowerCase()));
   const all = [
@@ -1206,7 +1218,7 @@ function gymRenderLibraryGrid() {
 
   const filtered = all.filter(ex => {
     const matchMuscle = muscle === 'All' || ex.muscle_group === muscle;
-    const matchQuery  = !q || ex.name.toLowerCase().includes(q) || (ex.muscle_group || '').toLowerCase().includes(q);
+    const matchQuery = !q || ex.name.toLowerCase().includes(q) || (ex.muscle_group || '').toLowerCase().includes(q);
     return matchMuscle && matchQuery;
   });
 
@@ -1217,7 +1229,7 @@ function gymRenderLibraryGrid() {
 
   grid.innerHTML = filtered.map(ex => {
     const color = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
-    const icon  = GYM_CATEGORY_ICONS[ex.category || 'strength'] || '💪';
+    const icon = GYM_CATEGORY_ICONS[ex.category || 'strength'] || '💪';
     const deleteBtn = ex.custom
       ? `<button class="gym-lib-delete-btn" onclick="gymDeleteCustomExercise('${ex.id}')" title="Delete">✕</button>`
       : '';
@@ -1298,9 +1310,9 @@ function gymCloseCustomModal() {
 }
 
 async function gymSaveCustomExercise() {
-  const name     = (document.getElementById('gymCustomName')?.value     || '').trim();
-  const muscle   = document.getElementById('gymCustomMuscle')?.value    || 'Core';
-  const category = document.getElementById('gymCustomCategory')?.value  || 'strength';
+  const name = (document.getElementById('gymCustomName')?.value || '').trim();
+  const muscle = document.getElementById('gymCustomMuscle')?.value || 'Core';
+  const category = document.getElementById('gymCustomCategory')?.value || 'strength';
 
   if (!name) { toast('Exercise needs a name'); return; }
 
@@ -1312,7 +1324,7 @@ async function gymSaveCustomExercise() {
       gymRenderLibraryGrid();
       toast('Custom exercise added!');
     }
-  } catch(err) {
+  } catch (err) {
     console.error('gymSaveCustomExercise error:', err);
     toast('Failed to add exercise');
   }
@@ -1327,7 +1339,7 @@ async function gymDeleteCustomExercise(id) {
       gymRenderLibraryGrid();
       toast('Exercise deleted');
     }
-  } catch(err) {
+  } catch (err) {
     toast('Failed to delete exercise');
   }
 }
