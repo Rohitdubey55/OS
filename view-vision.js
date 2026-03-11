@@ -1586,6 +1586,11 @@ async function renderTDPModalContent(active, tab) {
   const overlay = document.getElementById('tdpModalOverlay');
   if (!overlay) return;
 
+  // Auto-fetch if current tab and no plan provided
+  if (tab === 'current' && !active) {
+    active = await getActiveTDP();
+  }
+
   let bodyHtml = '';
   if (tab === 'current') {
     if (active) {
@@ -1606,7 +1611,7 @@ async function renderTDPModalContent(active, tab) {
         <button class="tdp-close" onclick="closeTDPModal()">${renderIcon('x', null, 'style="width:20px"')}</button>
       </div>
       <div class="tdp-tabs">
-        <button class="tdp-tab ${tab === 'current' ? 'active' : ''}" onclick="renderTDPModalContent(${active ? 'state.data.vision_tdp.find(p=>p.id===\'' + active.id + '\')' : 'null'}, 'current')">Current</button>
+        <button class="tdp-tab ${tab === 'current' ? 'active' : ''}" onclick="renderTDPModalContent(null, 'current')">Current</button>
         <button class="tdp-tab ${tab === 'previous' ? 'active' : ''}" onclick="renderTDPModalContent(null, 'previous')">Previous Plans</button>
       </div>
       <div class="tdp-modal-body">
