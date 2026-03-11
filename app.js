@@ -1032,6 +1032,8 @@ function routeTo(view) {
   else if (view === 'habits') renderHabitsView();
   else if (view === 'diary') renderDiaryView();
   else if (view === 'vision') renderVisionView();
+  else if (view === 'gym') renderGym();
+  else if (view === 'notes') renderNotes();
 }
 
 async function init() {
