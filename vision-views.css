@@ -210,6 +210,7 @@
 .tdp-list-item:hover {
     border-color: var(--primary-soft);
     background: var(--surface-3);
+    transform: translateX(4px);
 }
 
 .tdp-checkbox {
@@ -228,6 +229,21 @@
     background: var(--success);
     border-color: var(--success);
     color: white;
+}
+
+.tdp-checkbox::after {
+    content: '';
+    width: 10px;
+    height: 5px;
+    border-left: 2px solid white;
+    border-bottom: 2px solid white;
+    transform: rotate(-45deg) translate(1px, -1px);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.tdp-list-item.done .tdp-checkbox::after {
+    opacity: 1;
 }
 
 .tdp-item-text {

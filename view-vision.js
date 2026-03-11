@@ -1657,7 +1657,7 @@ function renderCurrentTDP(plan) {
         <div class="tdp-cat-list">
           ${(cats[cat] || []).map((item, idx) => `
             <div class="tdp-list-item ${item.completed ? 'done' : ''}" onclick="toggleTDPItem('${plan.id}', '${cat}', ${idx})">
-              <div class="tdp-checkbox">${item.completed ? renderIcon('check', null, 'style="width:12px"') : ''}</div>
+              <div class="tdp-checkbox"></div>
               <div class="tdp-item-text">${item.text}</div>
               <button class="btn-icon" onclick="event.stopPropagation(); deleteTDPItem('${plan.id}', '${cat}', ${idx})">${renderIcon('trash', null, 'style="width:14px"')}</button>
             </div>
@@ -1677,9 +1677,21 @@ async function toggleTDPItem(planId, cat, idx) {
   const cats = JSON.parse(plan.categories_json);
   cats[cat][idx].completed = !cats[cat][idx].completed;
   plan.categories_json = JSON.stringify(cats);
-  await apiPost('vision_tdp', plan);
+
+  // Optimistic UI
   renderTDPModalContent(plan, 'current');
   renderVision();
+
+  try {
+    await apiPost('vision_tdp', plan);
+    showToast('Saved on sheet');
+  } catch (e) {
+    console.error('Failed to save TDP item toggle:', e);
+    showToast('Failed to save to sheet');
+    // Reload data to sync back if error
+    await loadAllData();
+    renderVision();
+  }
 }
 
 async function addTDPItem(planId, cat, text) {
@@ -1690,9 +1702,20 @@ async function addTDPItem(planId, cat, text) {
   if (!cats[cat]) cats[cat] = [];
   cats[cat].push({ text, completed: false });
   plan.categories_json = JSON.stringify(cats);
-  await apiPost('vision_tdp', plan);
+
+  // Optimistic UI
   renderTDPModalContent(plan, 'current');
   renderVision();
+
+  try {
+    await apiPost('vision_tdp', plan);
+    showToast('Saved on sheet');
+  } catch (e) {
+    console.error('Failed to add TDP item:', e);
+    showToast('Failed to save to sheet');
+    await loadAllData();
+    renderVision();
+  }
 }
 
 async function deleteTDPItem(planId, cat, idx) {
@@ -1701,9 +1724,20 @@ async function deleteTDPItem(planId, cat, idx) {
   const cats = JSON.parse(plan.categories_json);
   cats[cat].splice(idx, 1);
   plan.categories_json = JSON.stringify(cats);
-  await apiPost('vision_tdp', plan);
+
+  // Optimistic UI
   renderTDPModalContent(plan, 'current');
   renderVision();
+
+  try {
+    await apiPost('vision_tdp', plan);
+    showToast('Saved on sheet');
+  } catch (e) {
+    console.error('Failed to delete TDP item:', e);
+    showToast('Failed to save to sheet');
+    await loadAllData();
+    renderVision();
+  }
 }
 
 function renderCreateTDPView() {
