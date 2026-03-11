@@ -10,7 +10,7 @@ window.state = {
 
     view: "dashboard",
 
-    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [] },
+    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_tdp: [] },
 
     loading: false
 
@@ -188,11 +188,13 @@ async function apiCall(action, sheet, payload = {}, id = null) {
 
         if (!json.success) throw new Error(json.message);
 
-        let data = json.data || [];
+        // For 'get' requests, return the data array directly for compatibility
+        if (action === 'get') {
+            return json.data || [];
+        }
 
-
-
-        return data;
+        // For all other actions (create, update, delete, init), return the full JSON response
+        return json;
 
     } catch (e) {
         console.error("API Error:", e);
@@ -208,12 +210,27 @@ async function apiGet(sheet, opts = {}) {
     return await apiCall('get', sheet);
 }
 
-async function apiPost(data) {
-    // data is { action, sheet, payload, id }
-    if (!data) return { success: false, message: 'No data' };
-    const res = await apiCall(data.action, data.sheet, data.payload, data.id);
-    // Compatibility: return an object that looks like GAS response
-    return { success: true, data: res, id: res.id || data.id };
+async function apiPost(sheetOrData, maybePayload) {
+    if (!sheetOrData) return { success: false, message: 'No data' };
+
+    let action, sheet, payload, id;
+
+    if (typeof sheetOrData === 'string') {
+        // Handle apiPost(sheet, payload)
+        sheet = sheetOrData;
+        payload = maybePayload;
+        action = payload && payload.id ? 'update' : 'create';
+        id = payload ? payload.id : null;
+    } else {
+        // Handle legacy apiPost({ action, sheet, payload, id })
+        action = sheetOrData.action;
+        sheet = sheetOrData.sheet;
+        payload = sheetOrData.payload;
+        id = sheetOrData.id;
+    }
+
+    const res = await apiCall(action, sheet, payload, id);
+    return res;
 }
 
 async function initToolsSheets() {
@@ -2074,8 +2091,8 @@ async function loadAllData() {
     updateLoader(5, 'Connecting...');
 
     // Include all sheets including settings, funds, assets, and diary enhancements
-    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images'];
-    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images'];
+    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp'];
+    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp'];
 
     let loaded = 0;
     const total = sheets.length;
