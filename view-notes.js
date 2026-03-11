@@ -292,16 +292,15 @@ function renderNotesDetail(note) {
                 <button class="ntb" onclick="notesFormat('checklist')" title="Checklist">☑ Task</button>
                 <button class="ntb" onclick="notesFormat('quote')"     title="Quote">" Quote</button>
                 <span class="ntb-sep"></span>
-                <button class="ntb" onclick="notesFormat('code')"      title="Inline code"><code>\`code\`</code></button>
-                <button class="ntb" onclick="notesFormat('codeblock')" title="Code block">```</button >
+                <button class="ntb" onclick="notesFormat('codeblock')" title="Code block">\` \` \`</button>
                 <button class="ntb" onclick="notesFormat('hr')"        title="Divider">—</button>
                 <span class="ntb-flex"></span>
                 <button class="ntb ntb-preview" id="notesPreviewBtn" onclick="notesTogglePreview()">
                     <i data-icon="eye" style="width:13px;height:13px"></i> Preview
                 </button>
-            </div >
+            </div>
 
-            < !--Editor -->
+            <!-- Editor -->
             <div class="notes-content-area" id="notesContentArea">
                 <textarea class="notes-editor" id="noteEditor"
                     placeholder="Start writing… Markdown is supported"
@@ -310,7 +309,7 @@ function renderNotesDetail(note) {
                 >${escapeHtml(note.content || '')}</textarea>
             </div>
 
-            <!--Footer -->
+            <!-- Footer -->
         <div class="notes-detail-footer">
             <div class="notes-tags-row" id="notesTagsRow">
                 ${tags.map(t => notesTagChipHTML(t)).join('')}
@@ -322,7 +321,7 @@ function renderNotesDetail(note) {
             </div>
             <span class="notes-wc-label" id="notesWCLabel">${wc} words</span>
         </div>
-        </div >
+        </div>
         `;
 
     // Mobile: show detail panel
@@ -339,7 +338,7 @@ function renderNotesDetail(note) {
 }
 
 function notesTagChipHTML(tag) {
-    return `< span class="notes-tag-chip" > #${ escapeHtml(tag) } <button class="notes-tag-x" onclick="notesRemoveTag('${escapeHtml(tag)}')">×</button></span > `;
+    return `<span class="notes-tag-chip">#${escapeHtml(tag)} <button class="notes-tag-x" onclick="notesRemoveTag('${escapeHtml(tag)}')">×</button></span>`;
 }
 
 /* ═══════════════════════════════
@@ -351,9 +350,9 @@ function selectNotesCard(id) {
         notesSaveTimer = null;
         saveNoteNow(true);
     }
-    notesIsNew      = false;
+    notesIsNew = false;
     notesPreviewMode = false;
-    activeNoteId    = id;
+    activeNoteId = id;
     renderNotesCards();
     const note = notesData.find(n => String(n.id) === String(id));
     if (note) renderNotesDetail(note);
@@ -365,16 +364,16 @@ function createNewNote() {
         notesSaveTimer = null;
         saveNoteNow(true);
     }
-    notesIsNew       = true;
+    notesIsNew = true;
     notesPreviewMode = false;
-    activeNoteId     = null;
+    activeNoteId = null;
     renderNotesDetail({
-        id:         null,
-        title:      '',
-        content:    '',
-        category:   notesFilter !== 'all' ? notesFilter : 'personal',
-        tags:       '',
-        is_pinned:  false,
+        id: null,
+        title: '',
+        content: '',
+        category: notesFilter !== 'all' ? notesFilter : 'personal',
+        tags: '',
+        is_pinned: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
     });
@@ -396,9 +395,9 @@ function notesDebounceSave() {
 }
 
 async function saveNoteNow(silent = false) {
-    const titleEl   = document.getElementById('noteTitleInput');
-    const editorEl  = document.getElementById('noteEditor');
-    const catEl     = document.getElementById('noteCatPicker');
+    const titleEl = document.getElementById('noteTitleInput');
+    const editorEl = document.getElementById('noteEditor');
+    const catEl = document.getElementById('noteCatPicker');
     if (!titleEl) return;
 
     const tagChips = [...document.querySelectorAll('.notes-tag-chip')]
@@ -406,10 +405,10 @@ async function saveNoteNow(silent = false) {
         .filter(Boolean);
 
     const payload = {
-        title:      titleEl.value.trim() || 'Untitled',
-        content:    editorEl?.value || '',
-        category:   catEl?.value || 'personal',
-        tags:       tagChips.join(', '),
+        title: titleEl.value.trim() || 'Untitled',
+        content: editorEl?.value || '',
+        category: catEl?.value || 'personal',
+        tags: tagChips.join(', '),
         updated_at: new Date().toISOString(),
     };
 
@@ -422,7 +421,7 @@ async function saveNoteNow(silent = false) {
             payload.created_at = new Date().toISOString();
             res = await apiPost({ action: 'create', sheet: 'notes', payload });
             if (res.success) {
-                notesIsNew   = false;
+                notesIsNew = false;
                 activeNoteId = res.id || res.data?.id;
                 await loadNotesData();
             }
@@ -437,7 +436,7 @@ async function saveNoteNow(silent = false) {
         }
         if (badge && !silent) {
             badge.textContent = '✓ saved';
-            badge.className   = 'notes-save-badge saved';
+            badge.className = 'notes-save-badge saved';
             setTimeout(() => { if (badge) badge.textContent = ''; }, 2000);
         }
     } catch (err) {
@@ -450,17 +449,17 @@ async function saveNoteNow(silent = false) {
    FORMATTING TOOLBAR
 ═══════════════════════════════ */
 const NOTES_FMT = {
-    bold:      { b: '**',    a: '**',    ph: 'bold text' },
-    italic:    { b: '*',     a: '*',     ph: 'italic text' },
-    h1:        { b: '# ',    a: '',      ph: 'Heading 1',   nl: true },
-    h2:        { b: '## ',   a: '',      ph: 'Heading 2',   nl: true },
-    h3:        { b: '### ',  a: '',      ph: 'Heading 3',   nl: true },
-    code:      { b: '`',     a: '`',     ph: 'code' },
-    codeblock: { b: '```\n', a: '\n```', ph: 'code here',   nl: true },
-    bullet:    { b: '- ',    a: '',      ph: 'list item',   nl: true },
-    checklist: { b: '- [ ] ',a: '',      ph: 'task',        nl: true },
-    quote:     { b: '> ',    a: '',      ph: 'quote',       nl: true },
-    hr:        { insert: '\n---\n' },
+    bold: { b: '**', a: '**', ph: 'bold text' },
+    italic: { b: '*', a: '*', ph: 'italic text' },
+    h1: { b: '# ', a: '', ph: 'Heading 1', nl: true },
+    h2: { b: '## ', a: '', ph: 'Heading 2', nl: true },
+    h3: { b: '### ', a: '', ph: 'Heading 3', nl: true },
+    code: { b: '`', a: '`', ph: 'code' },
+    codeblock: { b: '```\n', a: '\n```', ph: 'code here', nl: true },
+    bullet: { b: '- ', a: '', ph: 'list item', nl: true },
+    checklist: { b: '- [ ] ', a: '', ph: 'task', nl: true },
+    quote: { b: '> ', a: '', ph: 'quote', nl: true },
+    hr: { insert: '\n---\n' },
 };
 
 function notesFormat(type) {
@@ -473,7 +472,7 @@ function notesFormat(type) {
         newVal = ta.value.slice(0, s) + f.insert + ta.value.slice(e);
         ns = ne = s + f.insert.length;
     } else {
-        const text   = ta.value.slice(s, e) || f.ph;
+        const text = ta.value.slice(s, e) || f.ph;
         const prefix = f.nl && s > 0 && ta.value[s - 1] !== '\n' ? '\n' : '';
         newVal = ta.value.slice(0, s) + prefix + f.b + text + f.a + ta.value.slice(e);
         ns = s + prefix.length + f.b.length;
@@ -505,32 +504,32 @@ function notesLiveCount(ta) {
     const wc = notesWordCount(ta.value);
     const wl = document.getElementById('notesWCLabel');
     const wc2 = document.getElementById('noteWCChip');
-    const rt  = document.getElementById('noteRTChip');
-    if (wl)  wl.textContent  = `${ wc } words`;
-    if (wc2) wc2.textContent = `${ wc } words`;
-    if (rt)  rt.textContent  = `⏱ ${ notesReadingTime(ta.value) } `;
+    const rt = document.getElementById('noteRTChip');
+    if (wl) wl.textContent = `${wc} words`;
+    if (wc2) wc2.textContent = `${wc} words`;
+    if (rt) rt.textContent = `⏱ ${notesReadingTime(ta.value)} `;
 }
 
 /* ── Preview (markdown render) ── */
 function notesTogglePreview() {
     const area = document.getElementById('notesContentArea');
-    const btn  = document.getElementById('notesPreviewBtn');
-    const ta   = document.getElementById('noteEditor');
+    const btn = document.getElementById('notesPreviewBtn');
+    const ta = document.getElementById('noteEditor');
     if (!area) return;
 
     notesPreviewMode = !notesPreviewMode;
     if (notesPreviewMode) {
         const html = notesRenderMD(ta?.value || '');
-        area.innerHTML = `< div class="notes-preview" onclick = "notesTogglePreview()" > ${ html }</div > `;
-        if (btn) btn.innerHTML = `< i data - icon="edit-2" style = "width:13px;height:13px" ></i > Edit`;
+        area.innerHTML = `<div class="notes-preview" onclick="notesTogglePreview()">${html}</div>`;
+        if (btn) btn.innerHTML = `<i data-icon="edit-2" style="width:13px;height:13px"></i> Edit`;
     } else {
         const note = notesData.find(n => String(n.id) === String(activeNoteId));
-        area.innerHTML = `< textarea class="notes-editor" id = "noteEditor"
-    placeholder = "Start writing… Markdown is supported"
-    oninput = "notesDebounceSave(); notesLiveCount(this)"
-    onkeydown = "notesEditorKey(event)"
-        > ${ escapeHtml(note?.content || '') }</textarea > `;
-        if (btn) btn.innerHTML = `< i data - icon="eye" style = "width:13px;height:13px" ></i > Preview`;
+        area.innerHTML = `<textarea class="notes-editor" id="noteEditor"
+            placeholder="Start writing… Markdown is supported"
+            oninput="notesDebounceSave(); notesLiveCount(this)"
+            onkeydown="notesEditorKey(event)"
+        >${escapeHtml(note?.content || '')}</textarea>`;
+        if (btn) btn.innerHTML = `<i data-icon="eye" style="width:13px;height:13px"></i> Preview`;
     }
     if (typeof lucide !== 'undefined') lucide.createIcons({ root: area });
 }
@@ -546,11 +545,11 @@ function notesTagKey(e) {
         const existing = [...document.querySelectorAll('.notes-tag-chip')]
             .map(el => el.textContent.replace('×', '').replace('#', '').trim());
         if (existing.includes(val)) { e.target.value = ''; return; }
-        const row   = document.getElementById('notesTagsRow');
+        const row = document.getElementById('notesTagsRow');
         const input = document.getElementById('notesTagInput');
-        const chip  = document.createElement('span');
+        const chip = document.createElement('span');
         chip.className = 'notes-tag-chip';
-        chip.innerHTML = `#${ escapeHtml(val) } <button class="notes-tag-x" onclick="notesRemoveTag('${escapeHtml(val)}')">×</button>`;
+        chip.innerHTML = `#${escapeHtml(val)} <button class="notes-tag-x" onclick="notesRemoveTag('${escapeHtml(val)}')">×</button>`;
         row.insertBefore(chip, input);
         e.target.value = '';
         notesDebounceSave();
@@ -580,8 +579,10 @@ async function toggleNotePin(id) {
     const note = notesData.find(n => String(n.id) === String(id));
     if (!note) return;
     try {
-        const res = await apiPost({ action: 'update', sheet: 'notes', id,
-            payload: { is_pinned: !note.is_pinned, updated_at: new Date().toISOString() } });
+        const res = await apiPost({
+            action: 'update', sheet: 'notes', id,
+            payload: { is_pinned: !note.is_pinned, updated_at: new Date().toISOString() }
+        });
         if (res.success) {
             note.is_pinned = !note.is_pinned;
             renderNotesCards();
@@ -592,9 +593,9 @@ async function toggleNotePin(id) {
 }
 
 function copyNoteToClipboard() {
-    const title   = document.getElementById('noteTitleInput')?.value || '';
+    const title = document.getElementById('noteTitleInput')?.value || '';
     const content = document.getElementById('noteEditor')?.value || '';
-    navigator.clipboard.writeText(`${ title } \n\n${ content } `)
+    navigator.clipboard.writeText(`${title} \n\n${content} `)
         .then(() => toast('📋 Copied to clipboard!'))
         .catch(() => toast('❌ Copy failed'));
 }
@@ -604,14 +605,14 @@ async function deleteNoteById(id) {
     try {
         const res = await apiPost({ action: 'delete', sheet: 'notes', id });
         if (res.success) {
-            notesData    = notesData.filter(n => String(n.id) !== String(id));
+            notesData = notesData.filter(n => String(n.id) !== String(id));
             activeNoteId = null;
-            notesIsNew   = false;
+            notesIsNew = false;
             updateNotesStats();
             renderNotesCards();
             document.getElementById('notesShell')?.classList.remove('notes-has-detail');
             const main = document.getElementById('notesMain');
-            if (main) main.innerHTML = `< div class="notes-empty-panel" ><div class="notes-empty-icon">🗑️</div><h3>Note deleted</h3><p>Select or create a note</p></div > `;
+            if (main) main.innerHTML = `<div class="notes-empty-panel"><div class="notes-empty-icon">🗑️</div><h3>Note deleted</h3><p>Select or create a note</p></div>`;
             toast('🗑️ Note deleted');
         }
     } catch (err) { toast('❌ Error deleting note'); }
@@ -653,8 +654,8 @@ function toggleNotesView() {
     const btn = document.getElementById('notesViewToggle');
     if (btn) {
         btn.innerHTML = notesView === 'grid'
-            ? `< i data - icon="list" style = "width:14px;height:14px" ></i > `
-            : `< i data - icon="layout-grid" style = "width:14px;height:14px" ></i > `;
+            ? `<i data-icon="list" style="width:14px;height:14px"></i>`
+            : `<i data-icon="layout-grid" style="width:14px;height:14px"></i>`;
         if (typeof lucide !== 'undefined') lucide.createIcons({ root: btn });
     }
 }
@@ -671,7 +672,7 @@ function notesKeyboardHandler(e) {
         notesIsNew = false; activeNoteId = null;
         document.getElementById('notesShell')?.classList.remove('notes-has-detail');
         const m = document.getElementById('notesMain');
-        if (m) m.innerHTML = `< div class="notes-empty-panel" ><div class="notes-empty-icon">📝</div><h3>No note selected</h3></div > `;
+        if (m) m.innerHTML = `<div class="notes-empty-panel"><div class="notes-empty-icon">📝</div><h3>No note selected</h3></div>`;
     }
 }
 
@@ -683,7 +684,7 @@ function notesRenderMD(text) {
     let h = escapeHtml(text);
 
     // Fenced code blocks
-    h = h.replace(/```([^ `]*?)``` / gs, (_, c) => `<pre class="nmd-pre"><code>${c.trim()}</code></pre>`);
+    h = h.replace(/```([^]*?)```/gs, (_, c) => `<pre class="nmd-pre"><code>${c.trim()}</code></pre>`);
     // Inline code
     h = h.replace(/`([^`\n]+)`/g, '<code class="nmd-code">$1</code>');
     // Headers
