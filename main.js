@@ -195,16 +195,41 @@ async function apiCall(action, sheet, payload = {}, id = null) {
         return data;
 
     } catch (e) {
-
         console.error("API Error:", e);
-
         showToast("Error: " + e.message);
-
         return [];
-
     }
-
 }
+
+// --- LEGACY API WRAPPERS (For view-gym, view-notes etc) ---
+async function apiGet(sheet, opts = {}) {
+    // opts may contain month: "YYYY-MM"
+    // apiCall(action, sheet, payload = {}, id = null)
+    return await apiCall('get', sheet);
+}
+
+async function apiPost(data) {
+    // data is { action, sheet, payload, id }
+    if (!data) return { success: false, message: 'No data' };
+    const res = await apiCall(data.action, data.sheet, data.payload, data.id);
+    // Compatibility: return an object that looks like GAS response
+    return { success: true, data: res, id: res.id || data.id };
+}
+
+async function initToolsSheets() {
+    try {
+        // initToolsSheets in app.js used fetch directly
+        const url = `${API_BASE}?action=init&sheet=tools`;
+        const res = await fetch(url);
+        return await res.json();
+    } catch (err) {
+        console.error('Error initializing tools:', err);
+    }
+}
+
+window.apiGet = apiGet;
+window.apiPost = apiPost;
+window.initToolsSheets = initToolsSheets;
 
 
 
