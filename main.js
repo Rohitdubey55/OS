@@ -218,10 +218,8 @@ async function apiPost(data) {
 
 async function initToolsSheets() {
     try {
-        // initToolsSheets in app.js used fetch directly
-        const url = `${API_BASE}?action=init&sheet=tools`;
-        const res = await fetch(url);
-        return await res.json();
+        // Use apiCall instead of raw fetch to ensure POST request and proper error handling
+        return await apiCall('init', 'tools');
     } catch (err) {
         console.error('Error initializing tools:', err);
     }

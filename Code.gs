@@ -102,7 +102,7 @@ function doGet(e) {
     }
 
     if (e.parameter.action === "init") {
-      return initToolsSheets();
+      return jsonResponse(initToolsSheets());
     }
 
     return jsonResponse({ success: false, message: "Invalid GET action" });
@@ -130,6 +130,10 @@ function doPost(e) {
 
     if (body.action === "delete") {
       return deleteData(body.sheet, body.id);
+    }
+
+    if (body.action === "init") {
+      return jsonResponse(initToolsSheets());
     }
 
     return jsonResponse({ success: false, message: "Invalid POST action" });
