@@ -25,7 +25,8 @@ const SCHEMA = {
   "vision_images": ["id", "vision_id", "file_id", "url", "name", "uploaded_at"],
   "pomodoro_settings": ["id", "work_duration", "short_break", "long_break", "long_break_interval", "sound_work", "sound_break", "auto_start_break", "background_mode"],
   "pomodoro_sessions": ["id", "date", "type", "duration", "habit_id", "task_id", "completed"],
-  "pomodoro_badges": ["id", "user_id", "badge_type", "unlocked_at", "total_sessions"]
+  "pomodoro_badges": ["id", "user_id", "badge_type", "unlocked_at", "total_sessions"],
+  "vision_tdp": ["id", "start_date", "end_date", "status", "categories_json", "created_at"]
 };
 
 /**
