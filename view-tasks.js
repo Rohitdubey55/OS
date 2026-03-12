@@ -10,7 +10,7 @@ let _expandedTaskIds = new Set();
 let _collapsedCategories = new Set();
 let _taskCategory = 'All';
 let _taskPriorityFilter = 'All';
-let _showCompletedTasks = true;
+let _showCompletedTasks = false;
 
 const PRIORITY_COLOR = { P1: '#DC2626', P2: '#D97706', P3: '#059669' };
 const PRIORITY_LABEL = { P1: 'High', P2: 'Medium', P3: 'Low' };
@@ -168,31 +168,18 @@ function renderTasks(filter = '') {
 
   const allCats = [...new Set((state.data.tasks || []).map(t => t.category).filter(Boolean))];
   const today = new Date().toISOString().slice(0, 10);
-  const overdueCount = pending.filter(t => t.due_date && t.due_date < today).length;
   const totalPending = pending.length + recurringToday.filter(t => !isRecurringTaskCompletedToday(t)).length;
 
   const pendingByCat = {};
-  let allPendingAndRecurring = [...pending, ...recurringToday.filter(t => !isRecurringTaskCompletedToday(t))];
-  allPendingAndRecurring.sort((a, b) => (a.priority === 'P1' && b.priority !== 'P1' ? -1 : (a.priority !== 'P1' && b.priority === 'P1' ? 1 : 0)));
-  const todaysThree = allPendingAndRecurring.slice(0, 3);
-  const todaysThreeIds = todaysThree.map(t => t.id);
-
-  pending = pending.filter(t => !todaysThreeIds.includes(t.id));
-  recurringToday = recurringToday.filter(t => !todaysThreeIds.includes(t.id));
-
   pending.forEach(t => {
     const cat = t.category || 'Uncategorized';
     if (!pendingByCat[cat]) pendingByCat[cat] = [];
     pendingByCat[cat].push(t);
   });
 
-  const p1Count = pending.filter(t => t.priority === 'P1').length +
-                  todaysThree.filter(t => t.priority === 'P1').length;
   const doneCount = (state.data.tasks || []).filter(t => t.status === 'completed').length;
   const totalCount = (state.data.tasks || []).length;
   const pctDone = totalCount ? Math.round((doneCount / totalCount) * 100) : 0;
-
-  const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
   document.getElementById('main').innerHTML = `
   <style>
@@ -204,6 +191,7 @@ function renderTasks(filter = '') {
     .tk-header-left { display:flex; align-items:center; gap:10px; }
     .tk-header-title { font-size:24px; font-weight:800; color:var(--text-1); letter-spacing:-0.8px; line-height:1; }
     .tk-count-badge { font-size:11px; font-weight:700; background:var(--primary); color:#fff; border-radius:20px; padding:3px 9px; letter-spacing:.2px; }
+    .tk-pct-badge { font-size:11px; font-weight:700; background:var(--surface-2); color:var(--text-3); border:1.5px solid var(--border-color); border-radius:20px; padding:3px 9px; letter-spacing:.2px; }
     .tk-header-right { display:flex; align-items:center; gap:4px; }
     .tk-add-btn { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; background:var(--primary); color:#fff; border:none; border-radius:22px; font-size:13px; font-weight:700; cursor:pointer; transition:all .2s; box-shadow:0 2px 8px rgba(79,70,229,.25); letter-spacing:.1px; }
     .tk-add-btn:active { opacity:.88; transform:scale(.96); box-shadow:none; }
@@ -239,27 +227,6 @@ function renderTasks(filter = '') {
     .tk-sort-select { margin-left:auto; background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:10px; padding:6px 10px; font-size:12px; color:var(--text-2); cursor:pointer; outline:none; font-weight:500; }
     .tk-toggle-done { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border:1.5px solid var(--border-color); background:var(--surface-1); border-radius:10px; cursor:pointer; color:var(--text-3); transition:all .15s; flex-shrink:0; }
     .tk-toggle-done.active { border-color:var(--success,#059669); color:var(--success,#059669); background:rgba(5,150,105,.06); }
-
-    /* ══ FOCUS CARD ══ */
-    .tk-focus-card { margin:0 16px 10px; background:linear-gradient(135deg,var(--primary) 0%,var(--accent,#8B5CF6) 100%); border-radius:18px; padding:16px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 4px 20px rgba(79,70,229,.22); flex-shrink:0; position:relative; overflow:hidden; }
-    .tk-focus-card::before { content:''; position:absolute; top:-30px; right:-20px; width:100px; height:100px; border-radius:50%; background:rgba(255,255,255,.06); pointer-events:none; }
-    .tk-focus-card::after { content:''; position:absolute; bottom:-40px; right:30px; width:80px; height:80px; border-radius:50%; background:rgba(255,255,255,.04); pointer-events:none; }
-    .tk-focus-date { font-size:11px; font-weight:600; color:rgba(255,255,255,.7); margin-bottom:5px; letter-spacing:.3px; text-transform:uppercase; }
-    .tk-focus-headline { font-size:16px; font-weight:800; color:#fff; letter-spacing:-.3px; margin-bottom:8px; }
-    .tk-focus-stats { display:flex; gap:6px; flex-wrap:wrap; }
-    .tk-stat-badge { font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px; background:rgba(255,255,255,.15); color:rgba(255,255,255,.9); border:1px solid rgba(255,255,255,.15); backdrop-filter:blur(4px); }
-    .tk-stat-badge.danger { background:rgba(239,68,68,.25); color:#fff; border-color:rgba(239,68,68,.3); }
-    .tk-stat-badge.urgent { background:rgba(245,158,11,.25); color:#fff; border-color:rgba(245,158,11,.3); }
-    .tk-focus-right { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; z-index:1; }
-    .tk-focus-pct { font-size:28px; font-weight:900; color:#fff; line-height:1; letter-spacing:-1px; }
-    .tk-focus-label { font-size:10px; font-weight:600; color:rgba(255,255,255,.6); text-align:right; letter-spacing:.3px; }
-    .tk-focus-track { width:72px; height:5px; background:rgba(255,255,255,.2); border-radius:3px; overflow:hidden; }
-    .tk-focus-fill { height:100%; background:#fff; border-radius:3px; transition:width .9s cubic-bezier(.2,.8,.2,1); }
-
-    /* ══ OVERDUE BANNER ══ */
-    .tk-overdue-banner { margin:0 16px 8px; background:rgba(220,38,38,.05); border:1px solid rgba(220,38,38,.15); border-radius:12px; padding:9px 14px; display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--danger,#DC2626); flex-shrink:0; }
-    .tk-overdue-banner strong { font-weight:700; }
-    .tk-overdue-banner button { margin-left:auto; font-size:11.5px; font-weight:700; background:rgba(220,38,38,.1); border:none; border-radius:8px; padding:4px 12px; color:var(--danger,#DC2626); cursor:pointer; white-space:nowrap; }
 
     /* ══ SCROLLABLE LIST ══ */
     .tk-list { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 16px 80px; }
@@ -307,28 +274,8 @@ function renderTasks(filter = '') {
     .task-meta-chip { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; color:var(--text-3); background:var(--surface-2); padding:2px 7px; border-radius:20px; border:1px solid var(--border-color); white-space:nowrap; }
     .task-meta-chip.done-chip { color:var(--success,#059669); background:rgba(5,150,105,.06); border-color:rgba(5,150,105,.2); }
 
-    /* ══ EXPANDED PANEL ══ */
-    .subtask-expand { padding:10px 14px 14px 47px; background:var(--surface-2); border-top:1px solid var(--border-color); animation:tkExpandIn .2s ease; }
-    @keyframes tkExpandIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-    .tk-expand-desc { font-size:13px; color:var(--text-3); line-height:1.6; margin-bottom:12px; padding:10px 12px; background:var(--surface-1); border-radius:10px; border:1px solid var(--border-color); }
-    .subtask-item { display:flex; align-items:center; gap:9px; padding:6px 0; font-size:13px; border-bottom:1px solid var(--border-color); }
-    .subtask-item:last-of-type { border-bottom:none; }
-    .subtask-mini-check { width:17px; height:17px; min-width:17px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s; flex-shrink:0; }
-    .subtask-mini-check.done { background:var(--success,#059669); border-color:var(--success,#059669); }
-    .tk-subtask-add { display:flex; align-items:center; gap:8px; padding:7px 0; margin-top:4px; }
-    .tk-subtask-add-ring { width:17px; height:17px; min-width:17px; border:2px dashed var(--border-color); border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .tk-subtask-add-input { flex:1; border:none; background:transparent; outline:none; font-size:13px; color:var(--text-1); }
-    .tk-subtask-add-input::placeholder { color:var(--text-3); }
-
-    /* ══ ROW ACTION BUTTONS ══ */
-    .tk-row-actions { display:flex; gap:6px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border-color); flex-wrap:wrap; }
-    .tk-action-btn { display:inline-flex; align-items:center; gap:5px; padding:6px 13px; border-radius:9px; font-size:12px; font-weight:600; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); cursor:pointer; transition:all .15s; }
-    .tk-action-btn:active { transform:scale(.96); }
-    .tk-action-btn:hover { background:var(--surface-3,#E2E8F0); }
-    .tk-action-btn.danger { color:var(--danger,#DC2626); border-color:rgba(220,38,38,.2); background:rgba(220,38,38,.04); }
-    .tk-action-btn.danger:active { background:rgba(220,38,38,.1); }
-    .tk-action-btn.primary { color:var(--primary); border-color:rgba(79,70,229,.25); background:rgba(79,70,229,.05); }
-    .tk-action-btn.primary:active { background:rgba(79,70,229,.12); }
+    /* ══ EXPANDED PANEL (kept for compatibility) ══ */
+    .subtask-expand { display:none; }
 
     /* ══ EMPTY STATE ══ */
     .tk-empty { display:flex; flex-direction:column; align-items:center; padding:52px 24px; text-align:center; }
@@ -395,10 +342,73 @@ function renderTasks(filter = '') {
     .tk-step-dot { width:6px; height:6px; border-radius:50%; background:var(--border-color); transition:all .22s; }
     .tk-step-dot.active { background:var(--primary); width:20px; border-radius:3px; }
 
+    /* ══ TASK ROW — active state ══ */
+    .task-bento-row.sheet-open { background:var(--primary-soft,rgba(79,70,229,.05)); }
+
+    /* ══ BOTTOM SHEET ══ */
+    .tk-sheet-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; opacity:0; transition:opacity .3s ease; pointer-events:none; }
+    .tk-sheet-overlay.open { opacity:1; pointer-events:all; }
+    .tk-sheet { position:fixed; left:0; right:0; bottom:0; z-index:1001; background:var(--surface-1); border-radius:24px 24px 0 0; max-height:90vh; display:flex; flex-direction:column; transform:translateY(100%); transition:transform .38s cubic-bezier(.32,.72,0,1); will-change:transform; box-shadow:0 -8px 40px rgba(0,0,0,.18); }
+    .tk-sheet.open { transform:translateY(0); }
+    .tk-sheet-handle { width:36px; height:4px; background:var(--border-color); border-radius:2px; margin:12px auto 0; flex-shrink:0; }
+    .tk-sheet-prio-bar { height:3px; border-radius:0 0 2px 2px; flex-shrink:0; margin:10px 24px 0; border-radius:3px; }
+
+    /* Sheet header */
+    .tk-sheet-header { padding:16px 20px 0; flex-shrink:0; }
+    .tk-sheet-title-row { display:flex; align-items:flex-start; gap:14px; margin-bottom:14px; }
+    .tk-sheet-check { width:26px; height:26px; min-width:26px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s cubic-bezier(.2,.8,.2,1); margin-top:3px; flex-shrink:0; }
+    .tk-sheet-check.done { background:var(--success,#059669); border-color:var(--success,#059669); }
+    .tk-sheet-check:active:not(.done) { transform:scale(.88); border-color:var(--primary); }
+    .tk-sheet-title { font-size:20px; font-weight:800; color:var(--text-1); line-height:1.3; flex:1; letter-spacing:-.5px; word-break:break-word; }
+    .tk-sheet-title.done { text-decoration:line-through; color:var(--text-3); font-weight:600; }
+    .tk-sheet-close { width:32px; height:32px; min-width:32px; border:none; background:var(--surface-2); border-radius:50%; cursor:pointer; color:var(--text-3); display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all .15s; margin-top:2px; }
+    .tk-sheet-close:active { background:var(--surface-3,#E2E8F0); }
+
+    /* Meta chips */
+    .tk-sheet-chips { display:flex; flex-wrap:wrap; gap:6px; padding:0 20px 16px; flex-shrink:0; }
+    .tk-sheet-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:20px; font-size:12px; font-weight:600; background:var(--surface-2); color:var(--text-2); border:1px solid var(--border-color); }
+    .tk-sheet-chip.today { background:rgba(79,70,229,.08); color:var(--primary); border-color:rgba(79,70,229,.2); }
+    .tk-sheet-chip.overdue { background:rgba(220,38,38,.07); color:#DC2626; border-color:rgba(220,38,38,.18); }
+    .tk-sheet-chip.p1 { background:rgba(220,38,38,.07); color:#DC2626; border-color:rgba(220,38,38,.18); }
+    .tk-sheet-chip.p2 { background:rgba(217,119,6,.07); color:#D97706; border-color:rgba(217,119,6,.18); }
+    .tk-sheet-chip.p3 { background:rgba(5,150,105,.07); color:#059669; border-color:rgba(5,150,105,.18); }
+
+    /* Scrollable body */
+    .tk-sheet-body { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 20px 8px; }
+    .tk-sheet-divider { height:1px; background:var(--border-color); margin:0 -20px 16px; }
+
+    /* Description */
+    .tk-sheet-desc { font-size:14.5px; color:var(--text-2); line-height:1.7; margin-bottom:20px; }
+
+    /* Section label */
+    .tk-sheet-sec-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--text-3); margin-bottom:10px; display:flex; align-items:center; gap:7px; }
+
+    /* Subtasks */
+    .tk-sheet-subtask-list { background:var(--surface-2); border-radius:14px; overflow:hidden; margin-bottom:8px; }
+    .tk-sheet-sub-item { display:flex; align-items:center; gap:12px; padding:11px 14px; border-bottom:1px solid var(--border-color); transition:background .15s; }
+    .tk-sheet-sub-item:last-child { border-bottom:none; }
+    .tk-sheet-sub-item:active { background:var(--surface-3,#E2E8F0); }
+    .tk-sheet-sub-check { width:20px; height:20px; min-width:20px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .18s; flex-shrink:0; }
+    .tk-sheet-sub-check.done { background:var(--success,#059669); border-color:var(--success,#059669); }
+    .tk-sheet-sub-text { flex:1; font-size:14px; color:var(--text-1); line-height:1.4; }
+    .tk-sheet-sub-text.done { text-decoration:line-through; color:var(--text-3); }
+    .tk-sheet-sub-del { border:none; background:none; cursor:pointer; opacity:.3; padding:4px; display:flex; align-items:center; }
+    .tk-sheet-sub-add { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--surface-2); border-radius:14px; margin-bottom:20px; border:1.5px dashed var(--border-color); transition:border-color .2s; }
+    .tk-sheet-sub-add:focus-within { border-color:var(--primary); }
+    .tk-sheet-sub-add-input { flex:1; border:none; background:transparent; outline:none; font-size:14px; color:var(--text-1); }
+    .tk-sheet-sub-add-input::placeholder { color:var(--text-3); }
+
+    /* Action bar */
+    .tk-sheet-actions { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; padding:14px 20px; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px)); border-top:1px solid var(--border-color); flex-shrink:0; background:var(--surface-1); }
+    .tk-sheet-act { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:12px 6px; border-radius:14px; border:1.5px solid var(--border-color); background:var(--surface-2); cursor:pointer; font-size:11.5px; font-weight:600; color:var(--text-2); transition:all .18s; }
+    .tk-sheet-act:active { transform:scale(.94); }
+    .tk-sheet-act i { pointer-events:none; }
+    .tk-sheet-act.primary { border-color:rgba(79,70,229,.2); background:rgba(79,70,229,.06); color:var(--primary); }
+    .tk-sheet-act.success { border-color:rgba(5,150,105,.2); background:rgba(5,150,105,.06); color:var(--success,#059669); }
+    .tk-sheet-act.danger { border-color:rgba(220,38,38,.2); background:rgba(220,38,38,.05); color:#DC2626; }
+
     @media(max-width:480px) {
       .tk-shell { height:calc(100vh - env(safe-area-inset-top,44px) - 80px); }
-      .tk-focus-pct { font-size:24px; }
-      .tk-focus-track { width:60px; }
     }
   </style>
 
@@ -409,10 +419,11 @@ function renderTasks(filter = '') {
       <div class="tk-header-left">
         <span class="tk-header-title">Tasks</span>
         <span class="tk-count-badge">${totalPending}</span>
+        ${pctDone > 0 ? `<span class="tk-pct-badge">${pctDone}%</span>` : ''}
       </div>
       <div class="tk-header-right">
         <button class="tk-icon-btn ${_itemSelectionMode ? 'active' : ''}" onclick="toggleTaskSelectionMode()" title="Select mode">
-          <i data-lucide="check-square" style="width:18px;height:18px"></i>
+          <i data-lucide="list-checks" style="width:18px;height:18px"></i>
         </button>
         <button class="tk-icon-btn" onclick="openCategoryManager()" title="Categories">
           <i data-lucide="tag" style="width:18px;height:18px"></i>
@@ -484,56 +495,16 @@ function renderTasks(filter = '') {
       </button>
     </div>
 
-    <!-- Focus Card -->
-    <div class="tk-focus-card">
-      <div>
-        <div class="tk-focus-date">${dateLabel}</div>
-        <div class="tk-focus-headline">${totalPending === 0 ? 'All clear!' : `${totalPending} task${totalPending !== 1 ? 's' : ''} remaining`}</div>
-        <div class="tk-focus-stats">
-          ${overdueCount > 0 ? `<span class="tk-stat-badge danger">${overdueCount} overdue</span>` : ''}
-          ${p1Count > 0 ? `<span class="tk-stat-badge urgent">${p1Count} urgent</span>` : ''}
-          <span class="tk-stat-badge">${doneCount} done</span>
-        </div>
-      </div>
-      <div class="tk-focus-right">
-        <div class="tk-focus-pct">${pctDone}%</div>
-        <div class="tk-focus-label">complete</div>
-        <div class="tk-focus-track">
-          <div class="tk-focus-fill" style="width:${pctDone}%"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Overdue Banner -->
-    ${overdueCount > 0 ? `
-    <div class="tk-overdue-banner">
-      <i data-lucide="alert-triangle" style="width:14px;height:14px;flex-shrink:0"></i>
-      <span><strong>${overdueCount} task${overdueCount > 1 ? 's' : ''}</strong> past due</span>
-      <button onclick="_taskPriorityFilter='All';_taskCategory='All';renderTasks()">View all</button>
-    </div>` : ''}
-
     <!-- Scrollable List -->
     <div class="tk-list">
 
-      ${todaysThree.length > 0 ? tkSectionHTML("__todays_three__", "Today's Focus", todaysThree, false, true) : `
-        <div class="tk-section" style="margin-bottom:10px;">
-          <div class="tk-section-header" style="cursor:default;">
-            <div class="tk-section-dot" style="background:var(--success,#059669)"></div>
-            <span class="tk-section-label">Today's Focus</span>
-          </div>
-          <div style="padding:18px 16px;text-align:center;font-size:13px;color:var(--text-3);line-height:1.5;">
-            <span style="font-size:20px;display:block;margin-bottom:6px;">✓</span>
-            Nothing urgent today — you're ahead of the game.
-          </div>
-        </div>`}
-
       ${recurringToday.length > 0 ? tkSectionHTML('__recurring_today__', 'Recurring Today', recurringToday, true) : ''}
 
-      ${pending.length === 0 && recurringToday.length === 0 && todaysThree.length === 0 ? `
+      ${pending.length === 0 && recurringToday.length === 0 ? `
         <div class="tk-empty">
           <div class="tk-empty-icon">✓</div>
           <div class="tk-empty-title">All clear!</div>
-          <div class="tk-empty-sub">No active tasks right now. Quick-capture above.</div>
+          <div class="tk-empty-sub">No pending tasks. Use quick capture above to add one.</div>
         </div>
       ` : Object.keys(pendingByCat).sort().map((cat, idx) =>
           tkSectionHTML(cat, cat, pendingByCat[cat], false, true, false, idx)
@@ -624,10 +595,10 @@ function renderBentoTaskRow(t, isRecurring = false) {
   const rowTint = !isDone && t.priority === 'P1' ? 'background:rgba(220,38,38,.025);' : '';
 
   return `
-  <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''}"
+  <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''} ${isExpanded ? 'sheet-open' : ''}"
        id="task-row-${t.id}"
        style="${accentStyle}${rowTint}"
-       onclick="toggleTaskDetails('${t.id}')">
+       onclick="${_itemSelectionMode ? `toggleTaskSelection('${t.id}')` : `toggleTaskDetails('${t.id}')`}">
 
     <!-- Checkbox -->
     <div class="task-check-ring ${isDone ? 'done' : ''}"
@@ -648,10 +619,8 @@ function renderBentoTaskRow(t, isRecurring = false) {
         <span class="task-title-text ${isDone ? 'done-text' : ''} ${t.priority === 'P1' && !isDone ? 'p1-text' : ''}">
           ${escapeHtml(t.title || '')}
         </span>
-        ${dateLabel && !isExpanded ? `<span class="${dateChipClass}">${dateLabel}</span>` : ''}
+        ${dateLabel ? `<span class="${dateChipClass}">${dateLabel}</span>` : ''}
       </div>
-
-      ${!isExpanded ? `
       <div class="tk-meta-row">
         ${subtasks.length > 0 ? `
         <span class="task-meta-chip ${doneSubCount === subtasks.length && subtasks.length > 0 ? 'done-chip' : ''}">
@@ -661,91 +630,215 @@ function renderBentoTaskRow(t, isRecurring = false) {
         ${recurLabel ? `<span class="task-meta-chip"><i data-lucide="repeat-2" style="width:9px;height:9px"></i> ${recurLabel}</span>` : ''}
         ${t.pomodoro_estimate > 0 ? `<span class="task-meta-chip" style="color:var(--primary)"><i data-lucide="timer" style="width:9px;height:9px"></i> ${t.pomodoro_estimate}×🍅</span>` : ''}
         ${t.category && _taskCategory === 'All' ? `<span class="task-meta-chip">${escapeHtml(t.category)}</span>` : ''}
-      </div>` : ''}
-    </div>
-  </div>
-
-  <!-- Expanded Panel -->
-  ${isExpanded ? `
-  <div class="subtask-expand">
-
-    <!-- Expanded meta row -->
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:${t.description||subtasks.length?'10px':'0'};">
-      ${dateLabel ? `<span class="task-meta-chip ${isOverdue?'':''}${dateChipClass.includes('overdue')?'':''}${dateChipClass.includes('today-chip')?'':''}" style="${isOverdue?'color:var(--danger,#DC2626);background:rgba(220,38,38,.07);border-color:rgba(220,38,38,.18);':dateChipClass.includes('today-chip')?'color:var(--primary);background:rgba(79,70,229,.07);border-color:rgba(79,70,229,.2);':''}">
-        <i data-lucide="calendar" style="width:9px;height:9px"></i> ${dateLabel}
-      </span>` : ''}
-      ${t.category ? `<span class="task-meta-chip">${escapeHtml(t.category)}</span>` : ''}
-      ${recurLabel ? `<span class="task-meta-chip"><i data-lucide="repeat-2" style="width:9px;height:9px"></i> ${recurLabel}</span>` : ''}
-      ${t.pomodoro_estimate > 0 ? `<span class="task-meta-chip" style="color:var(--primary)"><i data-lucide="timer" style="width:9px;height:9px"></i> ${t.pomodoro_estimate}×🍅</span>` : ''}
-    </div>
-
-    ${t.description ? `<div class="tk-expand-desc">${escapeHtml(t.description)}</div>` : ''}
-
-    ${subtasks.map((s, idx) => `
-    <div class="subtask-item">
-      <div class="subtask-mini-check ${s.done ? 'done' : ''}"
-           onclick="event.stopPropagation();toggleSubtask('${t.id}',${idx},${!s.done})">
-        ${s.done ? `<i data-lucide="check" style="width:8px;height:8px;color:white;stroke-width:3"></i>` : ''}
       </div>
-      <span style="flex:1;font-size:13px;${s.done?'text-decoration:line-through;color:var(--text-3);':'color:var(--text-1);'}">${escapeHtml(s.text)}</span>
-      <button style="border:none;background:none;cursor:pointer;opacity:.35;padding:3px;"
-              onclick="event.stopPropagation();window.deleteSubtask('${t.id}',${idx})">
-        <i data-lucide="x" style="width:12px;height:12px"></i>
-      </button>
-    </div>`).join('')}
-
-    <div class="tk-subtask-add">
-      <div class="tk-subtask-add-ring">
-        <i data-lucide="plus" style="width:9px;height:9px;color:var(--text-3)"></i>
-      </div>
-      <input type="text" id="inline-subtask-input-${t.id}"
-             class="tk-subtask-add-input"
-             placeholder="Add subtask…"
-             onclick="event.stopPropagation()"
-             onkeydown="if(event.key==='Enter'){event.stopPropagation();addInlineSubtask('${t.id}',this.value);this.value='';}">
     </div>
 
-    <!-- Action Buttons (visible only when expanded) -->
-    <div class="tk-row-actions">
-      <button class="tk-action-btn primary" onclick="event.stopPropagation();openEditTask('${t.id}')">
-        <i data-lucide="pencil" style="width:12px;height:12px"></i> Edit
-      </button>
-      ${t.pomodoro_estimate > 0 ? `
-      <button class="tk-action-btn primary" onclick="event.stopPropagation();quickStartPomodoro('task','${t.id}')">
-        <i data-lucide="timer" style="width:12px;height:12px"></i> Focus
-      </button>` : ''}
-      <button class="tk-action-btn" onclick="event.stopPropagation();addReminderToTask('${t.id}')">
-        <i data-lucide="bell" style="width:12px;height:12px"></i> Remind
-      </button>
-      <button class="tk-action-btn danger" style="margin-left:auto" onclick="event.stopPropagation();deleteTask('${t.id}')">
-        <i data-lucide="trash-2" style="width:12px;height:12px"></i> Delete
-      </button>
-    </div>
-  </div>` : ''}`;
+    <!-- Chevron -->
+    <i data-lucide="chevron-right" style="width:15px;height:15px;color:var(--text-3);opacity:.4;flex-shrink:0;margin-top:2px;"></i>
+  </div>`;
 }
 
 /* ══════════════════════════════════════════════════════
-   EXPAND / COLLAPSE TASK
+   TASK DETAIL BOTTOM SHEET
 ══════════════════════════════════════════════════════ */
-window.toggleTaskDetails = function (id) {
+let _sheetTaskId = null;
+
+function _tkSheetHTML(t) {
+  const isRecurring = !!(t.recurrence && t.recurrence !== 'none');
+  const isDone = isRecurring ? isRecurringTaskCompletedToday(t) : t.status === 'completed';
+  const today = new Date().toISOString().slice(0, 10);
+  const isOverdue = t.due_date && t.due_date < today && !isDone;
+  const pHex = { P1: '#DC2626', P2: '#D97706', P3: '#059669' }[t.priority] || '#94A3B8';
+  const subtasks = parseSubtasks(t);
+  const doneSubCount = subtasks.filter(s => s.done).length;
+
+  // Date label
+  let dateLabel = '', dateClass = '';
+  if (t.due_date) {
+    const diff = Math.round((new Date(t.due_date) - new Date(today)) / 86400000);
+    if (diff === 0)      { dateLabel = 'Today';               dateClass = 'today'; }
+    else if (diff === 1) { dateLabel = 'Tomorrow'; }
+    else if (diff === -1){ dateLabel = 'Yesterday';            if (isOverdue) dateClass = 'overdue'; }
+    else if (diff < 0)   { dateLabel = `${Math.abs(diff)}d overdue`; if (isOverdue) dateClass = 'overdue'; }
+    else if (diff < 7)   { dateLabel = `in ${diff} days`; }
+    else { dateLabel = new Date(t.due_date + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' }); }
+  }
+
+  const prioLabel = { P1: 'High Priority', P2: 'Medium Priority', P3: 'Low Priority' }[t.priority] || '';
+  const prioClass = { P1: 'p1', P2: 'p2', P3: 'p3' }[t.priority] || '';
+  const recurLabel = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }[t.recurrence] || '';
+
+  return `
+  <div class="tk-sheet-handle"></div>
+  <div class="tk-sheet-prio-bar" style="background:${pHex}"></div>
+
+  <div class="tk-sheet-header">
+    <div class="tk-sheet-title-row">
+      <div class="tk-sheet-check ${isDone ? 'done' : ''}" id="tkSheetCheck"
+           style="${!isDone ? `border-color:${pHex}66` : ''}"
+           onclick="${isRecurring ? `toggleRecurringTask('${t.id}',${!isDone})` : `toggleTaskOptimistic('${t.id}')`};_tkRefreshSheetRow('${t.id}')">
+        ${isDone ? `<i data-lucide="check" style="width:11px;height:11px;color:#fff;stroke-width:3"></i>` : ''}
+      </div>
+      <div class="tk-sheet-title ${isDone ? 'done' : ''}">${escapeHtml(t.title || '')}</div>
+      <button class="tk-sheet-close" onclick="closeTaskSheet()">
+        <i data-lucide="x" style="width:14px;height:14px"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="tk-sheet-chips">
+    ${dateLabel ? `<span class="tk-sheet-chip ${dateClass}"><i data-lucide="calendar" style="width:11px;height:11px"></i> ${dateLabel}</span>` : ''}
+    ${prioLabel ? `<span class="tk-sheet-chip ${prioClass}"><i data-lucide="flag" style="width:11px;height:11px"></i> ${prioLabel}</span>` : ''}
+    ${t.category ? `<span class="tk-sheet-chip"><i data-lucide="tag" style="width:11px;height:11px"></i> ${escapeHtml(t.category)}</span>` : ''}
+    ${recurLabel ? `<span class="tk-sheet-chip"><i data-lucide="repeat-2" style="width:11px;height:11px"></i> ${recurLabel}</span>` : ''}
+    ${t.due_time ? `<span class="tk-sheet-chip"><i data-lucide="clock" style="width:11px;height:11px"></i> ${t.due_time}</span>` : ''}
+    ${t.pomodoro_estimate > 0 ? `<span class="tk-sheet-chip p2"><i data-lucide="timer" style="width:11px;height:11px"></i> ${t.pomodoro_estimate} sessions</span>` : ''}
+  </div>
+
+  <div class="tk-sheet-body">
+    ${t.description ? `
+    <div class="tk-sheet-sec-label"><i data-lucide="align-left" style="width:12px;height:12px"></i> Notes</div>
+    <div class="tk-sheet-desc">${escapeHtml(t.description)}</div>` : ''}
+
+    <div class="tk-sheet-sec-label"><i data-lucide="list-checks" style="width:12px;height:12px"></i> Subtasks
+      ${subtasks.length > 0 ? `<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--success,#059669)">${doneSubCount}/${subtasks.length}</span>` : ''}
+    </div>
+
+    ${subtasks.length > 0 ? `
+    <div class="tk-sheet-subtask-list">
+      ${subtasks.map((s, idx) => `
+      <div class="tk-sheet-sub-item">
+        <div class="tk-sheet-sub-check ${s.done ? 'done' : ''}"
+             onclick="toggleSubtask('${t.id}',${idx},${!s.done});_tkRefreshSheetRow('${t.id}')">
+          ${s.done ? `<i data-lucide="check" style="width:9px;height:9px;color:#fff;stroke-width:3"></i>` : ''}
+        </div>
+        <span class="tk-sheet-sub-text ${s.done ? 'done' : ''}">${escapeHtml(s.text)}</span>
+        <button class="tk-sheet-sub-del" onclick="deleteSubtask('${t.id}',${idx});_tkRefreshSheetRow('${t.id}')">
+          <i data-lucide="x" style="width:13px;height:13px"></i>
+        </button>
+      </div>`).join('')}
+    </div>` : ''}
+
+    <div class="tk-sheet-sub-add">
+      <div style="width:20px;height:20px;min-width:20px;border-radius:50%;border:2px dashed var(--border-color);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <i data-lucide="plus" style="width:10px;height:10px;color:var(--text-3)"></i>
+      </div>
+      <input class="tk-sheet-sub-add-input" id="tkSheetSubInput"
+             placeholder="Add a subtask…"
+             onkeydown="if(event.key==='Enter'&&this.value.trim()){addInlineSubtask('${t.id}',this.value);this.value='';_tkRefreshSheetRow('${t.id}')}">
+    </div>
+  </div>
+
+  <div class="tk-sheet-actions">
+    <button class="tk-sheet-act primary" onclick="closeTaskSheet();openEditTask('${t.id}')">
+      <i data-lucide="pencil" style="width:18px;height:18px"></i>
+      Edit
+    </button>
+    <button class="tk-sheet-act ${t.pomodoro_estimate > 0 ? 'success' : ''}" onclick="closeTaskSheet();quickStartPomodoro('task','${t.id}')">
+      <i data-lucide="timer" style="width:18px;height:18px"></i>
+      Focus
+    </button>
+    <button class="tk-sheet-act" onclick="closeTaskSheet();addReminderToTask('${t.id}')">
+      <i data-lucide="bell" style="width:18px;height:18px"></i>
+      Remind
+    </button>
+    <button class="tk-sheet-act danger" onclick="closeTaskSheet();deleteTask('${t.id}')">
+      <i data-lucide="trash-2" style="width:18px;height:18px"></i>
+      Delete
+    </button>
+  </div>`;
+}
+
+window._tkRefreshSheetRow = function(id) {
+  // Re-render the task row in the list
+  const t = state.data.tasks.find(x => String(x.id) === String(id));
+  if (t) {
+    const row = document.getElementById(`task-row-${id}`);
+    if (row) {
+      const isRec = !!(t.recurrence && t.recurrence !== 'none');
+      row.outerHTML = renderBentoTaskRow(t, isRec);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+    // Refresh sheet content in-place
+    const sheet = document.getElementById('tkSheet');
+    if (sheet && _sheetTaskId === String(id)) {
+      sheet.innerHTML = _tkSheetHTML(t);
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+  }
+};
+
+window.openTaskSheet = function(id) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
 
-  _expandedTaskIds.has(String(id))
-    ? _expandedTaskIds.delete(String(id))
-    : _expandedTaskIds.add(String(id));
+  _sheetTaskId = String(id);
+  _expandedTaskIds.add(String(id));
 
+  // Inject overlay + sheet if not present
+  let overlay = document.getElementById('tkSheetOverlay');
+  let sheet = document.getElementById('tkSheet');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'tkSheetOverlay';
+    overlay.className = 'tk-sheet-overlay';
+    overlay.onclick = closeTaskSheet;
+    document.body.appendChild(overlay);
+  }
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'tkSheet';
+    sheet.className = 'tk-sheet';
+    document.body.appendChild(sheet);
+  }
+
+  sheet.innerHTML = _tkSheetHTML(t);
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  // Highlight the row
   const row = document.getElementById(`task-row-${id}`);
-  if (row) {
-    const isRecurring = !!(t.recurrence && t.recurrence !== 'none');
-    const next = row.nextElementSibling;
-    if (next && next.classList.contains('subtask-expand')) next.remove();
-    row.outerHTML = renderBentoTaskRow(t, isRecurring);
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-    const inp = document.getElementById(`inline-subtask-input-${id}`);
-    if (inp) inp.focus();
+  if (row) row.classList.add('sheet-open');
+
+  // Trigger animation next frame
+  requestAnimationFrame(() => {
+    overlay.classList.add('open');
+    sheet.classList.add('open');
+  });
+
+  // Swipe-down to close
+  let startY = 0;
+  sheet.ontouchstart = e => { startY = e.touches[0].clientY; };
+  sheet.ontouchmove = e => { if (e.touches[0].clientY - startY > 80) closeTaskSheet(); };
+};
+
+window.closeTaskSheet = function() {
+  const overlay = document.getElementById('tkSheetOverlay');
+  const sheet = document.getElementById('tkSheet');
+  if (!sheet) return;
+
+  overlay?.classList.remove('open');
+  sheet.classList.remove('open');
+
+  // Remove row highlight
+  if (_sheetTaskId) {
+    const row = document.getElementById(`task-row-${_sheetTaskId}`);
+    if (row) row.classList.remove('sheet-open');
+    _expandedTaskIds.delete(_sheetTaskId);
+    _sheetTaskId = null;
+  }
+
+  setTimeout(() => {
+    overlay?.remove();
+    sheet?.remove();
+  }, 380);
+};
+
+/* ── Toggle task row (opens sheet) ── */
+window.toggleTaskDetails = function(id) {
+  if (_sheetTaskId === String(id)) {
+    closeTaskSheet();
   } else {
-    renderTasks(_getSearchValue());
+    openTaskSheet(id);
   }
 };
 
@@ -756,10 +849,14 @@ function _reRenderTaskRow(taskId) {
   const row = document.getElementById(`task-row-${taskId}`);
   if (!row) return renderTasks(_getSearchValue());
   const isRecurring = !!(t.recurrence && t.recurrence !== 'none');
-  const next = row.nextElementSibling;
-  if (next && next.classList.contains('subtask-expand')) next.remove();
   row.outerHTML = renderBentoTaskRow(t, isRecurring);
   if (typeof lucide !== 'undefined') lucide.createIcons();
+  // Refresh sheet if open for this task
+  const sheet = document.getElementById('tkSheet');
+  if (sheet && _sheetTaskId === String(taskId)) {
+    sheet.innerHTML = _tkSheetHTML(t);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+  }
 }
 
 window.toggleSubtask = async function (taskId, subIndex, newStatus) {
