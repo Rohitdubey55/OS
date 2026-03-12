@@ -12,7 +12,7 @@ let _taskCategory = 'All';
 let _taskPriorityFilter = 'All';
 let _showCompletedTasks = true;
 
-const PRIORITY_COLOR = { P1: 'var(--danger, #EF4444)', P2: 'var(--warning, #F59E0B)', P3: 'var(--success, #10B981)' };
+const PRIORITY_COLOR = { P1: '#DC2626', P2: '#D97706', P3: '#059669' };
 const PRIORITY_LABEL = { P1: 'High', P2: 'Medium', P3: 'Low' };
 
 function getTaskTodayDayName() {
@@ -78,21 +78,26 @@ function parseDueTimeForInput(val) {
 window.tkQuickCapture = async function(e) {
   if (e.key !== 'Enter') return;
   const inp = document.getElementById('tkCaptureInput');
+  const catSel = document.getElementById('tkCaptureCat');
   const title = inp?.value?.trim();
   if (!title) return;
   inp.value = '';
   inp.placeholder = 'Saving…';
+  const category = catSel?.value || '';
   try {
     await apiCall('create', 'tasks', {
       title,
       priority: 'P2',
       status: 'pending',
+      category,
       due_date: new Date().toISOString().slice(0, 10),
       created_at: new Date().toISOString(),
       subtasks: '[]'
     });
+    inp.placeholder = 'Capture a task… press Enter to save';
     await refreshData('tasks');
   } catch (e) {
+    inp.placeholder = 'Capture a task… press Enter to save';
     showToast('Failed to save task');
   }
 };
@@ -191,187 +196,208 @@ function renderTasks(filter = '') {
 
   document.getElementById('main').innerHTML = `
   <style>
-    /* ── Shell ── */
-    .tk-shell { display:flex; flex-direction:column; height:calc(100vh - env(safe-area-inset-top,44px) - 80px); overflow:hidden; }
+    /* ══ SHELL ══ */
+    .tk-shell { display:flex; flex-direction:column; height:calc(100vh - env(safe-area-inset-top,44px) - 80px); overflow:hidden; background:var(--surface-base); }
 
-    /* ── Header ── */
-    .tk-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 10px; flex-shrink:0; }
-    .tk-header-left { display:flex; align-items:center; gap:8px; }
-    .tk-header-title { font-size:22px; font-weight:800; color:var(--text-1); letter-spacing:-0.5px; }
-    .tk-count-badge { font-size:11px; font-weight:700; background:var(--primary); color:#fff; border-radius:20px; padding:2px 8px; }
-    .tk-header-right { display:flex; align-items:center; gap:6px; }
-    .tk-add-btn { display:inline-flex; align-items:center; gap:5px; padding:8px 16px; background:var(--primary); color:#fff; border:none; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer; transition:opacity .15s,transform .15s; }
-    .tk-add-btn:active { opacity:.85; transform:scale(.97); }
-    .tk-icon-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border:none; background:transparent; border-radius:10px; cursor:pointer; color:var(--text-muted); transition:background .15s; }
-    .tk-icon-btn:hover,.tk-icon-btn:active { background:var(--surface-2,rgba(0,0,0,.05)); }
-    .tk-icon-btn.active { color:var(--primary); }
+    /* ══ HEADER ══ */
+    .tk-header { display:flex; align-items:center; justify-content:space-between; padding:16px 16px 12px; flex-shrink:0; }
+    .tk-header-left { display:flex; align-items:center; gap:10px; }
+    .tk-header-title { font-size:24px; font-weight:800; color:var(--text-1); letter-spacing:-0.8px; line-height:1; }
+    .tk-count-badge { font-size:11px; font-weight:700; background:var(--primary); color:#fff; border-radius:20px; padding:3px 9px; letter-spacing:.2px; }
+    .tk-header-right { display:flex; align-items:center; gap:4px; }
+    .tk-add-btn { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; background:var(--primary); color:#fff; border:none; border-radius:22px; font-size:13px; font-weight:700; cursor:pointer; transition:all .2s; box-shadow:0 2px 8px rgba(79,70,229,.25); letter-spacing:.1px; }
+    .tk-add-btn:active { opacity:.88; transform:scale(.96); box-shadow:none; }
+    .tk-icon-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border:none; background:transparent; border-radius:10px; cursor:pointer; color:var(--text-3); transition:all .15s; }
+    .tk-icon-btn:hover,.tk-icon-btn:active { background:var(--surface-2); color:var(--text-1); }
+    .tk-icon-btn.active { color:var(--primary); background:var(--primary-soft,rgba(79,70,229,.08)); }
 
-    /* ── Quick Capture ── */
-    .tk-capture-wrap { padding:0 16px 8px; flex-shrink:0; }
-    .tk-capture { display:flex; align-items:center; gap:10px; background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:14px; padding:11px 14px; transition:border-color .2s,box-shadow .2s; }
-    .tk-capture:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent); }
-    .tk-capture-input { flex:1; background:transparent; border:none; outline:none; font-size:14px; color:var(--text-1); }
-    .tk-capture-input::placeholder { color:var(--text-muted); }
+    /* ══ QUICK CAPTURE ══ */
+    .tk-capture-wrap { padding:0 16px 10px; flex-shrink:0; }
+    .tk-capture { display:flex; align-items:center; gap:0; background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:14px; padding:0; overflow:hidden; transition:border-color .25s,box-shadow .25s; box-shadow:var(--shadow-sm); }
+    .tk-capture:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.12), var(--shadow-sm); }
+    .tk-capture-icon { display:flex; align-items:center; padding:0 12px 0 14px; color:var(--primary); flex-shrink:0; }
+    .tk-capture-input { flex:1; background:transparent; border:none; outline:none; font-size:14px; color:var(--text-1); padding:12px 0; min-width:0; }
+    .tk-capture-input::placeholder { color:var(--text-3); }
+    .tk-capture-divider { width:1px; background:var(--border-color); height:20px; flex-shrink:0; margin:0 2px; }
+    .tk-capture-cat { border:none; background:transparent; outline:none; font-size:12px; font-weight:600; color:var(--text-3); padding:12px 14px 12px 10px; cursor:pointer; flex-shrink:0; max-width:100px; }
+    .tk-capture-cat:focus { color:var(--primary); }
 
-    /* ── Filter Pills ── */
-    .tk-filter-row { display:flex; gap:6px; padding:0 16px 6px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; }
+    /* ══ FILTER PILLS ══ */
+    .tk-filter-row { display:flex; gap:6px; padding:0 16px 8px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; }
     .tk-filter-row::-webkit-scrollbar { display:none; }
-    .tk-cat-pill { display:inline-flex; align-items:center; padding:5px 13px; border-radius:20px; font-size:12.5px; font-weight:500; background:var(--surface-2,rgba(0,0,0,.04)); border:1.5px solid transparent; color:var(--text-muted); cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all .15s; }
-    .tk-cat-pill.active { background:color-mix(in srgb,var(--primary) 12%,transparent); border-color:var(--primary); color:var(--primary); font-weight:700; }
+    .tk-cat-pill { display:inline-flex; align-items:center; padding:6px 14px; border-radius:22px; font-size:12.5px; font-weight:500; background:var(--surface-1); border:1.5px solid var(--border-color); color:var(--text-3); cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all .18s; }
+    .tk-cat-pill:active { transform:scale(.96); }
+    .tk-cat-pill.active { background:var(--primary); border-color:var(--primary); color:#fff; font-weight:700; box-shadow:0 2px 8px rgba(79,70,229,.2); }
 
-    /* ── Priority + Sort Row ── */
+    /* ══ PRIORITY + SORT ROW ══ */
     .tk-priority-row { display:flex; align-items:center; gap:8px; padding:0 16px 10px; flex-shrink:0; }
-    .tk-prio-group { display:flex; align-items:center; gap:5px; background:var(--surface-2,rgba(0,0,0,.04)); border-radius:20px; padding:5px 10px; }
-    .tk-prio-dot { width:18px; height:18px; border-radius:50%; background:var(--dot-color,#999); border:3px solid transparent; cursor:pointer; transition:transform .15s,box-shadow .15s; flex-shrink:0; }
-    .tk-prio-dot.all-prio { width:auto; height:auto; background:transparent; border:none; padding:0 4px; font-size:11px; font-weight:700; color:var(--text-muted); border-radius:0; }
+    .tk-prio-group { display:flex; align-items:center; gap:4px; background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:22px; padding:4px 10px 4px 8px; }
+    .tk-prio-dot { width:18px; height:18px; border-radius:50%; background:var(--dot-color,#999); border:2.5px solid transparent; cursor:pointer; transition:all .18s; flex-shrink:0; }
+    .tk-prio-dot.all-prio { width:auto; height:auto; background:transparent; border:none; padding:0 2px; font-size:11.5px; font-weight:700; color:var(--text-3); border-radius:0; }
     .tk-prio-dot.all-prio.active { color:var(--primary); }
-    .tk-prio-dot:not(.all-prio).active { transform:scale(1.3); box-shadow:0 0 0 3px rgba(255,255,255,.7),0 0 0 5px var(--dot-color); }
-    .tk-prio-dot:hover { transform:scale(1.15); }
-    .tk-sort-select { margin-left:auto; background:var(--surface-2,rgba(0,0,0,.04)); border:1px solid var(--border-color); border-radius:10px; padding:5px 10px; font-size:12px; color:var(--text-1); cursor:pointer; outline:none; }
+    .tk-prio-dot:not(.all-prio).active { transform:scale(1.25); box-shadow:0 0 0 2.5px #fff, 0 0 0 4.5px var(--dot-color); }
+    .tk-sort-select { margin-left:auto; background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:10px; padding:6px 10px; font-size:12px; color:var(--text-2); cursor:pointer; outline:none; font-weight:500; }
+    .tk-toggle-done { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border:1.5px solid var(--border-color); background:var(--surface-1); border-radius:10px; cursor:pointer; color:var(--text-3); transition:all .15s; flex-shrink:0; }
+    .tk-toggle-done.active { border-color:var(--success,#059669); color:var(--success,#059669); background:rgba(5,150,105,.06); }
 
-    /* ── Focus Card ── */
-    .tk-focus-card { margin:0 16px 10px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 2px 8px rgba(0,0,0,.03); flex-shrink:0; }
-    .tk-focus-date { font-size:13px; font-weight:700; color:var(--text-1); margin-bottom:6px; }
+    /* ══ FOCUS CARD ══ */
+    .tk-focus-card { margin:0 16px 10px; background:linear-gradient(135deg,var(--primary) 0%,var(--accent,#8B5CF6) 100%); border-radius:18px; padding:16px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 4px 20px rgba(79,70,229,.22); flex-shrink:0; position:relative; overflow:hidden; }
+    .tk-focus-card::before { content:''; position:absolute; top:-30px; right:-20px; width:100px; height:100px; border-radius:50%; background:rgba(255,255,255,.06); pointer-events:none; }
+    .tk-focus-card::after { content:''; position:absolute; bottom:-40px; right:30px; width:80px; height:80px; border-radius:50%; background:rgba(255,255,255,.04); pointer-events:none; }
+    .tk-focus-date { font-size:11px; font-weight:600; color:rgba(255,255,255,.7); margin-bottom:5px; letter-spacing:.3px; text-transform:uppercase; }
+    .tk-focus-headline { font-size:16px; font-weight:800; color:#fff; letter-spacing:-.3px; margin-bottom:8px; }
     .tk-focus-stats { display:flex; gap:6px; flex-wrap:wrap; }
-    .tk-stat-badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--surface-2,rgba(0,0,0,.05)); color:var(--text-muted); border:1px solid var(--border-color); }
-    .tk-stat-badge.danger { background:rgba(239,68,68,.08); color:var(--danger,#EF4444); border-color:rgba(239,68,68,.2); }
-    .tk-stat-badge.urgent { background:rgba(245,158,11,.08); color:var(--warning,#F59E0B); border-color:rgba(245,158,11,.2); }
-    .tk-focus-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
-    .tk-focus-pct { font-size:20px; font-weight:800; color:var(--primary); line-height:1; }
-    .tk-focus-track { width:80px; height:6px; background:var(--surface-2,rgba(0,0,0,.07)); border-radius:3px; overflow:hidden; }
-    .tk-focus-fill { height:100%; background:linear-gradient(90deg,var(--primary),var(--success,#10B981)); border-radius:3px; transition:width .8s cubic-bezier(.2,.8,.2,1); }
+    .tk-stat-badge { font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px; background:rgba(255,255,255,.15); color:rgba(255,255,255,.9); border:1px solid rgba(255,255,255,.15); backdrop-filter:blur(4px); }
+    .tk-stat-badge.danger { background:rgba(239,68,68,.25); color:#fff; border-color:rgba(239,68,68,.3); }
+    .tk-stat-badge.urgent { background:rgba(245,158,11,.25); color:#fff; border-color:rgba(245,158,11,.3); }
+    .tk-focus-right { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; z-index:1; }
+    .tk-focus-pct { font-size:28px; font-weight:900; color:#fff; line-height:1; letter-spacing:-1px; }
+    .tk-focus-label { font-size:10px; font-weight:600; color:rgba(255,255,255,.6); text-align:right; letter-spacing:.3px; }
+    .tk-focus-track { width:72px; height:5px; background:rgba(255,255,255,.2); border-radius:3px; overflow:hidden; }
+    .tk-focus-fill { height:100%; background:#fff; border-radius:3px; transition:width .9s cubic-bezier(.2,.8,.2,1); }
 
-    /* ── Overdue Banner ── */
-    .tk-overdue-banner { margin:0 16px 8px; background:rgba(239,68,68,.06); border:1px solid rgba(239,68,68,.2); border-radius:10px; padding:8px 12px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--danger,#EF4444); flex-shrink:0; }
-    .tk-overdue-banner button { margin-left:auto; font-size:11px; font-weight:700; background:rgba(239,68,68,.12); border:none; border-radius:8px; padding:3px 10px; color:var(--danger,#EF4444); cursor:pointer; }
+    /* ══ OVERDUE BANNER ══ */
+    .tk-overdue-banner { margin:0 16px 8px; background:rgba(220,38,38,.05); border:1px solid rgba(220,38,38,.15); border-radius:12px; padding:9px 14px; display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--danger,#DC2626); flex-shrink:0; }
+    .tk-overdue-banner strong { font-weight:700; }
+    .tk-overdue-banner button { margin-left:auto; font-size:11.5px; font-weight:700; background:rgba(220,38,38,.1); border:none; border-radius:8px; padding:4px 12px; color:var(--danger,#DC2626); cursor:pointer; white-space:nowrap; }
 
-    /* ── Scrollable List ── */
+    /* ══ SCROLLABLE LIST ══ */
     .tk-list { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 16px 80px; }
 
-    /* ── Section Card ── */
-    .tk-section { background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; margin-bottom:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.03); animation:tkIn .3s cubic-bezier(.2,.8,.2,1) both; }
-    @keyframes tkIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
-    .tk-section-header { display:flex; align-items:center; gap:8px; padding:10px 14px; cursor:pointer; user-select:none; background:transparent; border-bottom:1px solid var(--border-color); transition:background .15s; }
-    .tk-section-header:hover { background:var(--surface-2,rgba(0,0,0,.02)); }
-    .tk-section-dot { width:8px; height:8px; border-radius:50%; background:var(--primary); flex-shrink:0; }
-    .tk-section-label { flex:1; font-size:13px; font-weight:700; color:var(--text-1); }
-    .tk-section-count { font-size:11px; color:var(--text-muted); font-weight:600; }
-    .tk-section-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; }
-    .tk-section-badge.urgent { background:rgba(239,68,68,.1); color:var(--danger,#EF4444); }
-    .tk-section-badge.overdue { background:rgba(239,68,68,.1); color:var(--danger,#EF4444); }
-    .tk-section-chevron { width:14px; height:14px; color:var(--text-muted); opacity:.5; transition:transform .2s; flex-shrink:0; }
-    .tk-section-chevron.open { transform:rotate(90deg); }
+    /* ══ SECTION CARD ══ */
+    .tk-section { background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; margin-bottom:10px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03); animation:tkIn .3s cubic-bezier(.2,.8,.2,1) both; }
+    @keyframes tkIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .tk-section-header { display:flex; align-items:center; gap:9px; padding:11px 14px; cursor:pointer; user-select:none; background:transparent; transition:background .15s; }
+    .tk-section-header:active { background:var(--surface-2); }
+    .tk-section-dot { width:7px; height:7px; border-radius:50%; background:var(--primary); flex-shrink:0; }
+    .tk-section-label { flex:1; font-size:12.5px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:.5px; }
+    .tk-section-count { font-size:12px; font-weight:600; color:var(--text-3); }
+    .tk-section-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px; }
+    .tk-section-badge.urgent { background:rgba(220,38,38,.08); color:var(--danger,#DC2626); }
+    .tk-section-badge.overdue { background:rgba(220,38,38,.08); color:var(--danger,#DC2626); }
+    .tk-section-tasks { border-top:1px solid var(--border-color); }
 
-    /* ── Task Row ── */
-    .task-bento-row { display:flex; align-items:flex-start; gap:11px; padding:11px 14px; border-bottom:1px solid var(--border-color); cursor:pointer; transition:background .15s; position:relative; animation:tkRowIn .25s ease both; }
-    @keyframes tkRowIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+    /* ══ TASK ROW ══ */
+    .task-bento-row { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; border-bottom:1px solid var(--border-color); cursor:pointer; transition:background .15s; position:relative; animation:tkRowIn .22s ease both; }
+    @keyframes tkRowIn { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:translateX(0)} }
     .task-bento-row:last-child { border-bottom:none; }
-    .task-bento-row:hover { background:var(--surface-2,rgba(0,0,0,.02)); }
-    .task-bento-row.done { opacity:.5; }
-    .task-bento-row.selected { background:color-mix(in srgb,var(--primary) 8%,transparent); }
+    .task-bento-row:active { background:var(--surface-2); }
+    .task-bento-row.done { opacity:.48; }
+    .task-bento-row.selected { background:var(--primary-soft,rgba(79,70,229,.06)); }
     .task-bento-row.animating-done { animation:tkDone .4s ease forwards; }
-    @keyframes tkDone { 0%{opacity:1} 50%{background:rgba(16,185,129,.12);transform:scale(1.01)} 100%{opacity:.5} }
+    @keyframes tkDone { 0%{opacity:1} 50%{background:rgba(5,150,105,.08);transform:scale(1.005)} 100%{opacity:.48} }
 
-    /* ── Checkbox ── */
-    .task-check-ring { width:20px; height:20px; min-width:20px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s; flex-shrink:0; margin-top:1px; }
-    .task-check-ring.done { background:var(--primary); border-color:var(--primary); }
-    .task-check-ring:hover:not(.done) { border-color:var(--primary); background:color-mix(in srgb,var(--primary) 8%,transparent); }
+    /* ══ CHECKBOX ══ */
+    .task-check-ring { width:21px; height:21px; min-width:21px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s cubic-bezier(.2,.8,.2,1); flex-shrink:0; margin-top:1px; }
+    .task-check-ring.done { background:var(--success,#059669); border-color:var(--success,#059669); }
+    .task-check-ring:active:not(.done) { border-color:var(--primary); background:var(--primary-soft,rgba(79,70,229,.08)); transform:scale(.92); }
 
-    /* ── Row Content ── */
+    /* ══ ROW CONTENT ══ */
     .tk-row-content { flex:1; min-width:0; }
-    .tk-row-top { display:flex; align-items:flex-start; gap:6px; }
-    .task-title-text { font-size:14px; font-weight:500; line-height:1.35; color:var(--text-1); flex:1; min-width:0; word-break:break-word; }
-    .task-title-text.done-text { text-decoration:line-through; color:var(--text-muted); }
-    .task-title-text.p1-text { font-weight:700; font-size:14.5px; }
-    .tk-date-chip { font-size:11px; font-weight:600; padding:2px 7px; border-radius:20px; background:var(--surface-2); color:var(--text-muted); border:1px solid var(--border-color); white-space:nowrap; flex-shrink:0; }
-    .tk-date-chip.overdue { background:rgba(239,68,68,.08); color:var(--danger,#EF4444); border-color:rgba(239,68,68,.2); }
-    .tk-date-chip.today-chip { background:color-mix(in srgb,var(--primary) 10%,transparent); color:var(--primary); border-color:color-mix(in srgb,var(--primary) 30%,transparent); }
+    .tk-row-top { display:flex; align-items:flex-start; gap:7px; }
+    .task-title-text { font-size:14px; font-weight:500; line-height:1.4; color:var(--text-1); flex:1; min-width:0; word-break:break-word; }
+    .task-title-text.done-text { text-decoration:line-through; color:var(--text-3); }
+    .task-title-text.p1-text { font-weight:700; }
+    .tk-date-chip { font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--surface-2); color:var(--text-3); border:1px solid var(--border-color); white-space:nowrap; flex-shrink:0; line-height:1.6; }
+    .tk-date-chip.overdue { background:rgba(220,38,38,.07); color:var(--danger,#DC2626); border-color:rgba(220,38,38,.18); }
+    .tk-date-chip.today-chip { background:rgba(79,70,229,.08); color:var(--primary); border-color:rgba(79,70,229,.2); }
 
-    /* ── Meta chips (collapsed) ── */
+    /* ══ META CHIPS ══ */
     .tk-meta-row { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
-    .task-meta-chip { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; color:var(--text-muted); background:var(--surface-2,rgba(0,0,0,.04)); padding:2px 7px; border-radius:20px; border:1px solid var(--border-color); white-space:nowrap; }
-    .task-meta-chip.done-chip { color:var(--success,#10B981); border-color:rgba(16,185,129,.3); }
+    .task-meta-chip { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; color:var(--text-3); background:var(--surface-2); padding:2px 7px; border-radius:20px; border:1px solid var(--border-color); white-space:nowrap; }
+    .task-meta-chip.done-chip { color:var(--success,#059669); background:rgba(5,150,105,.06); border-color:rgba(5,150,105,.2); }
 
-    /* ── Expanded panel ── */
-    .subtask-expand { padding:10px 14px 12px 45px; border-bottom:1px solid var(--border-color); background:var(--surface-1); animation:tkIn .2s ease; }
-    .tk-expand-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin-bottom:10px; }
-    .subtask-item { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:12.5px; border-bottom:1px solid rgba(0,0,0,.04); }
+    /* ══ EXPANDED PANEL ══ */
+    .subtask-expand { padding:10px 14px 14px 47px; background:var(--surface-2); border-top:1px solid var(--border-color); animation:tkExpandIn .2s ease; }
+    @keyframes tkExpandIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+    .tk-expand-desc { font-size:13px; color:var(--text-3); line-height:1.6; margin-bottom:12px; padding:10px 12px; background:var(--surface-1); border-radius:10px; border:1px solid var(--border-color); }
+    .subtask-item { display:flex; align-items:center; gap:9px; padding:6px 0; font-size:13px; border-bottom:1px solid var(--border-color); }
     .subtask-item:last-of-type { border-bottom:none; }
-    .subtask-mini-check { width:16px; height:16px; min-width:16px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s; flex-shrink:0; }
-    .subtask-mini-check.done { background:var(--primary); border-color:var(--primary); }
-    .tk-subtask-add { display:flex; align-items:center; gap:8px; padding:6px 0; margin-top:4px; }
-    .tk-subtask-add-ring { width:16px; height:16px; min-width:16px; border:2px dashed var(--border-color); border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .tk-subtask-add-input { flex:1; border:none; background:transparent; outline:none; font-size:12.5px; color:var(--text-1); }
+    .subtask-mini-check { width:17px; height:17px; min-width:17px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s; flex-shrink:0; }
+    .subtask-mini-check.done { background:var(--success,#059669); border-color:var(--success,#059669); }
+    .tk-subtask-add { display:flex; align-items:center; gap:8px; padding:7px 0; margin-top:4px; }
+    .tk-subtask-add-ring { width:17px; height:17px; min-width:17px; border:2px dashed var(--border-color); border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .tk-subtask-add-input { flex:1; border:none; background:transparent; outline:none; font-size:13px; color:var(--text-1); }
+    .tk-subtask-add-input::placeholder { color:var(--text-3); }
 
-    /* ── Row action buttons (shown only when expanded) ── */
-    .tk-row-actions { display:flex; gap:4px; margin-top:10px; padding-top:8px; border-top:1px solid var(--border-color); }
-    .tk-action-btn { display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:8px; font-size:11.5px; font-weight:600; border:1px solid var(--border-color); background:var(--surface-2,rgba(0,0,0,.04)); color:var(--text-muted); cursor:pointer; transition:all .15s; }
-    .tk-action-btn:hover { background:var(--surface-base,rgba(0,0,0,.07)); color:var(--text-1); }
-    .tk-action-btn.danger:hover { background:rgba(239,68,68,.08); color:var(--danger,#EF4444); border-color:rgba(239,68,68,.2); }
-    .tk-action-btn.primary { color:var(--primary); border-color:color-mix(in srgb,var(--primary) 30%,transparent); background:color-mix(in srgb,var(--primary) 6%,transparent); }
+    /* ══ ROW ACTION BUTTONS ══ */
+    .tk-row-actions { display:flex; gap:6px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border-color); flex-wrap:wrap; }
+    .tk-action-btn { display:inline-flex; align-items:center; gap:5px; padding:6px 13px; border-radius:9px; font-size:12px; font-weight:600; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); cursor:pointer; transition:all .15s; }
+    .tk-action-btn:active { transform:scale(.96); }
+    .tk-action-btn:hover { background:var(--surface-3,#E2E8F0); }
+    .tk-action-btn.danger { color:var(--danger,#DC2626); border-color:rgba(220,38,38,.2); background:rgba(220,38,38,.04); }
+    .tk-action-btn.danger:active { background:rgba(220,38,38,.1); }
+    .tk-action-btn.primary { color:var(--primary); border-color:rgba(79,70,229,.25); background:rgba(79,70,229,.05); }
+    .tk-action-btn.primary:active { background:rgba(79,70,229,.12); }
 
-    /* ── Empty State ── */
-    .tk-empty { display:flex; flex-direction:column; align-items:center; padding:48px 24px; text-align:center; }
-    .tk-empty-icon { width:56px; height:56px; border-radius:50%; background:rgba(16,185,129,.1); display:flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:14px; }
-    .tk-empty-title { font-size:16px; font-weight:700; color:var(--text-1); margin-bottom:4px; }
-    .tk-empty-sub { font-size:13px; color:var(--text-muted); }
+    /* ══ EMPTY STATE ══ */
+    .tk-empty { display:flex; flex-direction:column; align-items:center; padding:52px 24px; text-align:center; }
+    .tk-empty-icon { width:60px; height:60px; border-radius:50%; background:rgba(5,150,105,.1); display:flex; align-items:center; justify-content:center; font-size:24px; margin-bottom:16px; }
+    .tk-empty-title { font-size:17px; font-weight:700; color:var(--text-1); margin-bottom:5px; }
+    .tk-empty-sub { font-size:13px; color:var(--text-3); line-height:1.5; }
 
-    /* ─── TWO-STEP MODAL ─── */
+    /* ══ TWO-STEP MODAL ══ */
     .tk-modal-wrap { position:relative; overflow:hidden; }
-    .tk-modal-slider { display:flex; transition:transform .3s cubic-bezier(.4,0,.2,1); width:200%; }
+    .tk-modal-slider { display:flex; transition:transform .32s cubic-bezier(.4,0,.2,1); width:200%; }
     .tk-modal-panel { width:50%; min-width:50%; display:flex; flex-direction:column; gap:0; }
-    .tk-modal-header { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
-    .tk-modal-title { flex:1; font-size:17px; font-weight:800; color:var(--text-1); letter-spacing:-.3px; }
-    .tk-modal-close { display:flex; align-items:center; justify-content:center; width:30px; height:30px; border:none; background:var(--surface-2,rgba(0,0,0,.06)); border-radius:50%; cursor:pointer; color:var(--text-muted); font-size:16px; font-weight:600; }
-    .tk-back-pill { display:inline-flex; align-items:center; gap:4px; padding:5px 12px; border-radius:20px; border:1px solid var(--border-color); background:var(--surface-2); font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; }
+    .tk-modal-header { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
+    .tk-modal-title { flex:1; font-size:18px; font-weight:800; color:var(--text-1); letter-spacing:-.4px; }
+    .tk-modal-close { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border:none; background:var(--surface-2); border-radius:50%; cursor:pointer; color:var(--text-3); font-size:17px; transition:all .15s; }
+    .tk-modal-close:active { background:var(--surface-3); }
+    .tk-back-pill { display:inline-flex; align-items:center; gap:5px; padding:6px 14px; border-radius:22px; border:1.5px solid var(--border-color); background:var(--surface-2); font-size:12.5px; font-weight:600; color:var(--text-2); cursor:pointer; transition:all .15s; }
+    .tk-back-pill:active { background:var(--surface-3); }
 
     /* Title input */
-    .tk-title-input { width:100%; border:none; outline:none; font-size:18px; font-weight:700; color:var(--text-1); background:transparent; padding:4px 0 12px; border-bottom:2px solid var(--border-color); margin-bottom:18px; letter-spacing:-.2px; transition:border-color .2s; box-sizing:border-box; }
+    .tk-title-input { width:100%; border:none; outline:none; font-size:19px; font-weight:700; color:var(--text-1); background:transparent; padding:4px 0 14px; border-bottom:2px solid var(--border-color); margin-bottom:20px; letter-spacing:-.3px; transition:border-color .2s; box-sizing:border-box; }
     .tk-title-input:focus { border-bottom-color:var(--primary); }
-    .tk-title-input::placeholder { color:var(--text-muted); font-weight:400; }
+    .tk-title-input::placeholder { color:var(--text-3); font-weight:400; font-size:17px; }
 
     /* Priority picker */
-    .tk-prio-picker { display:flex; gap:6px; }
-    .tk-prio-pick { flex:1; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 8px; border-radius:10px; border:1.5px solid var(--border-color); background:var(--surface-2); font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; transition:all .15s; }
-    .tk-prio-pick.selected { border-color:var(--pick-color,var(--primary)); background:color-mix(in srgb,var(--pick-color,var(--primary)) 10%,transparent); color:var(--pick-color,var(--primary)); }
-    .tk-prio-pick .pk-dot { width:8px; height:8px; border-radius:50%; background:var(--pick-color); }
+    .tk-prio-picker { display:flex; gap:7px; }
+    .tk-prio-pick { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 8px; border-radius:12px; border:1.5px solid var(--border-color); background:var(--surface-2); font-size:12.5px; font-weight:600; color:var(--text-3); cursor:pointer; transition:all .18s; }
+    .tk-prio-pick:active { transform:scale(.97); }
+    .tk-prio-pick.selected { border-color:var(--pick-color,var(--primary)); background:color-mix(in srgb,var(--pick-color,var(--primary)) 10%,transparent); color:var(--pick-color,var(--primary)); font-weight:700; }
+    .tk-prio-pick .pk-dot { width:9px; height:9px; border-radius:50%; background:var(--pick-color); flex-shrink:0; }
 
     /* Field groups */
     .tk-field-section { margin-bottom:14px; }
-    .tk-field-label { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:7px; display:block; }
+    .tk-field-label { font-size:10.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.7px; margin-bottom:7px; display:block; }
     .tk-field-row { display:flex; gap:10px; margin-bottom:14px; }
     .tk-field-row .tk-field-section { flex:1; margin-bottom:0; }
-    .tk-input { width:100%; box-sizing:border-box; background:var(--surface-2,rgba(0,0,0,.04)); border:1.5px solid var(--border-color); border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--text-1); outline:none; transition:border-color .2s; }
-    .tk-input:focus { border-color:var(--primary); }
-    .tk-select { width:100%; box-sizing:border-box; background:var(--surface-2,rgba(0,0,0,.04)); border:1.5px solid var(--border-color); border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--text-1); outline:none; cursor:pointer; }
-    .tk-textarea { width:100%; box-sizing:border-box; background:var(--surface-2,rgba(0,0,0,.04)); border:1.5px solid var(--border-color); border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--text-1); outline:none; resize:none; line-height:1.5; transition:border-color .2s; }
-    .tk-textarea:focus { border-color:var(--primary); }
+    .tk-input { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; transition:border-color .2s,box-shadow .2s; }
+    .tk-input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
+    .tk-select { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; cursor:pointer; transition:border-color .2s; }
+    .tk-select:focus { border-color:var(--primary); }
+    .tk-textarea { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; resize:none; line-height:1.55; transition:border-color .2s,box-shadow .2s; }
+    .tk-textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
 
     /* Step 2 sections */
-    .tk-modal-section { background:var(--surface-2,rgba(0,0,0,.03)); border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; }
-    .tk-modal-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--primary); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
-    .tk-modal-subtask-add { width:100%; padding:7px; border:1.5px dashed var(--border-color); border-radius:8px; background:transparent; font-size:12.5px; color:var(--text-muted); cursor:pointer; text-align:center; margin-top:6px; transition:border-color .15s,color .15s; }
-    .tk-modal-subtask-add:hover { border-color:var(--primary); color:var(--primary); }
-    .tk-day-picker { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
-    .tk-day-label { font-size:11.5px; display:flex; align-items:center; gap:4px; background:var(--surface-2); padding:4px 8px; border-radius:8px; cursor:pointer; border:1px solid var(--border-color); transition:all .15s; }
+    .tk-modal-section { background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:13px; padding:13px; margin-bottom:12px; }
+    .tk-modal-section-title { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--primary); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .tk-modal-subtask-add { width:100%; padding:8px; border:1.5px dashed var(--border-color); border-radius:9px; background:transparent; font-size:12.5px; color:var(--text-3); cursor:pointer; text-align:center; margin-top:8px; transition:all .15s; }
+    .tk-modal-subtask-add:hover { border-color:var(--primary); color:var(--primary); background:rgba(79,70,229,.04); }
+    .tk-day-picker { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+    .tk-day-label { font-size:12px; display:flex; align-items:center; gap:4px; background:var(--surface-1); padding:5px 10px; border-radius:9px; cursor:pointer; border:1.5px solid var(--border-color); transition:all .15s; }
     .tk-day-label input { display:none; }
-    .tk-day-label.checked { background:color-mix(in srgb,var(--primary) 12%,transparent); border-color:var(--primary); color:var(--primary); font-weight:700; }
+    .tk-day-label.checked { background:rgba(79,70,229,.08); border-color:var(--primary); color:var(--primary); font-weight:700; }
 
     /* Modal Actions */
     .tk-modal-actions { display:flex; align-items:center; gap:10px; padding-top:16px; margin-top:4px; border-top:1px solid var(--border-color); }
-    .tk-modal-more { display:inline-flex; align-items:center; gap:4px; padding:9px 16px; border-radius:10px; border:1.5px solid var(--border-color); background:transparent; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; transition:all .15s; }
-    .tk-modal-more:hover { border-color:var(--primary); color:var(--primary); }
-    .tk-modal-save { flex:1; padding:10px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-size:14px; font-weight:700; cursor:pointer; transition:opacity .15s,transform .15s; }
-    .tk-modal-save:active { opacity:.85; transform:scale(.98); }
-    .tk-modal-cancel { padding:10px 16px; border-radius:10px; border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-muted); font-size:13px; font-weight:600; cursor:pointer; }
+    .tk-modal-more { display:inline-flex; align-items:center; gap:5px; padding:10px 18px; border-radius:11px; border:1.5px solid var(--border-color); background:transparent; font-size:13px; font-weight:600; color:var(--text-2); cursor:pointer; transition:all .18s; }
+    .tk-modal-more:hover { border-color:var(--primary); color:var(--primary); background:rgba(79,70,229,.04); }
+    .tk-modal-save { flex:1; padding:11px; border-radius:11px; border:none; background:var(--primary); color:#fff; font-size:14px; font-weight:700; cursor:pointer; transition:all .18s; box-shadow:0 2px 8px rgba(79,70,229,.25); letter-spacing:.1px; }
+    .tk-modal-save:active { opacity:.88; transform:scale(.98); box-shadow:none; }
+    .tk-modal-cancel { padding:11px 18px; border-radius:11px; border:1.5px solid var(--border-color); background:transparent; color:var(--text-2); font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+    .tk-modal-cancel:active { background:var(--surface-2); }
 
     /* Step dots */
-    .tk-step-dots { display:flex; justify-content:center; gap:5px; margin-bottom:16px; }
-    .tk-step-dot { width:6px; height:6px; border-radius:50%; background:var(--border-color); transition:all .2s; }
-    .tk-step-dot.active { background:var(--primary); width:18px; border-radius:3px; }
+    .tk-step-dots { display:flex; justify-content:center; gap:5px; margin-bottom:18px; }
+    .tk-step-dot { width:6px; height:6px; border-radius:50%; background:var(--border-color); transition:all .22s; }
+    .tk-step-dot.active { background:var(--primary); width:20px; border-radius:3px; }
 
     @media(max-width:480px) {
       .tk-shell { height:calc(100vh - env(safe-area-inset-top,44px) - 80px); }
+      .tk-focus-pct { font-size:24px; }
       .tk-focus-track { width:60px; }
     }
   </style>
@@ -399,8 +425,8 @@ function renderTasks(filter = '') {
     </div>
 
     ${_itemSelectionMode ? `
-    <div style="display:flex;align-items:center;gap:8px;padding:0 16px 10px;flex-shrink:0;">
-      <span style="font-size:13px;color:var(--text-muted);flex:1;">${_selectedTaskIds.size} selected</span>
+    <div style="display:flex;align-items:center;gap:8px;padding:0 16px 10px;flex-shrink:0;background:rgba(79,70,229,.04);border-bottom:1px solid var(--border-color);padding-top:10px;">
+      <span style="font-size:13px;font-weight:600;color:var(--primary);flex:1;">${_selectedTaskIds.size} selected</span>
       <button class="tk-action-btn danger" onclick="deleteSelectedTasks()">
         <i data-lucide="trash-2" style="width:13px;height:13px"></i> Delete
       </button>
@@ -410,10 +436,17 @@ function renderTasks(filter = '') {
     <!-- Quick Capture -->
     <div class="tk-capture-wrap">
       <div class="tk-capture">
-        <i data-lucide="plus-circle" style="width:16px;height:16px;color:var(--primary);flex-shrink:0"></i>
+        <div class="tk-capture-icon">
+          <i data-lucide="zap" style="width:15px;height:15px"></i>
+        </div>
         <input class="tk-capture-input" id="tkCaptureInput"
-               placeholder="Quick capture — type and press Enter…"
+               placeholder="Capture a task… press Enter to save"
                onkeydown="tkQuickCapture(event)" />
+        <div class="tk-capture-divider"></div>
+        <select class="tk-capture-cat" id="tkCaptureCat">
+          <option value="">No category</option>
+          ${allCats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+        </select>
       </div>
     </div>
 
@@ -433,7 +466,7 @@ function renderTasks(filter = '') {
         ${['P1','P2','P3'].map(p => `
           <button class="tk-prio-dot ${_taskPriorityFilter === p ? 'active' : ''}"
                   data-prio="${p}"
-                  style="--dot-color:${PRIORITY_COLOR[p].replace('var(--danger, ','').replace('var(--warning, ','').replace('var(--success, ','').replace(')','')}"
+                  style="--dot-color:${PRIORITY_COLOR[p]}"
                   onclick="tkSetPrio('${p}')"
                   title="${PRIORITY_LABEL[p]}"></button>
         `).join('')}
@@ -444,26 +477,27 @@ function renderTasks(filter = '') {
         <option value="category" ${_taskSort==='category'?'selected':''}>🏷 Category</option>
         <option value="title"    ${_taskSort==='title'?'selected':''}>A–Z</option>
       </select>
-      <button class="tk-icon-btn ${_showCompletedTasks?'active':''}"
+      <button class="tk-toggle-done ${_showCompletedTasks?'active':''}"
               onclick="_showCompletedTasks=!_showCompletedTasks;renderTasks()"
               title="Toggle completed">
-        <i data-lucide="check-circle-2" style="width:16px;height:16px"></i>
+        <i data-lucide="check-circle-2" style="width:15px;height:15px"></i>
       </button>
     </div>
 
     <!-- Focus Card -->
     <div class="tk-focus-card">
-      <div class="tk-focus-left">
+      <div>
         <div class="tk-focus-date">${dateLabel}</div>
+        <div class="tk-focus-headline">${totalPending === 0 ? 'All clear!' : `${totalPending} task${totalPending !== 1 ? 's' : ''} remaining`}</div>
         <div class="tk-focus-stats">
           ${overdueCount > 0 ? `<span class="tk-stat-badge danger">${overdueCount} overdue</span>` : ''}
           ${p1Count > 0 ? `<span class="tk-stat-badge urgent">${p1Count} urgent</span>` : ''}
-          <span class="tk-stat-badge">${totalPending} active</span>
           <span class="tk-stat-badge">${doneCount} done</span>
         </div>
       </div>
       <div class="tk-focus-right">
         <div class="tk-focus-pct">${pctDone}%</div>
+        <div class="tk-focus-label">complete</div>
         <div class="tk-focus-track">
           <div class="tk-focus-fill" style="width:${pctDone}%"></div>
         </div>
@@ -484,11 +518,12 @@ function renderTasks(filter = '') {
       ${todaysThree.length > 0 ? tkSectionHTML("__todays_three__", "Today's Focus", todaysThree, false, true) : `
         <div class="tk-section" style="margin-bottom:10px;">
           <div class="tk-section-header" style="cursor:default;">
-            <div class="tk-section-dot" style="background:var(--success,#10B981)"></div>
+            <div class="tk-section-dot" style="background:var(--success,#059669)"></div>
             <span class="tk-section-label">Today's Focus</span>
           </div>
-          <div style="padding:16px;text-align:center;font-size:13px;color:var(--text-muted);">
-            Nothing urgent — you're ahead of the game.
+          <div style="padding:18px 16px;text-align:center;font-size:13px;color:var(--text-3);line-height:1.5;">
+            <span style="font-size:20px;display:block;margin-bottom:6px;">✓</span>
+            Nothing urgent today — you're ahead of the game.
           </div>
         </div>`}
 
@@ -535,16 +570,16 @@ function tkSectionHTML(key, label, tasks, isRecurring = false, hideCategory = fa
   const dotColor = sectionColors[key] || 'var(--primary)';
 
   return `
-  <div class="tk-section" style="${dimmed ? 'opacity:0.7;' : ''}animation-delay:${idx * 0.04}s">
+  <div class="tk-section" style="${dimmed ? 'opacity:0.65;' : ''}animation-delay:${idx * 0.04}s">
     <div class="tk-section-header" onclick="toggleCategoryCollapse('${key}')">
       <div class="tk-section-dot" style="background:${dotColor}"></div>
       <span class="tk-section-label">${label}</span>
       ${p1InGroup > 0 ? `<span class="tk-section-badge urgent">${p1InGroup} urgent</span>` : ''}
       ${overdueInGroup > 0 ? `<span class="tk-section-badge overdue">${overdueInGroup} late</span>` : ''}
       <span class="tk-section-count">${count}</span>
-      <i data-lucide="chevron-right" style="width:14px;height:14px;color:var(--text-muted);opacity:.5;flex-shrink:0;transition:transform .2s;${isCollapsed ? '' : 'transform:rotate(90deg)'}"></i>
+      <i data-lucide="chevron-right" style="width:14px;height:14px;color:var(--text-3);opacity:.6;flex-shrink:0;transition:transform .22s;${isCollapsed ? '' : 'transform:rotate(90deg)'}"></i>
     </div>
-    ${!isCollapsed ? tasks.map(t => tkTaskRowHTML(t, isRecurring)).join('') : ''}
+    ${!isCollapsed ? `<div class="tk-section-tasks">${tasks.map(t => tkTaskRowHTML(t, isRecurring)).join('')}</div>` : ''}
   </div>`;
 }
 
@@ -562,7 +597,8 @@ function renderBentoTaskRow(t, isRecurring = false) {
   const isExpanded = _expandedTaskIds.has(String(t.id));
   const today = new Date().toISOString().slice(0, 10);
   const isOverdue = t.due_date && t.due_date < today && !isDone;
-  const pColor = { P1: '#EF4444', P2: '#F59E0B', P3: '#10B981' }[t.priority] || 'transparent';
+  const pHex  = { P1: '#DC2626', P2: '#D97706', P3: '#059669' }[t.priority] || '#94A3B8';
+  const pColor = pHex;
   const subtasks = parseSubtasks(t);
   const doneSubCount = subtasks.filter(s => s.done).length;
 
@@ -571,28 +607,31 @@ function renderBentoTaskRow(t, isRecurring = false) {
   let dateChipClass = 'tk-date-chip';
   if (t.due_date) {
     const diff = Math.round((new Date(t.due_date) - new Date(today)) / 86400000);
-    if (diff === 0)      { dateLabel = 'Today';       dateChipClass += ' today-chip'; }
+    if (diff === 0)      { dateLabel = 'Today';              dateChipClass += ' today-chip'; }
     else if (diff === 1) { dateLabel = 'Tomorrow'; }
-    else if (diff === -1){ dateLabel = 'Yesterday';   dateChipClass += isOverdue ? ' overdue' : ''; }
+    else if (diff === -1){ dateLabel = 'Yesterday';          if (isOverdue) dateChipClass += ' overdue'; }
     else if (diff < 0)   { dateLabel = `${Math.abs(diff)}d ago`; if (isOverdue) dateChipClass += ' overdue'; }
-    else if (diff < 7)   { dateLabel = `${diff}d`; }
-    else                 { dateLabel = t.due_date; }
+    else if (diff < 7)   { dateLabel = `in ${diff}d`; }
+    else                 { dateLabel = new Date(t.due_date + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
   }
 
-  const recurLabel = { daily:'↻ Daily', weekly:'↻ Weekly', monthly:'↻ Monthly' }[t.recurrence] || '';
-  const leftBorder = !isDone && t.priority === 'P1' ? `border-left:3px solid #EF4444;` :
-                     !isDone && t.priority === 'P2' ? `border-left:3px solid #F59E0B;` :
-                     'border-left:3px solid transparent;';
+  const recurLabel = { daily:'Daily', weekly:'Weekly', monthly:'Monthly' }[t.recurrence] || '';
+  // Priority left-accent strip
+  const accentStyle = !isDone && t.priority
+    ? `border-left:3px solid ${pColor};`
+    : 'border-left:3px solid transparent;';
+  // Subtle row tint for P1
+  const rowTint = !isDone && t.priority === 'P1' ? 'background:rgba(220,38,38,.025);' : '';
 
   return `
   <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''}"
        id="task-row-${t.id}"
-       style="${leftBorder}"
+       style="${accentStyle}${rowTint}"
        onclick="toggleTaskDetails('${t.id}')">
 
     <!-- Checkbox -->
     <div class="task-check-ring ${isDone ? 'done' : ''}"
-         style="${!isDone && t.priority ? `border-color:${pColor}66;` : ''}"
+         style="${!isDone && t.priority ? `border-color:${pColor}55;` : ''}"
          onclick="event.stopPropagation(); ${_itemSelectionMode
            ? `toggleTaskSelection('${t.id}')`
            : isRecurring
@@ -620,7 +659,7 @@ function renderBentoTaskRow(t, isRecurring = false) {
           ${doneSubCount}/${subtasks.length}
         </span>` : ''}
         ${recurLabel ? `<span class="task-meta-chip"><i data-lucide="repeat-2" style="width:9px;height:9px"></i> ${recurLabel}</span>` : ''}
-        ${t.pomodoro_estimate > 0 ? `<span class="task-meta-chip" style="color:var(--primary);"><i data-lucide="timer" style="width:9px;height:9px"></i> ${t.pomodoro_estimate}×🍅</span>` : ''}
+        ${t.pomodoro_estimate > 0 ? `<span class="task-meta-chip" style="color:var(--primary)"><i data-lucide="timer" style="width:9px;height:9px"></i> ${t.pomodoro_estimate}×🍅</span>` : ''}
         ${t.category && _taskCategory === 'All' ? `<span class="task-meta-chip">${escapeHtml(t.category)}</span>` : ''}
       </div>` : ''}
     </div>
@@ -629,12 +668,16 @@ function renderBentoTaskRow(t, isRecurring = false) {
   <!-- Expanded Panel -->
   ${isExpanded ? `
   <div class="subtask-expand">
-    ${dateLabel ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-      <i data-lucide="calendar" style="width:12px;height:12px;color:var(--text-muted)"></i>
-      <span class="task-meta-chip ${isOverdue ? 'danger' : ''}" style="${isOverdue?'color:var(--danger);':''}">${dateLabel}</span>
+
+    <!-- Expanded meta row -->
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:${t.description||subtasks.length?'10px':'0'};">
+      ${dateLabel ? `<span class="task-meta-chip ${isOverdue?'':''}${dateChipClass.includes('overdue')?'':''}${dateChipClass.includes('today-chip')?'':''}" style="${isOverdue?'color:var(--danger,#DC2626);background:rgba(220,38,38,.07);border-color:rgba(220,38,38,.18);':dateChipClass.includes('today-chip')?'color:var(--primary);background:rgba(79,70,229,.07);border-color:rgba(79,70,229,.2);':''}">
+        <i data-lucide="calendar" style="width:9px;height:9px"></i> ${dateLabel}
+      </span>` : ''}
       ${t.category ? `<span class="task-meta-chip">${escapeHtml(t.category)}</span>` : ''}
       ${recurLabel ? `<span class="task-meta-chip"><i data-lucide="repeat-2" style="width:9px;height:9px"></i> ${recurLabel}</span>` : ''}
-    </div>` : ''}
+      ${t.pomodoro_estimate > 0 ? `<span class="task-meta-chip" style="color:var(--primary)"><i data-lucide="timer" style="width:9px;height:9px"></i> ${t.pomodoro_estimate}×🍅</span>` : ''}
+    </div>
 
     ${t.description ? `<div class="tk-expand-desc">${escapeHtml(t.description)}</div>` : ''}
 
@@ -644,16 +687,16 @@ function renderBentoTaskRow(t, isRecurring = false) {
            onclick="event.stopPropagation();toggleSubtask('${t.id}',${idx},${!s.done})">
         ${s.done ? `<i data-lucide="check" style="width:8px;height:8px;color:white;stroke-width:3"></i>` : ''}
       </div>
-      <span style="flex:1;font-size:12.5px;${s.done?'text-decoration:line-through;color:var(--text-muted);':'color:var(--text-1);'}">${escapeHtml(s.text)}</span>
-      <button style="border:none;background:none;cursor:pointer;opacity:.4;padding:2px;"
+      <span style="flex:1;font-size:13px;${s.done?'text-decoration:line-through;color:var(--text-3);':'color:var(--text-1);'}">${escapeHtml(s.text)}</span>
+      <button style="border:none;background:none;cursor:pointer;opacity:.35;padding:3px;"
               onclick="event.stopPropagation();window.deleteSubtask('${t.id}',${idx})">
-        <i data-lucide="x" style="width:11px;height:11px"></i>
+        <i data-lucide="x" style="width:12px;height:12px"></i>
       </button>
     </div>`).join('')}
 
     <div class="tk-subtask-add">
       <div class="tk-subtask-add-ring">
-        <i data-lucide="plus" style="width:8px;height:8px;color:var(--text-muted)"></i>
+        <i data-lucide="plus" style="width:9px;height:9px;color:var(--text-3)"></i>
       </div>
       <input type="text" id="inline-subtask-input-${t.id}"
              class="tk-subtask-add-input"
@@ -674,8 +717,8 @@ function renderBentoTaskRow(t, isRecurring = false) {
       <button class="tk-action-btn" onclick="event.stopPropagation();addReminderToTask('${t.id}')">
         <i data-lucide="bell" style="width:12px;height:12px"></i> Remind
       </button>
-      <button class="tk-action-btn danger" onclick="event.stopPropagation();deleteTask('${t.id}')">
-        <i data-lucide="trash-2" style="width:12px;height:12px"></i>
+      <button class="tk-action-btn danger" style="margin-left:auto" onclick="event.stopPropagation();deleteTask('${t.id}')">
+        <i data-lucide="trash-2" style="width:12px;height:12px"></i> Delete
       </button>
     </div>
   </div>` : ''}`;
