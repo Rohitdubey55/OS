@@ -466,6 +466,8 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 0;
   width: 100%;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   /* Fill the grid cell */
 }
 
@@ -615,8 +617,10 @@
   display: flex;
   gap: var(--space-4);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 
   box-shadow:
     var(--shadow-layer-1),
@@ -629,6 +633,10 @@
   box-shadow:
     var(--shadow-layer-2),
     var(--shadow-layer-3);
+}
+
+.entry-card:active {
+  transform: scale(0.985);
 }
 
 .entry-mood-indicator {
@@ -723,18 +731,24 @@
 }
 
 .action-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: var(--surface-2);
   border-radius: var(--bento-radius-sm);
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .action-btn:hover {
   background: var(--primary);
+}
+
+.action-btn:active {
+  transform: scale(0.9);
 }
 
 /* ============================================
@@ -824,14 +838,21 @@
   border-radius: var(--bento-radius-sm);
   background: var(--surface-2);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  min-height: 40px;
 }
 
 .calendar-day:hover {
   transform: scale(1.1);
   box-shadow: var(--shadow-layer-2);
   z-index: 1;
+}
+
+.calendar-day:active {
+  transform: scale(0.9);
 }
 
 .calendar-day.other-month {
@@ -1363,14 +1384,14 @@
 }
 
 /* ============================================
-   NEW MODAL DESIGN
+   NEW MODAL DESIGN — Full-Screen Writing
    ============================================ */
 
 .diary-modal-new {
   padding: var(--space-2);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 120px);
+  height: 100%;
 }
 
 .diary-modal-new h2 {
@@ -1381,9 +1402,10 @@
 
 .diary-modal-new .rich-editor {
   flex: 1;
-  min-height: 250px;
-  max-height: 55vh;
+  min-height: 300px;
+  max-height: none;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .diary-modal-new .modal-actions {
@@ -1411,24 +1433,30 @@
 
 .mood-slider {
   flex: 1;
-  height: 8px;
-  border-radius: 4px;
+  height: 6px;
+  border-radius: 99px;
   background: linear-gradient(90deg, var(--mood-terrible), var(--mood-bad), var(--mood-okay), var(--mood-good), var(--mood-great));
   -webkit-appearance: none;
   appearance: none;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .mood-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: white;
-  border: 3px solid var(--primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 2px solid var(--primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
   cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.mood-slider::-webkit-slider-thumb:active {
+  transform: scale(1.15);
 }
 
 .mood-display {
@@ -1458,22 +1486,25 @@
 
 .rich-text-toolbar {
   display: flex;
-  gap: 4px;
-  padding: var(--space-2);
+  gap: 2px;
+  padding: 8px 12px;
   background: var(--surface-2);
   border-radius: var(--bento-radius-sm) var(--bento-radius-sm) 0 0;
 }
 
 .toolbar-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 700;
   color: var(--text-secondary);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: all 0.15s;
 }
 
 .toolbar-btn:hover {
@@ -1481,16 +1512,22 @@
   color: white;
 }
 
+.toolbar-btn:active {
+  transform: scale(0.92);
+}
+
 .rich-editor {
-  min-height: 150px;
-  border: 2px solid var(--border-color);
+  min-height: 200px;
+  border: 1.5px solid var(--border-color);
   border-top: none;
   border-radius: 0 0 var(--bento-radius-md) var(--bento-radius-md);
-  padding: var(--space-3);
-  font-size: 15px;
-  line-height: 1.6;
+  padding: 16px 18px;
+  font-size: 16px;
+  line-height: 1.75;
   background: var(--surface-1);
   outline: none;
+  -webkit-overflow-scrolling: touch;
+  letter-spacing: -0.1px;
 }
 
 .rich-editor:focus {
@@ -1500,6 +1537,7 @@
 .rich-editor:empty:before {
   content: attr(placeholder);
   color: var(--text-muted);
+  font-style: italic;
 }
 
 .word-count {
@@ -1677,8 +1715,8 @@
   }
 
   .entry-actions .action-btn {
-    width: 30px;
-    height: 30px;
+    width: 36px;
+    height: 36px;
     background: var(--surface-2);
   }
 
