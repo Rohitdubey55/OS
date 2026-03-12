@@ -44,7 +44,6 @@ function renderDiary() {
   const avgMood = validMoods.length ? (validMoods.reduce((a, b) => a + b, 0) / validMoods.length).toFixed(1) : '-';
   const streak = calculateStreak(entries);
   const totalEntries = entries.length;
-  const totalWords = entries.reduce((acc, e) => acc + (e.text ? e.text.split(/\s+/).length : 0), 0);
   const achievements = getAchievements(entries);
 
   // Calculate this week's entries
@@ -60,145 +59,318 @@ function renderDiary() {
   // Get mood insights
   const moodStats = getMoodStats(entries);
 
+  const DIARY_CSS = `<style>
+/* ═══ DIARY SHELL ═══ */
+.dr-shell { display:flex; flex-direction:column; height:calc(100vh - env(safe-area-inset-top,44px) - 80px); overflow:hidden; background:var(--surface-base,#F7F8FA); }
+
+/* ═══ HEADER ═══ */
+.dr-header { display:flex; align-items:center; justify-content:space-between; padding:18px 18px 14px; flex-shrink:0; }
+.dr-greeting { font-size:21px; font-weight:800; color:var(--text-1); letter-spacing:-.5px; line-height:1; margin:0; }
+.dr-header-date { font-size:12.5px; color:var(--text-3); margin:3px 0 0; font-weight:500; }
+.dr-write-btn { display:inline-flex; align-items:center; gap:6px; padding:9px 15px; background:var(--primary); color:#fff; border:none; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; flex-shrink:0; }
+.dr-write-btn:active { opacity:.85; transform:scale(.97); }
+
+/* ═══ STATS STRIP ═══ */
+.dr-stats-strip { display:flex; align-items:center; padding:0 18px 14px; flex-shrink:0; }
+.dr-stat-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:1px; }
+.dr-stat-n { font-size:19px; font-weight:800; color:var(--text-1); letter-spacing:-.5px; line-height:1; }
+.dr-stat-l { font-size:9.5px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:.3px; margin-top:2px; }
+.dr-stat-div { width:1px; height:26px; background:var(--border-color); flex-shrink:0; }
+
+/* ═══ OVERVIEW CARDS ═══ */
+.dr-overview-row { display:flex; gap:10px; padding:0 16px 12px; flex-shrink:0; }
+.dr-overview-card { flex:1; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; padding:12px 13px; min-width:0; }
+.dr-card-label { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--text-3); margin-bottom:10px; display:flex; align-items:center; gap:5px; }
+.dr-week-dots { display:flex; justify-content:space-between; margin-bottom:8px; }
+.dr-week-dot { display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; }
+.dr-week-dot-circle { width:20px; height:20px; border-radius:50%; background:var(--surface-2); border:1.5px solid var(--border-color); transition:all .15s; }
+.dr-week-dot.has-entry .dr-week-dot-circle { background:var(--primary); border-color:var(--primary); }
+.dr-week-dot.today:not(.has-entry) .dr-week-dot-circle { border-color:var(--primary); border-width:2px; background:rgba(79,70,229,.1); }
+.dr-week-dot.today.has-entry .dr-week-dot-circle { box-shadow:0 0 0 2.5px rgba(79,70,229,.2); }
+.dr-week-dot-day { font-size:8.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; }
+.dr-week-progress { height:3px; background:var(--surface-2); border-radius:99px; margin-top:2px; overflow:hidden; }
+.dr-week-progress-fill { height:100%; background:var(--primary); border-radius:99px; transition:width .5s ease; }
+.dr-week-stat { font-size:10.5px; color:var(--text-3); font-weight:500; margin-top:5px; }
+/* ═══ WEEK CARD (full-width single card) ═══ */
+.dr-week-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; padding:14px 16px 12px; margin:0 16px 12px; flex-shrink:0; }
+.dr-week-card-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+.dr-week-card-label { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--text-3); margin-bottom:4px; }
+.dr-week-written { font-size:15px; font-weight:800; color:var(--text-1); line-height:1; }
+.dr-week-written span { font-size:12px; font-weight:500; color:var(--text-3); }
+.dr-week-streak-badge { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; color:#F97316; background:rgba(249,115,22,.08); border:1px solid rgba(249,115,22,.15); padding:5px 12px; border-radius:99px; }
+
+/* ═══ NAV TABS ═══ */
+.dr-tabs { display:flex; padding:0 16px; flex-shrink:0; border-bottom:1.5px solid var(--border-color); overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.dr-tabs::-webkit-scrollbar { display:none; }
+.dr-tab { flex-shrink:0; padding:10px 14px; font-size:13px; font-weight:600; color:var(--text-3); background:transparent; border:none; border-bottom:2.5px solid transparent; cursor:pointer; transition:color .15s, border-color .15s; white-space:nowrap; margin-bottom:-1.5px; }
+.dr-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+.dr-tab:active { opacity:.7; }
+
+/* ═══ SCROLLABLE BODY ═══ */
+.dr-body { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-top:2px; }
+
+/* ═══ SEARCH BAR ═══ */
+.dr-search-bar { padding:10px 16px; padding-bottom:calc(10px + env(safe-area-inset-bottom,0px)); flex-shrink:0; display:flex; gap:8px; background:var(--surface-base,#F7F8FA); border-top:1px solid var(--border-color); }
+.dr-search-wrap { flex:1; display:flex; align-items:center; gap:8px; background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:10px; padding:0 12px; transition:border-color .15s; }
+.dr-search-wrap:focus-within { border-color:var(--primary); }
+.dr-search-input { flex:1; border:none; background:transparent; outline:none; font-size:13.5px; color:var(--text-1); padding:9px 0; }
+.dr-search-input::placeholder { color:var(--text-3); }
+.dr-search-clear { border:none; background:none; cursor:pointer; color:var(--text-3); font-size:16px; padding:4px; }
+.dr-filter-select { background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:10px; padding:0 10px; font-size:12px; color:var(--text-2); outline:none; cursor:pointer; font-weight:600; height:38px; }
+
+/* ═══ ENTRIES ═══ */
+.dr-entries { padding:12px 16px 16px; }
+.dr-section-header { display:flex; align-items:center; justify-content:space-between; padding:0 2px 10px; }
+.dr-section-title { font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.5px; }
+.dr-section-meta { font-size:11px; color:var(--text-3); font-weight:500; }
+
+/* ═══ ENTRY CARD ═══ */
+.dr-entry-card { background:var(--surface-1); border:1px solid var(--border-color); border-left-width:3px; border-radius:12px; margin-bottom:8px; overflow:hidden; cursor:pointer; transition:box-shadow .15s, transform .15s; animation:drCardIn .2s ease both; }
+@keyframes drCardIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+.dr-entry-card:active { transform:scale(.99); box-shadow:0 3px 12px rgba(0,0,0,.07); }
+.dr-entry-main { padding:13px 14px 9px; }
+.dr-entry-date { font-size:10.5px; font-weight:700; color:var(--text-3); margin-bottom:5px; text-transform:uppercase; letter-spacing:.3px; }
+.dr-entry-preview { font-size:13.5px; color:var(--text-1); line-height:1.5; margin:0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.dr-entry-tags-row { display:flex; flex-wrap:wrap; gap:4px; padding:0 14px 9px; }
+.dr-entry-tag { font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:99px; background:rgba(79,70,229,.07); color:var(--primary); }
+.dr-entry-foot { display:flex; align-items:center; justify-content:space-between; padding:8px 14px; border-top:1px solid var(--border-color); }
+.dr-entry-foot-left { display:flex; align-items:center; gap:8px; }
+.dr-mood-pill { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:99px; }
+.dr-entry-wc { font-size:11px; color:var(--text-3); font-weight:500; }
+.dr-entry-actions { display:flex; gap:2px; }
+.dr-entry-btn { width:28px; height:28px; border-radius:7px; border:none; background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text-3); transition:all .12s; }
+.dr-entry-btn:active { background:var(--surface-2); color:var(--text-1); }
+.dr-entry-btn.danger:active { background:rgba(220,38,38,.07); color:#DC2626; }
+
+/* ═══ EMPTY STATE ═══ */
+.dr-empty { display:flex; flex-direction:column; align-items:center; padding:56px 24px; text-align:center; }
+.dr-empty-icon { width:48px; height:48px; border-radius:14px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; margin-bottom:14px; }
+.dr-empty-title { font-size:17px; font-weight:700; color:var(--text-1); margin-bottom:6px; }
+.dr-empty-sub { font-size:13px; color:var(--text-3); line-height:1.55; margin-bottom:20px; max-width:260px; }
+.dr-empty-btn { padding:10px 22px; background:var(--primary); color:#fff; border:none; border-radius:10px; font-size:13.5px; font-weight:700; cursor:pointer; }
+
+/* ═══ CALENDAR VIEW ═══ */
+.dr-calendar { padding:14px 16px 16px; }
+.dr-cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.dr-cal-title { font-size:16px; font-weight:700; color:var(--text-1); }
+.dr-cal-stat { font-size:11.5px; font-weight:600; color:var(--text-3); }
+.dr-cal-weekdays { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:4px; }
+.dr-cal-weekday { text-align:center; font-size:10px; font-weight:700; color:var(--text-3); text-transform:uppercase; padding:4px 0; }
+.dr-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.dr-cal-day { aspect-ratio:1; border-radius:9px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; border:1px solid transparent; transition:all .12s; background:var(--surface-2); position:relative; gap:2px; }
+.dr-cal-day.other-month { opacity:.15; pointer-events:none; }
+.dr-cal-day.today { border-color:var(--primary); }
+.dr-cal-day.has-entry { background:rgba(79,70,229,.08); border-color:rgba(79,70,229,.2); }
+.dr-cal-day.today.has-entry { border-color:var(--primary); border-width:2px; }
+.dr-cal-day:active { transform:scale(.9); }
+.dr-cal-day-num { font-size:11px; font-weight:600; color:var(--text-2); line-height:1; }
+.dr-cal-day.today .dr-cal-day-num { color:var(--primary); font-weight:800; }
+.dr-cal-day-dot { width:4px; height:4px; border-radius:50%; background:var(--primary); }
+
+/* ═══ YEARLY VIEW ═══ */
+.dr-yearly { padding:14px 16px 16px; }
+.dr-yearly-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.dr-yearly-title { font-size:16px; font-weight:700; color:var(--text-1); }
+.dr-months-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.dr-month-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:12px; padding:10px; }
+.dr-month-name { font-size:10px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:.4px; margin-bottom:7px; display:flex; align-items:center; justify-content:space-between; }
+.dr-month-count { font-size:9px; font-weight:700; padding:1px 5px; border-radius:99px; background:rgba(79,70,229,.1); color:var(--primary); }
+.dr-month-days { display:grid; grid-template-columns:repeat(7,1fr); gap:1.5px; }
+.dr-day-cell { aspect-ratio:1; border-radius:2px; background:var(--surface-2); cursor:pointer; transition:all .12s; }
+.dr-day-cell.has-entry { background:var(--primary); opacity:.65; }
+.dr-day-cell.today { outline:1.5px solid var(--primary); outline-offset:0; opacity:1; }
+.dr-day-cell:active { transform:scale(.8); }
+
+/* ═══ INSIGHTS VIEW ═══ */
+.dr-insights { padding:14px 16px 16px; }
+.dr-insights-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.dr-insights-title { font-size:16px; font-weight:700; color:var(--text-1); }
+.dr-export-btn { display:inline-flex; align-items:center; gap:5px; padding:7px 12px; border-radius:9px; border:1.5px solid var(--border-color); background:transparent; font-size:12px; font-weight:600; color:var(--text-2); cursor:pointer; }
+.dr-insight-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; padding:16px; margin-bottom:10px; }
+.dr-insight-card-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3); margin-bottom:12px; }
+.dr-stat-row { display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--border-color); }
+.dr-stat-row:last-child { border-bottom:none; }
+.dr-stat-row-val { font-size:20px; font-weight:800; color:var(--text-1); min-width:52px; letter-spacing:-.5px; }
+.dr-stat-row-lbl { font-size:13px; color:var(--text-3); font-weight:500; }
+.dr-achievement-item { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border-color); }
+.dr-achievement-item:last-child { border-bottom:none; }
+.dr-achievement-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+.dr-achievement-item.unlocked .dr-achievement-icon { background:rgba(245,158,11,.1); }
+.dr-achievement-item.locked .dr-achievement-icon { background:var(--surface-2); filter:grayscale(1); opacity:.5; }
+.dr-achievement-name { font-size:13px; font-weight:700; color:var(--text-1); }
+.dr-achievement-desc { font-size:12px; color:var(--text-3); margin-top:1px; }
+
+/* ═══ TAGS VIEW ═══ */
+.dr-tags { padding:14px 16px 16px; }
+.dr-tags-grid { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:20px; }
+.dr-tag-chip { display:inline-flex; align-items:center; gap:5px; padding:6px 12px; border-radius:99px; font-size:12.5px; font-weight:600; cursor:pointer; border:1.5px solid transparent; transition:all .15s; }
+.dr-tag-chip:active { transform:scale(.95); }
+.dr-tag-count { font-size:11px; opacity:.7; }
+.dr-section-sep { font-size:10.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.6px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.dr-section-sep::after { content:''; flex:1; height:1px; background:var(--border-color); }
+.dr-templates-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:16px; }
+.dr-template-card { background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:12px; padding:12px; cursor:pointer; transition:all .15s; }
+.dr-template-card:active { border-color:var(--primary); }
+.dr-template-cat { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--primary); margin-bottom:4px; }
+.dr-template-title { font-size:13px; font-weight:700; color:var(--text-1); margin-bottom:4px; }
+.dr-template-preview { font-size:11px; color:var(--text-3); line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.dr-template-actions { display:flex; gap:6px; margin-top:10px; padding-top:8px; border-top:1px solid var(--border-color); }
+.dr-template-btn { flex:1; padding:5px 0; border-radius:7px; border:1px solid var(--border-color); background:var(--surface-2); font-size:11px; font-weight:600; color:var(--text-2); cursor:pointer; text-align:center; }
+.dr-template-btn.primary { border-color:rgba(79,70,229,.25); background:rgba(79,70,229,.07); color:var(--primary); }
+.dr-template-btn.danger { border-color:rgba(220,38,38,.15); background:rgba(220,38,38,.04); color:#DC2626; }
+
+/* ═══ MODAL ═══ */
+.dr-modal-title { font-size:18px; font-weight:800; color:var(--text-1); letter-spacing:-.3px; margin-bottom:16px; }
+.dr-mood-section { margin-bottom:14px; }
+.dr-mood-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3); margin-bottom:8px; display:block; }
+.dr-mood-slider-row { display:flex; align-items:center; gap:12px; }
+.dr-mood-display { display:flex; flex-direction:column; align-items:center; gap:1px; flex-shrink:0; min-width:40px; }
+.dr-mood-emoji { font-size:26px; line-height:1; }
+.dr-mood-num { font-size:12px; font-weight:800; color:var(--primary); }
+.dr-mood-slider { flex:1; -webkit-appearance:none; height:5px; border-radius:99px; background:var(--surface-3); outline:none; }
+.dr-mood-slider::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--primary); cursor:pointer; box-shadow:0 2px 6px rgba(79,70,229,.3); }
+.dr-mood-labels { display:flex; justify-content:space-between; margin-top:4px; font-size:10px; color:var(--text-3); font-weight:600; }
+.dr-toolbar { display:flex; align-items:center; gap:3px; padding:7px 10px; background:var(--surface-2); border-radius:9px 9px 0 0; border:1.5px solid var(--border-color); border-bottom:none; }
+.dr-toolbar-btn { display:flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:7px; border:none; background:transparent; color:var(--text-2); font-size:13px; font-weight:700; cursor:pointer; transition:all .12s; }
+.dr-toolbar-btn:active { background:var(--surface-3); }
+.dr-toolbar-ai { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:7px; border:1px solid rgba(79,70,229,.2); background:rgba(79,70,229,.06); font-size:11.5px; font-weight:700; color:var(--primary); cursor:pointer; margin-left:auto; white-space:nowrap; }
+.dr-editor { min-height:140px; max-height:220px; overflow-y:auto; background:var(--surface-2); border:1.5px solid var(--border-color); border-top:none; border-radius:0 0 9px 9px; padding:11px 13px; font-size:14px; color:var(--text-1); line-height:1.65; outline:none; }
+.dr-editor:focus { border-color:var(--primary); }
+.dr-editor[placeholder]:empty::before { content:attr(placeholder); color:var(--text-3); pointer-events:none; }
+.dr-field-row { display:flex; gap:8px; margin-top:10px; }
+.dr-field { flex:1; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:9px; padding:9px 12px; font-size:13px; color:var(--text-1); outline:none; transition:border-color .15s; }
+.dr-field:focus { border-color:var(--primary); }
+.dr-word-count { font-size:11px; color:var(--text-3); font-weight:500; text-align:right; margin-top:5px; }
+.dr-context-bar { display:flex; flex-wrap:wrap; gap:5px; padding:8px 0; margin-bottom:4px; }
+.dr-context-chip { display:inline-flex; align-items:center; gap:4px; padding:4px 9px; border-radius:99px; font-size:11.5px; font-weight:600; background:rgba(5,150,105,.07); color:var(--success,#059669); border:1px solid rgba(5,150,105,.15); }
+.dr-template-select { width:100%; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:9px; padding:9px 12px; font-size:13px; color:var(--text-1); outline:none; cursor:pointer; margin-bottom:12px; }
+.dr-modal-actions { display:flex; gap:10px; padding-top:16px; border-top:1px solid var(--border-color); margin-top:8px; }
+.dr-modal-save { flex:1; padding:11px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-size:14px; font-weight:700; cursor:pointer; transition:all .15s; }
+.dr-modal-save:active { opacity:.85; transform:scale(.99); }
+.dr-modal-cancel { padding:11px 16px; border-radius:10px; border:1.5px solid var(--border-color); background:transparent; color:var(--text-2); font-size:13px; font-weight:600; cursor:pointer; }
+
+/* ═══ REDESIGNED WRITE MODAL ═══ */
+.dr-modal-bar { display:flex; align-items:center; justify-content:space-between; padding-bottom:14px; border-bottom:1px solid var(--border-color); margin-bottom:14px; }
+.dr-modal-dismiss { font-size:13.5px; font-weight:600; color:var(--text-3); background:none; border:none; cursor:pointer; padding:6px 0; }
+.dr-modal-save-top { padding:8px 18px; background:var(--primary); color:#fff; border:none; border-radius:9px; font-size:13.5px; font-weight:700; cursor:pointer; transition:all .15s; }
+.dr-modal-save-top:active { opacity:.85; transform:scale(.98); }
+.dr-modal-date-chip { font-size:12.5px; font-weight:700; color:var(--text-2); background:var(--surface-2); padding:5px 12px; border-radius:99px; border:1px solid var(--border-color); cursor:pointer; }
+.dr-mood-strip { display:flex; align-items:center; gap:10px; padding:10px 13px; background:var(--surface-2); border-radius:11px; margin-bottom:12px; border:1px solid var(--border-color); }
+.dr-mood-big-emoji { font-size:26px; line-height:1; flex-shrink:0; }
+.dr-mood-big-num { font-size:16px; font-weight:800; color:var(--primary); min-width:24px; text-align:right; flex-shrink:0; }
+.dr-mood-slider-col { flex:1; display:flex; flex-direction:column; gap:4px; }
+.dr-mood-ends { display:flex; justify-content:space-between; font-size:9.5px; color:var(--text-3); font-weight:600; margin-top:2px; }
+.dr-write-zone { border-radius:12px; overflow:hidden; border:1.5px solid var(--border-color); margin-bottom:10px; transition:border-color .15s; }
+.dr-write-zone:focus-within { border-color:var(--primary); }
+.dr-zone-toolbar { display:flex; align-items:center; gap:1px; padding:6px 9px; border-bottom:1px solid var(--border-color); background:var(--surface-2); }
+.dr-zone-toolbar .dr-toolbar-btn { width:30px; height:26px; font-size:13px; }
+.dr-zone-editor { min-height:160px; max-height:240px; overflow-y:auto; background:var(--surface-1); padding:13px 14px; font-size:14.5px; color:var(--text-1); line-height:1.7; outline:none; }
+.dr-zone-editor[placeholder]:empty::before { content:attr(placeholder); color:var(--text-3); pointer-events:none; }
+.dr-zone-footer { display:flex; align-items:center; gap:8px; padding:8px 13px; border-top:1px solid var(--border-color); background:var(--surface-2); }
+.dr-zone-tags { flex:1; background:transparent; border:none; outline:none; font-size:12.5px; color:var(--text-2); min-width:0; }
+.dr-zone-tags::placeholder { color:var(--text-3); }
+.dr-zone-wc { font-size:11px; color:var(--text-3); font-weight:500; white-space:nowrap; flex-shrink:0; }
+.dr-context-chips { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:10px; }
+</style>`;
+
   document.getElementById('main').innerHTML = `
-    <div class="diary-wrapper diary-new-ui">
-      <!-- Hero Section -->
-      <div class="diary-hero">
-        <div class="hero-content">
-          <h1 class="hero-greeting">${getGreeting()}, ${state.userName || 'Friend'} ${renderIcon('default', null, '')}</h1>
-          <p class="hero-prompt">"${getDailyPrompt()}"</p>
+    ${DIARY_CSS}
+    <div class="dr-shell">
+
+      <!-- Header -->
+      <div class="dr-header">
+        <div>
+          <h1 class="dr-greeting">${getGreeting()}, ${state.userName || 'Friend'}</h1>
+          <p class="dr-header-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
         </div>
-        <button class="quick-write-btn" onclick="openDiaryModal()">
-          ${renderIcon('write', null, 'quick-write-icon')}
-          <span class="quick-write-text">Start Writing</span>
+        <button class="dr-write-btn" onclick="openDiaryModal()">
+          <i data-lucide="pen" style="width:14px;height:14px"></i>
+          New Entry
         </button>
       </div>
-      
-      <!-- Stats Bento Grid -->
-      <div class="diary-stats-grid">
-        <div class="stat-card stat-card-fire ${streak > 0 ? 'active' : ''}">
-          <div class="stat-card-glow"></div>
-          ${renderIcon('streak', null, 'stat-icon')}
-          <div class="stat-value">${streak}</div>
-          <div class="stat-label">Streak</div>
-          ${streak > 0 ? `<div class="stat-badge">Keep up!</div>` : ''}
+
+      <!-- Stats Strip -->
+      <div class="dr-stats-strip">
+        <div class="dr-stat-item">
+          <span class="dr-stat-n">${streak}</span>
+          <span class="dr-stat-l">Streak</span>
         </div>
-        
-        <div class="stat-card stat-card-mood">
-          ${renderIcon('mood', null, 'stat-icon')}
-          <div class="stat-value">${avgMood !== '-' ? avgMood : '-'}</div>
-          <div class="stat-label">Mood</div>
-          ${validMoods.length > 0 ? `<div class="stat-trend ${moodStats.trend === 'up' ? 'up' : moodStats.trend === 'down' ? 'down' : ''}">${moodStats.trend === 'up' ? '↑' : moodStats.trend === 'down' ? '↓' : '→'}</div>` : ''}
+        <div class="dr-stat-div"></div>
+        <div class="dr-stat-item">
+          <span class="dr-stat-n">${avgMood !== '-' ? avgMood : '—'}</span>
+          <span class="dr-stat-l">Avg Mood</span>
         </div>
-        
-        <div class="stat-card stat-card-entries">
-          ${renderIcon('entries', null, 'stat-icon')}
-          <div class="stat-value">${totalEntries}</div>
-          <div class="stat-label">Entries</div>
+        <div class="dr-stat-div"></div>
+        <div class="dr-stat-item">
+          <span class="dr-stat-n">${totalEntries}</span>
+          <span class="dr-stat-l">Entries</span>
         </div>
-        
-        <div class="stat-card stat-card-badges ${achievements.length > 0 ? 'has-badges' : ''}">
-          ${renderIcon('achievements', null, 'stat-icon')}
-          <div class="stat-value">${achievements.length}</div>
-          <div class="stat-label">Badges</div>
+        <div class="dr-stat-div"></div>
+        <div class="dr-stat-item">
+          <span class="dr-stat-n">${achievements.length}</span>
+          <span class="dr-stat-l">Badges</span>
         </div>
       </div>
-      
-      <!-- Quick Actions & Overview Row -->
-      <div class="diary-overview-row">
-        <!-- This Week Card -->
-        <div class="overview-card week-overview">
-          <div class="overview-header">
-            ${renderIcon('calendar', null, 'overview-icon')}
-            <h3>This Week</h3>
+
+      <!-- Overview Row: This Week -->
+      <div class="dr-overview-row">
+        <div class="dr-overview-card" style="flex:1">
+          <div class="dr-card-label">
+            <i data-lucide="calendar-days" style="width:11px;height:11px"></i>
+            This Week
           </div>
-          <div class="week-dots">
+          <div class="dr-week-dots">
             ${getWeekDots(entries)}
           </div>
-          <div class="week-stat">${weekDaysWritten}/7 days written</div>
-          <div class="week-progress">
-            <div class="week-progress-bar" style="width: ${(weekDaysWritten / 7) * 100}%"></div>
+          <div class="dr-week-progress">
+            <div class="dr-week-progress-fill" style="width:${(weekDaysWritten / 7) * 100}%"></div>
           </div>
-        </div>
-        
-        <!-- Mood Insights Card -->
-        <div class="overview-card mood-insights">
-          <div class="overview-header">
-            ${renderIcon('insights', null, 'overview-icon')}
-            <h3>Mood Insights</h3>
-          </div>
-          <div class="mood-sparkline">
-            <canvas id="moodSparkline"></canvas>
-          </div>
-          <div class="mood-insight-text">
-            ${moodStats.peak ? `${renderIcon('mood-great', null, 'insight-dot')} Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)` : 'Start writing to see insights'}
-          </div>
+          <div class="dr-week-stat">${weekDaysWritten}/7 days written</div>
         </div>
       </div>
-      
-      <!-- Navigation Tabs -->
-      <div class="diary-nav-tabs" style="display:flex; justify-content:stretch; gap:4px; background:var(--surface-2); border-radius:16px; padding:4px; margin-bottom:12px;">
-        <button class="nav-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')" title="All Entries" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'list' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'list' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'list' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
-          ${renderIcon('list', null, 'style="width:16px;"')}
-          <span>List</span>
-        </button>
-        <button class="nav-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')" title="Calendar" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'calendar' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'calendar' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'calendar' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
-          ${renderIcon('calendar', null, 'style="width:16px;"')}
-          <span>Month</span>
-        </button>
-        <button class="nav-tab ${currentDiaryView === 'yearly' ? 'active' : ''}" onclick="switchDiaryView('yearly')" title="Yearly" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'yearly' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'yearly' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'yearly' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
-          ${renderIcon('yearly', null, 'style="width:16px;"')}
-          <span>Year</span>
-        </button>
-        <button class="nav-tab ${currentDiaryView === 'insights' ? 'active' : ''}" onclick="switchDiaryView('insights')" title="Insights" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'insights' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'insights' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'insights' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
-          ${renderIcon('insights', null, 'style="width:16px;"')}
-          <span>Stats</span>
-        </button>
-        <button class="nav-tab ${currentDiaryView === 'tags' ? 'active' : ''}" onclick="switchDiaryView('tags')" title="Tags" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 4px; border-radius:12px; font-size:10px; font-weight:600; color:${currentDiaryView === 'tags' ? 'var(--primary)' : 'var(--text-muted)'}; background:${currentDiaryView === 'tags' ? 'var(--surface-1)' : 'transparent'}; border:none; cursor:pointer; box-shadow:${currentDiaryView === 'tags' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}; transition:all 0.2s;">
-          ${renderIcon('tags', null, 'style="width:16px;"')}
-          <span>Tags</span>
-        </button>
+
+      <!-- Nav Tabs -->
+      <div class="dr-tabs">
+        <button class="dr-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')">List</button>
+        <button class="dr-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')">Month</button>
+        <button class="dr-tab ${currentDiaryView === 'yearly' ? 'active' : ''}" onclick="switchDiaryView('yearly')">Year</button>
+        <button class="dr-tab ${currentDiaryView === 'insights' ? 'active' : ''}" onclick="switchDiaryView('insights')">Stats</button>
+        <button class="dr-tab ${currentDiaryView === 'tags' ? 'active' : ''}" onclick="switchDiaryView('tags')">Tags</button>
       </div>
-      
-      <!-- Content Area -->
-      <div class="diary-content">
+
+      <!-- Scrollable Body -->
+      <div class="dr-body">
         ${currentDiaryView === 'list' ? renderListView(sorted) : ''}
         ${currentDiaryView === 'calendar' ? renderCalendarView(entries) : ''}
         ${currentDiaryView === 'yearly' ? renderYearlyView(entries) : ''}
         ${currentDiaryView === 'insights' ? renderInsightsView(entries) : ''}
         ${currentDiaryView === 'tags' ? renderTagsView() : ''}
       </div>
-      
-      <!-- Search & Filter Bar (Always Visible) -->
-      <div class="diary-search-bar">
-        <div class="search-wrapper">
-          ${renderIcon('search', null, 'search-icon')}
-          <input type="text" class="search-input" placeholder="Search your journal..." 
+
+      <!-- Search & Filter Bar -->
+      <div class="dr-search-bar">
+        <div class="dr-search-wrap">
+          <i data-lucide="search" style="width:14px;height:14px;color:var(--text-3);flex-shrink:0"></i>
+          <input type="text" class="dr-search-input" placeholder="Search entries..."
                  value="${currentSearchQuery}" oninput="handleDiarySearch(this.value)">
-          ${currentSearchQuery ? `<button class="search-clear" onclick="handleDiarySearch('')">×</button>` : ''}
+          ${currentSearchQuery ? `<button class="dr-search-clear" onclick="handleDiarySearch('')">×</button>` : ''}
         </div>
-        <select class="filter-select" onchange="handleDateFilter(this.value)">
+        <select class="dr-filter-select" onchange="handleDateFilter(this.value)">
           <option value="all" ${currentDateFilter === 'all' ? 'selected' : ''}>All Time</option>
           <option value="week" ${currentDateFilter === 'week' ? 'selected' : ''}>This Week</option>
-          <option value="month" ${currentDateFilter === 'month' ? 'selected' : ''}>This Month</option>
-          <option value="last7" ${currentDateFilter === 'last7' ? 'selected' : ''}>Last 7 Days</option>
+          <option value="month" ${currentDateFilter === 'month' ? 'selected' : ''}>Month</option>
+          <option value="last7" ${currentDateFilter === 'last7' ? 'selected' : ''}>Last 7d</option>
         </select>
       </div>
+
     </div>
   `;
 
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 
-  // Render sparkline for any view that has it
-  setTimeout(() => {
-    const sparklineCanvas = document.getElementById('moodSparkline');
-    if (sparklineCanvas) {
-      renderMoodSparkline(entries);
-    }
-  }, 100);
 }
 
-// Generate week dots
+// Generate week dots (new dr- classes)
 function getWeekDots(entries) {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const today = new Date();
@@ -214,11 +386,11 @@ function getWeekDots(entries) {
     const isToday = dateStr === today.toISOString().slice(0, 10);
 
     dots.push(`
-      <div class="week-dot ${entry ? 'has-entry' : ''} ${isToday ? 'today' : ''}" 
+      <div class="dr-week-dot ${entry ? 'has-entry' : ''} ${isToday ? 'today' : ''}"
            title="${days[i]}${entry ? ` - Mood: ${entry.mood_score}/10` : ''}"
-           onclick="openDiaryModal('${dateStr}')" style="cursor:pointer;">
-        <span class="dot-label">${days[i].charAt(0)}</span>
-        ${entry ? `<span class="dot-mood">${getMoodEmoji(entry.mood_score)}</span>` : ''}
+           onclick="openDiaryModal('${dateStr}')">
+        <div class="dr-week-dot-circle"></div>
+        <span class="dr-week-dot-day">${days[i].charAt(0)}</span>
       </div>
     `);
   }
@@ -266,83 +438,47 @@ function getMoodStats(entries) {
   };
 }
 
-// Render home content (recent entries)
-function renderHomeContent(sorted) {
-  const recentEntries = sorted.slice(0, 5);
-
-  if (recentEntries.length === 0) {
-    return `
-      <div class="empty-home">
-        ${renderIcon('no-diary', null, 'empty-illustration')}
-        <h2>Start Your Journal</h2>
-        <p>Your journey begins with a single entry. Take a moment to reflect on your day.</p>
-        <button class="btn primary btn-large" onclick="openDiaryModal()">
-          Write Your First Entry
-        </button>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="recent-entries-section">
-      <div class="section-header">
-        ${renderIcon('entries', null, '')} Entries
-        <button class="view-all-btn" onclick="switchDiaryView('list')">View All ${renderIcon('chevron-right', null, 'view-all-icon')}</button>
-      </div>
-      <div class="entries-list">
-        ${recentEntries.map(entry => renderEntryCard(entry)).join('')}
-      </div>
-    </div>
-  `;
-}
-
-// Render entry card (new design)
+// Render entry card (new dr- classes)
 function renderEntryCard(entry) {
-  const dateObj = new Date(entry.date);
-  const dateStr = getRelativeDate(entry.date);
   const score = Number(entry.mood_score || 5);
-  const wordCount = entry.text ? entry.text.split(/\s+/).length : 0;
+  const wordCount = entry.text ? entry.text.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length : 0;
+  const dateStr = getRelativeDate(entry.date);
 
   let moodColor = '#F59E0B';
-  if (score >= 8) moodColor = '#10B981';
-  else if (score <= 4) moodColor = '#EF4444';
+  let moodBg = 'rgba(245,158,11,.1)';
+  if (score >= 8) { moodColor = '#10B981'; moodBg = 'rgba(16,185,129,.1)'; }
+  else if (score <= 4) { moodColor = '#EF4444'; moodBg = 'rgba(239,68,68,.1)'; }
 
-  // Normalize and split tags (both comma and space separated)
   const tags = entry.tags
-    ? entry.tags.split(/[,\s]+/)
-      .map(t => t.trim().replace(/^#+/, ''))
-      .filter(t => t.length > 0)
+    ? entry.tags.split(/[,\s]+/).map(t => t.trim().replace(/^#+/, '')).filter(t => t.length > 0)
     : [];
+  const hasTags = tags.length > 0;
 
   return `
-    <div class="entry-card" onclick="openEditDiary('${entry.id}')">
-      <div class="entry-mood-indicator" style="background: ${moodColor}"></div>
-      <div class="entry-content">
-        <div class="entry-header">
-          <span class="entry-date">${dateStr}</span>
-          <span class="entry-mood">
-            <span class="mood-emoji">${getMoodEmoji(score)}</span>
-            <span class="mood-score">${score}/10</span>
-          </span>
-        </div>
-        <p class="entry-preview">${(entry.text || '').substring(0, 150)}${(entry.text || '').length > 150 ? '...' : ''}</p>
-        ${tags.length > 0 ? `
-          <div class="entry-tags">
-            ${tags.slice(0, 4).map(tag => `<span class="tag">#${tag}</span>`).join('')}
-            ${tags.length > 4 ? `<span class="tag-more">+${tags.length - 4}</span>` : ''}
-          </div>
-        ` : ''}
-        <div class="entry-meta">
-          ${renderIcon('words', null, '')} ${wordCount} words
-        </div>
+    <div class="dr-entry-card" style="border-left-color:${moodColor}" onclick="openEditDiary('${entry.id}')">
+      <div class="dr-entry-main">
+        <div class="dr-entry-date">${dateStr}</div>
+        <p class="dr-entry-preview">${(entry.text || '').replace(/<[^>]*>/g, '').substring(0, 200)}</p>
       </div>
-      <div class="entry-actions">
-        <button class="action-btn" onclick="event.stopPropagation(); openEditDiary('${entry.id}')">
-          ${renderIcon('edit', null, '')}
-        </button>
-        <button class="action-btn" onclick="event.stopPropagation(); deleteEntry('${entry.id}')">
-          ${renderIcon('delete', null, '')}
-        </button>
+      ${hasTags ? `
+        <div class="dr-entry-tags-row">
+          ${tags.slice(0, 4).map(tag => `<span class="dr-entry-tag">#${tag}</span>`).join('')}
+          ${tags.length > 4 ? `<span class="dr-entry-tag">+${tags.length - 4}</span>` : ''}
+        </div>
+      ` : ''}
+      <div class="dr-entry-foot">
+        <div class="dr-entry-foot-left">
+          <span class="dr-mood-pill" style="background:${moodBg};color:${moodColor}">${getMoodEmoji(score)} ${score}/10</span>
+          <span class="dr-entry-wc">${wordCount} words</span>
+        </div>
+        <div class="dr-entry-actions">
+          <button class="dr-entry-btn" onclick="event.stopPropagation(); openEditDiary('${entry.id}')" title="Edit">
+            <i data-lucide="pencil" style="width:13px;height:13px"></i>
+          </button>
+          <button class="dr-entry-btn danger" onclick="event.stopPropagation(); deleteEntry('${entry.id}')" title="Delete">
+            <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -374,8 +510,11 @@ window.deleteEntry = async function (id) {
 function renderListView(sorted) {
   if (sorted.length === 0) {
     return `
-      <div class="empty-list">
-        <p>No entries match your search/filter.</p>
+      <div class="dr-empty">
+        <div class="dr-empty-icon">📖</div>
+        <div class="dr-empty-title">No entries yet</div>
+        <div class="dr-empty-sub">No entries match your search or filter.<br>Try adjusting your filters or write a new entry.</div>
+        <button class="dr-empty-btn" onclick="openDiaryModal()">Write First Entry</button>
       </div>
     `;
   }
@@ -384,21 +523,11 @@ function renderListView(sorted) {
   const streak = calculateStreak(sorted);
 
   return `
-    <div class="list-view">
-      <div class="view-header-row">
-        <div class="header-title">
-          ${renderIcon('list', null, 'header-icon')}
-          <h2>All Entries</h2>
-        </div>
-        <div class="list-stats">
-          <span class="stat-badge">📝 ${sorted.length} entries</span>
-          <span class="stat-badge">🔥 ${streak} day streak</span>
-          ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10 avg</span>` : ''}
-          ${moodStats.peak ? `<span class="stat-badge">✨ Best: ${moodStats.peak.day} (${moodStats.peak.mood}/10)</span>` : ''}
-        </div>
+    <div class="dr-entries">
+      <div class="dr-section-header">
+        <span class="dr-section-title">${sorted.length} ${sorted.length === 1 ? 'Entry' : 'Entries'}</span>
+        ${moodStats.avgMood ? `<span class="dr-section-meta">${moodStats.avgMood}/10 avg mood</span>` : ''}
       </div>
-    </div>
-    <div class="entries-list-full">
       ${sorted.map(entry => renderEntryCard(entry)).join('')}
     </div>
   `;
@@ -407,7 +536,7 @@ function renderListView(sorted) {
 // Render timeline view — mood colored vertical timeline
 function renderTimelineView(sorted) {
   if (sorted.length === 0) {
-    return `<div class="empty-list"><p>No entries yet. Start writing!</p></div>`;
+    return `<div class="dr-empty"><div class="dr-empty-icon">📖</div><div class="dr-empty-title">No entries yet</div><div class="dr-empty-sub">Start writing to see your timeline.</div></div>`;
   }
 
   const getMoodColor = (score) => {
@@ -425,16 +554,13 @@ function renderTimelineView(sorted) {
   };
 
   return `
-    <div class="view-header-row" style="margin-bottom:16px;">
-      <div class="header-title">
-        <h2>🕐 Timeline</h2>
+    <div class="dr-entries">
+      <div class="dr-section-header">
+        <span class="dr-section-title">🕐 Timeline</span>
+        <span style="font-size:11px;color:var(--text-3);font-weight:600;">📝 ${sorted.length} entries</span>
       </div>
-      <div class="list-stats">
-        <span class="stat-badge">📝 ${sorted.length} entries</span>
-      </div>
-    </div>
-    <div class="diary-timeline">
-      ${sorted.map((entry, i) => {
+      <div class="diary-timeline">
+        ${sorted.map((entry, i) => {
     const moodColor = getMoodColor(entry.mood_score);
     const moodBg = getMoodBg(entry.mood_score);
     const score = Number(entry.mood_score || 5);
@@ -457,6 +583,7 @@ function renderTimelineView(sorted) {
             <button style="position:absolute;top:10px;right:10px;border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:14px;" onclick="openEditDiary('${entry.id}')">✏️</button>
           </div>`;
   }).join('')}
+      </div>
     </div>
   `;
 }
@@ -482,7 +609,6 @@ function renderCalendarView(entries) {
     return d.getMonth() === month && d.getFullYear() === year;
   });
   const moodStats = getMoodStats(monthEntries);
-  const streak = calculateStreak(entries);
 
   let days = [];
 
@@ -510,37 +636,30 @@ function renderCalendarView(entries) {
     days.push({ date: i, isOtherMonth: true });
   }
 
+  const moodColors = ['', '#FEE2E2', '#FEF3C7', '#FEF9C3', '#D1FAE5', '#A7F3D0'];
+
   return `
-    <div class="calendar-view">
-      <div class="view-header-row">
-        <div class="header-title">
-          ${renderIcon('calendar', null, 'header-icon')}
-          <h2>${monthName}</h2>
-        </div>
-        <div class="calendar-stats">
-          <span class="stat-badge">📝 ${monthEntries.length} this month</span>
-          ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10</span>` : ''}
-        </div>
+    <div class="dr-calendar">
+      <div class="dr-cal-header">
+        <span class="dr-cal-title">${monthName}</span>
+        <span class="dr-cal-stat">${monthEntries.length} entries${moodStats.avgMood ? ` · ${moodStats.avgMood}/10 avg` : ''}</span>
       </div>
-      <div class="calendar-weekdays">
-        ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => `<span>${d}</span>`).join('')}
+      <div class="dr-cal-weekdays">
+        ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => `<div class="dr-cal-weekday">${d}</div>`).join('')}
       </div>
-      <div class="calendar-grid">
+      <div class="dr-cal-grid">
         ${days.map(d => {
-    if (d.isOtherMonth) return `<div class="calendar-day other-month"></div>`;
+    if (d.isOtherMonth) return `<div class="dr-cal-day other-month"><span class="dr-cal-day-num">${d.date}</span></div>`;
 
     const moodLevel = d.entry ? Math.ceil(Number(d.entry.mood_score || 5) / 2) : 0;
-    const moodColors = ['', '#FEE2E2', '#FEF3C7', '#FEF9C3', '#D1FAE5', '#A7F3D0'];
+    const bgStyle = moodLevel > 0 ? `background:${moodColors[moodLevel]}20` : '';
 
     return `
-            <div class="calendar-day ${d.isToday ? 'today' : ''} ${d.entry ? 'has-entry' : ''}" 
-                 style="${moodLevel > 0 ? `background: ${moodColors[moodLevel]}20` : ''}"
+            <div class="dr-cal-day ${d.isToday ? 'today' : ''} ${d.entry ? 'has-entry' : ''}"
+                 style="${bgStyle}"
                  onclick="${d.entry ? `openEditDiary('${d.entry.id}')` : `openDiaryModal('${year}-${String(month + 1).padStart(2, '0')}-${String(d.date).padStart(2, '0')}')`}">
-              <span class="day-number">${d.date}</span>
-              ${d.entry ? `
-                <span class="day-mood">${getMoodEmoji(d.entry.mood_score)}</span>
-                <div class="day-indicator" style="background: ${moodColors[moodLevel]}"></div>
-              ` : ''}
+              <span class="dr-cal-day-num">${d.date}</span>
+              ${d.entry ? `<div class="dr-cal-day-dot"></div>` : ''}
             </div>
           `;
   }).join('')}
@@ -586,6 +705,7 @@ function renderYearlyView(entries) {
 
     months.push({
       name: monthNames[m],
+      monthIndex: m,
       days,
       entryCount: monthEntries
     });
@@ -596,37 +716,31 @@ function renderYearlyView(entries) {
   const streak = calculateStreak(entries);
   const moodStats = getMoodStats(entries);
 
+  const moodColors = ['', '#EF4444', '#F97316', '#EAB308', '#22C55E', '#10B981'];
+
   return `
-    <div class="yearly-view">
-      <div class="view-header-row">
-        <div class="header-title">
-          ${renderIcon('calendar', null, 'header-icon')}
-          <h2>${year} Overview</h2>
-        </div>
-        <div class="yearly-stats">
-          <span class="stat-badge">📝 ${totalEntries} entries</span>
-          <span class="stat-badge">🔥 ${streak} day streak</span>
-          ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10 avg</span>` : ''}
-        </div>
+    <div class="dr-yearly">
+      <div class="dr-yearly-header">
+        <span class="dr-yearly-title">${year} Overview</span>
+        <span style="font-size:11px;color:var(--text-3);font-weight:600;">${totalEntries} entries · ${streak} streak${moodStats.avgMood ? ` · ${moodStats.avgMood}/10` : ''}</span>
       </div>
-      <div class="yearly-grid">
+      <div class="dr-months-grid">
         ${months.map(m => `
-          <div class="month-card">
-            <div class="month-header">
-              <span class="month-name">${m.name}</span>
-              <span class="month-count">${m.entryCount}</span>
+          <div class="dr-month-card">
+            <div class="dr-month-name">
+              ${m.name}
+              ${m.entryCount > 0 ? `<span class="dr-month-count">${m.entryCount}</span>` : ''}
             </div>
-            <div class="month-days">
+            <div class="dr-month-days">
               ${m.days.map(d => {
-    if (!d.day) return '<div class="day-cell empty"></div>';
+    if (!d.day) return '<div class="dr-day-cell" style="background:transparent;pointer-events:none;"></div>';
     const moodScore = d.entry ? Number(d.entry.mood_score || 5) : 0;
     const moodLevel = Math.ceil(moodScore / 2);
-    const moodColors = ['', '#EF4444', '#F97316', '#EAB308', '#22C55E', '#10B981'];
-    const bgColor = d.entry ? moodColors[moodLevel] : 'transparent';
+    const bgColor = d.entry ? moodColors[moodLevel] : 'var(--surface-2)';
     return `
-                  <div class="day-cell ${d.entry ? 'has-entry' : ''} ${d.isToday ? 'today' : ''}"
-                       style="background-color: ${bgColor} !important;"
-                       onclick="${d.entry ? `openEditDiary('${d.entry.id}')` : `openDiaryModal('${year}-${String(monthNames.indexOf(m.name) + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}')`}"
+                  <div class="dr-day-cell ${d.entry ? 'has-entry' : ''} ${d.isToday ? 'today' : ''}"
+                       style="background-color:${bgColor} !important;"
+                       onclick="${d.entry ? `openEditDiary('${d.entry.id}')` : `openDiaryModal('${year}-${String(m.monthIndex + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}')`}"
                        title="${d.day}${d.entry ? ` - Mood: ${d.entry.mood_score}/10` : ''}">
                   </div>
                 `;
@@ -654,41 +768,44 @@ function renderInsightsView(entries) {
   const totalWords = entries.reduce((acc, e) => acc + (e.text ? e.text.split(/\s+/).length : 0), 0);
 
   return `
-    <div class="insights-view">
-      <div class="view-header-row">
-        <div class="header-title">
-          ${renderIcon('insights', null, 'header-icon')}
-          <h2>Insights</h2>
-        </div>
-        <button class="export-btn" onclick="window.exportDiary()">
-          ${renderIcon('export', null, '')} Export
+    <div class="dr-insights">
+      <div class="dr-insights-header">
+        <span class="dr-insights-title">Insights</span>
+        <button class="dr-export-btn" onclick="window.exportDiary()">
+          <i data-lucide="download" style="width:13px;height:13px"></i>
+          Export
         </button>
       </div>
-      <div class="insights-grid">
-        <!-- Mood Chart -->
-        <div class="insight-card insight-chart">
-          ${renderIcon('chart', null, '')} Mood Over Time
-          <canvas id="insightsChart"></canvas>
+
+
+      <!-- Writing Stats -->
+      <div class="dr-insight-card">
+        <div class="dr-insight-card-label">Writing Stats</div>
+        <div class="dr-stat-row">
+          <div class="dr-stat-row-val">${thisMonth.length}</div>
+          <div class="dr-stat-row-lbl">entries this month</div>
         </div>
-        
-        <!-- Writing Frequency -->
-        <div class="insight-card">
-          ${renderIcon('calendar', null, '')} Writing Frequency
-          <div class="frequency-stat">
-            <div class="frequency-value">${thisMonth.length}</div>
-            <div class="frequency-label">entries this month</div>
-          </div>
-          <div class="frequency-stat">
-            <div class="frequency-value">${totalWords.toLocaleString()}</div>
-            <div class="frequency-label">total words written</div>
-          </div>
+        <div class="dr-stat-row">
+          <div class="dr-stat-row-val">${totalWords.toLocaleString()}</div>
+          <div class="dr-stat-row-lbl">total words written</div>
         </div>
-        
-        <!-- Achievements -->
-        <div class="insight-card achievements-card">
-          ${renderIcon('achievements', null, '')} Achievements
-          <div class="achievements-list">
-            ${achievements.map(a => {
+        <div class="dr-stat-row">
+          <div class="dr-stat-row-val">${streak}</div>
+          <div class="dr-stat-row-lbl">day streak</div>
+        </div>
+        ${moodStats.avgMood ? `
+        <div class="dr-stat-row">
+          <div class="dr-stat-row-val">${moodStats.avgMood}</div>
+          <div class="dr-stat-row-lbl">average mood score</div>
+        </div>
+        ` : ''}
+      </div>
+
+      <!-- Achievements -->
+      ${achievements.length > 0 ? `
+      <div class="dr-insight-card">
+        <div class="dr-insight-card-label">Achievements</div>
+        ${achievements.map(a => {
     let unlocked = false;
     const totalEntries = entries.length;
     const goodMoodCount = entries.filter(e => Number(e.mood_score) >= 8).length;
@@ -698,18 +815,17 @@ function renderInsightsView(entries) {
     if (a.type === 'mood' && goodMoodCount >= Number(a.target_value)) unlocked = true;
 
     return `
-                <div class="achievement-item ${unlocked ? 'unlocked' : 'locked'}">
-                  <span class="achievement-icon">${unlocked ? '🏆' : '🔒'}</span>
-                  <div class="achievement-info">
-                    <span class="achievement-name">${a.name}</span>
-                    <span class="achievement-desc">${a.description}</span>
-                  </div>
-                </div>
-              `;
+            <div class="dr-achievement-item ${unlocked ? 'unlocked' : 'locked'}">
+              <div class="dr-achievement-icon">${unlocked ? '🏆' : '🔒'}</div>
+              <div>
+                <div class="dr-achievement-name">${a.name}</div>
+                <div class="dr-achievement-desc">${a.description}</div>
+              </div>
+            </div>
+          `;
   }).join('')}
-          </div>
-        </div>
       </div>
+      ` : ''}
     </div>
   `;
 }
@@ -771,48 +887,6 @@ function renderMoodSparkline(entries) {
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-
-  moods.forEach((mood, i) => {
-    const x = padding + (i / Math.max(1, moods.length - 1)) * chartWidth;
-    const y = height - padding - ((mood - min) / Math.max(1, max - min)) * chartHeight;
-
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-
-  // Draw points with value labels
-  moods.forEach((mood, i) => {
-    const x = padding + (i / Math.max(1, moods.length - 1)) * chartWidth;
-    const y = height - padding - ((mood - min) / Math.max(1, max - min)) * chartHeight;
-
-    // Point
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#4F46E5';
-    ctx.fill();
-
-    // White center
-    ctx.beginPath();
-    ctx.arc(x, y, 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'white';
-    ctx.fill();
-
-    // Value label above point
-    if (moods.length <= 7) {
-      ctx.fillStyle = '#6B7280';
-      ctx.font = '9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(mood.toFixed(0), x, y - 10);
-    }
-  });
-
-  // Draw y-axis labels
-  ctx.fillStyle = '#9CA3AF';
-  ctx.font = '9px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(max.toFixed(0), 2, padding + 4);
-  ctx.fillText(min.toFixed(0), 2, height - padding);
 
   moods.forEach((mood, i) => {
     const x = padding + (i / Math.max(1, moods.length - 1)) * chartWidth;
@@ -978,57 +1052,46 @@ function renderTagsView() {
 
   const colors = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
-  const moodStats = getMoodStats(entries);
-  const streak = calculateStreak(entries);
-
   return `
-    <div class="tags-view">
-      <div class="view-header-row">
-        <div class="header-title">
-          ${renderIcon('tags', null, 'header-icon')} 
-          <h2>Your Tags</h2>
-        </div>
-        <div class="tags-stats">
-          <span class="stat-badge">📝 ${entries.length} entries</span>
-          <span class="stat-badge">🔥 ${streak} day streak</span>
-          ${moodStats.avgMood ? `<span class="stat-badge">😊 ${moodStats.avgMood}/10 avg</span>` : ''}
-        </div>
+    <div class="dr-tags">
+      <div class="dr-section-header" style="padding:4px 0 14px;">
+        <span class="dr-section-title">Your Tags</span>
+        <button style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:10px;border:1.5px solid var(--border-color);background:var(--surface-2);color:var(--text-2);cursor:pointer;" onclick="openTagModal()">+ New Tag</button>
       </div>
-      
-      <div class="tags-grid">
+
+      <div class="dr-tags-grid">
         ${allTags.length === 0 ? `
-          <div class="empty-tags">
-            <p>No tags yet. Tags will appear when you use them.</p>
+          <div class="dr-empty" style="padding:30px 0;">
+            <div class="dr-empty-icon">🏷️</div>
+            <div class="dr-empty-title" style="font-size:14px;">No tags yet</div>
+            <div class="dr-empty-sub" style="font-size:12px;">Tags will appear when you add them to entries.</div>
           </div>
         ` : allTags.map((tag, idx) => {
     const count = tagCounts[tag] || 0;
     const color = colors[idx % colors.length];
     return `
-            <div class="tag-chip" style="--tag-color: ${color}" onclick="filterByTag('${tag}')">
-              <span class="tag-name">#${tag}</span>
-              <span class="tag-count">${count}</span>
+            <div class="dr-tag-chip" style="background:${color}14;color:${color};border-color:${color}30;" onclick="filterByTag('${tag}')">
+              #${tag}
+              <span class="dr-tag-count">${count}</span>
             </div>
           `;
   }).join('')}
       </div>
-      
+
       <!-- Templates Section -->
-      <div class="templates-section">
-        <div class="section-header-row">
-          <div class="section-title">
-            ${renderIcon('template', null, '')} Templates
-          </div>
-          <div class="section-actions">
-            ${(state.data.diary_templates || []).length === 0 ? `
-              <button class="btn btn-seed" onclick="seedDefaultTemplates()">
-                ${renderIcon('plus', null, '')} Seed Defaults
-              </button>
-            ` : ''}
-            <button class="btn primary" onclick="openTemplateModal()">+ New Template</button>
-          </div>
-        </div>
-        ${renderTemplatesList()}
+      <div class="dr-section-sep">
+        Templates
       </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span style="font-size:12px;color:var(--text-3);font-weight:500;">${(state.data.diary_templates || []).length} templates</span>
+        <div style="display:flex;gap:6px;">
+          ${(state.data.diary_templates || []).length === 0 ? `
+            <button style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:10px;border:1.5px solid var(--border-color);background:var(--surface-2);color:var(--text-2);cursor:pointer;" onclick="seedDefaultTemplates()">Seed Defaults</button>
+          ` : ''}
+          <button style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:10px;border:none;background:var(--primary);color:#fff;cursor:pointer;" onclick="openTemplateModal()">+ New Template</button>
+        </div>
+      </div>
+      ${renderTemplatesList()}
     </div>
   `;
 }
@@ -1061,19 +1124,19 @@ window.seedDefaultTemplates = async function () {
 
 function renderTemplatesList() {
   const templates = state.data.diary_templates || [];
-  if (!templates.length) return '<p class="text-muted">No templates yet</p>';
+  if (!templates.length) return '<p style="font-size:13px;color:var(--text-3);margin:0;">No templates yet</p>';
 
   return `
-    <div class="templates-grid">
+    <div class="dr-templates-grid">
       ${templates.map(t => `
-        <div class="template-card">
-          <span class="template-category">${t.category || 'general'}</span>
-          <h4>${t.title}</h4>
-          <p>${(t.content || '').substring(0, 80)}...</p>
-          <div class="template-actions">
-            <button class="btn btn-sm" onclick="useTemplate(${t.id})">Use</button>
-            <button class="btn btn-sm" onclick="editTemplate(${t.id})">Edit</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteTemplate(${t.id})">Delete</button>
+        <div class="dr-template-card">
+          <div class="dr-template-cat">${t.category || 'general'}</div>
+          <div class="dr-template-title">${t.title}</div>
+          <div class="dr-template-preview">${(t.content || '').substring(0, 80)}...</div>
+          <div class="dr-template-actions">
+            <button class="dr-template-btn primary" onclick="useTemplate(${t.id})">Use</button>
+            <button class="dr-template-btn" onclick="editTemplate(${t.id})">Edit</button>
+            <button class="dr-template-btn danger" onclick="deleteTemplate(${t.id})">Delete</button>
           </div>
         </div>
       `).join('')}
@@ -1190,70 +1253,60 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
   const contextData = getContextData(defaultDate);
 
   box.innerHTML = `
-    <div class="diary-modal-new">
-      <h2>✍️ ${dateStr ? 'Edit Entry' : 'New Entry'}</h2>
-      
-      <!-- Template Selector -->
+    <div class="dr-modal">
+      <div class="dr-modal-title">${dateStr ? 'Edit Entry' : 'New Entry'}</div>
+
       ${templates.length > 0 ? `
-      <div class="template-selector-modal">
-        <select class="input" id="templateSelect" onchange="loadTemplateInModal(this.value)">
-          <option value="">-- Use a Template --</option>
-          ${templates.map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
-        </select>
-      </div>
+      <select class="dr-template-select" id="templateSelect" onchange="loadTemplateInModal(this.value)">
+        <option value="">— Use a Template —</option>
+        ${templates.map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
+      </select>
       ` : ''}
-      
-      <!-- Context Quick View -->
+
       ${((showTasks && contextData.tasks?.length) || (showHabits && contextData.habits?.length) || (showExpenses && contextData.expenses > 0)) ? `
-      <div class="context-quick-view">
-        ${showTasks && contextData.tasks?.length ? `<span class="context-item">✓ ${contextData.tasks.length} task(s) done</span>` : ''}
-        ${showHabits && contextData.habits?.length ? `<span class="context-item">✓ ${contextData.habits.length} habit(s) logged</span>` : ''}
-        ${showExpenses && contextData.expenses > 0 ? `<span class="context-item">${renderIcon('money', null, '')}${(contextData.expenses || 0).toFixed(2)} spent</span>` : ''}
+      <div class="dr-context-bar">
+        ${showTasks && contextData.tasks?.length ? `<span class="dr-context-chip">✓ ${contextData.tasks.length} task(s) done</span>` : ''}
+        ${showHabits && contextData.habits?.length ? `<span class="dr-context-chip">✓ ${contextData.habits.length} habit(s) logged</span>` : ''}
+        ${showExpenses && contextData.expenses > 0 ? `<span class="dr-context-chip">💸 ${(contextData.expenses || 0).toFixed(2)} spent</span>` : ''}
       </div>` : ''}
-      
-      <!-- Mood Selector -->
-      <div class="mood-selector">
-        <label>How are you feeling?</label>
-        <div class="mood-slider-container">
-          <input type="range" min="1" max="10" value="${defaultMood}" class="mood-slider" id="mMoodScore"
-            oninput="updateMoodDisplay(this.value)">
-          <div class="mood-display">
-            <span id="moodEmoji" class="mood-emoji-large">${getMoodEmoji(defaultMood)}</span>
-            <span id="moodVal" class="mood-number">${defaultMood}</span>
+
+      <div class="dr-mood-section">
+        <span class="dr-mood-label">How are you feeling?</span>
+        <div class="dr-mood-slider-row">
+          <div class="dr-mood-display">
+            <span id="moodEmoji" class="dr-mood-emoji">${getMoodEmoji(defaultMood)}</span>
+            <span id="moodVal" class="dr-mood-num">${defaultMood}</span>
           </div>
+          <input type="range" min="1" max="10" value="${defaultMood}" class="mood-slider dr-mood-slider" id="mMoodScore"
+            oninput="updateMoodDisplay(this.value)">
         </div>
-        <div class="mood-labels">
+        <div class="dr-mood-labels">
           <span>Awful</span>
           <span>Amazing</span>
         </div>
       </div>
-      
-      <!-- Writing Area -->
-      <div class="rich-text-toolbar">
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('bold')" title="Bold"><b>B</b></button>
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('italic')" title="Italic"><i>I</i></button>
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertUnorderedList')" title="Bullet List">•</button>
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertOrderedList')" title="Numbered List">1.</button>
-        <div style="flex:1"></div>
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${defaultDate}')" title="Auto-Summarize Day" style="color:var(--primary); font-size:12px; font-weight:600; padding:0 8px; width:auto;">
+
+      <div class="dr-toolbar">
+        <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('bold')" title="Bold"><b>B</b></button>
+        <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('italic')" title="Italic"><i>I</i></button>
+        <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertUnorderedList')" title="Bullet List">•</button>
+        <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertOrderedList')" title="Numbered List">1.</button>
+        <button type="button" class="dr-toolbar-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${defaultDate}')" title="Auto-Summarize Day">
           ✨ Auto-Summary
         </button>
       </div>
-      <div class="rich-editor" id="mDiaryText" contenteditable="true" 
+      <div class="rich-editor dr-editor" id="mDiaryText" contenteditable="true"
            placeholder="Start writing...">${templateContent}</div>
-      
-      <!-- Tags -->
-      <input class="input" id="mDiaryTags" placeholder="#tags (comma separated)">
-      
-      <!-- Date -->
-      <input type="date" class="input" id="mDiaryDate" value="${defaultDate}">
-      
-      <!-- Word Count -->
-      <div class="word-count" id="diaryWordCount">0 words</div>
-      
-      <div class="modal-actions">
-        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <button class="btn primary btn-save" data-action="save-diary-modal">Save Entry</button>
+
+      <div class="dr-field-row">
+        <input class="dr-field" id="mDiaryTags" placeholder="#tags (comma separated)">
+        <input type="date" class="dr-field" id="mDiaryDate" value="${defaultDate}" style="max-width:160px;">
+      </div>
+      <div class="dr-word-count" id="diaryWordCount">0 words</div>
+
+      <div class="dr-modal-actions">
+        <button class="dr-modal-cancel" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+        <button class="dr-modal-save" data-action="save-diary-modal">Save Entry</button>
       </div>
     </div>
   `;
@@ -1304,39 +1357,45 @@ window.openEditDiary = function (id) {
   const score = Number(e.mood_score || 5);
 
   box.innerHTML = `
-    <div class="diary-modal-new">
-      <h2>✍️ Edit Entry</h2>
-      
-      <div class="mood-selector">
-        <label>How are you feeling?</label>
-        <div class="mood-slider-container">
-          <input type="range" min="1" max="10" value="${score}" class="mood-slider" id="mMoodScore"
-            oninput="updateMoodDisplay(this.value)">
-          <div class="mood-display">
-            <span id="moodEmoji" class="mood-emoji-large">${getMoodEmoji(score)}</span>
-            <span id="moodVal" class="mood-number">${score}</span>
+    <div class="dr-modal">
+      <div class="dr-modal-title">Edit Entry</div>
+
+      <div class="dr-mood-section">
+        <span class="dr-mood-label">How are you feeling?</span>
+        <div class="dr-mood-slider-row">
+          <div class="dr-mood-display">
+            <span id="moodEmoji" class="dr-mood-emoji">${getMoodEmoji(score)}</span>
+            <span id="moodVal" class="dr-mood-num">${score}</span>
           </div>
+          <input type="range" min="1" max="10" value="${score}" class="mood-slider dr-mood-slider" id="mMoodScore"
+            oninput="updateMoodDisplay(this.value)">
+        </div>
+        <div class="dr-mood-labels">
+          <span>Awful</span>
+          <span>Amazing</span>
         </div>
       </div>
-      
-      <div class="rich-text-toolbar">
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('bold')" title="Bold"><b>B</b></button>
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('italic')" title="Italic"><i>I</i></button>
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertUnorderedList')" title="Bullet List">•</button>
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertOrderedList')" title="Numbered List">1.</button>
-        <div style="flex:1"></div>
-        <button type="button" class="toolbar-btn" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${(e.date || '').slice(0, 10)}')" title="Auto-Summarize Day" style="color:var(--primary); font-size:12px; font-weight:600; padding:0 8px; width:auto;">
+
+      <div class="dr-toolbar">
+        <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('bold')" title="Bold"><b>B</b></button>
+        <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('italic')" title="Italic"><i>I</i></button>
+        <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertUnorderedList')" title="Bullet List">•</button>
+        <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertOrderedList')" title="Numbered List">1.</button>
+        <button type="button" class="dr-toolbar-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${(e.date || '').slice(0, 10)}')" title="Auto-Summarize Day">
           ✨ Auto-Summary
         </button>
       </div>
-      <div class="rich-editor" id="mDiaryText" contenteditable="true">${(e.text || '').replace(/</g, '<')}</div>
-      <input class="input" id="mDiaryTags" value="${(e.tags || '')}">
-      <input type="date" class="input" id="mDiaryDate" value="${(e.date || '').slice(0, 10)}">
-      <div class="word-count">${e.text ? e.text.split(/\s+/).length : 0} words</div>
-      
-      <div class="modal-actions">
-        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <button class="btn primary btn-save" data-action="update-diary-modal" data-edit-id="${e.id}">Update</button>
+      <div class="rich-editor dr-editor" id="mDiaryText" contenteditable="true">${(e.text || '').replace(/</g, '<')}</div>
+
+      <div class="dr-field-row">
+        <input class="dr-field" id="mDiaryTags" value="${(e.tags || '')}">
+        <input type="date" class="dr-field" id="mDiaryDate" value="${(e.date || '').slice(0, 10)}" style="max-width:160px;">
+      </div>
+      <div class="dr-word-count" id="diaryWordCount">${e.text ? e.text.split(/\s+/).length : 0} words</div>
+
+      <div class="dr-modal-actions">
+        <button class="dr-modal-cancel" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+        <button class="dr-modal-save" data-action="update-diary-modal" data-edit-id="${e.id}">Update</button>
       </div>
     </div>
   `;
@@ -1345,7 +1404,8 @@ window.openEditDiary = function (id) {
   editor.addEventListener('input', () => {
     const text = editor.innerText || '';
     const count = text.trim() ? text.trim().split(/\s+/).length : 0;
-    document.querySelector('.word-count').textContent = `${count} words`;
+    const wc = document.getElementById('diaryWordCount');
+    if (wc) wc.textContent = `${count} words`;
   });
 
   modal.classList.remove('hidden');
@@ -1385,7 +1445,7 @@ window.insertDiarySummary = function (dateStr) {
   }
 
   if (context.expenses > 0) {
-    summaryParts.push('<b>Expenses:</b> ' + renderIcon('money', null, '') + context.expenses.toFixed(2));
+    summaryParts.push('<b>Expenses:</b> 💸 ' + context.expenses.toFixed(2));
   }
 
   if (summaryParts.length === 0) {
