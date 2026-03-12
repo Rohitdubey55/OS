@@ -71,11 +71,11 @@ function renderDiary() {
 .dr-write-btn:active { opacity:.85; transform:scale(.97); }
 
 /* ═══ STATS STRIP ═══ */
-.dr-stats-strip { display:flex; align-items:center; padding:0 18px 14px; flex-shrink:0; }
-.dr-stat-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:1px; }
-.dr-stat-n { font-size:19px; font-weight:800; color:var(--text-1); letter-spacing:-.5px; line-height:1; }
-.dr-stat-l { font-size:9.5px; font-weight:600; color:var(--text-3); text-transform:uppercase; letter-spacing:.3px; margin-top:2px; }
-.dr-stat-div { width:1px; height:26px; background:var(--border-color); flex-shrink:0; }
+.dr-stats-strip { display:flex; align-items:center; padding:24px 18px; flex-shrink:0; background:var(--surface-1); border-radius:16px; margin:0 16px 16px; border:1px solid var(--border-color); }
+.dr-stat-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.dr-stat-n { font-size:32px; font-weight:800; color:#0F172A; letter-spacing:-1px; line-height:1; }
+.dr-stat-l { font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:1px; }
+.dr-stat-div { width:1px; height:36px; background:#E2E8F0; flex-shrink:0; }
 
 /* ═══ OVERVIEW CARDS ═══ */
 .dr-overview-row { display:flex; gap:10px; padding:0 16px 12px; flex-shrink:0; }
