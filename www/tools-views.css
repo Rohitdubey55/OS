@@ -1067,7 +1067,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 24px 16px;
+    padding: calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));
 }
 
 .gym-builder-inner {
@@ -1418,15 +1418,57 @@
 }
 
 .gym-history-badge-done {
-    background: rgba(16, 185, 129, 0.12);
-    color: #059669;
-    border: 1px solid rgba(16, 185, 129, 0.25);
+    background: color-mix(in srgb, var(--primary, #10B981) 12%, transparent);
+    color: var(--primary, #10B981);
+    border: 1px solid color-mix(in srgb, var(--primary, #10B981) 25%, transparent);
 }
 
 .gym-history-badge-partial {
     background: rgba(245, 158, 11, 0.12);
-    color: #B45309;
+    color: #F59E0B;
     border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.gym-history-session-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.gym-history-action-btn {
+    background: var(--surface-2, #f1f5f9);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.2s;
+}
+
+.gym-history-action-btn i {
+    width: 14px;
+    height: 14px;
+}
+
+.gym-history-action-btn:hover {
+    background: var(--surface-3);
+    color: var(--text-main);
+}
+
+.gym-history-action-btn.delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.gym-history-action-btn.edit:hover {
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 .gym-history-exercises {
@@ -1671,8 +1713,11 @@
     inset: 0;
     z-index: 250;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    padding: calc(24px + env(safe-area-inset-top)) 16px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     animation: gymFadeIn 0.2s ease;
 }
 
@@ -1737,6 +1782,7 @@
     outline: none;
     transition: border-color 0.18s;
     -webkit-appearance: none;
+    appearance: none;
 }
 
 .gym-form-input:focus {
@@ -3031,6 +3077,7 @@
 
 /* ── Responsive ── */
 @media (max-width: 680px) {
+
     /* Shell fills viewport height, feed scrolls inside — no fixed compose needed */
     .nc-shell {
         border-radius: 12px;

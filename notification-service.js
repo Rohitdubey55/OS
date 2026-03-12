@@ -419,6 +419,7 @@ function checkAndTriggerReminders() {
     const habits = state.data.habits || [];
     habits.forEach(habit => {
         if (!habit.reminder_time) return;
+        if (habit.alarm_enabled === false) return; // user disabled alarm for this habit
         const timeStr = String(habit.reminder_time);
 
         let hours, minutes;
@@ -617,6 +618,7 @@ async function syncNativeNotifications() {
         const habits = state.data.habits || [];
         habits.forEach(habit => {
             if (!habit.reminder_time) return;
+            if (habit.alarm_enabled === false) return; // user disabled alarm for this habit
             const timeStr = String(habit.reminder_time);
             let hours, minutes;
 

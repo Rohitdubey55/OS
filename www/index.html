@@ -57,6 +57,7 @@
     <link rel="stylesheet" href="vision-views.css" />
 
     <link rel="stylesheet" href="saas-polish.css" />
+    <link rel="stylesheet" href="styles/books-reader.css" />
     <link rel="stylesheet" href="command-palette.css" />
     <link rel="stylesheet" href="styles/icon-styles.css" />
 
@@ -135,6 +136,7 @@
                 </div>
 
                 <div class="nav-item" onclick="routeTo('people')" data-target="people">People</div>
+                <div class="nav-item" onclick="routeTo('books')" data-target="books">Books</div>
 
             </nav>
 
@@ -211,6 +213,10 @@
             <div class="mob-item" onclick="routeTo('people')" data-target="people">
                 <i data-icon="people"></i>
                 People
+            </div>
+            <div class="mob-item" onclick="routeTo('books')" data-target="books">
+                <i data-icon="book-open"></i>
+                Books
             </div>
 
         </nav>
@@ -410,6 +416,8 @@
     <script src="view-pomodoro.js"></script>
     <script src="view-notes.js"></script>
     <script src="view-chimes.js"></script>
+    <script src="view-books.js"></script>
+    <script src="view-reader.js"></script>
     <script src="notification-service.js?v=3"></script>
     <script src="command-palette.js"></script>
 

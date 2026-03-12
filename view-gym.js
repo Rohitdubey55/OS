@@ -133,30 +133,25 @@ let gymElapsedInterval = null;   // interval id for elapsed timer
 
 async function renderGym() {
   const main = document.getElementById('main');
+
   main.innerHTML = `
     <div class="gym-shell" id="gymShell">
-      <!-- Persistent 7-day history strip -->
       <div class="gym-week-strip" id="gymWeekStrip"></div>
-
-      <!-- 3-tab bar -->
       <div class="gym-tab-bar">
         <button class="gym-tab-btn active" data-tab="today"   onclick="gymSwitchTab('today')">Today</button>
         <button class="gym-tab-btn"        data-tab="plans"   onclick="gymSwitchTab('plans')">Plans</button>
         <button class="gym-tab-btn"        data-tab="library" onclick="gymSwitchTab('library')">Library</button>
       </div>
-
-      <div class="gym-content" id="gymContent">
-        <div class="gym-loading-state">Loading…</div>
-      </div>
+      <div class="gym-content" id="gymContent"></div>
     </div>
-
-    <!-- History day detail modal -->
+    <div id="gymBuilderOverlay" style="display:none"></div>
+    <div id="gymCustomModal" style="display:none"></div>
     <div class="gym-history-modal hidden" id="gymHistoryModal" onclick="gymCloseHistoryModal(event)">
       <div class="gym-history-modal-inner" id="gymHistoryModalInner"></div>
     </div>
   `;
 
-  await gymLoadData();
+  gymLoadData(); // always non-blocking
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -165,31 +160,28 @@ async function renderGym() {
 
 async function gymLoadData() {
   try {
-    if (typeof initToolsSheets === 'function') await initToolsSheets();
-
-    // Prefer pre-loaded global state if available
-    if (state.data.gym_plans && state.data.gym_plans.length > 0) {
+    // If state already has gym data (loaded by loadAllData on startup), use it immediately
+    if (Array.isArray(state.data.gym_plans)) {
       gymPlans = state.data.gym_plans;
       gymSessions = state.data.gym_sessions || [];
       gymCustomExercises = state.data.gym_exercises || [];
     } else {
+      // First ever load: init sheets then fetch
+      if (typeof initToolsSheets === 'function') await initToolsSheets();
       const [plansRes, sessionsRes, customRes] = await Promise.all([
         apiGet('gym_plans'),
         apiGet('gym_sessions'),
         apiGet('gym_exercises'),
       ]);
-
       gymPlans = plansRes || [];
       gymSessions = sessionsRes || [];
       gymCustomExercises = customRes || [];
-
-      // Cache back to state
       state.data.gym_plans = gymPlans;
       state.data.gym_sessions = gymSessions;
       state.data.gym_exercises = gymCustomExercises;
     }
 
-    // Resolve today's session
+    // Resolve today's session (if not already resolved from cache)
     const todayStr = gymTodayStr();
     const rawToday = gymSessions.find(s => s.date === todayStr);
     if (rawToday) {
@@ -762,8 +754,6 @@ function gymRenderPlans(container) {
         <div class="gym-plan-new-label">New Plan</div>
       </div>
     </div>
-    <!-- Plan builder overlay rendered here -->
-    <div id="gymBuilderOverlay" style="display:none"></div>
   `;
 }
 
@@ -1035,6 +1025,43 @@ function gymRenderWeekStrip() {
   }).join('');
 }
 
+async function gymDeleteSession(sessionId) {
+  if (!confirm('Are you sure you want to delete this workout session? This cannot be undone.')) return;
+  try {
+    await apiPost({ action: 'delete', sheet: 'gym_sessions', id: sessionId });
+    gymSessions = gymSessions.filter(s => String(s.id) !== String(sessionId));
+    state.data.gym_sessions = gymSessions;
+    toast('Session deleted');
+    if (gymSelectedHistoryDate) {
+      gymOpenHistoryModal(gymSelectedHistoryDate);
+    }
+  } catch (err) {
+    console.error('gymDeleteSession error:', err);
+    toast('Failed to delete session', 'error');
+  }
+}
+
+async function gymEditSession(sessionId) {
+  const session = gymSessions.find(s => String(s.id) === String(sessionId));
+  if (!session) return;
+
+  // If there's an active session with progress, warn the user
+  if (gymTodaySession && gymTodaySession.exercises.some(ex => ex.sets.some(s => s.done))) {
+    if (!confirm('You have an active workout in progress. Editing this past session will replace your current progress. Continue?')) return;
+  }
+
+  gymTodaySessionRow = session;
+  try {
+    gymTodaySession = JSON.parse(session.workout_json || '{"exercises":[]}');
+  } catch (e) {
+    gymTodaySession = { exercises: [] };
+  }
+
+  gymCloseHistoryModal();
+  gymRenderTab('today');
+  toast('Loading session for editing...');
+}
+
 function gymOpenHistoryModal(d) {
   gymSelectedHistoryDate = d;
   const modal = document.getElementById('gymHistoryModal');
@@ -1063,7 +1090,7 @@ function gymOpenHistoryModal(d) {
       const totalVol = exercises.reduce((acc, ex) =>
         acc + ex.sets.filter(st => st.done).reduce((sv, st) => sv + (st.reps || 0) * (st.weight || 0), 0), 0);
       const exRows = exercises.map(ex => {
-        const color = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
+        const color = GYM_MUSCLE_COLORS[ex.muscle_group] || 'var(--primary)';
         const doneSetsEx = ex.sets.filter(st => st.done);
         const setsDetail = doneSetsEx.length
           ? doneSetsEx.map(st => `<span class="gym-history-set-chip">${st.reps}×${st.weight}kg</span>`).join('')
@@ -1079,10 +1106,19 @@ function gymOpenHistoryModal(d) {
         : '<span class="gym-history-badge gym-history-badge-partial">Partial</span>';
       return `<div class="gym-history-session-card">
         <div class="gym-history-session-header">
-          <div>
+          <div style="flex:1">
             <div class="gym-history-session-name">${escapeHtml(s.plan_name || 'Session')}</div>
             <div class="gym-history-session-meta">${doneSets}/${totalSets} sets · ${totalVol > 0 ? Math.round(totalVol).toLocaleString() + 'kg vol' : '—'}</div>
-          </div>${status}
+          </div>
+          <div class="gym-history-session-actions">
+            ${status}
+            <button class="gym-history-action-btn edit" onclick="gymEditSession('${s.id}')" title="Edit">
+              <i data-lucide="edit-2"></i>
+            </button>
+            <button class="gym-history-action-btn delete" onclick="gymDeleteSession('${s.id}')" title="Delete">
+              <i data-lucide="trash-2"></i>
+            </button>
+          </div>
         </div>
         <div class="gym-history-exercises">${exRows}</div>
       </div>`;
@@ -1098,6 +1134,11 @@ function gymOpenHistoryModal(d) {
     <div class="gym-history-modal-body">${content}</div>
   `;
   modal.classList.remove('hidden');
+
+  // Re-run Lucide icons
+  if (typeof lucide !== 'undefined' && lucide.createIcons) {
+    lucide.createIcons();
+  }
 }
 
 function gymCloseHistoryModal(e) {
@@ -1195,9 +1236,8 @@ function gymRenderLibrary(container) {
              value="${escapeHtml(gymLibrarySearch)}" placeholder="Search exercises…"
              oninput="gymSetLibrarySearch(this.value)">
     </div>
-    <div class="gym-lib-grid" id="gymLibGrid"></div>
     <button class="gym-lib-add-custom-btn" onclick="gymOpenAddCustom()">＋ Add Custom Exercise</button>
-    <div id="gymCustomModal" style="display:none"></div>
+    <div class="gym-lib-grid" id="gymLibGrid"></div>
   `;
 
   gymRenderLibraryGrid();

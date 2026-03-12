@@ -6,7 +6,7 @@ const SCHEMA = {
   "planner_events": ["id", "title", "start_datetime", "end_datetime", "category"],
   "tasks": ["id", "title", "due_date", "due_time", "priority", "status", "notes", "description", "category", "tags", "vision_id", "recurrence", "recurrence_days", "recurrence_end", "completed_dates", "duration", "subtasks", "pomodoro_estimate", "pomodoro_length"],
   "expenses": ["id", "date", "amount", "category", "description", "type"],
-  "habits": ["id", "habit_name", "frequency", "streak", "reminder_time", "emoji", "pomodoro_sessions", "pomodoro_length"],
+  "habits": ["id", "habit_name", "frequency", "streak", "reminder_time", "emoji", "pomodoro_sessions", "pomodoro_length", "alarm_enabled"],
   "habit_logs": ["id", "habit_id", "date", "status", "pomodoro_completed"],
   "diary": ["id", "date", "content", "mood", "tags"],
   "vision_board": ["id", "category", "title", "description", "image_url", "target_date", "progress", "status", "notes", "linked_habits", "created_at", "updated_at", "video_url", "month_focus"],
@@ -26,7 +26,10 @@ const SCHEMA = {
   "pomodoro_settings": ["id", "work_duration", "short_break", "long_break", "long_break_interval", "sound_work", "sound_break", "auto_start_break", "background_mode"],
   "pomodoro_sessions": ["id", "date", "type", "duration", "habit_id", "task_id", "completed"],
   "pomodoro_badges": ["id", "user_id", "badge_type", "unlocked_at", "total_sessions"],
-  "vision_tdp": ["id", "start_date", "end_date", "status", "categories_json", "created_at"]
+  "vision_tdp": ["id", "start_date", "end_date", "status", "categories_json", "created_at"],
+  "book_library": ["id", "title", "author", "cover_url", "category", "status", "date_added", "date_completed", "rating", "notes", "linked_goals", "tags"],
+  "book_summaries": ["id", "book_id", "book_title", "author", "summary_json", "total_pages", "created_at", "linked_vision_ids", "key_takeaways", "action_items"],
+  "reader_settings": ["id", "background_color", "font_color", "font_family", "font_size", "line_spacing", "fullscreen_mode", "page_animation", "auto_save_position"]
 };
 
 /**
@@ -444,6 +447,29 @@ function initToolsSheets() {
   if (!notesSheet) {
     notesSheet = ss.insertSheet('notes');
     notesSheet.appendRow(['id', 'title', 'content', 'category', 'created_at', 'updated_at', 'is_pinned', 'tags']);
+  }
+  
+  // Create book_library sheet if not exists
+  let bookLibrarySheet = ss.getSheetByName('book_library');
+  if (!bookLibrarySheet) {
+    bookLibrarySheet = ss.insertSheet('book_library');
+    bookLibrarySheet.appendRow(SCHEMA['book_library']);
+  }
+  
+  // Create book_summaries sheet if not exists
+  let bookSummariesSheet = ss.getSheetByName('book_summaries');
+  if (!bookSummariesSheet) {
+    bookSummariesSheet = ss.insertSheet('book_summaries');
+    bookSummariesSheet.appendRow(SCHEMA['book_summaries']);
+  }
+  
+  // Create reader_settings sheet if not exists
+  let readerSettingsSheet = ss.getSheetByName('reader_settings');
+  if (!readerSettingsSheet) {
+    readerSettingsSheet = ss.insertSheet('reader_settings');
+    readerSettingsSheet.appendRow(SCHEMA['reader_settings']);
+    // Add default user preferences
+    readerSettingsSheet.appendRow(['user_prefs', '#ffffff', '#1a1a1a', 'serif', 18, 1.6, false, 'slide', true]);
   }
   
   return { success: true, message: 'Tools sheets initialized' };

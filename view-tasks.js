@@ -1,18 +1,17 @@
-/* view-tasks.js — Ultra-Premium Bento Grid UI */
+/* view-tasks.js — SaaS Premium Task Manager */
 
 const TASK_DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-// --- STATE ---
+/* ── State ── */
 let _taskSort = 'priority';
 let _itemSelectionMode = false;
 let _selectedTaskIds = new Set();
-let _expandedTaskIds = new Set();       // tasks expanded to show subtasks
-let _collapsedCategories = new Set();   // category groups collapsed
+let _expandedTaskIds = new Set();
+let _collapsedCategories = new Set();
 let _taskCategory = 'All';
 let _taskPriorityFilter = 'All';
 let _showCompletedTasks = true;
 
-// Priority palette - use CSS variables for theme support
 const PRIORITY_COLOR = { P1: 'var(--danger, #EF4444)', P2: 'var(--warning, #F59E0B)', P3: 'var(--success, #10B981)' };
 const PRIORITY_LABEL = { P1: 'High', P2: 'Medium', P3: 'Low' };
 
@@ -56,86 +55,100 @@ window.toggleCategoryCollapse = function (cat) {
   renderTasks(_getSearchValue());
 };
 
-function _getSearchValue() {
-  return '';
-}
+function _getSearchValue() { return ''; }
 
-// Helper to parse due_time from various formats to HH:mm for input field
 function parseDueTimeForInput(val) {
   if (!val) return '';
   const s = String(val);
-
-  // Handle Google Sheets datetime format: "1899-12-30T14:30:00"
   if (s.startsWith('1899-12-30T')) {
-    const timePart = s.slice(11, 16); // Extract "14:30"
-    if (timePart.match(/^\d{2}:\d{2}$/)) {
-      return timePart;
-    }
+    const timePart = s.slice(11, 16);
+    if (timePart.match(/^\d{2}:\d{2}$/)) return timePart;
   }
-
-  // Handle ISO format with T
   if (s.includes('T') && !s.startsWith('1899')) {
     const dt = new Date(s);
-    if (!isNaN(dt.getTime())) {
-      return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
-    }
+    if (!isNaN(dt.getTime())) return String(dt.getHours()).padStart(2, '0') + ':' + String(dt.getMinutes()).padStart(2, '0');
   }
-
-  // Already HH:mm
-  if (s.match(/^\d{2}:\d{2}/)) {
-    return s.slice(0, 5);
-  }
-
+  if (s.match(/^\d{2}:\d{2}/)) return s.slice(0, 5);
   return '';
 }
 
-// ─────────────────────────────────────────────────────────
-//  MAIN RENDERER
-// ─────────────────────────────────────────────────────────
+/* ══════════════════════════════════════════════════════
+   QUICK-CAPTURE HANDLER
+══════════════════════════════════════════════════════ */
+window.tkQuickCapture = async function(e) {
+  if (e.key !== 'Enter') return;
+  const inp = document.getElementById('tkCaptureInput');
+  const title = inp?.value?.trim();
+  if (!title) return;
+  inp.value = '';
+  inp.placeholder = 'Saving…';
+  try {
+    await apiCall('create', 'tasks', {
+      title,
+      priority: 'P2',
+      status: 'pending',
+      due_date: new Date().toISOString().slice(0, 10),
+      created_at: new Date().toISOString(),
+      subtasks: '[]'
+    });
+    await refreshData('tasks');
+  } catch (e) {
+    showToast('Failed to save task');
+  }
+};
+
+window.tkSetCat = function(cat) {
+  _taskCategory = cat;
+  document.querySelectorAll('.tk-cat-pill').forEach(el =>
+    el.classList.toggle('active', el.dataset.cat === cat)
+  );
+  renderTasks();
+};
+
+window.tkSetPrio = function(p) {
+  _taskPriorityFilter = p;
+  document.querySelectorAll('.tk-prio-dot').forEach(el =>
+    el.classList.toggle('active', el.dataset.prio === p)
+  );
+  renderTasks();
+};
+
+/* ══════════════════════════════════════════════════════
+   MAIN RENDERER
+══════════════════════════════════════════════════════ */
 function renderTasks(filter = '') {
   let tasks = Array.isArray(state.data.tasks) ? [...state.data.tasks] : [];
 
-  // Apply default collapsed/expanded setting from Settings (only on fresh render with no existing state)
   if (_collapsedCategories.size === 0 && !filter) {
     const s = state.data.settings?.[0] || {};
     let defaultView = s.task_default_view || 'expanded';
-
-    // Check if there's a prefix in task_categories that overrides this
     if (s.task_categories && s.task_categories.startsWith('VIEW:')) {
       const parts = s.task_categories.split('|');
       const viewPref = parts[0].replace('VIEW:', '');
-      if (viewPref === 'collapsed' || viewPref === 'expanded') {
-        defaultView = viewPref;
-      }
+      if (viewPref === 'collapsed' || viewPref === 'expanded') defaultView = viewPref;
     }
-
     if (defaultView === 'collapsed') {
-      // Pre-collapse all categories when the user prefers collapsed view
-      const allCats = [...new Set(tasks.map(t => t.category || 'Other'))];
-      allCats.forEach(c => _collapsedCategories.add(c));
-      _collapsedCategories.add('Today\'s 3');
+      const allCatsInit = [...new Set(tasks.map(t => t.category || 'Other'))];
+      allCatsInit.forEach(c => _collapsedCategories.add(c));
+      _collapsedCategories.add("Today's 3");
       _collapsedCategories.add('Recurring');
     } else {
-      // Ensure everything is expanded if the user prefers expanded view
       _collapsedCategories.clear();
     }
   }
-
 
   if (filter) tasks = tasks.filter(t => (t.title || '').toLowerCase().includes(filter.toLowerCase()));
   if (_taskCategory !== 'All') tasks = tasks.filter(t => t.category === _taskCategory);
   if (_taskPriorityFilter !== 'All') tasks = tasks.filter(t => t.priority === _taskPriorityFilter);
 
-  // Sort
   tasks.sort((a, b) => {
     if (_taskSort === 'priority') {
       const pMap = { P1: 1, P2: 2, P3: 3 };
       const diff = (pMap[a.priority] || 4) - (pMap[b.priority] || 4);
       if (diff !== 0) return diff;
     }
-    if (_taskSort === 'date' || _taskSort === 'priority') {
+    if (_taskSort === 'date' || _taskSort === 'priority')
       return (a.due_date || '9999').localeCompare(b.due_date || '9999');
-    }
     if (_taskSort === 'category') return (a.category || 'z').localeCompare(b.category || 'z');
     if (_taskSort === 'title') return (a.title || '').localeCompare(b.title || '');
     return 0;
@@ -145,26 +158,20 @@ function renderTasks(filter = '') {
   const recurring = tasks.filter(t => t.recurrence && t.recurrence !== 'none');
   let pending = oneOff.filter(t => t.status !== 'completed');
   const completed = oneOff.filter(t => t.status === 'completed');
-
   let recurringToday = recurring.filter(t => isTaskDueToday(t));
   const recurringOther = recurring.filter(t => !isTaskDueToday(t));
 
-  const allCats = ['All', ...new Set((state.data.tasks || []).map(t => t.category).filter(Boolean))];
+  const allCats = [...new Set((state.data.tasks || []).map(t => t.category).filter(Boolean))];
   const today = new Date().toISOString().slice(0, 10);
   const overdueCount = pending.filter(t => t.due_date && t.due_date < today).length;
   const totalPending = pending.length + recurringToday.filter(t => !isRecurringTaskCompletedToday(t)).length;
 
-  // Group pending by category
   const pendingByCat = {};
-
-  // Psychological UX: Pre-attentive Priority "Today's 3"
-  // Grab up to 3 highest priority tasks that are pending or recurring today
   let allPendingAndRecurring = [...pending, ...recurringToday.filter(t => !isRecurringTaskCompletedToday(t))];
   allPendingAndRecurring.sort((a, b) => (a.priority === 'P1' && b.priority !== 'P1' ? -1 : (a.priority !== 'P1' && b.priority === 'P1' ? 1 : 0)));
   const todaysThree = allPendingAndRecurring.slice(0, 3);
   const todaysThreeIds = todaysThree.map(t => t.id);
 
-  // Remove Today's 3 from the main pending lists to avoid duplication
   pending = pending.filter(t => !todaysThreeIds.includes(t.id));
   recurringToday = recurringToday.filter(t => !todaysThreeIds.includes(t.id));
 
@@ -174,412 +181,509 @@ function renderTasks(filter = '') {
     pendingByCat[cat].push(t);
   });
 
-  // Stats for the header strip
-  const p1Count = pending.filter(t => t.priority === 'P1').length;
+  const p1Count = pending.filter(t => t.priority === 'P1').length +
+                  todaysThree.filter(t => t.priority === 'P1').length;
   const doneCount = (state.data.tasks || []).filter(t => t.status === 'completed').length;
   const totalCount = (state.data.tasks || []).length;
   const pctDone = totalCount ? Math.round((doneCount / totalCount) * 100) : 0;
 
+  const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
   document.getElementById('main').innerHTML = `
-    <style>
-      /* Bento animations */
-      @keyframes bentoIn {
-        from { opacity:0; transform:translateY(15px) scale(0.97); }
-        to   { opacity:1; transform:translateY(0)    scale(1);    }
-      }
-      @keyframes taskSlideIn {
-        from { opacity:0; transform:translateX(-10px); }
-        to   { opacity:1; transform:translateX(0); }
-      }
+  <style>
+    /* ── Shell ── */
+    .tk-shell { display:flex; flex-direction:column; height:calc(100vh - env(safe-area-inset-top,44px) - 80px); overflow:hidden; }
 
-      /* Masonry Layout */
-      .bento-masonry {
-        column-count: 2;
-        column-gap: 12px;
-        margin-top: 10px;
-      }
-      @media (max-width: 650px) {
-        .bento-masonry { column-count: 1; }
-      }
+    /* ── Header ── */
+    .tk-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 10px; flex-shrink:0; }
+    .tk-header-left { display:flex; align-items:center; gap:8px; }
+    .tk-header-title { font-size:22px; font-weight:800; color:var(--text-1); letter-spacing:-0.5px; }
+    .tk-count-badge { font-size:11px; font-weight:700; background:var(--primary); color:#fff; border-radius:20px; padding:2px 8px; }
+    .tk-header-right { display:flex; align-items:center; gap:6px; }
+    .tk-add-btn { display:inline-flex; align-items:center; gap:5px; padding:8px 16px; background:var(--primary); color:#fff; border:none; border-radius:20px; font-size:13px; font-weight:700; cursor:pointer; transition:opacity .15s,transform .15s; }
+    .tk-add-btn:active { opacity:.85; transform:scale(.97); }
+    .tk-icon-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border:none; background:transparent; border-radius:10px; cursor:pointer; color:var(--text-muted); transition:background .15s; }
+    .tk-icon-btn:hover,.tk-icon-btn:active { background:var(--surface-2,rgba(0,0,0,.05)); }
+    .tk-icon-btn.active { color:var(--primary); }
 
-      .bento-card {
-        background: var(--surface-1);
-        border: 1px solid var(--border-color);
-        border-radius: 18px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.03);
-        overflow: hidden;
-        transition: box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-        animation: bentoIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-        break-inside: avoid;
-        margin-bottom: 12px;
-        display: inline-block;
-        width: 100%;
-      }
-      .bento-card:hover { 
-        box-shadow: 0 10px 32px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05); 
-        transform: translateY(-2px);
-      }
-      
-      .task-bento-row {
-        display: flex; align-items: flex-start; gap: 10px;
-        padding: 10px 14px; border-bottom: 1px solid var(--border-color);
-        cursor: pointer; transition: background 0.2s;
-        animation: taskSlideIn 0.3s ease both;
-      }
-      .task-bento-row:last-child { border-bottom: none; }
-      .task-bento-row:hover { background: var(--surface-2, rgba(0,0,0,0.02)); }
-      .task-bento-row.done { opacity: 0.55; }
-      .task-bento-row.selected { background: color-mix(in srgb, var(--primary) 8%, transparent); }
-      .task-check-ring {
-        width: 20px; height: 20px; min-width: 20px; border-radius: 50%;
-        border: 2px solid var(--border-color); display: flex; align-items: center;
-        justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; margin-top: 1px;
-      }
-      .task-check-ring.done    { background: var(--primary); border-color: var(--primary); }
-      .task-check-ring:hover:not(.done) { border-color: var(--primary); }
-      .cat-header {
-        display: flex; align-items: center; gap: 8px; padding: 9px 12px 7px;
-        cursor: pointer; user-select: none; background: var(--surface-2, rgba(0,0,0,0.015));
-        border-bottom: 1px solid var(--border-color); transition: background 0.15s;
-      }
-      .cat-header:hover { background: var(--surface-base, rgba(0,0,0,0.03)); }
-      .prio-dot {
-        width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-      }
-      .task-title-text {
-        font-size: 13.5px; font-weight: 500; line-height: 1.35;
-        color: var(--text-1); flex: 1; min-width: 0;
-      }
-      .task-meta-chip {
-        display: inline-flex; align-items: center; gap: 3px;
-        font-size: 10px; color: var(--text-muted); background: var(--surface-2, rgba(0,0,0,0.04));
-        padding: 1px 6px; border-radius: 20px; border: 1px solid var(--border-color);
-        white-space: nowrap;
-      }
-      .subtask-expand {
-        padding: 8px 12px 10px 40px; border-bottom: 1px solid var(--border-color);
-        background: var(--surface-1); animation: bentoIn 0.2s ease;
-      }
-      .subtask-item {
-        display: flex; align-items: center; gap: 8px; padding: 4px 0;
-        font-size: 12px; border-bottom: 1px solid rgba(0,0,0,0.04);
-      }
-      .subtask-item:last-of-type { border-bottom: none; }
-      .subtask-mini-check {
-        width: 15px; height: 15px; min-width: 15px; border-radius: 50%;
-        border: 2px solid var(--border-color); display: flex; align-items: center;
-        justify-content: center; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
-      }
-      .subtask-mini-check.done { background: var(--primary); border-color: var(--primary); }
-      .stat-pill {
-        display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-        background: var(--surface-1); border-radius: 16px; padding: 14px 16px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.03); border: 1px solid var(--border-color); 
-        flex: 1; min-width: 0; transition: transform 0.2s, box-shadow 0.2s;
-      }
-      .stat-pill:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.06); }
-      .filter-dot-btn {
-        width: 18px; height: 18px; border-radius: 50%; border: 3px solid transparent;
-        cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; flex-shrink: 0;
-      }
-      .filter-dot-btn.active { transform: scale(1.25); box-shadow: 0 0 0 3px rgba(255,255,255,0.6), 0 0 0 5px currentColor; }
-      .filter-dot-btn:hover { transform: scale(1.15); }
-    </style>
+    /* ── Quick Capture ── */
+    .tk-capture-wrap { padding:0 16px 8px; flex-shrink:0; }
+    .tk-capture { display:flex; align-items:center; gap:10px; background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:14px; padding:11px 14px; transition:border-color .2s,box-shadow .2s; }
+    .tk-capture:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 15%,transparent); }
+    .tk-capture-input { flex:1; background:transparent; border:none; outline:none; font-size:14px; color:var(--text-1); }
+    .tk-capture-input::placeholder { color:var(--text-muted); }
 
-    <div class="task-wrapper">
+    /* ── Filter Pills ── */
+    .tk-filter-row { display:flex; gap:6px; padding:0 16px 6px; overflow-x:auto; flex-shrink:0; scrollbar-width:none; }
+    .tk-filter-row::-webkit-scrollbar { display:none; }
+    .tk-cat-pill { display:inline-flex; align-items:center; padding:5px 13px; border-radius:20px; font-size:12.5px; font-weight:500; background:var(--surface-2,rgba(0,0,0,.04)); border:1.5px solid transparent; color:var(--text-muted); cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all .15s; }
+    .tk-cat-pill.active { background:color-mix(in srgb,var(--primary) 12%,transparent); border-color:var(--primary); color:var(--primary); font-weight:700; }
 
-      <!-- ── TOP HEADER ── -->
-      <div class="header-row" style="margin-bottom:12px;">
-        <div>
-          <h2 class="page-title">Tasks</h2>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn secondary" onclick="window._taskFiltersOpen=!window._taskFiltersOpen;renderTasks(_getSearchValue())" style="position:relative;">
-            ${renderIcon('tags', null, 'style="width:14px;margin-right:4px;"')}Filters
-            ${(_taskPriorityFilter !== 'All' || _taskCategory !== 'All') ? `<span style="position:absolute;top:-4px;right:-4px;width:8px;height:8px;background:var(--primary);border-radius:50%;"></span>` : ''}
-          </button>
-          <button class="btn secondary" onclick="openCategoryManager()">
-            ${renderIcon('tags', null, 'style="width:14px;margin-right:4px;"')}Categories
-          </button>
-          <button class="btn primary" onclick="openTaskModal()">${renderIcon('add', null, 'style="width:14px; margin-right:4px"')} Add Task</button>
+    /* ── Priority + Sort Row ── */
+    .tk-priority-row { display:flex; align-items:center; gap:8px; padding:0 16px 10px; flex-shrink:0; }
+    .tk-prio-group { display:flex; align-items:center; gap:5px; background:var(--surface-2,rgba(0,0,0,.04)); border-radius:20px; padding:5px 10px; }
+    .tk-prio-dot { width:18px; height:18px; border-radius:50%; background:var(--dot-color,#999); border:3px solid transparent; cursor:pointer; transition:transform .15s,box-shadow .15s; flex-shrink:0; }
+    .tk-prio-dot.all-prio { width:auto; height:auto; background:transparent; border:none; padding:0 4px; font-size:11px; font-weight:700; color:var(--text-muted); border-radius:0; }
+    .tk-prio-dot.all-prio.active { color:var(--primary); }
+    .tk-prio-dot:not(.all-prio).active { transform:scale(1.3); box-shadow:0 0 0 3px rgba(255,255,255,.7),0 0 0 5px var(--dot-color); }
+    .tk-prio-dot:hover { transform:scale(1.15); }
+    .tk-sort-select { margin-left:auto; background:var(--surface-2,rgba(0,0,0,.04)); border:1px solid var(--border-color); border-radius:10px; padding:5px 10px; font-size:12px; color:var(--text-1); cursor:pointer; outline:none; }
+
+    /* ── Focus Card ── */
+    .tk-focus-card { margin:0 16px 10px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 2px 8px rgba(0,0,0,.03); flex-shrink:0; }
+    .tk-focus-date { font-size:13px; font-weight:700; color:var(--text-1); margin-bottom:6px; }
+    .tk-focus-stats { display:flex; gap:6px; flex-wrap:wrap; }
+    .tk-stat-badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--surface-2,rgba(0,0,0,.05)); color:var(--text-muted); border:1px solid var(--border-color); }
+    .tk-stat-badge.danger { background:rgba(239,68,68,.08); color:var(--danger,#EF4444); border-color:rgba(239,68,68,.2); }
+    .tk-stat-badge.urgent { background:rgba(245,158,11,.08); color:var(--warning,#F59E0B); border-color:rgba(245,158,11,.2); }
+    .tk-focus-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+    .tk-focus-pct { font-size:20px; font-weight:800; color:var(--primary); line-height:1; }
+    .tk-focus-track { width:80px; height:6px; background:var(--surface-2,rgba(0,0,0,.07)); border-radius:3px; overflow:hidden; }
+    .tk-focus-fill { height:100%; background:linear-gradient(90deg,var(--primary),var(--success,#10B981)); border-radius:3px; transition:width .8s cubic-bezier(.2,.8,.2,1); }
+
+    /* ── Overdue Banner ── */
+    .tk-overdue-banner { margin:0 16px 8px; background:rgba(239,68,68,.06); border:1px solid rgba(239,68,68,.2); border-radius:10px; padding:8px 12px; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--danger,#EF4444); flex-shrink:0; }
+    .tk-overdue-banner button { margin-left:auto; font-size:11px; font-weight:700; background:rgba(239,68,68,.12); border:none; border-radius:8px; padding:3px 10px; color:var(--danger,#EF4444); cursor:pointer; }
+
+    /* ── Scrollable List ── */
+    .tk-list { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:0 16px 80px; }
+
+    /* ── Section Card ── */
+    .tk-section { background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; margin-bottom:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,.03); animation:tkIn .3s cubic-bezier(.2,.8,.2,1) both; }
+    @keyframes tkIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    .tk-section-header { display:flex; align-items:center; gap:8px; padding:10px 14px; cursor:pointer; user-select:none; background:transparent; border-bottom:1px solid var(--border-color); transition:background .15s; }
+    .tk-section-header:hover { background:var(--surface-2,rgba(0,0,0,.02)); }
+    .tk-section-dot { width:8px; height:8px; border-radius:50%; background:var(--primary); flex-shrink:0; }
+    .tk-section-label { flex:1; font-size:13px; font-weight:700; color:var(--text-1); }
+    .tk-section-count { font-size:11px; color:var(--text-muted); font-weight:600; }
+    .tk-section-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; }
+    .tk-section-badge.urgent { background:rgba(239,68,68,.1); color:var(--danger,#EF4444); }
+    .tk-section-badge.overdue { background:rgba(239,68,68,.1); color:var(--danger,#EF4444); }
+    .tk-section-chevron { width:14px; height:14px; color:var(--text-muted); opacity:.5; transition:transform .2s; flex-shrink:0; }
+    .tk-section-chevron.open { transform:rotate(90deg); }
+
+    /* ── Task Row ── */
+    .task-bento-row { display:flex; align-items:flex-start; gap:11px; padding:11px 14px; border-bottom:1px solid var(--border-color); cursor:pointer; transition:background .15s; position:relative; animation:tkRowIn .25s ease both; }
+    @keyframes tkRowIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+    .task-bento-row:last-child { border-bottom:none; }
+    .task-bento-row:hover { background:var(--surface-2,rgba(0,0,0,.02)); }
+    .task-bento-row.done { opacity:.5; }
+    .task-bento-row.selected { background:color-mix(in srgb,var(--primary) 8%,transparent); }
+    .task-bento-row.animating-done { animation:tkDone .4s ease forwards; }
+    @keyframes tkDone { 0%{opacity:1} 50%{background:rgba(16,185,129,.12);transform:scale(1.01)} 100%{opacity:.5} }
+
+    /* ── Checkbox ── */
+    .task-check-ring { width:20px; height:20px; min-width:20px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s; flex-shrink:0; margin-top:1px; }
+    .task-check-ring.done { background:var(--primary); border-color:var(--primary); }
+    .task-check-ring:hover:not(.done) { border-color:var(--primary); background:color-mix(in srgb,var(--primary) 8%,transparent); }
+
+    /* ── Row Content ── */
+    .tk-row-content { flex:1; min-width:0; }
+    .tk-row-top { display:flex; align-items:flex-start; gap:6px; }
+    .task-title-text { font-size:14px; font-weight:500; line-height:1.35; color:var(--text-1); flex:1; min-width:0; word-break:break-word; }
+    .task-title-text.done-text { text-decoration:line-through; color:var(--text-muted); }
+    .task-title-text.p1-text { font-weight:700; font-size:14.5px; }
+    .tk-date-chip { font-size:11px; font-weight:600; padding:2px 7px; border-radius:20px; background:var(--surface-2); color:var(--text-muted); border:1px solid var(--border-color); white-space:nowrap; flex-shrink:0; }
+    .tk-date-chip.overdue { background:rgba(239,68,68,.08); color:var(--danger,#EF4444); border-color:rgba(239,68,68,.2); }
+    .tk-date-chip.today-chip { background:color-mix(in srgb,var(--primary) 10%,transparent); color:var(--primary); border-color:color-mix(in srgb,var(--primary) 30%,transparent); }
+
+    /* ── Meta chips (collapsed) ── */
+    .tk-meta-row { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+    .task-meta-chip { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; color:var(--text-muted); background:var(--surface-2,rgba(0,0,0,.04)); padding:2px 7px; border-radius:20px; border:1px solid var(--border-color); white-space:nowrap; }
+    .task-meta-chip.done-chip { color:var(--success,#10B981); border-color:rgba(16,185,129,.3); }
+
+    /* ── Expanded panel ── */
+    .subtask-expand { padding:10px 14px 12px 45px; border-bottom:1px solid var(--border-color); background:var(--surface-1); animation:tkIn .2s ease; }
+    .tk-expand-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin-bottom:10px; }
+    .subtask-item { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:12.5px; border-bottom:1px solid rgba(0,0,0,.04); }
+    .subtask-item:last-of-type { border-bottom:none; }
+    .subtask-mini-check { width:16px; height:16px; min-width:16px; border-radius:50%; border:2px solid var(--border-color); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s; flex-shrink:0; }
+    .subtask-mini-check.done { background:var(--primary); border-color:var(--primary); }
+    .tk-subtask-add { display:flex; align-items:center; gap:8px; padding:6px 0; margin-top:4px; }
+    .tk-subtask-add-ring { width:16px; height:16px; min-width:16px; border:2px dashed var(--border-color); border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .tk-subtask-add-input { flex:1; border:none; background:transparent; outline:none; font-size:12.5px; color:var(--text-1); }
+
+    /* ── Row action buttons (shown only when expanded) ── */
+    .tk-row-actions { display:flex; gap:4px; margin-top:10px; padding-top:8px; border-top:1px solid var(--border-color); }
+    .tk-action-btn { display:inline-flex; align-items:center; gap:5px; padding:5px 12px; border-radius:8px; font-size:11.5px; font-weight:600; border:1px solid var(--border-color); background:var(--surface-2,rgba(0,0,0,.04)); color:var(--text-muted); cursor:pointer; transition:all .15s; }
+    .tk-action-btn:hover { background:var(--surface-base,rgba(0,0,0,.07)); color:var(--text-1); }
+    .tk-action-btn.danger:hover { background:rgba(239,68,68,.08); color:var(--danger,#EF4444); border-color:rgba(239,68,68,.2); }
+    .tk-action-btn.primary { color:var(--primary); border-color:color-mix(in srgb,var(--primary) 30%,transparent); background:color-mix(in srgb,var(--primary) 6%,transparent); }
+
+    /* ── Empty State ── */
+    .tk-empty { display:flex; flex-direction:column; align-items:center; padding:48px 24px; text-align:center; }
+    .tk-empty-icon { width:56px; height:56px; border-radius:50%; background:rgba(16,185,129,.1); display:flex; align-items:center; justify-content:center; font-size:22px; margin-bottom:14px; }
+    .tk-empty-title { font-size:16px; font-weight:700; color:var(--text-1); margin-bottom:4px; }
+    .tk-empty-sub { font-size:13px; color:var(--text-muted); }
+
+    /* ─── TWO-STEP MODAL ─── */
+    .tk-modal-wrap { position:relative; overflow:hidden; }
+    .tk-modal-slider { display:flex; transition:transform .3s cubic-bezier(.4,0,.2,1); width:200%; }
+    .tk-modal-panel { width:50%; min-width:50%; display:flex; flex-direction:column; gap:0; }
+    .tk-modal-header { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+    .tk-modal-title { flex:1; font-size:17px; font-weight:800; color:var(--text-1); letter-spacing:-.3px; }
+    .tk-modal-close { display:flex; align-items:center; justify-content:center; width:30px; height:30px; border:none; background:var(--surface-2,rgba(0,0,0,.06)); border-radius:50%; cursor:pointer; color:var(--text-muted); font-size:16px; font-weight:600; }
+    .tk-back-pill { display:inline-flex; align-items:center; gap:4px; padding:5px 12px; border-radius:20px; border:1px solid var(--border-color); background:var(--surface-2); font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; }
+
+    /* Title input */
+    .tk-title-input { width:100%; border:none; outline:none; font-size:18px; font-weight:700; color:var(--text-1); background:transparent; padding:4px 0 12px; border-bottom:2px solid var(--border-color); margin-bottom:18px; letter-spacing:-.2px; transition:border-color .2s; box-sizing:border-box; }
+    .tk-title-input:focus { border-bottom-color:var(--primary); }
+    .tk-title-input::placeholder { color:var(--text-muted); font-weight:400; }
+
+    /* Priority picker */
+    .tk-prio-picker { display:flex; gap:6px; }
+    .tk-prio-pick { flex:1; display:flex; align-items:center; justify-content:center; gap:5px; padding:9px 8px; border-radius:10px; border:1.5px solid var(--border-color); background:var(--surface-2); font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; transition:all .15s; }
+    .tk-prio-pick.selected { border-color:var(--pick-color,var(--primary)); background:color-mix(in srgb,var(--pick-color,var(--primary)) 10%,transparent); color:var(--pick-color,var(--primary)); }
+    .tk-prio-pick .pk-dot { width:8px; height:8px; border-radius:50%; background:var(--pick-color); }
+
+    /* Field groups */
+    .tk-field-section { margin-bottom:14px; }
+    .tk-field-label { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:7px; display:block; }
+    .tk-field-row { display:flex; gap:10px; margin-bottom:14px; }
+    .tk-field-row .tk-field-section { flex:1; margin-bottom:0; }
+    .tk-input { width:100%; box-sizing:border-box; background:var(--surface-2,rgba(0,0,0,.04)); border:1.5px solid var(--border-color); border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--text-1); outline:none; transition:border-color .2s; }
+    .tk-input:focus { border-color:var(--primary); }
+    .tk-select { width:100%; box-sizing:border-box; background:var(--surface-2,rgba(0,0,0,.04)); border:1.5px solid var(--border-color); border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--text-1); outline:none; cursor:pointer; }
+    .tk-textarea { width:100%; box-sizing:border-box; background:var(--surface-2,rgba(0,0,0,.04)); border:1.5px solid var(--border-color); border-radius:10px; padding:9px 12px; font-size:13.5px; color:var(--text-1); outline:none; resize:none; line-height:1.5; transition:border-color .2s; }
+    .tk-textarea:focus { border-color:var(--primary); }
+
+    /* Step 2 sections */
+    .tk-modal-section { background:var(--surface-2,rgba(0,0,0,.03)); border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; }
+    .tk-modal-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--primary); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .tk-modal-subtask-add { width:100%; padding:7px; border:1.5px dashed var(--border-color); border-radius:8px; background:transparent; font-size:12.5px; color:var(--text-muted); cursor:pointer; text-align:center; margin-top:6px; transition:border-color .15s,color .15s; }
+    .tk-modal-subtask-add:hover { border-color:var(--primary); color:var(--primary); }
+    .tk-day-picker { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+    .tk-day-label { font-size:11.5px; display:flex; align-items:center; gap:4px; background:var(--surface-2); padding:4px 8px; border-radius:8px; cursor:pointer; border:1px solid var(--border-color); transition:all .15s; }
+    .tk-day-label input { display:none; }
+    .tk-day-label.checked { background:color-mix(in srgb,var(--primary) 12%,transparent); border-color:var(--primary); color:var(--primary); font-weight:700; }
+
+    /* Modal Actions */
+    .tk-modal-actions { display:flex; align-items:center; gap:10px; padding-top:16px; margin-top:4px; border-top:1px solid var(--border-color); }
+    .tk-modal-more { display:inline-flex; align-items:center; gap:4px; padding:9px 16px; border-radius:10px; border:1.5px solid var(--border-color); background:transparent; font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; transition:all .15s; }
+    .tk-modal-more:hover { border-color:var(--primary); color:var(--primary); }
+    .tk-modal-save { flex:1; padding:10px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-size:14px; font-weight:700; cursor:pointer; transition:opacity .15s,transform .15s; }
+    .tk-modal-save:active { opacity:.85; transform:scale(.98); }
+    .tk-modal-cancel { padding:10px 16px; border-radius:10px; border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-muted); font-size:13px; font-weight:600; cursor:pointer; }
+
+    /* Step dots */
+    .tk-step-dots { display:flex; justify-content:center; gap:5px; margin-bottom:16px; }
+    .tk-step-dot { width:6px; height:6px; border-radius:50%; background:var(--border-color); transition:all .2s; }
+    .tk-step-dot.active { background:var(--primary); width:18px; border-radius:3px; }
+
+    @media(max-width:480px) {
+      .tk-shell { height:calc(100vh - env(safe-area-inset-top,44px) - 80px); }
+      .tk-focus-track { width:60px; }
+    }
+  </style>
+
+  <div class="tk-shell">
+
+    <!-- Header -->
+    <div class="tk-header">
+      <div class="tk-header-left">
+        <span class="tk-header-title">Tasks</span>
+        <span class="tk-count-badge">${totalPending}</span>
+      </div>
+      <div class="tk-header-right">
+        <button class="tk-icon-btn ${_itemSelectionMode ? 'active' : ''}" onclick="toggleTaskSelectionMode()" title="Select mode">
+          <i data-lucide="check-square" style="width:18px;height:18px"></i>
+        </button>
+        <button class="tk-icon-btn" onclick="openCategoryManager()" title="Categories">
+          <i data-lucide="tag" style="width:18px;height:18px"></i>
+        </button>
+        <button class="tk-add-btn" onclick="openTaskModal()">
+          <i data-lucide="plus" style="width:15px;height:15px"></i>
+          <span>Add</span>
+        </button>
+      </div>
+    </div>
+
+    ${_itemSelectionMode ? `
+    <div style="display:flex;align-items:center;gap:8px;padding:0 16px 10px;flex-shrink:0;">
+      <span style="font-size:13px;color:var(--text-muted);flex:1;">${_selectedTaskIds.size} selected</span>
+      <button class="tk-action-btn danger" onclick="deleteSelectedTasks()">
+        <i data-lucide="trash-2" style="width:13px;height:13px"></i> Delete
+      </button>
+      <button class="tk-action-btn" onclick="toggleTaskSelectionMode()">Cancel</button>
+    </div>` : ''}
+
+    <!-- Quick Capture -->
+    <div class="tk-capture-wrap">
+      <div class="tk-capture">
+        <i data-lucide="plus-circle" style="width:16px;height:16px;color:var(--primary);flex-shrink:0"></i>
+        <input class="tk-capture-input" id="tkCaptureInput"
+               placeholder="Quick capture — type and press Enter…"
+               onkeydown="tkQuickCapture(event)" />
+      </div>
+    </div>
+
+    <!-- Category Pills -->
+    <div class="tk-filter-row">
+      ${['All', ...allCats].map(c => `
+        <button class="tk-cat-pill ${_taskCategory === c ? 'active' : ''}"
+                data-cat="${c}" onclick="tkSetCat('${c}')">${escapeHtml(c)}</button>
+      `).join('')}
+    </div>
+
+    <!-- Priority + Sort Row -->
+    <div class="tk-priority-row">
+      <div class="tk-prio-group">
+        <button class="tk-prio-dot all-prio ${_taskPriorityFilter === 'All' ? 'active' : ''}"
+                data-prio="All" onclick="tkSetPrio('All')">All</button>
+        ${['P1','P2','P3'].map(p => `
+          <button class="tk-prio-dot ${_taskPriorityFilter === p ? 'active' : ''}"
+                  data-prio="${p}"
+                  style="--dot-color:${PRIORITY_COLOR[p].replace('var(--danger, ','').replace('var(--warning, ','').replace('var(--success, ','').replace(')','')}"
+                  onclick="tkSetPrio('${p}')"
+                  title="${PRIORITY_LABEL[p]}"></button>
+        `).join('')}
+      </div>
+      <select class="tk-sort-select" onchange="_taskSort=this.value;renderTasks()">
+        <option value="priority" ${_taskSort==='priority'?'selected':''}>↑ Priority</option>
+        <option value="date"     ${_taskSort==='date'?'selected':''}>📅 Due Date</option>
+        <option value="category" ${_taskSort==='category'?'selected':''}>🏷 Category</option>
+        <option value="title"    ${_taskSort==='title'?'selected':''}>A–Z</option>
+      </select>
+      <button class="tk-icon-btn ${_showCompletedTasks?'active':''}"
+              onclick="_showCompletedTasks=!_showCompletedTasks;renderTasks()"
+              title="Toggle completed">
+        <i data-lucide="check-circle-2" style="width:16px;height:16px"></i>
+      </button>
+    </div>
+
+    <!-- Focus Card -->
+    <div class="tk-focus-card">
+      <div class="tk-focus-left">
+        <div class="tk-focus-date">${dateLabel}</div>
+        <div class="tk-focus-stats">
+          ${overdueCount > 0 ? `<span class="tk-stat-badge danger">${overdueCount} overdue</span>` : ''}
+          ${p1Count > 0 ? `<span class="tk-stat-badge urgent">${p1Count} urgent</span>` : ''}
+          <span class="tk-stat-badge">${totalPending} active</span>
+          <span class="tk-stat-badge">${doneCount} done</span>
         </div>
       </div>
-
-      <!-- ── STATS STRIP ── -->
-      <div style="display:flex; gap:12px; margin-bottom:16px; overflow-x:auto; scrollbar-width:none; padding-bottom:4px;">
-        <div class="stat-pill">
-          <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
-             <div style="width:8px; height:8px; border-radius:50%; background:var(--danger)"></div>
-             <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Urgent</span>
-          </div>
-          <div style="font-size:24px; font-weight:800; color:var(--text-1); line-height:1;">${p1Count}</div>
-        </div>
-        <div class="stat-pill">
-          <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
-             <div style="width:8px; height:8px; border-radius:50%; background:var(--primary)"></div>
-             <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Active</span>
-          </div>
-          <div style="font-size:24px; font-weight:800; color:var(--text-1); line-height:1;">${totalPending}</div>
-        </div>
-        <div class="stat-pill" style="flex:1.5;">
-          <div style="display:flex; justify-content:space-between; width:100%; margin-bottom:10px; align-items:center;">
-             <span style="font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Progress</span>
-             <span style="font-size:12px; font-weight:700; color:var(--primary);">${pctDone}%</span>
-          </div>
-          <div style="width:100%; height:8px; background:var(--surface-2, rgba(0,0,0,0.05)); border-radius:4px; overflow:hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
-            <div style="width:${pctDone}%; height:100%; background:linear-gradient(90deg, var(--primary), var(--success)); border-radius:4px; transition:width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);"></div>
-          </div>
+      <div class="tk-focus-right">
+        <div class="tk-focus-pct">${pctDone}%</div>
+        <div class="tk-focus-track">
+          <div class="tk-focus-fill" style="width:${pctDone}%"></div>
         </div>
       </div>
+    </div>
 
-      <!-- ── COLLAPSIBLE FILTERS ── -->
-      <div id="task-filter-panel" style="overflow:hidden; transition:max-height 0.3s ease, opacity 0.3s ease; max-height:${window._taskFiltersOpen ? '200px' : '0'}; opacity:${window._taskFiltersOpen ? '1' : '0'}; margin-bottom:${window._taskFiltersOpen ? '12px' : '0'};">
-        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:10px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px;">
+    <!-- Overdue Banner -->
+    ${overdueCount > 0 ? `
+    <div class="tk-overdue-banner">
+      <i data-lucide="alert-triangle" style="width:14px;height:14px;flex-shrink:0"></i>
+      <span><strong>${overdueCount} task${overdueCount > 1 ? 's' : ''}</strong> past due</span>
+      <button onclick="_taskPriorityFilter='All';_taskCategory='All';renderTasks()">View all</button>
+    </div>` : ''}
 
+    <!-- Scrollable List -->
+    <div class="tk-list">
 
-          <!-- Priority dot filters -->
-          <div style="display:flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border-color);border-radius:20px;padding:5px 10px;">
-            <button onclick="_taskPriorityFilter='All';renderTasks(_getSearchValue())"
-              style="font-size:11px;font-weight:600;background:none;border:none;cursor:pointer;padding:0 4px;color:${_taskPriorityFilter === 'All' ? 'var(--primary)' : 'var(--text-muted)'};">All</button>
-            ${['P1', 'P2', 'P3'].map(p => `
-              <button class="filter-dot-btn ${_taskPriorityFilter === p ? 'active' : ''}"
-                style="background:${PRIORITY_COLOR[p]}; color:${PRIORITY_COLOR[p]};"
-                onclick="_taskPriorityFilter='${p}';renderTasks(_getSearchValue())"
-                title="${PRIORITY_LABEL[p]}"></button>
-            `).join('')}
+      ${todaysThree.length > 0 ? tkSectionHTML("__todays_three__", "Today's Focus", todaysThree, false, true) : `
+        <div class="tk-section" style="margin-bottom:10px;">
+          <div class="tk-section-header" style="cursor:default;">
+            <div class="tk-section-dot" style="background:var(--success,#10B981)"></div>
+            <span class="tk-section-label">Today's Focus</span>
           </div>
+          <div style="padding:16px;text-align:center;font-size:13px;color:var(--text-muted);">
+            Nothing urgent — you're ahead of the game.
+          </div>
+        </div>`}
 
-          <!-- Category -->
-          <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
-            onchange="_taskCategory=this.value;renderTasks(_getSearchValue())">
-            ${allCats.map(c => `<option value="${c}" ${c === _taskCategory ? 'selected' : ''}>${c}</option>`).join('')}
-          </select>
+      ${recurringToday.length > 0 ? tkSectionHTML('__recurring_today__', 'Recurring Today', recurringToday, true) : ''}
 
-          <!-- Sort -->
-          <select class="input" style="flex:1;min-width:70px;margin:0;padding:0 8px;height:30px;font-size:12px;border-radius:10px;"
-            onchange="_taskSort=this.value;renderTasks(_getSearchValue())">
-            <option value="priority" ${_taskSort === 'priority' ? 'selected' : ''}>↑ Priority</option>
-            <option value="date"     ${_taskSort === 'date' ? 'selected' : ''}>📅 Date</option>
-            <option value="category" ${_taskSort === 'category' ? 'selected' : ''}>🏷 Group</option>
-            <option value="title"    ${_taskSort === 'title' ? 'selected' : ''}>A–Z</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- ── OVERDUE BANNER ── -->
-      ${overdueCount > 0 ? `
-      <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);border-radius:10px;padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--danger);">
-        ${renderIcon('warning', null, 'style="width:14px;flex-shrink:0;"')}
-        <span><strong>${overdueCount} task${overdueCount > 1 ? 's' : ''}</strong> past due date</span>
-      </div>` : ''}
-
-      <!-- ── TODAY'S 3 (PINNED) ── -->
-      ${todaysThree.length > 0 ? renderBentoSection('__todays_three__',
-    `${renderIcon('priority', null, 'style="width:13px;color:var(--danger)"')} Today's 3`,
-    todaysThree, false, true) : ''}
-
-      <!-- ── RECURRING TODAY ── -->
-      ${recurringToday.length > 0 ? renderBentoSection('__recurring_today__',
-      `${renderIcon('repeat', null, 'style="width:13px;"')} Today's Recurring`,
-      recurringToday, true) : ''}
-
-      <!-- ── PENDING BY CATEGORY ── -->
       ${pending.length === 0 && recurringToday.length === 0 && todaysThree.length === 0 ? `
-        <div class="bento-card" style="padding:32px;text-align:center;">
-          ${renderIcon('check-circle', null, 'style="width:32px;color:var(--success);margin-bottom:8px;display:block;margin-left:auto;margin-right:auto;"')}
-          <div style="font-weight:600;color:var(--text-2);margin-bottom:4px;">All clear!</div>
-          <div style="font-size:12px;color:var(--text-muted);">No active tasks right now.</div>
+        <div class="tk-empty">
+          <div class="tk-empty-icon">✓</div>
+          <div class="tk-empty-title">All clear!</div>
+          <div class="tk-empty-sub">No active tasks right now. Quick-capture above.</div>
         </div>
-      ` : `<div class="bento-masonry">` + Object.keys(pendingByCat).sort().map((cat, idx) => {
-        // Wrap in a temporary span just to set animation delay based on index
-        const bentoHtml = renderBentoSection(cat, cat, pendingByCat[cat], false, true);
-        return bentoHtml.replace('class="bento-card"', `class="bento-card" style="animation-delay:${idx * 0.05}s;"`);
-      }).join('') + `</div>`}
+      ` : Object.keys(pendingByCat).sort().map((cat, idx) =>
+          tkSectionHTML(cat, cat, pendingByCat[cat], false, true, false, idx)
+        ).join('')}
 
-      <!-- ── COMPLETED ── -->
-      ${completed.length > 0 ? renderBentoSection('__completed__',
-        `${renderIcon('check-circle', null, 'style="width:13px;"')} Completed`,
-        completed, false) : ''}
+      ${_showCompletedTasks && completed.length > 0 ? tkSectionHTML('__completed__', `Completed (${completed.length})`, completed, false) : ''}
 
-      <!-- ── OTHER RECURRING ── -->
-      ${recurringOther.length > 0 ? renderBentoSection('__recurring_other__',
-          `${renderIcon('repeat', null, 'style="width:13px;"')} Other Recurring`,
-          recurringOther, true, false, true) : ''}
+      ${recurringOther.length > 0 ? tkSectionHTML('__recurring_other__', 'Other Recurring', recurringOther, true, false, true) : ''}
 
-      <!-- bottom spacer -->
-      <div style="height:80px;"></div>
-    </div>`;
+      <div style="height:80px"></div>
+    </div>
+  </div>`;
 
-  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-
-  // Attach swipe actions after render
+  if (typeof lucide !== 'undefined') lucide.createIcons();
   _attachTaskSwipes();
 }
 
-function _attachTaskSwipes() {
-  if (typeof window.addSwipeAction !== 'function') return;
-  document.querySelectorAll('.task-bento-row').forEach(row => {
-    const taskId = row.id.replace('task-row-', '');
-    window.addSwipeAction(row,
-      () => { // Swipe Left -> Delete
-        window.deleteTask(taskId);
-      },
-      () => { // Swipe Right -> Toggle Done
-        window.toggleTaskOptimistic(taskId);
-      }
-    );
-  });
-}
-
-// ─────────────────────────────────────────────────────────
-//  BENTO SECTION
-// ─────────────────────────────────────────────────────────
-function renderBentoSection(key, label, tasks, isRecurring = false, hideCategory = false, dimmed = false) {
-  const isCollapsed = _collapsedCategories.has(key); // Now correctly uses .has() for collapse state. Empty set = expanded.
+/* ══════════════════════════════════════════════════════
+   SECTION RENDERER
+══════════════════════════════════════════════════════ */
+function tkSectionHTML(key, label, tasks, isRecurring = false, hideCategory = false, dimmed = false, idx = 0) {
+  const isCollapsed = _collapsedCategories.has(key);
   const count = tasks.length;
   const today = new Date().toISOString().slice(0, 10);
   const overdueInGroup = tasks.filter(t => t.due_date && t.due_date < today && t.status !== 'completed').length;
   const p1InGroup = tasks.filter(t => t.priority === 'P1').length;
 
+  const sectionColors = {
+    '__todays_three__': 'var(--danger,#EF4444)',
+    '__recurring_today__': 'var(--primary)',
+    '__completed__': 'var(--success,#10B981)',
+    '__recurring_other__': 'var(--text-muted)',
+  };
+  const dotColor = sectionColors[key] || 'var(--primary)';
+
   return `
-    <div class="bento-card" style="${dimmed ? 'opacity:0.6;' : ''} margin-bottom:10px;">
-      <!-- Category Header -->
-      <div class="cat-header" onclick="toggleCategoryCollapse('${key}')">
-        <div style="width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0;"></div>
-        <span style="flex:1;font-size:13px;font-weight:600;color:var(--text-1);">${label}</span>
-        ${p1InGroup > 0 ? `<span style="font-size:10px;font-weight:700;color:${PRIORITY_COLOR.P1};background:${PRIORITY_COLOR.P1}18;border-radius:20px;padding:1px 7px;">${p1InGroup} urgent</span>` : ''}
-        ${overdueInGroup > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--danger);background:rgba(239,68,68,0.1);border-radius:20px;padding:1px 7px;">${renderIcon('warning', null, 'style="width:10px; vertical-align:middle; margin-right:2px;"')} ${overdueInGroup}</span>` : ''}
-        <span style="font-size:11px;color:var(--text-muted);margin-left:2px;">${count}</span>
-        ${renderIcon(isCollapsed ? 'right' : 'down', null, 'style="width:14px;color:var(--text-muted);flex-shrink:0;"')}
-      </div>
-      ${!isCollapsed ? tasks.map(t => renderBentoTaskRow(t, isRecurring, dimmed)).join('') : ''}
-    </div>`;
+  <div class="tk-section" style="${dimmed ? 'opacity:0.7;' : ''}animation-delay:${idx * 0.04}s">
+    <div class="tk-section-header" onclick="toggleCategoryCollapse('${key}')">
+      <div class="tk-section-dot" style="background:${dotColor}"></div>
+      <span class="tk-section-label">${label}</span>
+      ${p1InGroup > 0 ? `<span class="tk-section-badge urgent">${p1InGroup} urgent</span>` : ''}
+      ${overdueInGroup > 0 ? `<span class="tk-section-badge overdue">${overdueInGroup} late</span>` : ''}
+      <span class="tk-section-count">${count}</span>
+      <i data-lucide="chevron-right" style="width:14px;height:14px;color:var(--text-muted);opacity:.5;flex-shrink:0;transition:transform .2s;${isCollapsed ? '' : 'transform:rotate(90deg)'}"></i>
+    </div>
+    ${!isCollapsed ? tasks.map(t => tkTaskRowHTML(t, isRecurring)).join('') : ''}
+  </div>`;
 }
 
-// ─────────────────────────────────────────────────────────
-//  BENTO TASK ROW
-// ─────────────────────────────────────────────────────────
-function renderBentoTaskRow(t, isRecurring = false, dimmed = false) {
+/* ══════════════════════════════════════════════════════
+   TASK ROW RENDERER — clean by default, actions on expand
+══════════════════════════════════════════════════════ */
+function tkTaskRowHTML(t, isRecurring = false) {
+  // Keep original function name alias for _reRenderTaskRow / _attachTaskSwipes compatibility
+  return renderBentoTaskRow(t, isRecurring);
+}
+
+function renderBentoTaskRow(t, isRecurring = false) {
   const isDone = isRecurring ? isRecurringTaskCompletedToday(t) : t.status === 'completed';
   const selected = _selectedTaskIds.has(String(t.id));
   const isExpanded = _expandedTaskIds.has(String(t.id));
   const today = new Date().toISOString().slice(0, 10);
   const isOverdue = t.due_date && t.due_date < today && !isDone;
-  const pColor = PRIORITY_COLOR[t.priority] || 'transparent';
+  const pColor = { P1: '#EF4444', P2: '#F59E0B', P3: '#10B981' }[t.priority] || 'transparent';
   const subtasks = parseSubtasks(t);
   const doneSubCount = subtasks.filter(s => s.done).length;
 
   // Friendly date
   let dateLabel = '';
+  let dateChipClass = 'tk-date-chip';
   if (t.due_date) {
     const diff = Math.round((new Date(t.due_date) - new Date(today)) / 86400000);
-    if (diff === 0) dateLabel = 'Today';
-    else if (diff === 1) dateLabel = 'Tomorrow';
-    else if (diff === -1) dateLabel = 'Yesterday';
-    else if (diff < 0) dateLabel = `${Math.abs(diff)}d ago`;
-    else if (diff < 7) dateLabel = `${diff}d`;
-    else dateLabel = t.due_date;
+    if (diff === 0)      { dateLabel = 'Today';       dateChipClass += ' today-chip'; }
+    else if (diff === 1) { dateLabel = 'Tomorrow'; }
+    else if (diff === -1){ dateLabel = 'Yesterday';   dateChipClass += isOverdue ? ' overdue' : ''; }
+    else if (diff < 0)   { dateLabel = `${Math.abs(diff)}d ago`; if (isOverdue) dateChipClass += ' overdue'; }
+    else if (diff < 7)   { dateLabel = `${diff}d`; }
+    else                 { dateLabel = t.due_date; }
   }
 
-  const recurLabel = { daily: '↻ Daily', weekly: '↻ Weekly', monthly: '↻ Monthly' }[t.recurrence] || '';
+  const recurLabel = { daily:'↻ Daily', weekly:'↻ Weekly', monthly:'↻ Monthly' }[t.recurrence] || '';
+  const leftBorder = !isDone && t.priority === 'P1' ? `border-left:3px solid #EF4444;` :
+                     !isDone && t.priority === 'P2' ? `border-left:3px solid #F59E0B;` :
+                     'border-left:3px solid transparent;';
 
   return `
-    <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''}"
-         id="task-row-${t.id}"
-         style="border-left:${t.priority === 'P1' && !isDone ? '4px solid ' + pColor : (t.priority === 'P2' && !isDone ? '3px solid ' + pColor : '3px solid transparent')};"
-         onclick="toggleTaskDetails('${t.id}')">
+  <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''}"
+       id="task-row-${t.id}"
+       style="${leftBorder}"
+       onclick="toggleTaskDetails('${t.id}')">
 
-      <!-- Checkbox -->
-      <div class="task-check-ring ${isDone ? 'done' : ''}"
-           onclick="event.stopPropagation(); ${_itemSelectionMode ? `toggleTaskSelection('${t.id}')` :
-      (isRecurring ? `toggleRecurringTask('${t.id}',${!isDone})` : `toggleTaskOptimistic('${t.id}')`)}"
-           style="${isDone ? 'background:var(--primary);border-color:var(--primary);' : (!_itemSelectionMode && t.priority ? `border-color:${pColor}55;` : '')}">
-        ${isDone || (_itemSelectionMode && selected)
-      ? `${renderIcon('save', null, 'style="width:10px;color:white;"')}`
-      : (_itemSelectionMode ? `${renderIcon('circle', null, 'style="width:10px;color:var(--text-muted);"')}` : '')
-    }
-      </div>
-
-      <!-- Content -->
-      <div style="flex:1;min-width:0;">
-        <div style="display:flex;align-items:flex-start;gap:4px;">
-          <span class="task-title-text" style="${isDone ? 'text-decoration:line-through;color:var(--text-muted);' : ''} ${t.priority === 'P1' && !isDone ? 'font-size: 14.5px; font-weight: 600;' : ''}">
-            ${t.title}
-          </span>
-          ${!_itemSelectionMode ? `
-          <div style="display:flex;align-items:center;gap:1px;flex-shrink:0;margin-top:-1px;">
-            ${t.pomodoro_estimate > 0 ? `
-            <button class="btn icon" style="width:22px;height:22px;padding:2px;color:var(--primary);" onclick="event.stopPropagation(); quickStartPomodoro('task', '${t.id}')" title="Start Pomodoro">
-              ${renderIcon('timer', null, 'style="width:11px;"')}
-            </button>
-            ` : ''}
-            <button class="btn icon" style="width:22px;height:22px;padding:2px;" onclick="event.stopPropagation();openEditTask('${t.id}')" title="Edit">
-              ${renderIcon('edit', null, 'style="width:11px;"')}
-            </button>
-            <button class="btn icon" style="width:22px;height:22px;padding:2px;" onclick="event.stopPropagation();addReminderToTask('${t.id}')" title="Remind me">
-              ${renderIcon('reminder', null, 'style="width:11px;"')}
-            </button>
-            <button class="btn icon" style="width:22px;height:22px;padding:2px;" onclick="event.stopPropagation();deleteTask('${t.id}')" title="Delete">
-              ${renderIcon('delete', null, 'style="width:11px;"')}
-            </button>
-            ${renderIcon(isExpanded ? 'up' : 'down', null, 'style="width:13px;color:var(--text-muted);opacity:0.5;margin-left:1px;"')}
-          </div>` : ''}
-        </div>
-
-        <!-- Meta chips (collapsed view) -->
-        ${!isExpanded ? `
-        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
-          ${t.due_date ? `
-          <span class="task-meta-chip" style="${isOverdue ? 'color:var(--danger);border-color:rgba(239,68,68,0.3);background:rgba(239,68,68,0.07);' : ''}">
-            ${renderIcon(isOverdue ? 'alert-circle' : 'calendar', null, 'style="width:9px;"')}
-            ${dateLabel}${isOverdue ? ` ${renderIcon('warning', null, 'style="width:10px;vertical-align:middle;margin-left:2px;"')}` : ''}
-          </span>` : ''}
-          ${t.pomodoro_estimate > 0 ? `
-          <span class="task-meta-chip" style="color:var(--primary);border-color:var(--primary-soft);">
-            ${renderIcon('timer', null, 'style="width:9px;"')} ${t.pomodoro_estimate} sessions
-          </span>` : ''}
-          ${subtasks.length > 0 ? `
-          <span class="task-meta-chip" style="${doneSubCount === subtasks.length && subtasks.length > 0 ? 'color:var(--success);border-color:rgba(16,185,129,0.3);' : ''}">
-            ${renderIcon(doneSubCount === subtasks.length && subtasks.length > 0 ? 'check-circle' : 'tasks', null, 'style="width:9px;"')}
-            ${doneSubCount}/${subtasks.length}
-          </span>` : ''}
-          ${recurLabel ? `<span class="task-meta-chip">${renderIcon('repeat', null, 'style="width:9px;"')} ${recurLabel}</span>` : ''}
-        </div>` : ''}
-      </div>
+    <!-- Checkbox -->
+    <div class="task-check-ring ${isDone ? 'done' : ''}"
+         style="${!isDone && t.priority ? `border-color:${pColor}66;` : ''}"
+         onclick="event.stopPropagation(); ${_itemSelectionMode
+           ? `toggleTaskSelection('${t.id}')`
+           : isRecurring
+             ? `toggleRecurringTask('${t.id}',${!isDone})`
+             : `toggleTaskOptimistic('${t.id}')`}">
+      ${isDone || (_itemSelectionMode && selected)
+        ? `<i data-lucide="check" style="width:10px;height:10px;color:white;stroke-width:3"></i>`
+        : ''}
     </div>
 
-    <!-- Expanded subtasks panel -->
-    ${isExpanded ? `
-    <div class="subtask-expand">
-      ${t.description ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;line-height:1.5;">${t.description}</div>` : ''}
-      ${subtasks.map((s, idx) => `
-        <div class="subtask-item">
-          <div class="subtask-mini-check ${s.done ? 'done' : ''}"
-               onclick="event.stopPropagation();toggleSubtask('${t.id}',${idx},${!s.done})">
-            ${s.done ? `${renderIcon('save', null, 'style="width:8px;color:white;"')}` : ''}
-          </div>
-          <span style="flex:1;${s.done ? 'text-decoration:line-through;color:var(--text-muted);' : 'color:var(--text-2);'}">${s.text}</span>
-          ${renderIcon('x', null, 'style="width:11px;color:var(--text-muted);cursor:pointer;opacity:0.5;"')}
-             onclick="event.stopPropagation();window.deleteSubtask('${t.id}',${idx})"></div>
-        </div>
-      `).join('')}
-      <!-- Add subtask input -->
-      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;margin-top:2px;">
-        <div style="width:15px;height:15px;min-width:15px;border:2px dashed var(--border-color);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-          ${renderIcon('add', null, 'style="width:8px;color:var(--text-muted); font-weight: 800;"')}
-        </div>
-        <input type="text" id="inline-subtask-input-${t.id}" placeholder="Add subtask…"
-               style="flex:1;border:none;background:transparent;outline:none;font-size:12px;color:var(--text-1);"
-               onclick="event.stopPropagation()"
-               onkeydown="if(event.key==='Enter'){event.stopPropagation();addInlineSubtask('${t.id}',this.value);this.value='';}">
+    <!-- Content -->
+    <div class="tk-row-content">
+      <div class="tk-row-top">
+        <span class="task-title-text ${isDone ? 'done-text' : ''} ${t.priority === 'P1' && !isDone ? 'p1-text' : ''}">
+          ${escapeHtml(t.title || '')}
+        </span>
+        ${dateLabel && !isExpanded ? `<span class="${dateChipClass}">${dateLabel}</span>` : ''}
       </div>
+
+      ${!isExpanded ? `
+      <div class="tk-meta-row">
+        ${subtasks.length > 0 ? `
+        <span class="task-meta-chip ${doneSubCount === subtasks.length && subtasks.length > 0 ? 'done-chip' : ''}">
+          <i data-lucide="${doneSubCount === subtasks.length ? 'check-circle-2' : 'list-checks'}" style="width:9px;height:9px"></i>
+          ${doneSubCount}/${subtasks.length}
+        </span>` : ''}
+        ${recurLabel ? `<span class="task-meta-chip"><i data-lucide="repeat-2" style="width:9px;height:9px"></i> ${recurLabel}</span>` : ''}
+        ${t.pomodoro_estimate > 0 ? `<span class="task-meta-chip" style="color:var(--primary);"><i data-lucide="timer" style="width:9px;height:9px"></i> ${t.pomodoro_estimate}×🍅</span>` : ''}
+        ${t.category && _taskCategory === 'All' ? `<span class="task-meta-chip">${escapeHtml(t.category)}</span>` : ''}
+      </div>` : ''}
+    </div>
+  </div>
+
+  <!-- Expanded Panel -->
+  ${isExpanded ? `
+  <div class="subtask-expand">
+    ${dateLabel ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <i data-lucide="calendar" style="width:12px;height:12px;color:var(--text-muted)"></i>
+      <span class="task-meta-chip ${isOverdue ? 'danger' : ''}" style="${isOverdue?'color:var(--danger);':''}">${dateLabel}</span>
+      ${t.category ? `<span class="task-meta-chip">${escapeHtml(t.category)}</span>` : ''}
+      ${recurLabel ? `<span class="task-meta-chip"><i data-lucide="repeat-2" style="width:9px;height:9px"></i> ${recurLabel}</span>` : ''}
     </div>` : ''}
-  `;
+
+    ${t.description ? `<div class="tk-expand-desc">${escapeHtml(t.description)}</div>` : ''}
+
+    ${subtasks.map((s, idx) => `
+    <div class="subtask-item">
+      <div class="subtask-mini-check ${s.done ? 'done' : ''}"
+           onclick="event.stopPropagation();toggleSubtask('${t.id}',${idx},${!s.done})">
+        ${s.done ? `<i data-lucide="check" style="width:8px;height:8px;color:white;stroke-width:3"></i>` : ''}
+      </div>
+      <span style="flex:1;font-size:12.5px;${s.done?'text-decoration:line-through;color:var(--text-muted);':'color:var(--text-1);'}">${escapeHtml(s.text)}</span>
+      <button style="border:none;background:none;cursor:pointer;opacity:.4;padding:2px;"
+              onclick="event.stopPropagation();window.deleteSubtask('${t.id}',${idx})">
+        <i data-lucide="x" style="width:11px;height:11px"></i>
+      </button>
+    </div>`).join('')}
+
+    <div class="tk-subtask-add">
+      <div class="tk-subtask-add-ring">
+        <i data-lucide="plus" style="width:8px;height:8px;color:var(--text-muted)"></i>
+      </div>
+      <input type="text" id="inline-subtask-input-${t.id}"
+             class="tk-subtask-add-input"
+             placeholder="Add subtask…"
+             onclick="event.stopPropagation()"
+             onkeydown="if(event.key==='Enter'){event.stopPropagation();addInlineSubtask('${t.id}',this.value);this.value='';}">
+    </div>
+
+    <!-- Action Buttons (visible only when expanded) -->
+    <div class="tk-row-actions">
+      <button class="tk-action-btn primary" onclick="event.stopPropagation();openEditTask('${t.id}')">
+        <i data-lucide="pencil" style="width:12px;height:12px"></i> Edit
+      </button>
+      ${t.pomodoro_estimate > 0 ? `
+      <button class="tk-action-btn primary" onclick="event.stopPropagation();quickStartPomodoro('task','${t.id}')">
+        <i data-lucide="timer" style="width:12px;height:12px"></i> Focus
+      </button>` : ''}
+      <button class="tk-action-btn" onclick="event.stopPropagation();addReminderToTask('${t.id}')">
+        <i data-lucide="bell" style="width:12px;height:12px"></i> Remind
+      </button>
+      <button class="tk-action-btn danger" onclick="event.stopPropagation();deleteTask('${t.id}')">
+        <i data-lucide="trash-2" style="width:12px;height:12px"></i>
+      </button>
+    </div>
+  </div>` : ''}`;
 }
 
-// ─────────────────────────────────────────────────────────
-//  EXPAND / COLLAPSE TASK
-// ─────────────────────────────────────────────────────────
+/* ══════════════════════════════════════════════════════
+   EXPAND / COLLAPSE TASK
+══════════════════════════════════════════════════════ */
 window.toggleTaskDetails = function (id) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
@@ -588,18 +692,12 @@ window.toggleTaskDetails = function (id) {
     ? _expandedTaskIds.delete(String(id))
     : _expandedTaskIds.add(String(id));
 
-  // Re-render just this task in place for snappiness
   const row = document.getElementById(`task-row-${id}`);
   if (row) {
     const isRecurring = !!(t.recurrence && t.recurrence !== 'none');
-    // Replace row + its optional expanded sibling
-    const newHtml = renderBentoTaskRow(t, isRecurring);
-    const tmp = document.createElement('div');
-    tmp.innerHTML = newHtml;
-    // Remove old expanded div if present
     const next = row.nextElementSibling;
     if (next && next.classList.contains('subtask-expand')) next.remove();
-    row.outerHTML = newHtml;
+    row.outerHTML = renderBentoTaskRow(t, isRecurring);
     if (typeof lucide !== 'undefined') lucide.createIcons();
     const inp = document.getElementById(`inline-subtask-input-${id}`);
     if (inp) inp.focus();
@@ -608,9 +706,7 @@ window.toggleTaskDetails = function (id) {
   }
 };
 
-// ─────────────────────────────────────────────────────────
-//  SUBTASK OPERATIONS
-// ─────────────────────────────────────────────────────────
+/* ── Subtask Operations ── */
 function _reRenderTaskRow(taskId) {
   const t = state.data.tasks.find(x => String(x.id) === String(taskId));
   if (!t) return renderTasks(_getSearchValue());
@@ -657,9 +753,7 @@ window.addInlineSubtask = async function (taskId, text) {
   await apiCall('update', 'tasks', { subtasks: t.subtasks }, taskId);
 };
 
-// ─────────────────────────────────────────────────────────
-//  SELECTION & BATCH DELETE
-// ─────────────────────────────────────────────────────────
+/* ── Selection & Batch Delete ── */
 window.toggleTaskSelectionMode = function () {
   _itemSelectionMode = !_itemSelectionMode;
   _selectedTaskIds.clear();
@@ -695,9 +789,19 @@ window.confirmDeleteSelectedTasks = async function () {
   _selectedTaskIds.clear();
 };
 
-// ─────────────────────────────────────────────────────────
-//  TOGGLE TASK STATUS
-// ─────────────────────────────────────────────────────────
+/* ── Attach Swipes ── */
+function _attachTaskSwipes() {
+  if (typeof window.addSwipeAction !== 'function') return;
+  document.querySelectorAll('.task-bento-row').forEach(row => {
+    const taskId = row.id.replace('task-row-', '');
+    window.addSwipeAction(row,
+      () => { window.deleteTask(taskId); },
+      () => { window.toggleTaskOptimistic(taskId); }
+    );
+  });
+}
+
+/* ── Toggle Task Status ── */
 window.toggleRecurringTask = async function (id, markDone) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
@@ -714,21 +818,17 @@ window.toggleTaskOptimistic = async function (id) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
   const newStatus = t.status === 'completed' ? 'pending' : 'completed';
-
-  // Haptic Feedback
   if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
-
   const row = document.getElementById(`task-row-${id}`);
   if (newStatus === 'completed' && row) {
     row.classList.add('animating-done');
     await new Promise(r => setTimeout(r, 400));
   }
-
   t.status = newStatus;
   _reRenderTaskRow(id);
   try {
     await apiCall('update', 'tasks', { status: newStatus }, id);
-    if (newStatus === 'completed') showToast('Task completed!');
+    if (newStatus === 'completed') showToast('Task completed! ✓');
   } catch (e) {
     t.status = newStatus === 'completed' ? 'pending' : 'completed';
     _reRenderTaskRow(id);
@@ -736,231 +836,431 @@ window.toggleTaskOptimistic = async function (id) {
   }
 };
 
-// ─────────────────────────────────────────────────────────
-//  MODALS
-// ─────────────────────────────────────────────────────────
+/* ══════════════════════════════════════════════════════
+   TWO-STEP MODAL — NEW TASK
+══════════════════════════════════════════════════════ */
+
+// Internal state for modal priority selection
+let _modalPriority = 'P2';
+
+window.tkPickPriority = function(p) {
+  _modalPriority = p;
+  // Update hidden select (read by main.js)
+  const sel = document.getElementById('mTaskPriority');
+  if (sel) sel.value = p;
+  // Update visual buttons
+  document.querySelectorAll('.tk-prio-pick').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.p === p);
+  });
+};
+
+window.tkModalGoStep2 = function() {
+  const slider = document.getElementById('tkModalSlider');
+  if (slider) { slider.style.transform = 'translateX(-50%)'; }
+  // Update step dots
+  document.querySelectorAll('.tk-step-dot').forEach((d, i) => d.classList.toggle('active', i === 1));
+};
+
+window.tkModalGoStep1 = function() {
+  const slider = document.getElementById('tkModalSlider');
+  if (slider) { slider.style.transform = 'translateX(0)'; }
+  document.querySelectorAll('.tk-step-dot').forEach((d, i) => d.classList.toggle('active', i === 0));
+};
+
 window.openTaskModal = function () {
+  _modalPriority = 'P2';
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
   const categories = getAllTaskCategories();
+
   box.innerHTML = `
-    <h3>New Task</h3>
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <input class="input" id="mTaskTitle" placeholder="Task title" autofocus>
-      <textarea class="input" id="mTaskDesc" placeholder="Description..." rows="2"></textarea>
-      <div style="border:1px solid var(--border-color);padding:10px;border-radius:10px;">
-        <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Subtasks</label>
-        <div id="mSubtaskList" style="margin-top:6px;"></div>
-        <button class="btn small secondary" style="width:100%;margin-top:6px;" onclick="addSubtaskInput()">${renderIcon('add', null, 'style="width:12px; margin-right:4px;"')} Add Subtask</button>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <select class="input" id="mTaskCategory">
-          <option value="" disabled selected>Category</option>
-          ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
-        </select>
-        <input type="text" class="input" id="mTaskTags" placeholder="Tags">
-      </div>
-      <div style="display:flex;gap:8px;">
-        <select class="input" id="mTaskVisionGoal" style="flex:1;">
-          <option value="">Link to Vision Goal (None)</option>
-          ${(state.data.vision || []).filter(g => g.status !== 'achieved').map(g => `<option value="${g.id}">${g.title || g.goal_name}</option>`).join('')}
-        </select>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <select class="input" id="mTaskPriority">
-          <option value="P1">● High (P1)</option>
-          <option value="P2" selected>● Medium (P2)</option>
-          <option value="P3">● Low (P3)</option>
-        </select>
-        <input type="date" class="input" id="mTaskDate" value="${new Date().toISOString().slice(0, 10)}">
-        <input type="time" class="input" id="mTaskTime" title="Start Time">
-        <input type="number" class="input" id="mTaskDuration" placeholder="Duration (mins)" style="width:110px;" value="30" min="5" step="5" title="Duration in minutes">
-      </div>
-      
-      <div style="padding:12px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border-color);">
-        <label style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
-            <i data-icon="timer" style="width:14px"></i> Pomodoro Estimate
-        </label>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;">
-            <div style="flex:1;">
-                <span style="font-size:12px; color:var(--text-2); display:block;">Est. sessions</span>
-                <input type="number" class="input" id="mTaskPomoEstimate" placeholder="0" value="0" style="width:100%" min="0">
-            </div>
-            <div style="flex:1;">
-                <span style="font-size:12px; color:var(--text-2); display:block;">Session Length (min)</span>
-                <input type="number" class="input" id="mTaskPomoLength" placeholder="25" value="25" style="width:100%" min="5" step="5">
-            </div>
+  <div class="tk-modal-wrap">
+    <!-- Step indicator -->
+    <div class="tk-step-dots">
+      <div class="tk-step-dot active"></div>
+      <div class="tk-step-dot"></div>
+    </div>
+
+    <div class="tk-modal-slider" id="tkModalSlider">
+
+      <!-- ═══ PANEL 1: Quick Capture ═══ -->
+      <div class="tk-modal-panel">
+        <div class="tk-modal-header">
+          <span class="tk-modal-title">New Task</span>
+          <button class="tk-modal-close" onclick="document.getElementById('universalModal').classList.add('hidden')">✕</button>
+        </div>
+
+        <input class="tk-title-input" id="mTaskTitle" placeholder="What needs to be done?" autofocus>
+
+        <!-- Priority -->
+        <div class="tk-field-section">
+          <span class="tk-field-label">Priority</span>
+          <div class="tk-prio-picker">
+            <button class="tk-prio-pick" data-p="P1" style="--pick-color:#EF4444" onclick="tkPickPriority('P1')">
+              <span class="pk-dot" style="background:#EF4444"></span> High
+            </button>
+            <button class="tk-prio-pick selected" data-p="P2" style="--pick-color:#F59E0B" onclick="tkPickPriority('P2')">
+              <span class="pk-dot" style="background:#F59E0B"></span> Medium
+            </button>
+            <button class="tk-prio-pick" data-p="P3" style="--pick-color:#10B981" onclick="tkPickPriority('P3')">
+              <span class="pk-dot" style="background:#10B981"></span> Low
+            </button>
+          </div>
+          <!-- Hidden select read by main.js -->
+          <select id="mTaskPriority" style="display:none;">
+            <option value="P1">P1</option>
+            <option value="P2" selected>P2</option>
+            <option value="P3">P3</option>
+          </select>
+        </div>
+
+        <!-- Date + Category -->
+        <div class="tk-field-row">
+          <div class="tk-field-section">
+            <span class="tk-field-label">Due Date</span>
+            <input type="date" class="tk-input" id="mTaskDate" value="${new Date().toISOString().slice(0,10)}">
+          </div>
+          <div class="tk-field-section">
+            <span class="tk-field-label">Category</span>
+            <select class="tk-select" id="mTaskCategory">
+              <option value="">None</option>
+              ${categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="tk-modal-actions">
+          <button class="tk-modal-more" onclick="tkModalGoStep2()">
+            More <i data-lucide="chevron-right" style="width:14px;height:14px"></i>
+          </button>
+          <button class="tk-modal-save" data-action="save-task-modal">Save Task</button>
         </div>
       </div>
-      <div>
-        <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Recurrence</label>
-        <select class="input" id="mTaskRecurrence" onchange="taskRecurrenceChanged()" style="margin-top:6px;">
-          <option value="none">None</option>
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </select>
-      </div>
-      <div id="taskDayPickerWrap" style="display:none;">
-        <label style="font-size:11px;font-weight:700;color:var(--text-muted);">Days</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
-          ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `
-            <label style="font-size:11px;display:flex;align-items:center;gap:3px;">
-              <input type="checkbox" value="${d}" class="task-day-check"> ${d}
-            </label>`).join('')}
+
+      <!-- ═══ PANEL 2: Details ═══ -->
+      <div class="tk-modal-panel" style="padding-left:20px;">
+        <div class="tk-modal-header">
+          <button class="tk-back-pill" onclick="tkModalGoStep1()">
+            <i data-lucide="arrow-left" style="width:13px;height:13px"></i> Back
+          </button>
+          <span class="tk-modal-title">Details</span>
+          <button class="tk-modal-close" onclick="document.getElementById('universalModal').classList.add('hidden')">✕</button>
+        </div>
+
+        <textarea class="tk-textarea" id="mTaskDesc" placeholder="Description..." rows="2"></textarea>
+
+        <!-- Tags + Time row -->
+        <div class="tk-field-row" style="margin-top:12px;">
+          <div class="tk-field-section">
+            <span class="tk-field-label">Time</span>
+            <input type="time" class="tk-input" id="mTaskTime">
+          </div>
+          <div class="tk-field-section">
+            <span class="tk-field-label">Tags</span>
+            <input type="text" class="tk-input" id="mTaskTags" placeholder="tag1, tag2">
+          </div>
+        </div>
+
+        <!-- Subtasks -->
+        <div class="tk-modal-section">
+          <div class="tk-modal-section-title">
+            <i data-lucide="list-checks" style="width:13px;height:13px"></i> Subtasks
+          </div>
+          <div id="mSubtaskList"></div>
+          <button class="tk-modal-subtask-add" onclick="addSubtaskInput()">+ Add subtask</button>
+        </div>
+
+        <!-- Duration + Pomodoro -->
+        <div class="tk-modal-section">
+          <div class="tk-modal-section-title">
+            <i data-lucide="timer" style="width:13px;height:13px"></i> Time Estimate
+          </div>
+          <div class="tk-field-row" style="margin-bottom:0;">
+            <div class="tk-field-section">
+              <span class="tk-field-label">Duration (min)</span>
+              <input type="number" class="tk-input" id="mTaskDuration" value="30" min="5" step="5">
+            </div>
+            <div class="tk-field-section">
+              <span class="tk-field-label">🍅 Sessions</span>
+              <input type="number" class="tk-input" id="mTaskPomoEstimate" value="0" min="0">
+            </div>
+            <div class="tk-field-section">
+              <span class="tk-field-label">Session (min)</span>
+              <input type="number" class="tk-input" id="mTaskPomoLength" value="25" min="5" step="5">
+            </div>
+          </div>
+        </div>
+
+        <!-- Vision Link -->
+        <div class="tk-field-section">
+          <span class="tk-field-label">Link to Vision Goal</span>
+          <select class="tk-select" id="mTaskVisionGoal">
+            <option value="">None</option>
+            ${(state.data.vision || []).filter(g => g.status !== 'achieved').map(g =>
+              `<option value="${g.id}">${escapeHtml(g.title || g.goal_name || '')}</option>`
+            ).join('')}
+          </select>
+        </div>
+
+        <!-- Recurrence -->
+        <div class="tk-modal-section">
+          <div class="tk-modal-section-title">
+            <i data-lucide="repeat-2" style="width:13px;height:13px"></i> Recurrence
+          </div>
+          <select class="tk-select" id="mTaskRecurrence" onchange="taskRecurrenceChanged()">
+            <option value="none">None</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <div id="taskDayPickerWrap" style="display:none;margin-top:10px;">
+            <div class="tk-day-picker">
+              ${TASK_DAY_NAMES.map(d => `
+                <label class="tk-day-label">
+                  <input type="checkbox" value="${d}" class="task-day-check"> ${d}
+                </label>`).join('')}
+            </div>
+          </div>
+          <div id="taskEndDateWrap" style="display:none;margin-top:10px;">
+            <span class="tk-field-label">End Date</span>
+            <input type="date" class="tk-input" id="mTaskRecurrenceEnd" style="margin-top:6px;">
+          </div>
+        </div>
+
+        <div class="tk-modal-actions">
+          <button class="tk-modal-cancel" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+          <button class="tk-modal-save" data-action="save-task-modal">Save Task</button>
         </div>
       </div>
-      <div id="taskEndDateWrap" style="display:none;">
-        <label style="font-size:11px;font-weight:700;color:var(--text-muted);">End Date (optional)</label>
-        <input type="date" class="input" id="mTaskRecurrenceEnd" style="margin-top:6px;">
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
-        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <button class="btn primary" data-action="save-task-modal">Save Task</button>
-      </div>
-    </div>`;
-  document.getElementById('universalModal').classList.remove('hidden');
+
+    </div><!-- /slider -->
+  </div>`;
+
+  modal.classList.remove('hidden');
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 };
 
+/* ── Subtask input helper (used by both modals) ── */
 window.addSubtaskInput = function (value = '', done = false) {
   const list = document.getElementById('mSubtaskList');
+  if (!list) return;
   const div = document.createElement('div');
-  div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:5px;';
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;';
   div.innerHTML = `
-    <input type="checkbox" class="subtask-check" ${done ? 'checked' : ''}>
-    <input type="text" class="input small subtask-text" value="${value}" placeholder="Step…" style="margin:0;flex:1;">
-    ${renderIcon('x', null, 'style="width:13px;cursor:pointer;" onclick="this.parentElement.remove()"')}`;
+    <input type="checkbox" class="subtask-check" ${done ? 'checked' : ''} style="width:14px;height:14px;cursor:pointer;flex-shrink:0;">
+    <input type="text" class="subtask-text tk-input" value="${escapeHtml(value)}" placeholder="Step…" style="margin:0;flex:1;padding:6px 10px;">
+    <button style="border:none;background:none;cursor:pointer;opacity:.4;padding:4px;" onclick="this.parentElement.remove()">
+      <i data-lucide="x" style="width:13px;height:13px"></i>
+    </button>`;
   list.appendChild(div);
   if (typeof lucide !== 'undefined') lucide.createIcons();
 };
 
 window.taskRecurrenceChanged = function () {
-  const val = document.getElementById('mTaskRecurrence').value;
-  document.getElementById('taskDayPickerWrap').style.display = val === 'weekly' ? 'block' : 'none';
-  document.getElementById('taskEndDateWrap').style.display = val !== 'none' ? 'block' : 'none';
+  const val = document.getElementById('mTaskRecurrence')?.value;
+  const dayWrap = document.getElementById('taskDayPickerWrap');
+  const endWrap = document.getElementById('taskEndDateWrap');
+  if (dayWrap) dayWrap.style.display = val === 'weekly' ? 'block' : 'none';
+  if (endWrap) endWrap.style.display = val !== 'none' ? 'block' : 'none';
 };
 
+/* ══════════════════════════════════════════════════════
+   TWO-STEP MODAL — EDIT TASK
+══════════════════════════════════════════════════════ */
 window.openEditTask = function (id) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
+  _modalPriority = t.priority || 'P2';
+
   const categories = getAllTaskCategories();
   const isWeekly = t.recurrence === 'weekly';
   const isRecurring = t.recurrence && t.recurrence !== 'none';
   const selectedDays = t.recurrence_days ? t.recurrence_days.split(',').map(s => s.trim()) : [];
   let subtasks = [];
-  try { if (t.subtasks) subtasks = typeof t.subtasks === 'string' ? JSON.parse(t.subtasks) : t.subtasks; } catch { }
+  try { if (t.subtasks) subtasks = typeof t.subtasks === 'string' ? JSON.parse(t.subtasks) : t.subtasks; } catch {}
 
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
+
   box.innerHTML = `
-    <h3>Edit Task</h3>
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <input class="input" id="mTaskTitle" value="${(t.title || '').replace(/"/g, '&quot;')}" placeholder="Task title">
-      <textarea class="input" id="mTaskDesc" placeholder="Description..." rows="2">${t.description || ''}</textarea>
-      <div style="border:1px solid var(--border-color);padding:10px;border-radius:10px;">
-        <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Subtasks</label>
-        <div id="mSubtaskList" style="margin-top:6px;"></div>
-        <button class="btn small secondary" style="width:100%;margin-top:6px;" onclick="addSubtaskInput()">${renderIcon('add', null, 'style="width:12px; margin-right:4px;"')} Add Subtask</button>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <select class="input" id="mTaskCategory">
-          <option value="" disabled ${!t.category ? 'selected' : ''}>Category</option>
-          ${categories.map(c => `<option value="${c}" ${t.category === c ? 'selected' : ''}>${c}</option>`).join('')}
-        </select>
-        <input type="text" class="input" id="mTaskTags" value="${t.tags || ''}" placeholder="Tags">
-      </div>
-      <div style="display:flex;gap:8px;">
-        <select class="input" id="mTaskVisionGoal" style="flex:1;">
-          <option value="">Link to Vision Goal (None)</option>
-          ${(state.data.vision || []).filter(g => g.status !== 'achieved' || g.id === t.vision_id).map(g => `<option value="${g.id}" ${String(g.id) === String(t.vision_id) ? 'selected' : ''}>${g.title || g.goal_name}</option>`).join('')}
-        </select>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <select class="input" id="mTaskPriority">
-          <option value="P1" ${t.priority === 'P1' ? 'selected' : ''}>● High (P1)</option>
-          <option value="P2" ${t.priority === 'P2' ? 'selected' : ''}>● Medium (P2)</option>
-          <option value="P3" ${(!t.priority || t.priority === 'P3') ? 'selected' : ''}>● Low (P3)</option>
-        </select>
-        <input type="date" class="input" id="mTaskDate" value="${t.due_date || ''}">
-        <input type="time" class="input" id="mTaskTime" value="${parseDueTimeForInput(t.due_time)}" title="Start Time">
-        <input type="number" class="input" id="mTaskDuration" placeholder="Duration (mins)" style="width:110px;" value="${t.duration || 30}" min="5" step="5" title="Duration in minutes">
+  <div class="tk-modal-wrap">
+    <div class="tk-step-dots">
+      <div class="tk-step-dot active"></div>
+      <div class="tk-step-dot"></div>
+    </div>
+
+    <div class="tk-modal-slider" id="tkModalSlider">
+
+      <!-- ═══ PANEL 1 ═══ -->
+      <div class="tk-modal-panel">
+        <div class="tk-modal-header">
+          <span class="tk-modal-title">Edit Task</span>
+          <button class="tk-modal-close" onclick="document.getElementById('universalModal').classList.add('hidden')">✕</button>
+        </div>
+
+        <input class="tk-title-input" id="mTaskTitle"
+               value="${escapeHtml(t.title || '')}" placeholder="Task title">
+
+        <!-- Priority -->
+        <div class="tk-field-section">
+          <span class="tk-field-label">Priority</span>
+          <div class="tk-prio-picker">
+            <button class="tk-prio-pick ${t.priority==='P1'?'selected':''}" data-p="P1" style="--pick-color:#EF4444" onclick="tkPickPriority('P1')">
+              <span class="pk-dot" style="background:#EF4444"></span> High
+            </button>
+            <button class="tk-prio-pick ${(!t.priority||t.priority==='P2')?'selected':''}" data-p="P2" style="--pick-color:#F59E0B" onclick="tkPickPriority('P2')">
+              <span class="pk-dot" style="background:#F59E0B"></span> Medium
+            </button>
+            <button class="tk-prio-pick ${t.priority==='P3'?'selected':''}" data-p="P3" style="--pick-color:#10B981" onclick="tkPickPriority('P3')">
+              <span class="pk-dot" style="background:#10B981"></span> Low
+            </button>
+          </div>
+          <select id="mTaskPriority" style="display:none;">
+            <option value="P1" ${t.priority==='P1'?'selected':''}>P1</option>
+            <option value="P2" ${(!t.priority||t.priority==='P2')?'selected':''}>P2</option>
+            <option value="P3" ${t.priority==='P3'?'selected':''}>P3</option>
+          </select>
+        </div>
+
+        <div class="tk-field-row">
+          <div class="tk-field-section">
+            <span class="tk-field-label">Due Date</span>
+            <input type="date" class="tk-input" id="mTaskDate" value="${t.due_date || ''}">
+          </div>
+          <div class="tk-field-section">
+            <span class="tk-field-label">Category</span>
+            <select class="tk-select" id="mTaskCategory">
+              <option value="">None</option>
+              ${categories.map(c => `<option value="${escapeHtml(c)}" ${t.category===c?'selected':''}>${escapeHtml(c)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div class="tk-modal-actions">
+          <button class="tk-modal-more" onclick="tkModalGoStep2()">
+            More <i data-lucide="chevron-right" style="width:14px;height:14px"></i>
+          </button>
+          <button class="tk-modal-save" data-action="update-task-modal" data-edit-id="${t.id}">Update</button>
+        </div>
       </div>
 
-      <div style="padding:12px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border-color);">
-        <label style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
-            <i data-icon="timer" style="width:14px"></i> Pomodoro Estimate
-        </label>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;">
-            <div style="flex:1;">
-                <span style="font-size:12px; color:var(--text-2); display:block;">Est. sessions</span>
-                <input type="number" class="input" id="mTaskPomoEstimate" placeholder="0" value="${t.pomodoro_estimate || 0}" style="width:100%" min="0">
+      <!-- ═══ PANEL 2 ═══ -->
+      <div class="tk-modal-panel" style="padding-left:20px;">
+        <div class="tk-modal-header">
+          <button class="tk-back-pill" onclick="tkModalGoStep1()">
+            <i data-lucide="arrow-left" style="width:13px;height:13px"></i> Back
+          </button>
+          <span class="tk-modal-title">Details</span>
+          <button class="tk-modal-close" onclick="document.getElementById('universalModal').classList.add('hidden')">✕</button>
+        </div>
+
+        <textarea class="tk-textarea" id="mTaskDesc" rows="2" placeholder="Description...">${escapeHtml(t.description || '')}</textarea>
+
+        <div class="tk-field-row" style="margin-top:12px;">
+          <div class="tk-field-section">
+            <span class="tk-field-label">Time</span>
+            <input type="time" class="tk-input" id="mTaskTime" value="${parseDueTimeForInput(t.due_time)}">
+          </div>
+          <div class="tk-field-section">
+            <span class="tk-field-label">Tags</span>
+            <input type="text" class="tk-input" id="mTaskTags" value="${escapeHtml(t.tags || '')}" placeholder="tag1, tag2">
+          </div>
+        </div>
+
+        <div class="tk-modal-section">
+          <div class="tk-modal-section-title">
+            <i data-lucide="list-checks" style="width:13px;height:13px"></i> Subtasks
+          </div>
+          <div id="mSubtaskList"></div>
+          <button class="tk-modal-subtask-add" onclick="addSubtaskInput()">+ Add subtask</button>
+        </div>
+
+        <div class="tk-modal-section">
+          <div class="tk-modal-section-title">
+            <i data-lucide="timer" style="width:13px;height:13px"></i> Time Estimate
+          </div>
+          <div class="tk-field-row" style="margin-bottom:0;">
+            <div class="tk-field-section">
+              <span class="tk-field-label">Duration (min)</span>
+              <input type="number" class="tk-input" id="mTaskDuration" value="${t.duration || 30}" min="5" step="5">
             </div>
-            <div style="flex:1;">
-                <span style="font-size:12px; color:var(--text-2); display:block;">Session Length (min)</span>
-                <input type="number" class="input" id="mTaskPomoLength" placeholder="25" value="${t.pomodoro_length || 25}" style="width:100%" min="5" step="5">
+            <div class="tk-field-section">
+              <span class="tk-field-label">🍅 Sessions</span>
+              <input type="number" class="tk-input" id="mTaskPomoEstimate" value="${t.pomodoro_estimate || 0}" min="0">
             </div>
+            <div class="tk-field-section">
+              <span class="tk-field-label">Session (min)</span>
+              <input type="number" class="tk-input" id="mTaskPomoLength" value="${t.pomodoro_length || 25}" min="5" step="5">
+            </div>
+          </div>
+        </div>
+
+        <div class="tk-field-section">
+          <span class="tk-field-label">Link to Vision Goal</span>
+          <select class="tk-select" id="mTaskVisionGoal">
+            <option value="">None</option>
+            ${(state.data.vision || []).filter(g => g.status !== 'achieved' || g.id === t.vision_id).map(g =>
+              `<option value="${g.id}" ${String(g.id)===String(t.vision_id)?'selected':''}>${escapeHtml(g.title || g.goal_name || '')}</option>`
+            ).join('')}
+          </select>
+        </div>
+
+        <div class="tk-modal-section">
+          <div class="tk-modal-section-title">
+            <i data-lucide="repeat-2" style="width:13px;height:13px"></i> Recurrence
+          </div>
+          <select class="tk-select" id="mTaskRecurrence" onchange="taskRecurrenceChanged()">
+            <option value="none"    ${!t.recurrence||t.recurrence==='none'?'selected':''}>None</option>
+            <option value="daily"   ${t.recurrence==='daily'?'selected':''}>Daily</option>
+            <option value="weekly"  ${t.recurrence==='weekly'?'selected':''}>Weekly</option>
+            <option value="monthly" ${t.recurrence==='monthly'?'selected':''}>Monthly</option>
+          </select>
+          <div id="taskDayPickerWrap" style="display:${isWeekly?'block':'none'};margin-top:10px;">
+            <div class="tk-day-picker">
+              ${TASK_DAY_NAMES.map(d => `
+                <label class="tk-day-label ${selectedDays.includes(d)?'checked':''}">
+                  <input type="checkbox" value="${d}" class="task-day-check" ${selectedDays.includes(d)?'checked':''}> ${d}
+                </label>`).join('')}
+            </div>
+          </div>
+          <div id="taskEndDateWrap" style="display:${isRecurring?'block':'none'};margin-top:10px;">
+            <span class="tk-field-label">End Date</span>
+            <input type="date" class="tk-input" id="mTaskRecurrenceEnd" value="${t.recurrence_end||''}" style="margin-top:6px;">
+          </div>
+        </div>
+
+        <div class="tk-modal-actions">
+          <button class="tk-modal-cancel" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+          <button class="tk-modal-save" data-action="update-task-modal" data-edit-id="${t.id}">Update Task</button>
         </div>
       </div>
-      <div>
-        <label style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Recurrence</label>
-        <select class="input" id="mTaskRecurrence" onchange="taskRecurrenceChanged()" style="margin-top:6px;">
-          <option value="none"    ${!t.recurrence || t.recurrence === 'none' ? 'selected' : ''}>None</option>
-          <option value="daily"   ${t.recurrence === 'daily' ? 'selected' : ''}>Daily</option>
-          <option value="weekly"  ${t.recurrence === 'weekly' ? 'selected' : ''}>Weekly</option>
-          <option value="monthly" ${t.recurrence === 'monthly' ? 'selected' : ''}>Monthly</option>
-        </select>
-      </div>
-      <div id="taskDayPickerWrap" style="display:${isWeekly ? 'block' : 'none'};">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${TASK_DAY_NAMES.map(d => `
-            <label style="font-size:11px;display:flex;align-items:center;gap:3px;">
-              <input type="checkbox" value="${d}" class="task-day-check" ${selectedDays.includes(d) ? 'checked' : ''}> ${d}
-            </label>`).join('')}
-        </div>
-      </div>
-      <div id="taskEndDateWrap" style="display:${isRecurring ? 'block' : 'none'};">
-        <label style="font-size:11px;font-weight:700;color:var(--text-muted);">End Date</label>
-        <input type="date" class="input" id="mTaskRecurrenceEnd" value="${t.recurrence_end || ''}" style="margin-top:6px;">
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
-        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <button class="btn primary" data-action="update-task-modal" data-edit-id="${t.id}">Update Task</button>
-      </div>
-    </div>`;
+
+    </div><!-- /slider -->
+  </div>`;
+
   modal.classList.remove('hidden');
   if (subtasks.length > 0) {
     document.getElementById('mSubtaskList').innerHTML = '';
     subtasks.forEach(s => addSubtaskInput(s.text, s.done));
   }
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 };
 
-// ─────────────────────────────────────────────────────────
-// Reminder Integration
-// ─────────────────────────────────────────────────────────
-
+/* ══════════════════════════════════════════════════════
+   REMINDER INTEGRATION (unchanged)
+══════════════════════════════════════════════════════ */
 window.addReminderToTask = function (taskId) {
   const task = state.data.tasks.find(t => String(t.id) === String(taskId));
   if (!task) return;
-
-  // Open the reminder modal pre-filled with task info
   if (typeof openReminderModal === 'function') {
-    // First create a new reminder, then we'll link it
     openReminderModal();
-
-    // Pre-fill the form with task info
     setTimeout(() => {
       document.getElementById('reminderTitle').value = `Task: ${task.title}`;
       document.getElementById('reminderDescription').value = task.description || '';
       document.getElementById('reminderCategory').value = 'task';
       document.getElementById('relatedItemType').value = 'task';
-
-      // Load tasks in the related item dropdown
       loadRelatedItems('task');
-      setTimeout(() => {
-        document.getElementById('relatedItemId').value = taskId;
-      }, 100);
-
-      // Pre-fill with task due date if available
+      setTimeout(() => { document.getElementById('relatedItemId').value = taskId; }, 100);
       if (task.due_date) {
         const dueDate = new Date(task.due_date);
         document.getElementById('reminderDate').value = dueDate.toISOString().split('T')[0];
@@ -970,218 +1270,144 @@ window.addReminderToTask = function (taskId) {
   }
 };
 
-// ─────────────────────────────────────────────────────────
-// Delete Task Function
-// ─────────────────────────────────────────────────────────
+/* ══════════════════════════════════════════════════════
+   DELETE TASK (unchanged)
+══════════════════════════════════════════════════════ */
 window.deleteTask = async function (id) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
-
   const originalTask = { ...t };
   const originalIndex = state.data.tasks.indexOf(t);
-
-  // Optimistic Remove
   state.data.tasks.splice(originalIndex, 1);
   renderTasks(_getSearchValue());
-
   showToast('Task deleted', 'default', async () => {
-    // Undo logic
     state.data.tasks.splice(originalIndex, 0, originalTask);
     renderTasks(_getSearchValue());
     showToast('Task restored');
   });
-
-  // Delay actual deletion to allow undo
   setTimeout(async () => {
-    // check if still deleted (not restored)
     const stillDeleted = !state.data.tasks.find(x => String(x.id) === String(id));
     if (stillDeleted) {
-      try {
-        await apiCall('delete', 'tasks', {}, id);
-      } catch (err) {
-        console.error('Failed to delete task:', err);
-      }
+      try { await apiCall('delete', 'tasks', {}, id); } catch (err) { console.error('Failed to delete task:', err); }
     }
   }, 5000);
 };
 
-// ─────────────────────────────────────────────────────────
-// Category CRUD Functions - Stored in Settings Sheet
-// ─────────────────────────────────────────────────────────
-
-// Default categories - these can be extended by user
+/* ══════════════════════════════════════════════════════
+   CATEGORY CRUD (unchanged)
+══════════════════════════════════════════════════════ */
 const DEFAULT_TASK_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
 
-// Get categories from settings (synced with Google Sheets)
 function getTaskCategories() {
   const settings = state.data.settings?.[0] || {};
   if (settings.task_categories) {
     let raw = settings.task_categories;
-    // Strip internal prefix (VIEW:collapsed|...)
-    if (raw.startsWith('VIEW:')) {
-      raw = raw.split('|')[1] || '';
-    }
-
+    if (raw.startsWith('VIEW:')) raw = raw.split('|')[1] || '';
     try {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) return parsed;
-    } catch (e) { }
-    // Treat as comma-separated string
+    } catch (e) {}
     return raw.split(',').map(c => c.trim()).filter(Boolean);
   }
   return [...DEFAULT_TASK_CATEGORIES];
 }
 
-// Save categories to settings (synced with Google Sheets)
 async function saveTaskCategoriesToSettings(categories) {
   const settings = state.data.settings?.[0] || {};
   let currentRaw = settings.task_categories || '';
   let prefix = '';
-
-  // Preserve the internal prefix (VIEW:collapsed|...)
-  if (currentRaw.startsWith('VIEW:')) {
-    prefix = currentRaw.split('|')[0] + '|';
-  }
-
-  const newSettings = {
-    ...settings,
-    task_categories: prefix + categories.join(',')
-  };
-
-  // Update settings in the sheet
+  if (currentRaw.startsWith('VIEW:')) prefix = currentRaw.split('|')[0] + '|';
+  const newSettings = { ...settings, task_categories: prefix + categories.join(',') };
   if (settings.id) {
     await apiCall('update', 'settings', newSettings, settings.id);
   } else {
     await apiCall('create', 'settings', newSettings);
   }
-
-  // Update local state
   if (!state.data.settings) state.data.settings = [{}];
   state.data.settings[0] = newSettings;
 }
 
-// Get all categories (including from existing tasks)
 function getAllTaskCategories() {
   const savedCats = getTaskCategories();
   const taskCats = (state.data.tasks || []).map(t => t.category).filter(Boolean);
   return [...new Set([...savedCats, ...taskCats])];
 }
 
-// Add a new category
 window.addTaskCategory = async function (categoryName) {
   if (!categoryName || categoryName.trim() === '') return false;
   const trimmed = categoryName.trim();
   const categories = getTaskCategories();
-  if (categories.includes(trimmed)) {
-    showToast('Category already exists');
-    return false;
-  }
+  if (categories.includes(trimmed)) { showToast('Category already exists'); return false; }
   categories.push(trimmed);
   await saveTaskCategoriesToSettings(categories);
   showToast(`Category "${trimmed}" added`);
   return true;
 };
 
-// Delete a category (tasks will become uncategorized)
 window.deleteTaskCategory = async function (categoryName) {
   if (!confirm(`Delete category "${categoryName}"? Tasks will become uncategorized.`)) return;
-
-  // Remove from categories list
   const categories = getTaskCategories().filter(c => c !== categoryName);
   await saveTaskCategoriesToSettings(categories);
-
-  // Update all tasks with this category to have no category
   const tasksToUpdate = state.data.tasks.filter(t => t.category === categoryName);
-  for (const t of tasksToUpdate) {
-    await apiCall('update', 'tasks', { ...t, category: '' }, t.id);
-  }
-
+  for (const t of tasksToUpdate) await apiCall('update', 'tasks', { ...t, category: '' }, t.id);
   showToast(`Category "${categoryName}" deleted`);
   await refreshData('tasks');
 };
 
-// Rename a category
 window.renameTaskCategory = async function (oldName, newName) {
   if (!newName || newName.trim() === '') return false;
   const trimmed = newName.trim();
   const categories = getTaskCategories();
-
-  if (categories.includes(trimmed) && trimmed !== oldName) {
-    showToast('Category name already exists');
-    return false;
-  }
-
-  // Update categories list
+  if (categories.includes(trimmed) && trimmed !== oldName) { showToast('Category name already exists'); return false; }
   const newCategories = categories.map(c => c === oldName ? trimmed : c);
   await saveTaskCategoriesToSettings(newCategories);
-
-  // Update all tasks with this category
   const tasksToUpdate = state.data.tasks.filter(t => t.category === oldName);
-  for (const t of tasksToUpdate) {
-    await apiCall('update', 'tasks', { ...t, category: trimmed }, t.id);
-  }
-
+  for (const t of tasksToUpdate) await apiCall('update', 'tasks', { ...t, category: trimmed }, t.id);
   showToast(`Category renamed to "${trimmed}"`);
   await refreshData('tasks');
   return true;
 };
 
-// Open Category Management Modal
 window.openCategoryManager = function () {
   const categories = getAllTaskCategories();
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-
   box.innerHTML = `
-    <h3 style="margin-bottom:16px;">Manage Task Categories</h3>
-    
-    <!-- Add new category -->
+    <h3 style="margin-bottom:16px;font-size:17px;font-weight:800;">Manage Categories</h3>
     <div style="display:flex;gap:8px;margin-bottom:16px;">
-      <input class="input" id="newCategoryInput" placeholder="New category name" style="flex:1;">
-      <button class="btn primary" onclick="saveNewCategory()">Add</button>
+      <input class="tk-input" id="newCategoryInput" placeholder="New category name" style="flex:1;">
+      <button class="btn primary" style="white-space:nowrap;" onclick="saveNewCategory()">Add</button>
     </div>
-    
-    <!-- Category list -->
-    <div style="max-height:300px;overflow-y:auto;">
+    <div style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
       ${categories.map(cat => `
-        <div class="category-item" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;margin-bottom:6px;">
-          <span style="font-weight:500;">${cat}</span>
-          <div style="display:flex;gap:4px;">
-            <button class="btn icon small" onclick="editCategoryName('${cat}')" title="Rename">
-              ${renderIcon('edit', null, 'style="width:12px;"')}
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--border-color);border-radius:10px;background:var(--surface-2);">
+          <span style="font-weight:600;font-size:14px;">${escapeHtml(cat)}</span>
+          <div style="display:flex;gap:6px;">
+            <button class="btn icon small" onclick="editCategoryName('${escapeHtml(cat)}')" title="Rename">
+              <i data-lucide="pencil" style="width:13px;height:13px"></i>
             </button>
-            <button class="btn icon small" onclick="confirmDeleteCategory('${cat}')" title="Delete">
-              ${renderIcon('delete', null, 'style="width:12px;"')}
+            <button class="btn icon small" onclick="confirmDeleteCategory('${escapeHtml(cat)}')" title="Delete">
+              <i data-lucide="trash-2" style="width:13px;height:13px"></i>
             </button>
           </div>
-        </div>
-      `).join('')}
+        </div>`).join('')}
     </div>
-    
     <div style="display:flex;justify-content:flex-end;margin-top:16px;">
       <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Close</button>
-    </div>
-  `;
-
+    </div>`;
   modal.classList.remove('hidden');
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
 };
 
 window.saveNewCategory = async function () {
   const input = document.getElementById('newCategoryInput');
   const name = input.value.trim();
-  if (await addTaskCategory(name)) {
-    input.value = '';
-    openCategoryManager(); // Refresh the modal
-  }
+  if (await addTaskCategory(name)) { input.value = ''; openCategoryManager(); }
 };
 
 window.editCategoryName = async function (oldName) {
-  const newName = prompt(`Rename category "${oldName}" to:`, oldName);
-  if (newName && newName !== oldName) {
-    await renameTaskCategory(oldName, newName);
-    openCategoryManager(); // Refresh the modal
-  }
+  const newName = prompt(`Rename "${oldName}" to:`, oldName);
+  if (newName && newName !== oldName) { await renameTaskCategory(oldName, newName); openCategoryManager(); }
 };
 
 window.confirmDeleteCategory = async function (categoryName) {

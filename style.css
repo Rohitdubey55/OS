@@ -5891,6 +5891,89 @@ input:checked+.slider:before {
   justify-content: flex-end;
 }
 
+/* ── Daily Tools Widget ── */
+.daily-tools-widget .widget-body {
+  padding: 12px;
+}
+
+.dt-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.dt-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 4px 10px;
+  border: none;
+  background: var(--surface-1);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s;
+  border: 1px solid var(--border-color);
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dt-tool:hover,
+.dt-tool:active {
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 6px 20px var(--dt-shadow, rgba(0,0,0,0.12));
+}
+
+.dt-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px var(--dt-shadow, rgba(0,0,0,0.15));
+}
+
+.dt-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  letter-spacing: 0.2px;
+}
+
+/* Habit alarm toggle button */
+.habit-alarm-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.habit-alarm-btn.on {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.habit-alarm-btn.off {
+  color: var(--text-muted);
+  border-color: var(--border-color);
+  background: var(--surface-2);
+  opacity: 0.6;
+}
+
+.habit-alarm-btn:hover {
+  transform: scale(1.1);
+}
+
 /* Premium Streak Pill */
 .streak-pill {
   display: flex;

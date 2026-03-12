@@ -187,6 +187,7 @@ function renderHabits() {
                       <div class="streak-pill ${stats.streak >= 30 ? 'streak-30' : (stats.streak >= 7 ? 'streak-7' : '')}">
                         ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : '⭐')} ${stats.streak}
                       </div>
+                      ${h.reminder_time ? `<button class="habit-alarm-btn ${h.alarm_enabled === false ? 'off' : 'on'}" id="alarm-btn-${h.id}" onclick="event.stopPropagation(); toggleHabitAlarm('${h.id}')" title="${h.alarm_enabled === false ? 'Alarm off — tap to enable' : 'Alarm on — tap to disable'}">${renderIcon(h.alarm_enabled === false ? 'bell-off' : 'bell', null, 'style="width:14px;height:14px"')}</button>` : ''}
                       ${renderIcon('down', null, 'class="collapse-icon"')}
                     </div>
                   </div>
@@ -246,6 +247,47 @@ window.toggleHabitCard = function (habitId) {
     card.classList.toggle('habit-expanded');
   }
   _expandedHabitId = _expandedHabitId === habitId ? null : habitId;
+};
+
+// Toggle alarm on/off for a habit — saves to sheet immediately
+window.toggleHabitAlarm = async function (habitId) {
+  const habit = (state.data.habits || []).find(h => String(h.id) === String(habitId));
+  if (!habit) return;
+
+  const newVal = habit.alarm_enabled === false ? true : false; // default is ON
+
+  // Optimistic UI update
+  habit.alarm_enabled = newVal;
+  const btn = document.getElementById('alarm-btn-' + habitId);
+  if (btn) {
+    btn.className = 'habit-alarm-btn ' + (newVal ? 'on' : 'off');
+    btn.title = newVal ? 'Alarm on — tap to disable' : 'Alarm off — tap to enable';
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+      btn.innerHTML = newVal
+        ? '<i data-lucide="bell" style="width:14px;height:14px"></i>'
+        : '<i data-lucide="bell-off" style="width:14px;height:14px"></i>';
+      lucide.createIcons({ nodes: [btn] });
+    }
+  }
+
+  try {
+    await apiCall('update', 'habits', { alarm_enabled: newVal }, habitId);
+    // Update cache
+    state.data.habits = state.data.habits.map(h =>
+      String(h.id) === String(habitId) ? Object.assign({}, h, { alarm_enabled: newVal }) : h
+    );
+    // Re-sync notifications
+    if (typeof window.syncNativeNotifications === 'function') {
+      setTimeout(window.syncNativeNotifications, 300);
+    }
+    const label = newVal ? 'Alarm enabled 🔔' : 'Alarm disabled 🔕';
+    if (typeof showToast === 'function') showToast(label, 'success');
+  } catch (err) {
+    console.error('[Habits] Failed to toggle alarm:', err);
+    // Revert on failure
+    habit.alarm_enabled = !newVal;
+    if (btn) btn.className = 'habit-alarm-btn ' + (!newVal ? 'on' : 'off');
+  }
 };
 
 // Toggle habit for a specific date (back-date marking)

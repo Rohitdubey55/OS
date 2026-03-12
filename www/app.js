@@ -167,7 +167,8 @@ async function loadAllData() {
   try {
     const month = new Date().toISOString().slice(0, 7);
     const [
-      planner, tasks, expenses, funds, assets, diary, vision, habits, habit_logs
+      planner, tasks, expenses, funds, assets, diary, vision, habits, habit_logs,
+      gym_plans, gym_sessions, gym_exercises, book_library, book_summaries
     ] = await Promise.all([
       apiGet(SHEETS.planner, { month }),
       apiGet(SHEETS.tasks),
@@ -177,10 +178,16 @@ async function loadAllData() {
       apiGet(SHEETS.diary, { month }),
       apiGet(SHEETS.vision),
       apiGet(SHEETS.habits),
-      apiGet(SHEETS.habit_logs)
+      apiGet(SHEETS.habit_logs),
+      apiGet('gym_plans'),
+      apiGet('gym_sessions'),
+      apiGet('gym_exercises'),
+      apiGet('book_library').catch(() => []),
+      apiGet('book_summaries').catch(() => [])
     ]);
 
-    state.data = { planner, tasks, expenses, funds, assets, diary, vision, habits, habit_logs };
+    state.data = { planner, tasks, expenses, funds, assets, diary, vision, habits, habit_logs,
+                   gym_plans, gym_sessions, gym_exercises, book_library, book_summaries };
     return true;
   } catch (err) {
     toast("Failed to load data. See console.");
@@ -1034,6 +1041,7 @@ function routeTo(view) {
   else if (view === 'vision') renderVisionView();
   else if (view === 'gym') renderGym();
   else if (view === 'notes') renderNotes();
+  else if (view === 'books') renderBooks();
 }
 
 async function init() {

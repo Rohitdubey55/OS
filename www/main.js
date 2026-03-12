@@ -10,7 +10,7 @@ window.state = {
 
     view: "dashboard",
 
-    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_tdp: [], gym_plans: [], gym_sessions: [], gym_exercises: [], notes: [] },
+    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_tdp: [], gym_plans: [], gym_sessions: [], gym_exercises: [], notes: [], book_library: [], book_summaries: [], reader_settings: [] },
 
     loading: false
 
@@ -358,6 +358,8 @@ async function routeTo(viewName) {
             else if (viewName === 'chimes') renderChimesView();
             else if (viewName === 'lifeCalendar') renderLifeCalendar();
             else if (viewName === 'pomodoro') renderPomodoro();
+            else if (viewName === 'books') renderBooks();
+            else if (viewName === 'reader') renderReader();
         } catch (e) {
             console.error('Error rendering view ' + viewName + ':', e);
             main.innerHTML = '<div style="padding:20px; color:red">Error loading view: ' + viewName + '<br><small>' + e.message + '</small></div>';
@@ -2029,7 +2031,9 @@ async function refreshData(viewContext) {
         'tasks': 'tasks',
         'diary': 'diary',
         'vision': 'vision_board',
-        'people': 'people'
+        'people': 'people',
+        'books': 'book_library',
+        'reader': 'book_summaries'
     };
 
     const sheetName = sheetMap[viewContext] || viewContext;
@@ -2044,9 +2048,10 @@ async function refreshData(viewContext) {
         'tasks': 'tasks',
         'diary': 'diary',
         'vision_board': 'vision',
-        'vision_board': 'vision',
         'habit_logs': 'habit_logs',
-        'people': 'people'
+        'people': 'people',
+        'book_library': 'book_library',
+        'book_summaries': 'book_summaries'
     };
 
     const stateKey = stateKeyMap[sheetName] || sheetName;
@@ -2096,8 +2101,8 @@ async function loadAllData() {
     updateLoader(5, 'Connecting...');
 
     // Include all sheets including settings, funds, assets, and diary enhancements
-    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes'];
-    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes'];
+    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings'];
+    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings'];
 
     let loaded = 0;
     const total = sheets.length;

@@ -11,7 +11,8 @@ const DEFAULT_DASH_CONFIG = [
   { id: 'pinnedNotes', label: 'Pinned Notes', visible: true },
   { id: 'yearProgress', label: 'Year/Life Progress', visible: true },
   { id: 'tasks', label: 'High Priority Tasks', visible: true },
-  { id: 'habits', label: 'Habit Tracker', visible: true }
+  { id: 'habits', label: 'Habit Tracker', visible: true },
+  { id: 'dailyTools', label: 'Daily Tools', visible: true }
 ];
 
 // Default KPI visibility config
@@ -805,6 +806,35 @@ function renderDashboard() {
       </div>`;
     },
 
+    // ─── DAILY TOOLS WIDGET ───
+    dailyTools: () => {
+      const tools = [
+        { id: 'gym',      label: 'Gym',      icon: 'fitness',  bg: 'linear-gradient(135deg,#ef4444,#dc2626)', shadow: 'rgba(239,68,68,0.25)' },
+        { id: 'notes',    label: 'Notes',    icon: 'entries',  bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', shadow: 'rgba(99,102,241,0.25)' },
+        { id: 'pomodoro', label: 'Focus',    icon: 'clock',    bg: 'linear-gradient(135deg,#f59e0b,#d97706)', shadow: 'rgba(245,158,11,0.25)' },
+        { id: 'chimes',   label: 'Chimes',   icon: 'bell',     bg: 'linear-gradient(135deg,#10b981,#059669)', shadow: 'rgba(16,185,129,0.25)' },
+        { id: 'books',    label: 'Books',    icon: 'book',     bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', shadow: 'rgba(139,92,246,0.25)' },
+      ];
+      return `
+        <div class="widget-card daily-tools-widget" data-widget-id="dailyTools">
+          <div class="widget-header" onclick="toggleWidget(this)">
+            <div class="widget-title">${renderIcon('wrench', null, 'style="width:16px;height:16px;margin-right:8px"')} Daily Tools</div>
+            ${renderIcon('down', null, 'class="widget-chevron"')}
+          </div>
+          <div class="widget-body">
+            <div class="dt-grid">
+              ${tools.map(t => `
+                <button class="dt-tool" onclick="routeTo('${t.id}')" style="--dt-shadow:${t.shadow}">
+                  <div class="dt-icon-wrap" style="background:${t.bg}">
+                    ${renderIcon(t.icon, null, 'style="width:22px;height:22px;color:#fff"')}
+                  </div>
+                  <span class="dt-label">${t.label}</span>
+                </button>`).join('')}
+            </div>
+          </div>
+        </div>`;
+    },
+
     // ─── PINNED NOTES WIDGET ───
     pinnedNotes: () => {
       const notes = (state.data.notes || []).filter(n => n.pinned === true || n.pinned === 'true');
@@ -876,16 +906,6 @@ function renderDashboard() {
         ${gridHtml}
       </div>
 
-      <div style="display:flex; gap:12px; margin: 12px 0;">
-        <button class="btn" onclick="routeTo('notes')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; cursor:pointer;">
-           ${renderIcon('entries', null, 'style="width:18px; color:var(--primary)"')}
-           <span style="font-weight:600">Notes</span>
-        </button>
-        <button class="btn" onclick="routeTo('gym')" style="flex:1; background:var(--surface-1); border:1px solid var(--border); padding: 12px; border-radius: 14px; display:flex; justify-content:center; align-items:center; gap:8px; touch-action:manipulation; -webkit-tap-highlight-color:transparent; cursor:pointer;">
-           ${renderIcon('fitness', null, 'style="width:18px; color:var(--danger)"')}
-           <span style="font-weight:600">Gym</span>
-        </button>
-      </div>
       <div style="margin:0 0 24px 0; text-align:center">
         <button class="btn" onclick="openDashCustomize()" style="width:100%; background:var(--surface-1); border:1px solid var(--border); color:var(--text-muted); justify-content:center; padding:12px;">
             ${renderIcon('dashboard', null, 'style="width:16px; margin-right:8px"')} Dashboard Layout

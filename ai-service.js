@@ -84,6 +84,119 @@ Task: Answer the user's question directly based on the data above. Be concise an
         }
     },
 
+    // Get personalized book recommendations
+    generateBookRecommendations: async function (userData) {
+        const config = this.getConfig();
+        if (!config.apiKey) throw new Error("Missing API Key.");
+
+        const prompt = `
+Analyze the user's goals, habits, and interests from the provided data below.
+Recommend 5-8 highly relevant books that would specifically help them achieve their goals or improve their life based on their habits and diary reflections.
+
+For each book, provide:
+- Title and Author
+- Why it's relevant (referencing specific goals/diary/habits)
+- Key benefit they'll gain
+- Category/Genre
+
+DATA CONTEXT:
+Vision Board Goals: ${JSON.stringify(userData.vision || [])}
+Active Habits: ${JSON.stringify(userData.habits || [])}
+Recent Diary Reflections: ${JSON.stringify(userData.diary?.slice(0, 5) || [])}
+Tasks: ${JSON.stringify(userData.tasks?.slice(0, 10) || [])}
+
+OUTPUT FORMAT: Return a valid JSON array of objects:
+[
+  {
+    "title": "Book Title",
+    "author": "Author Name",
+    "reason": "Why it's relevant to your goal X...",
+    "benefit": "Key takeaway...",
+    "category": "Self-Help/Business/etc"
+  }
+]
+Do not include any other text, only the JSON.
+`;
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            if (!response.ok) throw new Error('AI Recommendation Failed');
+            const result = await response.json();
+            let text = result.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+            // Clean up JSON if LLM added markdown blocks
+            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            return JSON.parse(text);
+        } catch (error) {
+            console.error("Recommendation Error:", error);
+            throw error;
+        }
+    },
+
+    // Generate 15-page summary
+    generateBookSummary: async function (bookTitle, author, userGoals) {
+        const config = this.getConfig();
+        if (!config.apiKey) throw new Error("Missing API Key.");
+
+        const prompt = `
+Generate a comprehensive, actionable 15-page summary of "${bookTitle}" by ${author}.
+Focus specifically on how the core ideas in this book can help the user achieve their goals: ${JSON.stringify(userGoals || [])}.
+
+STRUCTURE REQUIRED (15 Distinct Sections/Pages):
+Page 1-2: Book Overview & Core Thesis.
+Page 3-4: Key Concepts Part 1 (The psychological or practical foundation).
+Page 5-6: Key Concepts Part 2 (Methodology and frameworks).
+Page 7-8: Advanced Strategies and Nuances.
+Page 9-10: Practical Applications for Daily Life.
+Page 11-12: Specific Action Items relative to user's goals.
+Page 13: The author's distilled system/framework.
+Page 14: Challenges & Common Pitfalls.
+Page 15: Final Recap & 5 Daily Mantras/Actions.
+
+OUTPUT FORMAT: Return a valid JSON object:
+{
+  "book_title": "${bookTitle}",
+  "author": "${author}",
+  "pages": [
+    {
+      "page_number": 1,
+      "title": "Section Title",
+      "content": "Full, deep content for this page (multiple paragraphs)...",
+      "key_points": ["point1", "point2"],
+      "action_items": ["action1"]
+    },
+    ... up to page 15
+  ],
+  "key_takeaways": ["overall takeaway 1", ...],
+  "overall_action_plan": ["step 1", ...]
+}
+Ensure the content is deep and high-quality, not just bullet points. Do not include introductions, only JSON.
+`;
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            if (!response.ok) throw new Error('AI Summary Failed');
+            const result = await response.json();
+            let text = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            return JSON.parse(text);
+        } catch (error) {
+            console.error("Summary Generation Error:", error);
+            throw error;
+        }
+    },
+
     // Prompt Templates
     constructPrompt: function (context, data) {
         const safeJSON = (obj) => JSON.stringify(obj || {}, null, 2);
