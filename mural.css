@@ -117,6 +117,126 @@
     box-shadow: var(--shadow-md);
 }
 
+/* --- Dashboard & Projects --- */
+.mural-dashboard {
+    padding: 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding-bottom: 120px;
+}
+
+.mural-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+}
+
+.mural-header-title {
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.mural-header-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.mural-cat-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+}
+
+.mural-cat-pill {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-1);
+    color: var(--text-2);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.mural-cat-pill.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.mural-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.mural-project-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: all 0.2s;
+    position: relative;
+    cursor: pointer;
+}
+
+.mural-project-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-light);
+}
+
+.mural-project-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.mural-project-meta {
+    font-size: 12px;
+    color: var(--text-3);
+}
+
+.mural-project-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 12px;
+}
+
+.mural-project-del {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.mural-project-del:hover {
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.mural-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-3);
+}
+
+
 @media (max-width: 768px) {
     .mural-toolbar {
         bottom: 90px;

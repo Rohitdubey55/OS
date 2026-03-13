@@ -30,7 +30,9 @@ const SCHEMA = {
   "book_library": ["id", "title", "author", "cover_url", "category", "status", "date_added", "date_completed", "rating", "notes", "linked_goals", "tags"],
   "book_summaries": ["id", "book_id", "book_title", "author", "summary_json", "total_pages", "created_at", "linked_vision_ids", "key_takeaways", "action_items"],
   "reader_settings": ["id", "background_color", "font_color", "font_family", "font_size", "line_spacing", "fullscreen_mode", "page_animation", "auto_save_position"],
-  "mural_elements": ["id", "type", "x", "y", "w", "h", "content", "color", "z_index", "metadata"]
+  "mural_elements": ["id", "project_id", "type", "x", "y", "w", "h", "content", "color", "z_index", "metadata"],
+  "mural_projects": ["id", "title", "category", "created_at", "updated_at"],
+  "mural_categories": ["id", "name", "color"]
 };
 
 /**
@@ -478,6 +480,26 @@ function initToolsSheets() {
   if (!muralSheet) {
     muralSheet = ss.insertSheet('mural_elements');
     muralSheet.appendRow(SCHEMA['mural_elements']);
+  }
+
+  // Create mural_projects sheet if not exists
+  let muralProjectsSheet = ss.getSheetByName('mural_projects');
+  if (!muralProjectsSheet) {
+    muralProjectsSheet = ss.insertSheet('mural_projects');
+    muralProjectsSheet.appendRow(SCHEMA['mural_projects']);
+    // Add a default project
+    muralProjectsSheet.appendRow([1, 'First Project', 'general', new Date(), new Date()]);
+  }
+
+  // Create mural_categories sheet if not exists
+  let muralCategoriesSheet = ss.getSheetByName('mural_categories');
+  if (!muralCategoriesSheet) {
+    muralCategoriesSheet = ss.insertSheet('mural_categories');
+    muralCategoriesSheet.appendRow(SCHEMA['mural_categories']);
+    // Add default categories
+    muralCategoriesSheet.appendRow([1, 'general', '#6366F1']);
+    muralCategoriesSheet.appendRow([2, 'work', '#F59E0B']);
+    muralCategoriesSheet.appendRow([3, 'ideas', '#10B981']);
   }
   
   return { success: true, message: 'Tools sheets initialized' };
