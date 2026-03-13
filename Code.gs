@@ -29,7 +29,8 @@ const SCHEMA = {
   "vision_tdp": ["id", "start_date", "end_date", "status", "categories_json", "created_at"],
   "book_library": ["id", "title", "author", "cover_url", "category", "status", "date_added", "date_completed", "rating", "notes", "linked_goals", "tags"],
   "book_summaries": ["id", "book_id", "book_title", "author", "summary_json", "total_pages", "created_at", "linked_vision_ids", "key_takeaways", "action_items"],
-  "reader_settings": ["id", "background_color", "font_color", "font_family", "font_size", "line_spacing", "fullscreen_mode", "page_animation", "auto_save_position"]
+  "reader_settings": ["id", "background_color", "font_color", "font_family", "font_size", "line_spacing", "fullscreen_mode", "page_animation", "auto_save_position"],
+  "mural_elements": ["id", "type", "x", "y", "w", "h", "content", "color", "z_index", "metadata"]
 };
 
 /**
@@ -470,6 +471,13 @@ function initToolsSheets() {
     readerSettingsSheet.appendRow(SCHEMA['reader_settings']);
     // Add default user preferences
     readerSettingsSheet.appendRow(['user_prefs', '#ffffff', '#1a1a1a', 'serif', 18, 1.6, false, 'slide', true]);
+  }
+  
+  // Create mural_elements sheet if not exists
+  let muralSheet = ss.getSheetByName('mural_elements');
+  if (!muralSheet) {
+    muralSheet = ss.insertSheet('mural_elements');
+    muralSheet.appendRow(SCHEMA['mural_elements']);
   }
   
   return { success: true, message: 'Tools sheets initialized' };

@@ -10,7 +10,7 @@ window.state = {
 
     view: "dashboard",
 
-    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_tdp: [], gym_plans: [], gym_sessions: [], gym_exercises: [], notes: [], book_library: [], book_summaries: [], reader_settings: [] },
+    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_tdp: [], gym_plans: [], gym_sessions: [], gym_exercises: [], notes: [], book_library: [], book_summaries: [], reader_settings: [], mural: [] },
 
     loading: false
 
@@ -360,6 +360,7 @@ async function routeTo(viewName) {
             else if (viewName === 'pomodoro') renderPomodoro();
             else if (viewName === 'books') renderBooks();
             else if (viewName === 'reader') renderReader();
+            else if (viewName === 'mural') renderMural();
         } catch (e) {
             console.error('Error rendering view ' + viewName + ':', e);
             main.innerHTML = '<div style="padding:20px; color:red">Error loading view: ' + viewName + '<br><small>' + e.message + '</small></div>';
