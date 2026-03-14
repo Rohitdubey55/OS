@@ -58,6 +58,9 @@ const ICON_MAPPINGS = {
   'health': { lucide: 'heart', emoji: '❤️', material: 'favorite', remix: 'heart-line', tabler: 'heart', fontawesome: 'fa-heart', heroicons: 'heart', feather: 'heart' },
   'fitness': { lucide: 'dumbbell', emoji: '💪', material: 'fitness_center', remix: 'run-line', tabler: 'stretching', fontawesome: 'fa-dumbbell', heroicons: 'bolt', feather: 'activity' },
   'learning': { lucide: 'book-open', emoji: '📚', material: 'menu_book', remix: 'book-open-line', tabler: 'book', fontawesome: 'fa-book', heroicons: 'book-open', feather: 'book' },
+  'book-open': { lucide: 'book-open', emoji: '📖', material: 'menu_book', remix: 'book-open-line', tabler: 'book', fontawesome: 'fa-book-open', heroicons: 'book-open', feather: 'book' },
+  'book': { lucide: 'book', emoji: '📔', material: 'book', remix: 'book-line', tabler: 'book', fontawesome: 'fa-book', heroicons: 'book-open', feather: 'book' },
+  'languages': { lucide: 'languages', emoji: '🔤', material: 'language', remix: 'translate', tabler: 'language', fontawesome: 'fa-language', heroicons: 'language', feather: 'globe' },
   'productivity': { lucide: 'rocket', emoji: '🚀', material: 'rocket_launch', remix: 'rocket-line', tabler: 'rocket', fontawesome: 'fa-rocket', heroicons: 'rocket-launch', feather: 'send' },
   'spiritual': { lucide: 'sparkles', emoji: '🧘', material: 'self_improvement', remix: 'sparkling-line', tabler: 'sparkles', fontawesome: 'fa-sparkles', heroicons: 'sparkles', feather: 'star' },
   'water': { lucide: 'droplet', emoji: '💧', material: 'water_drop', remix: 'drop-line', tabler: 'droplet', fontawesome: 'fa-droplet', heroicons: 'droplet', feather: 'droplet' },
@@ -111,6 +114,7 @@ const ICON_MAPPINGS = {
   'chat': { lucide: 'message-circle', emoji: '💬', material: 'chat', remix: 'chat-4-line', tabler: 'message-circle', fontawesome: 'fa-comment', heroicons: 'chat-bubble-left', feather: 'message-circle' },
   'message-square': { lucide: 'message-square', emoji: '💬', material: 'chat', remix: 'message-3-line', tabler: 'message-square', fontawesome: 'fa-comment', heroicons: 'chat-bubble-left', feather: 'message-square' },
   'play': { lucide: 'play', emoji: '▶️', material: 'play_arrow', remix: 'play-line', tabler: 'play', fontawesome: 'fa-play', heroicons: 'play', feather: 'play' },
+  'mic': { lucide: 'mic', emoji: '🎤', material: 'mic', remix: 'mic-line', tabler: 'microphone', fontawesome: 'fa-microphone', heroicons: 'microphone', feather: 'mic' },
   'send': { lucide: 'send', emoji: '✈️', material: 'send', remix: 'send-plane-line', tabler: 'send', fontawesome: 'fa-paper-plane', heroicons: 'paper-airplane', feather: 'send' },
   'hash': { lucide: 'hash', emoji: '#', material: 'tag', remix: 'hashtag', tabler: 'hash', fontawesome: 'fa-hashtag', heroicons: 'hashtag', feather: 'hash' },
   'check-circle': { lucide: 'check-circle', emoji: '✅', material: 'check_circle', remix: 'checkbox-circle-line', tabler: 'circle-check', fontawesome: 'fa-circle-check', heroicons: 'check-circle', feather: 'check-circle' },
@@ -124,6 +128,7 @@ const ICON_MAPPINGS = {
   'next': { lucide: 'arrow-right', emoji: '➡️', material: 'arrow_forward', remix: 'arrow-right-line', tabler: 'arrow-right', fontawesome: 'fa-arrow-right', heroicons: 'arrow-right', feather: 'arrow-right' },
   'tag': { lucide: 'tag', emoji: '🏷️', material: 'local_offer', remix: 'price-tag-line', tabler: 'tag', fontawesome: 'fa-tag', heroicons: 'tag', feather: 'tag' },
   'clock': { lucide: 'clock', emoji: '🕒', material: 'schedule', remix: 'time-line', tabler: 'clock', fontawesome: 'fa-clock', heroicons: 'clock', feather: 'clock' },
+  'timer': { lucide: 'timer', emoji: '⏱️', material: 'timer', remix: 'timer-line', tabler: 'timer', fontawesome: 'fa-stopwatch', heroicons: 'clock', feather: 'clock' },
   'search': { lucide: 'search', emoji: '🔍', material: 'search', remix: 'search-line', tabler: 'search', fontawesome: 'fa-magnifying-glass', heroicons: 'magnifying-glass', feather: 'search' },
   'x': { lucide: 'x', emoji: '✕', material: 'close', remix: 'close-line', tabler: 'x', fontawesome: 'fa-xmark', heroicons: 'x-mark', feather: 'x' },
   'warning': { lucide: 'alert-triangle', emoji: '⚠️', material: 'warning', remix: 'error-warning-line', tabler: 'alert-triangle', fontawesome: 'fa-triangle-exclamation', heroicons: 'exclamation-triangle', feather: 'alert-triangle' },
@@ -337,6 +342,7 @@ function getHeroIconPath(iconName) {
     'arrow-up': 'M5 10l7-7m0 0l7 7m-7-7v18',
     'arrow-down': 'M19 14l-7 7m0 0l-7-7m7 7V3',
     'plus': 'M12 4v16m8-8H4',
+    'microphone': 'M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z',
     'x-mark': 'M6 18L18 6M6 6l12 12',
     'check': 'M5 13l4 4L19 7',
     'search': 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
@@ -352,6 +358,7 @@ function getHeroIconPath(iconName) {
     'clock': 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
     'moon': 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z',
     'sun': 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z',
+    'book-open': 'M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25',
     'default': 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z'
   };
   return paths[iconName] || paths['default'];

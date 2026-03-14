@@ -1,0 +1,1374 @@
+/* ============================================================
+   view-people.css — iPhone-First Compact People View
+   ============================================================ */
+
+:root {
+  --pp-radius-sm: 10px;
+  --pp-radius-md: 14px;
+  --pp-radius-lg: 16px;
+  --pp-transition: 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  --pp-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* --- Wrapper — prevents horizontal overflow --- */
+.people-wrapper {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 0 100px;
+  animation: ppFadeIn 0.3s ease;
+  overflow-x: hidden;
+}
+
+@keyframes ppFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+   STATS STRIP — always 4 columns
+   ============================================================ */
+.pp-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+
+.pp-stat-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--pp-radius-sm);
+  padding: 8px 4px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--pp-transition);
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+
+.pp-stat-card:active {
+  transform: scale(0.95);
+}
+
+.pp-stat-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  line-height: 1;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pp-stat-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.pp-stat-card:nth-child(1) {
+  animation: ppSlideUp 0.3s ease both;
+}
+
+.pp-stat-card:nth-child(2) {
+  animation: ppSlideUp 0.3s ease 0.04s both;
+}
+
+.pp-stat-card:nth-child(3) {
+  animation: ppSlideUp 0.3s ease 0.08s both;
+}
+
+.pp-stat-card:nth-child(4) {
+  animation: ppSlideUp 0.3s ease 0.12s both;
+}
+
+@keyframes ppSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+   BIRTHDAY BANNER
+   ============================================================ */
+.pp-birthday-banner {
+  background: linear-gradient(135deg, var(--warning-soft), var(--warning));
+  border-radius: var(--pp-radius-sm);
+  padding: 10px 14px;
+  margin: 0 2px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 2px;
+  z-index: 10;
+}
+
+.pp-birthday-icon {
+  font-size: 22px;
+}
+
+.pp-birthday-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.pp-birthday-names {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+/* ============================================================
+   CONTROLS BAR — single compact row, no overflow
+   ============================================================ */
+.pp-controls-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 2px 8px;
+  padding: 6px 8px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--pp-radius-sm);
+  position: sticky;
+  top: 2px;
+  z-index: 20;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.pp-search {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.pp-search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.pp-search input {
+  width: 100%;
+  padding: 6px 8px 6px 28px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 13px;
+  height: 36px;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+}
+
+.pp-search input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.pp-controls-right {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pp-sort-select {
+  padding: 0 20px 0 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  height: 36px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.pp-view-tabs {
+  display: flex;
+  gap: 1px;
+  background: var(--surface-2);
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.pp-view-tab {
+  width: 34px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all var(--pp-transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pp-view-tab.active {
+  background: var(--primary);
+  color: white;
+}
+
+.pp-add-btn {
+  height: 36px;
+  width: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pp-add-btn span {
+  display: none;
+}
+
+.pp-add-btn:active {
+  transform: scale(0.9);
+}
+
+/* ============================================================
+   FILTER CHIPS
+   ============================================================ */
+.pp-filter-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 0 2px 8px;
+  margin-bottom: 4px;
+}
+
+.pp-filter-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.pp-chip {
+  padding: 5px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all var(--pp-transition);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pp-chip.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.pp-chip-count {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+/* ============================================================
+   PERSON CARDS
+   ============================================================ */
+.pp-card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 0 2px;
+}
+
+.pp-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--pp-radius-md);
+  padding: 12px;
+  cursor: pointer;
+  transition: all var(--pp-transition);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  animation: ppSlideUp 0.3s ease both;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.pp-card:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.pp-card:nth-child(2) {
+  animation-delay: 0.03s;
+}
+
+.pp-card:nth-child(3) {
+  animation-delay: 0.06s;
+}
+
+.pp-card:nth-child(4) {
+  animation-delay: 0.09s;
+}
+
+.pp-card:nth-child(5) {
+  animation-delay: 0.12s;
+}
+
+.pp-card:nth-child(6) {
+  animation-delay: 0.15s;
+}
+
+.pp-card:nth-child(7) {
+  animation-delay: 0.18s;
+}
+
+.pp-card:nth-child(8) {
+  animation-delay: 0.2s;
+}
+
+.pp-card:active {
+  transform: scale(0.98);
+}
+
+.pp-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Avatar with decay ring */
+.pp-avatar-wrap {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.pp-avatar-ring {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 46px;
+  height: 46px;
+  transform: rotate(-90deg);
+}
+
+.pp-avatar-ring-bg {
+  fill: none;
+  stroke: var(--border-color);
+  stroke-width: 2.5;
+}
+
+.pp-avatar-ring-fill {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s ease;
+}
+
+.pp-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+  color: white;
+  position: relative;
+  z-index: 1;
+}
+
+.pp-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pp-card-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pp-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.pp-card-quick-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pp-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--pp-transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pp-icon-btn:active {
+  transform: scale(0.9);
+}
+
+.pp-icon-btn i {
+  width: 14px;
+  height: 14px;
+}
+
+.pp-card-name .pp-fav-star {
+  color: var(--text-muted);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.pp-card-name .pp-fav-star.is-fav {
+  color: var(--warning);
+  fill: var(--warning);
+}
+
+.pp-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.pp-rel-badge {
+  padding: 1px 6px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.pp-last-contact {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pp-last-contact.decay-active {
+  color: var(--success);
+}
+
+.pp-last-contact.decay-fading {
+  color: var(--warning);
+}
+
+.pp-last-contact.decay-risk {
+  color: var(--danger);
+}
+
+.pp-last-contact.decay-none {
+  color: var(--text-muted);
+}
+
+/* Streak pill */
+.pp-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  background: var(--warning-soft);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--warning-dark);
+}
+
+/* Balance badge */
+.pp-balance-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.pp-balance-badge.positive {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.pp-balance-badge.negative {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Card quick actions (Bottom bar removed in compact mode) */
+.pp-card-actions {
+  display: none;
+}
+
+.pp-quick-btn {
+  flex: 1;
+  height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all var(--pp-transition);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.pp-quick-btn:active {
+  transform: scale(0.92);
+}
+
+.pp-quick-btn.primary-action {
+  background: var(--primary);
+  color: white;
+  border-color: transparent;
+}
+
+/* ============================================================
+   NEEDS ATTENTION LIST (inside bottom sheet)
+   ============================================================ */
+.pp-attn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pp-attn-row:last-child {
+  border-bottom: none;
+}
+
+.pp-attn-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+.pp-attn-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pp-attn-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pp-attn-reason {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.pp-attn-action {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  min-height: 32px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pp-attn-action:active {
+  transform: scale(0.92);
+}
+
+/* ============================================================
+   BOTTOM SHEET
+   ============================================================ */
+.pp-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  z-index: 2100;
+  pointer-events: none;
+  transition: background 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pp-sheet-overlay.open {
+  background: rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.pp-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface-1);
+  border-radius: 20px 20px 0 0;
+  z-index: 2200;
+  transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.15);
+  will-change: transform;
+}
+
+.pp-sheet.open {
+  transform: translateY(0);
+}
+
+.pp-sheet-handle {
+  width: 32px;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  margin: 8px auto 4px;
+  flex-shrink: 0;
+}
+
+.pp-sheet-header {
+  padding: 8px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.pp-sheet-avatar-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+
+.pp-sheet-avatar-ring {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 62px;
+  height: 62px;
+  transform: rotate(-90deg);
+}
+
+.pp-sheet-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: white;
+  position: relative;
+  z-index: 1;
+}
+
+.pp-sheet-name {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text-1);
+  letter-spacing: -0.3px;
+}
+
+.pp-sheet-rel {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.pp-sheet-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+/* Sheet contact chips */
+.pp-sheet-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.pp-contact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text-1);
+  text-decoration: none;
+  min-height: 32px;
+}
+
+.pp-contact-chip i {
+  width: 12px;
+  height: 12px;
+}
+
+/* Sheet body */
+.pp-sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 16px;
+  overscroll-behavior: contain;
+}
+
+.pp-sheet-section {
+  margin-bottom: 18px;
+}
+
+.pp-sheet-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 8px;
+}
+
+/* Interaction history */
+.pp-history-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pp-history-item:last-child {
+  border-bottom: none;
+}
+
+.pp-history-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.pp-history-date {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.pp-history-note {
+  font-size: 13px;
+  color: var(--text-1);
+  margin-top: 1px;
+}
+
+/* Contact frequency dots */
+.pp-freq-dots {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.pp-freq-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+}
+
+.pp-freq-dot.active {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+/* Debt summary */
+.pp-debt-summary {
+  text-align: center;
+  padding: 14px;
+  background: var(--surface-2);
+  border-radius: var(--pp-radius-sm);
+  margin-bottom: 12px;
+}
+
+.pp-debt-amount {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.pp-debt-amount.positive {
+  color: var(--success);
+}
+
+.pp-debt-amount.negative {
+  color: var(--danger);
+}
+
+.pp-debt-amount.zero {
+  color: var(--text-muted);
+}
+
+.pp-debt-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.pp-debt-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.pp-debt-item-amount {
+  font-weight: 700;
+}
+
+.pp-debt-item-amount.positive {
+  color: var(--success);
+}
+
+.pp-debt-item-amount.negative {
+  color: var(--danger);
+}
+
+/* Sheet actions bar */
+.pp-sheet-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 10px 16px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  background: var(--surface-1);
+}
+
+.pp-sheet-action-btn {
+  min-height: 44px;
+  border: none;
+  border-radius: var(--pp-radius-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.pp-sheet-action-btn:active {
+  transform: scale(0.9);
+}
+
+.pp-sheet-action-btn.action-log {
+  background: var(--primary);
+  color: white;
+}
+
+.pp-sheet-action-btn.action-money {
+  background: var(--success);
+  color: white;
+}
+
+.pp-sheet-action-btn.action-edit {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.pp-sheet-action-btn.action-delete {
+  background: var(--surface-2);
+  color: var(--danger);
+}
+
+/* ============================================================
+   CONTACT OPTIONS SHEET
+   ============================================================ */
+.pp-contact-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--pp-radius-sm);
+  text-decoration: none;
+  color: inherit;
+  min-height: 48px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.pp-contact-option:active {
+  transform: scale(0.97);
+}
+
+.pp-contact-option-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pp-contact-option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pp-contact-option-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.pp-contact-option-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+/* ============================================================
+   FORM SHEET
+   ============================================================ */
+.pp-form-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  padding: 4px 16px 0;
+}
+
+.pp-form-body {
+  padding: 12px 16px;
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pp-form-group {
+  margin-bottom: 12px;
+}
+
+.pp-form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.pp-form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 15px;
+  min-height: 44px;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+}
+
+.pp-form-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.pp-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pp-form-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.pp-form-cancel {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pp-form-submit {
+  flex: 2;
+  min-height: 44px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pp-form-submit:active {
+  transform: scale(0.97);
+}
+
+/* ============================================================
+   TIMELINE VIEW
+   ============================================================ */
+.pp-timeline {
+  position: relative;
+  padding-left: 28px;
+}
+
+.pp-timeline::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--primary), var(--border-color));
+  border-radius: 1px;
+}
+
+.pp-timeline-month {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: 12px 0 6px -2px;
+  position: sticky;
+  top: 50px;
+  z-index: 5;
+  background: var(--bg-main);
+  padding: 2px 6px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.pp-timeline-item {
+  position: relative;
+  margin-bottom: 6px;
+  padding: 10px 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--pp-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+}
+
+.pp-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -23px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-main);
+}
+
+.pp-timeline-item.overdue::before {
+  background: var(--danger);
+}
+
+.pp-timeline-item.upcoming::before {
+  background: var(--warning);
+}
+
+.pp-timeline-item:active {
+  transform: scale(0.98);
+}
+
+.pp-timeline-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.pp-timeline-rel {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.pp-timeline-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.pp-timeline-date.overdue {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.pp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 16px;
+  text-align: center;
+}
+
+.pp-empty-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.pp-empty-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+
+.pp-empty-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  max-width: 260px;
+}
+
+.pp-empty-btn {
+  height: 44px;
+  padding: 0 24px;
+  border: none;
+  border-radius: var(--pp-radius-sm);
+  background: var(--primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pp-empty-btn:active {
+  transform: scale(0.95);
+}
+
+/* ============================================================
+   RESPONSIVE — Desktop
+   ============================================================ */
+@media (min-width: 640px) {
+  .people-wrapper {
+    max-width: 800px;
+  }
+
+  .pp-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pp-add-btn {
+    width: auto;
+    padding: 0 16px;
+  }
+
+  .pp-add-btn span {
+    display: inline;
+  }
+
+  .pp-stat-value {
+    font-size: 22px;
+  }
+
+  .pp-card {
+    padding: 16px;
+  }
+
+  .pp-avatar-wrap {
+    width: 48px;
+    height: 48px;
+  }
+
+  .pp-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 18px;
+    border-radius: 14px;
+  }
+
+  .pp-avatar-ring {
+    width: 54px;
+    height: 54px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .people-wrapper {
+    max-width: 960px;
+  }
+
+  .pp-card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Touch device — disable hover transforms */
+@media (hover: none) and (pointer: coarse) {
+
+  .pp-card:hover,
+  .pp-timeline-item:hover,
+  .pp-contact-option:hover {
+    transform: none;
+  }
+}
+
+/* iOS safe area */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+
+  .pp-sheet-actions,
+  .pp-form-actions {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+}

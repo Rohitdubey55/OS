@@ -1,4 +1,7 @@
 const SPREADSHEET_ID = "1m1r9fZ9cO8izkb-YIs-iz5hZljTpm3p0PzD-LiS0hZM";
+const CACHE_KEY = "app_data_cache";
+const CACHE_TTL = 21600; // 6 hours
+const CACHE_MAX_SIZE = 95000; // CacheService limit is ~100KB, using 95KB for safety
 
 /* -------- AUTOMATIC SCHEMA INITIALIZATION -------- */
 // Defines the exact required columns for every single module in PersonalOS
@@ -30,9 +33,9 @@ const SCHEMA = {
   "book_library": ["id", "title", "author", "cover_url", "category", "status", "date_added", "date_completed", "rating", "notes", "linked_goals", "tags"],
   "book_summaries": ["id", "book_id", "book_title", "author", "summary_json", "total_pages", "created_at", "linked_vision_ids", "key_takeaways", "action_items"],
   "reader_settings": ["id", "background_color", "font_color", "font_family", "font_size", "line_spacing", "fullscreen_mode", "page_animation", "auto_save_position"],
-  "mural_elements": ["id", "project_id", "type", "x", "y", "w", "h", "content", "color", "z_index", "metadata"],
   "mural_projects": ["id", "title", "category", "created_at", "updated_at"],
-  "mural_categories": ["id", "name", "color"]
+  "mural_categories": ["id", "name", "color"],
+  "mural_elements": ["id", "project_id", "type", "x", "y", "w", "h", "content", "color", "z_index", "shape", "from_id", "to_id", "connector_style", "from_side", "to_side"]
 };
 
 /**
@@ -100,6 +103,11 @@ function ensureSheetExists(sheetName) {
 
 function doGet(e) {
   try {
+    // ── Bulk fetch: ?action=getAll — returns ALL sheets in one response ──
+    if (e.parameter.action === "getAll") {
+      return getAllData();
+    }
+
     if (!e.parameter.action || !e.parameter.sheet) {
       return jsonResponse({ success: false, message: "Missing action or sheet parameter" });
     }
@@ -119,12 +127,195 @@ function doGet(e) {
   }
 }
 
+/**
+ * Bulk fetch — reads ALL app sheets in a single request.
+ * Returns { success: true, data: { planner_events: [...], tasks: [...], ... } }
+ */
+function getAllData() {
+  const cache = CacheService.getScriptCache();
+  const cachedData = getLargeCache_(cache, CACHE_KEY);
+  
+  if (cachedData) {
+    console.log("Memory Cache Hit");
+    return jsonResponse(JSON.parse(cachedData));
+  }
+
+  // Fallback to Persistent Cache (Infinite)
+  const persistentData = getLargeProperty_(CACHE_KEY);
+  if (persistentData) {
+    console.log("Persistent Cache Hit - Re-warming Memory Cache");
+    const parsed = JSON.parse(persistentData);
+    // Re-warm memory cache for fast subsequent access
+    putLargeCache_(cache, CACHE_KEY, persistentData, CACHE_TTL);
+    return jsonResponse(parsed);
+  }
+
+  console.log("Cache Miss - Full Rebuild Required");
+  const data = rebuildCache();
+  return jsonResponse(data);
+}
+
+/**
+ * Logic to fetch all data from sheets and update all cache layers.
+ */
+function rebuildCache() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheets = ss.getSheets();
+  const result = {};
+
+  sheets.forEach(sheet => {
+    const sheetName = sheet.getName();
+    try {
+      if (sheet.getLastRow() < 2) {
+        result[sheetName] = [];
+        return;
+      }
+      if (['language_projects', 'language_sessions'].includes(sheetName)) return;
+      
+      const values = sheet.getDataRange().getValues();
+      const headers = values[0];
+      const rows = values.slice(1);
+      result[sheetName] = rows.map(row => {
+        const obj = {};
+        headers.forEach((header, i) => {
+          obj[header] = normalizeOutput(row[i]);
+        });
+        return obj;
+      });
+    } catch (e) {
+      result[sheetName] = [];
+    }
+  });
+
+  const response = { success: true, data: result, cached_at: new Date().toISOString() };
+  const jsonString = JSON.stringify(response);
+  
+  // Update both Layers
+  putLargeCache_(CacheService.getScriptCache(), CACHE_KEY, jsonString, CACHE_TTL);
+  putLargeProperty_(CACHE_KEY, jsonString);
+  
+  return response;
+}
+
+/**
+ * Triggers on manual edit in the spreadsheet.
+ * Rebuilds the cache INSTANTLY so the app is fast when opened.
+ */
+function onEdit(e) {
+  console.log("Eager Rebuild triggered by sheet edit...");
+  rebuildCache();
+}
+
+/**
+ * Manually clear all cache layers.
+ */
+function clearCache() {
+  const cache = CacheService.getScriptCache();
+  removeLargeCache_(cache, CACHE_KEY);
+  removeLargeProperty_(CACHE_KEY);
+  console.log("All cache layers cleared.");
+}
+
+/**
+ * Helper to store large strings in cache by chunking.
+ */
+function putLargeCache_(cache, key, value, ttl) {
+  const chunks = {};
+  const meta = { numChunks: 0 };
+  for (let i = 0; i < value.length; i += CACHE_MAX_SIZE) {
+    const chunk = value.substring(i, i + CACHE_MAX_SIZE);
+    chunks[key + "_" + meta.numChunks] = chunk;
+    meta.numChunks++;
+  }
+  cache.putAll(chunks, ttl);
+  cache.put(key + "_meta", JSON.stringify(meta), ttl);
+}
+
+/**
+ * Helper to retrieve chunked strings from cache.
+ */
+function getLargeCache_(cache, key) {
+  const metaStr = cache.get(key + "_meta");
+  if (!metaStr) return null;
+  const meta = JSON.parse(metaStr);
+  const keys = [];
+  for (let i = 0; i < meta.numChunks; i++) keys.push(key + "_" + i);
+  const chunks = cache.getAll(keys);
+  let result = "";
+  for (let i = 0; i < meta.numChunks; i++) {
+    const chunk = chunks[key + "_" + i];
+    if (!chunk) return null;
+    result += chunk;
+  }
+  return result;
+}
+
+/**
+ * Helper to remove chunked strings from cache.
+ */
+function removeLargeCache_(cache, key) {
+  const metaStr = cache.get(key + "_meta");
+  if (!metaStr) return;
+  const meta = JSON.parse(metaStr);
+  const keys = [key + "_meta"];
+  for (let i = 0; i < meta.numChunks; i++) keys.push(key + "_" + i);
+  cache.removeAll(keys);
+}
+
+/**
+ * PropertiesService (Persistent Storage) Helpers
+ */
+function putLargeProperty_(key, value) {
+  const props = PropertiesService.getScriptProperties();
+  const meta = { numChunks: 0 };
+  const CHUNK_SIZE = 8000; // PropertiesService limit is ~9KB
+  
+  for (let i = 0; i < value.length; i += CHUNK_SIZE) {
+    const chunk = value.substring(i, i + CHUNK_SIZE);
+    props.setProperty(key + "_" + meta.numChunks, chunk);
+    meta.numChunks++;
+  }
+  props.setProperty(key + "_meta", JSON.stringify(meta));
+}
+
+function getLargeProperty_(key) {
+  const props = PropertiesService.getScriptProperties();
+  const metaStr = props.getProperty(key + "_meta");
+  if (!metaStr) return null;
+  
+  const meta = JSON.parse(metaStr);
+  let result = "";
+  for (let i = 0; i < meta.numChunks; i++) {
+    const chunk = props.getProperty(key + "_" + i);
+    if (!chunk) return null;
+    result += chunk;
+  }
+  return result;
+}
+
+function removeLargeProperty_(key) {
+  const props = PropertiesService.getScriptProperties();
+  const metaStr = props.getProperty(key + "_meta");
+  if (!metaStr) return;
+  
+  const meta = JSON.parse(metaStr);
+  props.deleteProperty(key + "_meta");
+  for (let i = 0; i < meta.numChunks; i++) {
+    props.deleteProperty(key + "_" + i);
+  }
+}
+
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
 
-    if (!body.action || !body.sheet) {
-      return jsonResponse({ success: false, message: "Missing action or sheet" });
+    if (!body.action) {
+      return jsonResponse({ success: false, message: "Missing action" });
+    }
+
+    // Sheet is required for standard CRUD, but optional for some custom actions
+    if (!body.sheet && !['deleteMuralProject', 'syncMuralElements', 'repairMural', 'init'].includes(body.action)) {
+      return jsonResponse({ success: false, message: "Missing sheet" });
     }
 
     if (body.action === "create") {
@@ -139,11 +330,26 @@ function doPost(e) {
       return deleteData(body.sheet, body.id);
     }
 
+    if (body.action === "deleteMuralProject") {
+      return deleteMuralProjectComplete(body.id);
+    }
+
+    if (body.action === "syncMuralElements") {
+      const payload = body.payload || {};
+      return syncMuralElements(payload.project_id, payload.elements);
+    }
+
+    if (body.action === "repairMural") {
+      return jsonResponse(migrateAndCleanupMuralData());
+    }
+    
     if (body.action === "init") {
       return jsonResponse(initToolsSheets());
     }
 
-    return jsonResponse({ success: false, message: "Invalid POST action" });
+    const res = jsonResponse({ success: false, message: "Invalid POST action" });
+    clearCache(); // Ensure cache is cleared on any POST action that might modify data
+    return res;
 
   } catch (err) {
     return jsonResponse({ success: false, error: err.toString() });
@@ -187,6 +393,7 @@ function createData(sheetName, payload) {
   const row = headers.map(header => normalizeInput(payload[header]));
 
   sheet.appendRow(row);
+  clearCache();
 
   return jsonResponse({ success: true, id: id });
 }
@@ -204,6 +411,7 @@ function updateData(sheetName, id, payload) {
                .setValue(normalizeInput(payload[header]));
         }
       });
+      clearCache();
       return jsonResponse({ success: true });
     }
   }
@@ -218,11 +426,36 @@ function deleteData(sheetName, id) {
   for (let i = 1; i < values.length; i++) {
     if (String(values[i][0]) === String(id)) {
       sheet.deleteRow(i + 1);
+      clearCache();
       return jsonResponse({ success: true });
     }
   }
 
   return jsonResponse({ success: false, message: "ID not found" });
+}
+
+function deleteMuralProjectComplete(projectId) {
+  try {
+    // 1. Delete project itself
+    deleteData('mural_projects', projectId);
+    
+    // 2. Delete all elements belonging to this project
+    const sheet = getSheet('mural_elements');
+    const values = sheet.getDataRange().getValues();
+    
+    // Iterate backwards to safely delete rows
+    for (let i = values.length - 1; i >= 1; i--) {
+      // project_id is in column 2 (index 1) for mural_elements
+      if (String(values[i][1]) === String(projectId)) { 
+        sheet.deleteRow(i + 1);
+      }
+    }
+    
+    clearCache();
+    return jsonResponse({ success: true });
+  } catch (err) {
+    return jsonResponse({ success: false, error: err.toString() });
+  }
 }
 
 function generateId(sheet) {
@@ -475,32 +708,152 @@ function initToolsSheets() {
     readerSettingsSheet.appendRow(['user_prefs', '#ffffff', '#1a1a1a', 'serif', 18, 1.6, false, 'slide', true]);
   }
   
-  // Create mural_elements sheet if not exists
-  let muralSheet = ss.getSheetByName('mural_elements');
-  if (!muralSheet) {
-    muralSheet = ss.insertSheet('mural_elements');
-    muralSheet.appendRow(SCHEMA['mural_elements']);
-  }
-
-  // Create mural_projects sheet if not exists
-  let muralProjectsSheet = ss.getSheetByName('mural_projects');
-  if (!muralProjectsSheet) {
-    muralProjectsSheet = ss.insertSheet('mural_projects');
-    muralProjectsSheet.appendRow(SCHEMA['mural_projects']);
-    // Add a default project
-    muralProjectsSheet.appendRow([1, 'First Project', 'general', new Date(), new Date()]);
-  }
-
-  // Create mural_categories sheet if not exists
-  let muralCategoriesSheet = ss.getSheetByName('mural_categories');
-  if (!muralCategoriesSheet) {
-    muralCategoriesSheet = ss.insertSheet('mural_categories');
-    muralCategoriesSheet.appendRow(SCHEMA['mural_categories']);
-    // Add default categories
-    muralCategoriesSheet.appendRow([1, 'general', '#6366F1']);
-    muralCategoriesSheet.appendRow([2, 'work', '#F59E0B']);
-    muralCategoriesSheet.appendRow([3, 'ideas', '#10B981']);
-  }
-  
   return { success: true, message: 'Tools sheets initialized' };
+}
+
+/**
+ * Bulk sync all elements for a project. 
+ * Creates new ones, updates existing ones, and ensures data consistency.
+ */
+function syncMuralElements(projectId, elements) {
+  try {
+    const sheet = getSheet('mural_elements');
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const project_id_idx = headers.indexOf('project_id');
+    const id_idx = headers.indexOf('id');
+    
+    if (project_id_idx === -1 || id_idx === -1) {
+      return jsonResponse({ success: false, message: "Sheet schema error" });
+    }
+
+    // 1. Identify which rows currently belong to this project
+    const rowsToDelete = []; // row indices (1-based)
+    const existingMap = {};  // id -> row index
+    for (let i = 1; i < values.length; i++) {
+      if (String(values[i][project_id_idx]) === String(projectId)) {
+        const sid = String(values[i][id_idx]);
+        existingMap[sid] = i + 1;
+        rowsToDelete.push(i + 1);
+      }
+    }
+
+    // 2. Establish ID mapping for NEW elements
+    const idMap = {}; 
+    let lastId = generateId(sheet);
+    elements.forEach(el => {
+      const elId = String(el.id);
+      if (elId.startsWith('temp_') && !existingMap[elId]) {
+        idMap[elId] = lastId++;
+      }
+    });
+
+    // 3. Process each element from the payload
+    const processedRows = new Set();
+    elements.forEach(el => {
+      let targetPayload = { ...el };
+      const elId = String(el.id);
+
+      // Update connector references if they point to temp IDs
+      if (targetPayload.from_id && idMap[String(targetPayload.from_id)]) {
+        targetPayload.from_id = idMap[String(targetPayload.from_id)];
+      }
+      if (targetPayload.to_id && idMap[String(targetPayload.to_id)]) {
+        targetPayload.to_id = idMap[String(targetPayload.to_id)];
+      }
+
+      if (existingMap[elId]) {
+        // UPDATE EXISTING
+        const rowIndex = existingMap[elId];
+        headers.forEach((header, colIndex) => {
+          if (targetPayload.hasOwnProperty(header) && header !== 'id') {
+            sheet.getRange(rowIndex, colIndex + 1).setValue(normalizeInput(targetPayload[header]));
+          }
+        });
+        processedRows.add(rowIndex);
+      } else {
+        // CREATE NEW
+        const newId = idMap[elId] || generateId(sheet);
+        targetPayload.id = newId;
+        const row = headers.map(header => normalizeInput(targetPayload[header]));
+        sheet.appendRow(row);
+      }
+    });
+
+    // 4. Delete rows that were in this project but NOT in the payload (Deletions)
+    // Sort descending to avoid index shifts
+    const toRemove = rowsToDelete.filter(idx => !processedRows.has(idx)).sort((a, b) => b - a);
+    toRemove.forEach(idx => sheet.deleteRow(idx));
+
+    clearCache();
+    return jsonResponse({ success: true, message: "Sync complete", idMap: idMap });
+  } catch (err) {
+    return jsonResponse({ success: false, error: err.toString() });
+  }
+}
+
+/**
+ * REPAIR Logic: Re-aligns headers and deduplicates data based on the modern SCHEMA.
+ */
+function migrateAndCleanupMuralData() {
+  try {
+    const sheet = getSheet('mural_elements');
+    const values = sheet.getDataRange().getValues();
+    if (values.length < 1) return { success: true, message: "Empty sheet" };
+
+    const oldHeaders = values[0];
+    const rows = values.slice(1);
+    const newHeaders = SCHEMA.mural_elements;
+
+    // 1. Map data to objects using OLD headers to extract whatever is there
+    const objects = rows.map(row => {
+      let obj = {};
+      oldHeaders.forEach((header, i) => {
+        if (header) obj[header.trim()] = row[i];
+      });
+      return obj;
+    });
+
+    // 2. Deduplicate and clean
+    const unique = [];
+    const seen = new Set();
+    
+    objects.forEach(obj => {
+      // Find project_id even if column was named differently
+      const pId = obj.project_id || obj.projectID || obj['Project ID'] || "";
+      obj.project_id = pId; 
+
+      // Skip totally empty or trash rows
+      if (!pId && !obj.id && !obj.type) return;
+
+      // Create a fingerprint for duplication check (project + type + content + position)
+      let finger;
+      if (obj.type === 'connector') {
+         finger = `${pId}_conn_${obj.from_id}_${obj.to_id}_${obj.from_side}_${obj.to_side}`;
+      } else {
+         const contentNorm = (obj.content || "").toString().trim().slice(0, 50);
+         finger = `${pId}_${obj.type}_${contentNorm}_${Math.round(obj.x || 0)}_${Math.round(obj.y || 0)}`;
+      }
+      
+      if (!seen.has(finger)) {
+        seen.add(finger);
+        // Ensure ID is a number if it looks like one, to avoid "temp_" staying forever if it accidentally got saved
+        if (obj.id && !isNaN(obj.id)) obj.id = parseInt(obj.id);
+        unique.push(obj);
+      }
+    });
+
+    // 3. Clear and rewrite with NEW headers and standardized data
+    sheet.clear();
+    sheet.appendRow(newHeaders);
+    
+    unique.forEach(obj => {
+      const row = newHeaders.map(h => normalizeInput(obj[h]));
+      sheet.appendRow(row);
+    });
+
+    return { success: true, message: "Cleanup complete", original: rows.length, final: unique.length };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
 }

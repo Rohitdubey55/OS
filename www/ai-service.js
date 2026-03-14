@@ -1,8 +1,8 @@
 /* ai-service.js */
 
 const AI_SERVICE = {
-    // Default Configuration
-    defaultModel: 'gemini-1.5-flash',
+    defaultModel: 'gemini-3-flash-preview',
+
 
     // Get Configuration from State (Sheet Source of Truth)
     getConfig: function () {
@@ -196,6 +196,8 @@ Ensure the content is deep and high-quality, not just bullet points. Do not incl
             throw error;
         }
     },
+
+
 
     // Prompt Templates
     constructPrompt: function (context, data) {

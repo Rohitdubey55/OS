@@ -49,12 +49,14 @@
     <link rel="stylesheet" href="diary-views.css" />
 
     <link rel="stylesheet" href="tools-views.css" />
+    <link rel="stylesheet" href="mural.css" />
 
     <link rel="stylesheet" href="finance-transactions.css" />
 
     <link rel="stylesheet" href="ui-polish.css" />
 
     <link rel="stylesheet" href="vision-views.css" />
+    <link rel="stylesheet" href="view-people.css" />
 
     <link rel="stylesheet" href="saas-polish.css" />
     <link rel="stylesheet" href="styles/books-reader.css" />
@@ -137,6 +139,7 @@
 
                 <div class="nav-item" onclick="routeTo('people')" data-target="people">People</div>
                 <div class="nav-item" onclick="routeTo('books')" data-target="books">Books</div>
+                <div class="nav-item" onclick="routeTo('mural')" data-target="mural">Mural</div>
 
             </nav>
 
@@ -217,6 +220,10 @@
             <div class="mob-item" onclick="routeTo('books')" data-target="books">
                 <i data-icon="book-open"></i>
                 Books
+            </div>
+            <div class="mob-item" onclick="routeTo('mural')" data-target="mural">
+                <i data-icon="layout"></i>
+                Mural
             </div>
 
         </nav>
@@ -323,6 +330,12 @@
                         <i data-icon="notebook" style="color:var(--success)"></i>
                     </button>
                 </div>
+                <div class="fab-menu-item" onclick="routeTo('mural'); closeFABMenu()">
+                    <span class="fab-menu-label">Mural</span>
+                    <button class="fab-menu-button mural" style="background:var(--surface-sunken)">
+                        <i data-icon="layout" style="color:var(--primary)"></i>
+                    </button>
+                </div>
                 <div class="fab-menu-item" onclick="routeTo('chimes'); closeFABMenu()">
                     <span class="fab-menu-label">Chimes</span>
                     <button class="fab-menu-button" style="background:var(--surface-sunken)">
@@ -392,7 +405,7 @@
         </div>
     </div>
 
-    <script src="main.js?v=20260220b"></script>
+    <script src="main.js?v=20260313a"></script>
 
     <script src="view-dashboard.js"></script>
 
@@ -415,6 +428,7 @@
     <script src="view-gym.js"></script>
     <script src="view-pomodoro.js"></script>
     <script src="view-notes.js"></script>
+    <script src="view-mural.js?v=20260314-v3"></script>
     <script src="view-chimes.js"></script>
     <script src="view-books.js"></script>
     <script src="view-reader.js"></script>

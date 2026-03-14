@@ -448,6 +448,20 @@ function checkAndTriggerReminders() {
 
         if (isNaN(hours) || isNaN(minutes)) return;
 
+        // Check if habit is scheduled for today
+        const isScheduledToday = (h) => {
+            if (!h.frequency || h.frequency === 'daily') return true;
+            if (h.frequency === 'weekly' && h.days) {
+                const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const today = dayNames[new Date().getDay()];
+                const scheduledDays = h.days.split(',').map(s => s.trim());
+                return scheduledDays.includes(today);
+            }
+            return true;
+        };
+
+        if (!isScheduledToday(habit)) return;
+
         // Debug log
         console.log('[Habit Notification] Checking:', habit.habit_name, 'time:', hours + ':' + minutes, 'now:', now.getHours() + ':' + now.getMinutes());
 
@@ -647,6 +661,18 @@ async function syncNativeNotifications() {
 
             if (isDoneToday) return; // Skip if already crushed today!
 
+            // Ensure we don't schedule an alarm if it's not scheduled for this day
+            const isScheduledForDay = (h, dateObj) => {
+                if (!h.frequency || h.frequency === 'daily') return true;
+                if (h.frequency === 'weekly' && h.days) {
+                    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    const day = dayNames[dateObj.getDay()];
+                    const scheduledDays = h.days.split(',').map(s => s.trim());
+                    return scheduledDays.includes(day);
+                }
+                return true;
+            };
+
             // Schedule for today
             const scheduleDate = new Date();
             scheduleDate.setHours(hours, minutes, 0, 0);
@@ -655,6 +681,9 @@ async function syncNativeNotifications() {
             if (scheduleDate.getTime() <= now.getTime()) {
                 scheduleDate.setDate(scheduleDate.getDate() + 1);
             }
+
+            // Check if scheduled for the target date
+            if (!isScheduledForDay(habit, scheduleDate)) return;
 
             // BURST MODE: Schedule 10 notifications spaced 1 minute apart
             for (let i = 0; i < 10; i++) {

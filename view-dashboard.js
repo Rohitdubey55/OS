@@ -809,11 +809,12 @@ function renderDashboard() {
     // ─── DAILY TOOLS WIDGET ───
     dailyTools: () => {
       const tools = [
-        { id: 'gym',      label: 'Gym',      icon: 'fitness',  bg: 'linear-gradient(135deg,#ef4444,#dc2626)', shadow: 'rgba(239,68,68,0.25)' },
-        { id: 'notes',    label: 'Notes',    icon: 'entries',  bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', shadow: 'rgba(99,102,241,0.25)' },
-        { id: 'pomodoro', label: 'Focus',    icon: 'clock',    bg: 'linear-gradient(135deg,#f59e0b,#d97706)', shadow: 'rgba(245,158,11,0.25)' },
-        { id: 'chimes',   label: 'Chimes',   icon: 'bell',     bg: 'linear-gradient(135deg,#10b981,#059669)', shadow: 'rgba(16,185,129,0.25)' },
-        { id: 'books',    label: 'Books',    icon: 'book',     bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', shadow: 'rgba(139,92,246,0.25)' },
+        { id: 'gym', label: 'Gym', icon: 'fitness', bg: 'linear-gradient(135deg,#ef4444,#dc2626)', shadow: 'rgba(239,68,68,0.25)' },
+        { id: 'notes', label: 'Notes', icon: 'entries', bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', shadow: 'rgba(99,102,241,0.25)' },
+        { id: 'pomodoro', label: 'Focus', icon: 'clock', bg: 'linear-gradient(135deg,#f59e0b,#d97706)', shadow: 'rgba(245,158,11,0.25)' },
+        { id: 'chimes', label: 'Chimes', icon: 'bell', bg: 'linear-gradient(135deg,#10b981,#059669)', shadow: 'rgba(16,185,129,0.25)' },
+        { id: 'books', label: 'Books', icon: 'book', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', shadow: 'rgba(139,92,246,0.25)' },
+        { id: 'mural', label: 'Mural', icon: 'layout', bg: 'linear-gradient(135deg,#ec4899,#db2777)', shadow: 'rgba(236,72,153,0.25)' },
       ];
       return `
         <div class="widget-card daily-tools-widget" data-widget-id="dailyTools">

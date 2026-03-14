@@ -10,7 +10,7 @@ window.state = {
 
     view: "dashboard",
 
-    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_tdp: [], gym_plans: [], gym_sessions: [], gym_exercises: [], notes: [], book_library: [], book_summaries: [], reader_settings: [], mural: [] },
+    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_tdp: [], gym_plans: [], gym_sessions: [], gym_exercises: [], notes: [], book_library: [], book_summaries: [], reader_settings: [], mural: [], language_projects: [], language_sessions: [] },
 
     loading: false
 
@@ -464,6 +464,14 @@ window.openActiveHabitAlarm = function (habitId, habitName) {
         ? window.notificationState.sound
         : 'alarm_fast_10s.wav';
 
+    // Verify sound exists, fallback to classic if unknown
+    const knownSounds = ['beep', 'chime', 'classic'];
+    const soundName = activeSound.split('.')[0];
+    if (!knownSounds.includes(soundName.toLowerCase())) {
+        console.warn(`Sound "${activeSound}" not found in local assets. Falling back to classic.`);
+        activeSound = 'classic.wav';
+    }
+
     // For iOS, convert .wav to .caf format
     if (activeSound.includes('.wav')) {
         activeSound = activeSound.replace('.wav', '.caf');
@@ -479,12 +487,12 @@ window.openActiveHabitAlarm = function (habitId, habitName) {
             isUrl: false
         }).catch(e => {
             console.error("NativeAudio preload failed", e);
-            fallbackAudio = new Audio('assets/sounds/' + activeSound);
+            fallbackAudio = new Audio('assets/sounds/' + activeSound.replace('.caf', '.wav'));
             fallbackAudio.loop = true;
             fallbackAudio.play().catch(err => console.error("Fallback audio play blocked", err));
         });
     } else {
-        fallbackAudio = new Audio('assets/sounds/' + activeSound);
+        fallbackAudio = new Audio('assets/sounds/' + activeSound.replace('.caf', '.wav'));
         fallbackAudio.loop = true;
         fallbackAudio.play().catch(e => console.error("Audio auto-play blocked", e));
     }
@@ -527,11 +535,8 @@ window.openActiveHabitAlarm = function (habitId, habitName) {
             }
             if (fallbackAudio) fallbackAudio.pause();
             overlay.remove();
-            // Auto-mark it as done
-            if (typeof window.toggleHabitOptimistic === 'function') {
-                window.toggleHabitOptimistic(habitId);
-            }
-            showToast("Habit crushed! 💪", "success");
+
+            showToast("Habit alarm dismissed", "success");
         }
     });
 
@@ -2096,67 +2101,136 @@ function updateLoader(percent, text) {
     if (status && text) status.textContent = text;
 }
 
+// ── Cache helpers (Removed as per request) ──
+
+// Sheet name → state key mapping (where they differ)
+const SHEET_TO_KEY = {
+    'planner_events': 'planner',
+    'vision_board': 'vision'
+};
+
+function applyBulkDataToState(bulkData) {
+    Object.keys(bulkData).forEach(sheetName => {
+        const key = SHEET_TO_KEY[sheetName] || sheetName;
+        state.data[key] = bulkData[sheetName] || [];
+    });
+}
+
+function applyPostLoadSettings() {
+    applyThemeOnLoad();
+    if (state.data.settings && state.data.settings.length > 0) {
+        if (typeof applySettings === 'function') applySettings();
+        if (typeof updateTabVisibility === 'function') updateTabVisibility();
+        if (typeof loadNotificationSettings === 'function') {
+            loadNotificationSettings();
+            if (typeof syncNativeNotifications === 'function') syncNativeNotifications();
+        }
+    }
+}
+
 async function loadAllData() {
-    console.log('loadAllData: Fetching all sheets...');
+    console.log('loadAllData: Starting...');
     state.loading = true;
     updateLoader(5, 'Connecting...');
 
-    // Include all sheets including settings, funds, assets, and diary enhancements
-    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings'];
-    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings'];
-
-    let loaded = 0;
-    const total = sheets.length;
-
-    // Load ALL sheets in parallel with progress tracking
-    const promises = sheets.map(s => {
-        return apiCall('get', s).then(res => {
-            loaded++;
-            const pct = 10 + Math.round((loaded / total) * 80); // 10% -> 90%
-            updateLoader(pct, `Fetching data... (${loaded}/${total})`);
-            return res;
-        });
-    });
-
-    const results = await Promise.all(promises);
-
-    results.forEach((res, i) => { state.data[keys[i]] = res; });
+    await fetchFreshData();
 
     state.loading = false;
     updateLoader(95, 'Processing & Rendering...');
-
     console.log("Data Loaded:", state.data);
+    applyPostLoadSettings();
 
-    // Apply theme settings on load
-    applyThemeOnLoad();
-
-    // Apply settings immediately after loading
-    if (state.data.settings && state.data.settings.length > 0) {
-        if (typeof applySettings === 'function') {
-            applySettings();
-        }
-        if (typeof updateTabVisibility === 'function') {
-            updateTabVisibility();
-        }
-
-        // Authoritative load for notifications
-        if (typeof loadNotificationSettings === 'function') {
-            loadNotificationSettings();
-            if (typeof syncNativeNotifications === 'function') {
-                syncNativeNotifications();
-            }
-        }
-    }
-
-    // Hide loader smoothly
     updateLoader(100, 'Ready!');
     setTimeout(() => {
         const loader = document.getElementById('appLoader');
-        if (loader) {
-            loader.classList.add('hidden');
-        }
+        if (loader) loader.classList.add('hidden');
     }, 500);
+}
 
+/**
+ * Fetch fresh data (bulk or fallback), save to cache.
+ */
+async function fetchFreshData() {
+    const startTime = performance.now();
+
+    // Try bulk fetch first
+    try {
+        updateLoader(10, 'Fetching all data...');
+        const url = `${API_BASE}?action=getAll&t=${Date.now()}`;
+        console.log('loadAllData: Attempting bulk fetch...');
+        const res = await fetch(url, { method: 'GET', redirect: 'follow' });
+        const text = await res.text();
+        const elapsed = Math.round(performance.now() - startTime);
+        console.log(`loadAllData: Bulk response in ${elapsed}ms, ${text.length} chars`);
+
+        let json;
+        try { json = JSON.parse(text); } catch (parseErr) {
+            throw new Error('Invalid JSON from getAll');
+        }
+
+        if (json.success && json.data) {
+            updateLoader(80, 'Processing data...');
+            applyBulkDataToState(json.data);
+            console.log(`loadAllData: ✅ Bulk fetch SUCCESS in ${elapsed}ms`);
+            return;
+        }
+    } catch (e) {
+        console.warn('loadAllData: Bulk fetch failed, using fallback:', e.message);
+    }
+
+    // Fallback: individual requests
+    console.log('loadAllData: Fallback (individual requests)...');
+    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings', 'mural_projects', 'mural_categories', 'mural_elements'];
+    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings', 'mural_projects', 'mural_categories', 'mural_elements'];
+
+    let loaded = 0;
+    const total = sheets.length;
+    const promises = sheets.map(s => {
+        return apiCall('get', s).then(res => {
+            loaded++;
+            updateLoader(10 + Math.round((loaded / total) * 80), `Fetching data... (${loaded}/${total})`);
+            return res;
+        });
+    });
+    const results = await Promise.all(promises);
+    results.forEach((res, i) => { state.data[keys[i]] = res; });
+
+    console.log(`loadAllData: Fallback done in ${Math.round(performance.now() - startTime)}ms`);
+}
+
+/**
+ * Background refresh — fetch fresh data silently and update state + cache.
+ * If data changed, re-render the current view.
+ */
+async function fetchFreshDataInBackground() {
+    console.log('Background refresh: Starting...');
+    const startTime = performance.now();
+
+    try {
+        const url = `${API_BASE}?action=getAll&t=${Date.now()}`;
+        const res = await fetch(url, { method: 'GET', redirect: 'follow' });
+        const text = await res.text();
+        const elapsed = Math.round(performance.now() - startTime);
+
+        let json;
+        try { json = JSON.parse(text); } catch (e) { return; }
+
+        if (json.success && json.data) {
+            applyBulkDataToState(json.data);
+            applyPostLoadSettings();
+
+            // Re-render current view with fresh data
+            const view = state.view;
+            if (view === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+            else if (view === 'tasks' && typeof renderTasks === 'function') renderTasks();
+            else if (view === 'habits' && typeof renderHabits === 'function') renderHabits();
+            else if (view === 'finance' && typeof renderFinance === 'function') renderFinance();
+
+            console.log(`Background refresh: ✅ Done in ${elapsed}ms`);
+        }
+    } catch (e) {
+        console.warn('Background refresh: Failed:', e.message);
+    }
 }
 
 
