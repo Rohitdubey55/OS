@@ -36,9 +36,9 @@
    ============================================================ */
 .pp-stats-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  margin-bottom: 10px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-bottom: 12px;
   padding: 0 2px;
 }
 
@@ -91,6 +91,10 @@
 
 .pp-stat-card:nth-child(4) {
   animation: ppSlideUp 0.3s ease 0.12s both;
+}
+
+.pp-stat-card:nth-child(5) {
+  animation: ppSlideUp 0.3s ease 0.16s both;
 }
 
 @keyframes ppSlideUp {

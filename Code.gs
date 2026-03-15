@@ -13,7 +13,7 @@ const SCHEMA = {
   "habit_logs": ["id", "habit_id", "date", "status", "pomodoro_completed"],
   "diary": ["id", "date", "content", "mood", "tags"],
   "vision_board": ["id", "category", "title", "description", "image_url", "target_date", "progress", "status", "notes", "linked_habits", "created_at", "updated_at", "video_url", "month_focus"],
-  "settings": ["id", "name", "dob", "morning_message", "afternoon_message", "evening_message", "weekly_budget", "monthly_budget", "category_budgets", "theme_color", "theme_mode", "orientation_lock", "ai_api_key", "ai_model", "nav_layout", "dashboard_config", "kpi_config", "notification_enabled", "notification_sound", "notification_method", "quiet_hours_start", "quiet_hours_end", "diary_default_mood", "diary_show_tasks", "diary_show_habits", "diary_show_expenses", "task_default_view", "task_categories"],
+  "settings": ["id", "name", "dob", "morning_message", "afternoon_message", "evening_message", "weekly_budget", "monthly_budget", "category_budgets", "theme_color", "theme_mode", "orientation_lock", "ai_api_key", "ai_model", "nav_layout", "dashboard_config", "kpi_config", "notification_enabled", "notification_sound", "notification_method", "quiet_hours_start", "quiet_hours_end", "diary_default_mood", "diary_show_tasks", "diary_show_habits", "diary_show_expenses", "task_default_view", "task_categories", "habit_routines"],
   "funds": ["id", "name", "balance", "type", "currency"],
   "assets": ["id", "name", "value", "purchase_date", "notes"],
   "people": ["id", "name", "relationship", "birthday", "phone", "email", "instagram", "last_contact", "notes"],

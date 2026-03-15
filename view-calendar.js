@@ -80,6 +80,9 @@ function navCal(dir) {
 }
 
 window.openEventModal = function (dateIso = null, startTime = "09:00") {
+  const modal = document.getElementById('universalModal');
+  if (modal) modal.classList.remove('bottom-sheet');
+  const box = modal ? modal.querySelector('.modal-box') : null;
   // 1. Inject Modal if missing (Lazy Load)
   if (!document.getElementById('eventModal')) {
     const modalHTML = `

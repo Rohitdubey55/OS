@@ -262,15 +262,19 @@ function renderPeople() {
         <div class="pp-stats-strip">
             <div class="pp-stat-card" onclick="peopleState.sortBy='name'; renderPeople()">
                 <div class="pp-stat-value">${stats.total}</div>
-                <div class="pp-stat-label">Contacts</div>
+                <div class="pp-stat-label">All</div>
+            </div>
+            <div class="pp-stat-card" onclick="window.openConnectSoonSheet()">
+                <div class="pp-stat-value" style="${upcoming.length > 0 ? 'color: var(--primary)' : ''}">${upcoming.length}</div>
+                <div class="pp-stat-label">Soon</div>
             </div>
             <div class="pp-stat-card" onclick="window.openNeedsAttentionSheet()">
                 <div class="pp-stat-value" style="${stats.needsAttention > 0 ? 'color: var(--danger)' : ''}">${stats.needsAttention}</div>
-                <div class="pp-stat-label">Need Attn</div>
+                <div class="pp-stat-label">Attn</div>
             </div>
             <div class="pp-stat-card" onclick="peopleState.sortBy='birthday'; renderPeople()">
                 <div class="pp-stat-value" style="${stats.upcomingBdays > 0 ? 'color: var(--warning)' : ''}">${stats.upcomingBdays}</div>
-                <div class="pp-stat-label">Birthdays</div>
+                <div class="pp-stat-label">Bdays</div>
             </div>
             <div class="pp-stat-card">
                 <div class="pp-stat-value" style="font-size: 14px;">${stats.totalBalance > 0 ? '₹' + Math.round(stats.totalBalance) : '—'}</div>
@@ -288,37 +292,6 @@ function renderPeople() {
             </div>
         </div>` : ''}
 
-        <!-- To Contact / Priority Row (Horizontal Story View) -->
-        ${upcoming.length > 0 ? `
-        <div class="pp-priority-section">
-            <div class="pp-section-header">
-                <span class="pp-section-title">Connect Soon</span>
-                <span class="pp-section-count">${upcoming.length} contacts</span>
-            </div>
-            <div class="pp-priority-row">
-                ${upcoming.map(u => {
-                    const grad = getAvatarGradient(u.name);
-                    const initial = (u.name || '?').charAt(0).toUpperCase();
-                    const todayStr = new Date().toISOString().slice(0, 10);
-                    let dateLabel = '';
-                    if (u.next_interaction === todayStr) dateLabel = 'Today';
-                    else if (u.next_interaction < todayStr) dateLabel = 'Overdue';
-                    else {
-                        const days = Math.floor((new Date(u.next_interaction) - new Date()) / 86400000);
-                        dateLabel = days === 0 ? 'Tmrw' : `In ${days + 1}d`;
-                    }
-                    return `
-                    <div class="pp-priority-item" onclick="window.openPersonSheet('${u.id}')">
-                        <div class="pp-priority-avatar-wrap">
-                            <div class="pp-priority-avatar" style="background:${grad}">${initial}</div>
-                            <div class="pp-priority-dot ${u.next_interaction <= todayStr ? 'overdue' : ''}"></div>
-                        </div>
-                        <div class="pp-priority-name">${u.name.split(' ')[0]}</div>
-                        <div class="pp-priority-date ${u.next_interaction < todayStr ? 'overdue' : ''}">${dateLabel}</div>
-                    </div>`;
-                }).join('')}
-            </div>
-        </div>` : ''}
 
         <!-- Controls Bar -->
         <div class="pp-controls-bar">
@@ -372,6 +345,49 @@ function renderPeople() {
 
     if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
+
+/* ============================================================
+   CONNECT SOON BOTTOM SHEET
+   ============================================================ */
+
+window.openConnectSoonSheet = function () {
+    const upcoming = getUpcomingInteractions(state.data.people || []);
+    if (upcoming.length === 0) { showToast('No contacts scheduled soon.'); return; }
+
+    const rows = upcoming.map(u => {
+        const grad = getAvatarGradient(u.name);
+        const initial = (u.name || '?').charAt(0).toUpperCase();
+        const todayStr = new Date().toISOString().slice(0, 10);
+        let dateLabel = '', isOverdue = false;
+
+        if (u.next_interaction === todayStr) dateLabel = 'Today';
+        else if (u.next_interaction < todayStr) { dateLabel = 'Overdue'; isOverdue = true; }
+        else {
+            const days = Math.floor((new Date(u.next_interaction) - new Date()) / 86400000);
+            dateLabel = days === 0 ? 'Tomorrow' : `In ${days + 1} days`;
+        }
+
+        return `
+        <div class="pp-attn-row" onclick="closePeopleSheet(); setTimeout(() => window.openPersonSheet('${u.id}'), 350)">
+            <div class="pp-attn-avatar" style="background:${grad}">${initial}</div>
+            <div class="pp-attn-info">
+                <div class="pp-attn-name">${u.name}</div>
+                <div class="pp-attn-reason" style="${isOverdue ? 'color:var(--danger)' : ''}">${dateLabel}</div>
+            </div>
+            <button class="pp-attn-action" onclick="event.stopPropagation(); closePeopleSheet(); setTimeout(() => window.logContact('${u.id}'), 350)">Log</button>
+        </div>`;
+    }).join('');
+
+    const html = `
+        <div style="padding: 8px 16px 0;">
+            <div style="font-size:17px; font-weight:800; color:var(--text-1);">Connect Soon</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Scheduled interactions for coming days</div>
+        </div>
+        <div class="pp-sheet-body" style="padding-top:12px;">
+            ${rows}
+        </div>`;
+    openPeopleSheet(html);
+};
 
 /* ============================================================
    NEEDS ATTENTION BOTTOM SHEET

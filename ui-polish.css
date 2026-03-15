@@ -964,3 +964,31 @@ html {
         opacity: 1;
     }
 }
+/* ─── BOTTOM SHEET MODAL ─── */
+.modal-overlay.bottom-sheet {
+    align-items: flex-end;
+}
+
+.modal-overlay.bottom-sheet .modal-box {
+    width: 100% !important;
+    max-width: 600px !important;
+    border-radius: 24px 24px 0 0 !important;
+    margin-bottom: 0 !important;
+    max-height: 92vh !important;
+    transform: translateY(100%);
+    animation: slideUpSheet 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
+}
+
+@keyframes slideUpSheet {
+    from {
+        transform: translateY(100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+/* Specific overrides for Habit Modal inside bottom sheet */
+.modal-overlay.bottom-sheet .modal-header-bar {
+    border-radius: 24px 24px 0 0;
+}

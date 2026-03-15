@@ -571,45 +571,107 @@ function renderDashboard() {
         return dailyNeeded > 5; // More than 5% per day = risk
       }).length;
 
-      // Render KPI card helper
-      const renderKpiCard = (id, label, value, subValue, icon, color, route) => {
+      // --- TREND CALCULATIONS ---
+      // Previous month expenses for comparison
+      const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+      const prevMonthExp = expenses
+        .filter(e => e.type === 'expense' && new Date(e.date).getMonth() === prevMonth && new Date(e.date).getFullYear() === prevYear)
+        .reduce((s, e) => s + Number(e.amount), 0);
+      const spendTrend = prevMonthExp > 0 ? Math.round((monthExp - prevMonthExp) / prevMonthExp * 100) : 0;
+
+      // Previous week task velocity
+      const twoWeeksAgo = new Date();
+      twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+      const tasksLastWeek = completedTasks.filter(t => t.completed_at && new Date(t.completed_at) >= twoWeeksAgo && new Date(t.completed_at) < weekAgo).length;
+      const velocityTrend = tasksLastWeek > 0 ? Math.round((taskVelocity - tasksLastWeek) / tasksLastWeek * 100) : 0;
+
+      // Category config
+      const catMeta = {
+        financial: { label: 'Finance', color: 'var(--primary)', bg: 'var(--primary-soft)' },
+        productivity: { label: 'Productivity', color: 'var(--success)', bg: 'var(--success-soft)' },
+        habits: { label: 'Habits', color: 'var(--warning)', bg: 'var(--warning-soft)' },
+        lifestyle: { label: 'Lifestyle', color: 'var(--info, #0EA5E9)', bg: 'rgba(14, 165, 233, 0.15)' },
+        predictive: { label: 'Predictive', color: 'var(--accent)', bg: 'rgba(167, 139, 250, 0.15)' }
+      };
+
+      // Render premium KPI card
+      const renderKpiCard = (id, label, value, subValue, icon, color, route, opts = {}) => {
         if (!visibleKpis.find(k => k.id === id)) return '';
-        return `<div class="kpi-card" style="flex:1; min-width:150px; cursor:pointer;" onclick="${route ? "routeTo('" + route + "')" : ''}">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start">
-            <div class="kpi-icon" style="background:${color}-soft; color:var(--${color}); width:36px; height:36px; border-radius: 12px;">${icon}</div>
+        const kpiCfg = kpiConfig.find(k => k.id === id);
+        const cat = kpiCfg?.category || 'financial';
+        const cm = catMeta[cat] || catMeta.financial;
+        const trend = opts.trend;
+        const trendUp = trend > 0;
+        const trendDown = trend < 0;
+        const trendIcon = trendUp ? '↑' : trendDown ? '↓' : '';
+        const trendColor = opts.trendInvert
+          ? (trendUp ? 'var(--danger)' : trendDown ? 'var(--success)' : 'var(--text-muted)')
+          : (trendUp ? 'var(--success)' : trendDown ? 'var(--danger)' : 'var(--text-muted)');
+        const trendBg = opts.trendInvert
+          ? (trendUp ? 'var(--danger-soft, rgba(220,38,38,0.12))' : trendDown ? 'var(--success-soft)' : 'transparent')
+          : (trendUp ? 'var(--success-soft)' : trendDown ? 'var(--danger-soft, rgba(220,38,38,0.12))' : 'transparent');
+        const progress = opts.progress; // 0-100
+        const sparkData = opts.spark; // array of numbers for mini sparkline
+
+        return `<div class="kpi-card kpi-card--${color}" style="--kpi-accent: var(--${color}); --kpi-accent-soft: var(--${color}-soft, rgba(99,102,241,0.12)); cursor:pointer;" onclick="${route ? "routeTo('" + route + "')" : ''}">
+          <div class="kpi-card__header">
+            <div class="kpi-icon" style="background:var(--${color}-soft, rgba(99,102,241,0.12)); color:var(--${color});">${icon}</div>
+            ${trend !== undefined && trend !== 0 ? `<div class="kpi-trend" style="color:${trendColor}; background:${trendBg};">
+              <span class="kpi-trend__icon">${trendIcon}</span>${Math.abs(trend)}%
+            </div>` : ''}
           </div>
-          <div style="margin-top:16px;">
-            <div class="kpi-value" style="font-size:20px; font-weight: 700;">${value}</div>
-            <div class="kpi-label" style="font-size:12px; margin-top: 4px;">${label}</div>
-            ${subValue ? `<div class="kpi-sub" style="font-size:10px; color:var(--text-muted); margin-top:2px;">${subValue}</div>` : ''}
+          <div class="kpi-card__body">
+            <div class="kpi-label">${label}</div>
+            <div class="kpi-value">${value}</div>
+            ${subValue ? `<div class="kpi-sub">${subValue}</div>` : ''}
           </div>
+          ${progress !== undefined ? `<div class="kpi-progress"><div class="kpi-progress__bar" style="width:${Math.min(progress, 100)}%; background:var(--${color});"></div></div>` : ''}
+          ${sparkData ? `<div class="kpi-spark" data-spark='${JSON.stringify(sparkData)}'></div>` : ''}
+          <div class="kpi-card__cat" style="color:${cm.color}; background:${cm.bg};">${cm.label}</div>
         </div>`;
       };
 
-      return `<div class="kpi-grid kpi-scroll" style="display:flex; flex-direction:row; gap:16px; overflow-x:auto; padding:6px 6px 16px 6px; margin: 0 0 8px 0; scrollbar-width:none; -ms-overflow-style:none;">
-        <style>
-          .kpi-scroll::-webkit-scrollbar { display: none; }
-          .kpi-scroll .kpi-card:hover { transform: translateY(-6px); transition: transform 0.3s ease; }
-        </style>
-        ${renderKpiCard('netWorth', 'Net Worth', '₹' + netWorth.toLocaleString(), null, renderIcon('money', null, 'style="width:18px;"'), 'primary', 'finance')}
-        ${renderKpiCard('monthSpend', 'Month Spend', '₹' + monthExp.toLocaleString(), null, renderIcon('loss', null, 'style="width:18px;"'), 'danger', 'finance')}
-        ${renderKpiCard('tasksDone', 'Tasks Done', completionRate + '%', null, renderIcon('check-circle', null, 'style="width:18px;"'), 'primary', 'tasks')}
-        ${renderKpiCard('monthlyBurnRate', 'Burn Rate', '₹' + avgDailySpend.toLocaleString(), '/day avg', renderIcon('trending-down', null, 'style="width:18px;"'), 'warning', 'finance')}
-        ${renderKpiCard('incomeExpenseRatio', 'Savings Rate', incomeExpenseRatio + '%', monthIncome > 0 ? '₹' + (monthIncome - monthExp).toLocaleString() + ' saved' : 'No income', renderIcon('percent', null, 'style="width:18px;"'), incomeExpenseRatio >= 0 ? 'success' : 'danger', 'finance')}
-        ${renderKpiCard('investmentReturns', 'Inv. Returns', (invReturns > 0 ? '+' : '') + invReturns + '%', '₹' + invCurrentValue.toLocaleString(), renderIcon('chart', null, 'style="width:18px;"'), invReturns >= 0 ? 'success' : 'danger', 'finance')}
-        ${renderKpiCard('ytdSpending', 'YTD Spend', '₹' + ytdSpending.toLocaleString(), null, renderIcon('calendar', null, 'style="width:18px;"'), 'primary', 'finance')}
-        ${renderKpiCard('taskVelocity', 'Task Velocity', taskVelocity + ' tasks', 'this week', renderIcon('zap', null, 'style="width:18px;"'), 'primary', 'tasks')}
-        ${renderKpiCard('priorityDist', 'Priority Mix', p1Percent + '% P1', p2Tasks + ' P2, ' + p3Tasks + ' P3', renderIcon('flag', null, 'style="width:18px;"'), 'warning', 'tasks')}
-        ${renderKpiCard('habitConsistency', 'Habit Score', avgHabitScore + '%', null, renderIcon('activity', null, 'style="width:18px;"'), 'primary', 'habits')}
-        ${renderKpiCard('bestHabit', 'Best Habit', bestHabit?.name?.substring(0, 12) || 'N/A', bestHabit ? bestHabit.completed + '/30 days' : '', renderIcon('award', null, 'style="width:18px;"'), 'success', 'habits')}
-        ${renderKpiCard('strugglingHabits', 'Struggling', strugglingHabits + ' habits', 'below 50%', renderIcon('alert-triangle', null, 'style="width:18px;"'), strugglingHabits > 0 ? 'warning' : 'success', 'habits')}
-        ${renderKpiCard('habitDiversity', 'Habits Active', habitDiversity, 'tracked', renderIcon('layers', null, 'style="width:18px;"'), 'primary', 'habits')}
-        ${renderKpiCard('weeklyPattern', 'Best Day', bestDay, 'for habits', renderIcon('calendar', null, 'style="width:18px;"'), 'success', 'habits')}
-        ${renderKpiCard('networkGrowth', 'New Contacts', newContacts, 'this month', renderIcon('user-plus', null, 'style="width:18px;"'), 'primary', 'people')}
-        ${renderKpiCard('interactionFreq', 'Contact Freq', avgInteractionDays > 0 ? avgInteractionDays + ' days' : 'N/A', 'avg interval', renderIcon('clock', null, 'style="width:18px;"'), 'primary', 'people')}
-        ${renderKpiCard('notesVolume', 'Notes', notesThisWeek, 'this week', renderIcon('file-text', null, 'style="width:18px;"'), 'primary', 'notes')}
-        ${renderKpiCard('projectedBalance', 'Proj. Balance', '₹' + projectedMonthEnd.toLocaleString(), 'month end', renderIcon('trending-up', null, 'style="width:18px;"'), projectedMonthEnd >= 0 ? 'success' : 'danger', 'finance')}
-        ${renderKpiCard('goalRisk', 'Goal Risk', atRiskGoals + ' at risk', 'deadline warning', renderIcon('alert-circle', null, 'style="width:18px;"'), atRiskGoals > 0 ? 'danger' : 'success', 'vision')}
+      // Build last-7-day spend sparkline data
+      const spendSparkData = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const ds = d.toISOString().slice(0, 10);
+        const dayTotal = expenses.filter(e => e.type === 'expense' && e.date === ds).reduce((s, e) => s + Number(e.amount), 0);
+        spendSparkData.push(dayTotal);
+      }
+
+      // Build task completion sparkline (last 7 days)
+      const taskSparkData = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const ds = d.toISOString().slice(0, 10);
+        const dayTasks = completedTasks.filter(t => t.completed_at && t.completed_at.slice(0, 10) === ds).length;
+        taskSparkData.push(dayTasks);
+      }
+
+      return `<div class="kpi-grid kpi-scroll">
+        ${renderKpiCard('netWorth', 'Net Worth', '₹' + netWorth.toLocaleString(), null, renderIcon('money', null, 'style="width:18px;"'), 'primary', 'finance', {})}
+        ${renderKpiCard('monthSpend', 'Month Spend', '₹' + monthExp.toLocaleString(), prevMonthExp > 0 ? 'vs ₹' + prevMonthExp.toLocaleString() + ' last mo' : null, renderIcon('loss', null, 'style="width:18px;"'), 'danger', 'finance', { trend: spendTrend, trendInvert: true, spark: spendSparkData })}
+        ${renderKpiCard('tasksDone', 'Tasks Done', completionRate + '%', completedTasks.length + ' of ' + tasks.length + ' tasks', renderIcon('check-circle', null, 'style="width:18px;"'), 'primary', 'tasks', { progress: completionRate, spark: taskSparkData })}
+        ${renderKpiCard('monthlyBurnRate', 'Burn Rate', '₹' + avgDailySpend.toLocaleString(), '/day avg · ' + (daysInMonth - today.getDate()) + 'd left', renderIcon('trending-down', null, 'style="width:18px;"'), 'warning', 'finance', { trend: spendTrend, trendInvert: true })}
+        ${renderKpiCard('incomeExpenseRatio', 'Savings Rate', incomeExpenseRatio + '%', monthIncome > 0 ? '₹' + (monthIncome - monthExp).toLocaleString() + ' saved' : 'No income', renderIcon('percent', null, 'style="width:18px;"'), incomeExpenseRatio >= 0 ? 'success' : 'danger', 'finance', { progress: Math.max(0, incomeExpenseRatio) })}
+        ${renderKpiCard('investmentReturns', 'Inv. Returns', (invReturns > 0 ? '+' : '') + invReturns + '%', '₹' + invCurrentValue.toLocaleString() + ' portfolio', renderIcon('chart', null, 'style="width:18px;"'), invReturns >= 0 ? 'success' : 'danger', 'finance', { trend: invReturns })}
+        ${renderKpiCard('ytdSpending', 'YTD Spend', '₹' + ytdSpending.toLocaleString(), Math.round(ytdSpending / (currentMonth + 1)).toLocaleString() + '/mo avg', renderIcon('calendar', null, 'style="width:18px;"'), 'primary', 'finance', {})}
+        ${renderKpiCard('taskVelocity', 'Task Velocity', taskVelocity + ' tasks', 'this week', renderIcon('zap', null, 'style="width:18px;"'), 'primary', 'tasks', { trend: velocityTrend, spark: taskSparkData })}
+        ${renderKpiCard('priorityDist', 'Priority Mix', p1Percent + '% P1', p1Tasks + ' critical · ' + p2Tasks + ' P2 · ' + p3Tasks + ' P3', renderIcon('flag', null, 'style="width:18px;"'), 'warning', 'tasks', {})}
+        ${renderKpiCard('habitConsistency', 'Habit Score', avgHabitScore + '%', habitCompletions.length + ' habits tracked', renderIcon('activity', null, 'style="width:18px;"'), avgHabitScore >= 70 ? 'success' : avgHabitScore >= 40 ? 'warning' : 'danger', 'habits', { progress: avgHabitScore })}
+        ${renderKpiCard('bestHabit', 'Best Habit', bestHabit?.name?.substring(0, 12) || 'N/A', bestHabit ? Math.round(bestHabit.completed / 30 * 100) + '% · ' + bestHabit.completed + '/30 days' : '', renderIcon('award', null, 'style="width:18px;"'), 'success', 'habits', { progress: bestHabit ? Math.round(bestHabit.completed / 30 * 100) : 0 })}
+        ${renderKpiCard('strugglingHabits', 'Struggling', strugglingHabits + ' habits', strugglingHabits > 0 ? 'need attention' : 'all on track!', renderIcon('alert-triangle', null, 'style="width:18px;"'), strugglingHabits > 0 ? 'warning' : 'success', 'habits', {})}
+        ${renderKpiCard('habitDiversity', 'Habits Active', habitDiversity, 'tracked', renderIcon('layers', null, 'style="width:18px;"'), 'primary', 'habits', {})}
+        ${renderKpiCard('weeklyPattern', 'Best Day', bestDay, 'strongest day for habits', renderIcon('calendar', null, 'style="width:18px;"'), 'success', 'habits', {})}
+        ${renderKpiCard('networkGrowth', 'New Contacts', newContacts, 'this month', renderIcon('user-plus', null, 'style="width:18px;"'), 'primary', 'people', {})}
+        ${renderKpiCard('interactionFreq', 'Contact Freq', avgInteractionDays > 0 ? avgInteractionDays + ' days' : 'N/A', 'avg interval', renderIcon('clock', null, 'style="width:18px;"'), 'primary', 'people', {})}
+        ${renderKpiCard('notesVolume', 'Notes', notesThisWeek, 'this week', renderIcon('file-text', null, 'style="width:18px;"'), 'primary', 'notes', {})}
+        ${renderKpiCard('projectedBalance', 'Proj. Balance', '₹' + projectedMonthEnd.toLocaleString(), 'end of ' + new Date().toLocaleString('en-US', { month: 'short' }), renderIcon('trending-up', null, 'style="width:18px;"'), projectedMonthEnd >= 0 ? 'success' : 'danger', 'finance', {})}
+        ${renderKpiCard('goalRisk', 'Goal Risk', atRiskGoals + ' at risk', atRiskGoals > 0 ? 'deadline pressure' : 'all clear', renderIcon('alert-circle', null, 'style="width:18px;"'), atRiskGoals > 0 ? 'danger' : 'success', 'vision', {})}
       </div>`;
     },
 
@@ -753,17 +815,40 @@ function renderDashboard() {
          <div class="widget-body">
             <div>
                 ${displayedHabits.length === 0 ? '<div class="text-muted" style="font-size:13px">No habits for today.</div>' :
-          displayedHabits.map(h => {
-            const isDone = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(todayStr));
-            return `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:14px;">
-                    <span style="${isDone ? 'text-decoration:line-through; color:var(--text-muted)' : ''}">${h.habit_name}</span>
-                    <div class="habit-check ${isDone ? 'done' : ''}" data-action="toggle-habit" data-id="${h.id}">
-                        ${isDone ? renderIcon('save', null, 'style="width:12px; color:white"') : ''}
+          (() => {
+            const grouped = displayedHabits.reduce((acc, h) => {
+              const r = h.routine || 'General';
+              if (!acc[r]) acc[r] = [];
+              acc[r].push(h);
+              return acc;
+            }, {});
+
+            const routines = Object.keys(grouped).sort((a, b) => {
+              if (a === 'General') return 1;
+              if (b === 'General') return -1;
+              return a.localeCompare(b);
+            });
+
+            return routines.map(r => {
+              const habitsInRoutine = grouped[r];
+              return `
+                <div style="margin-bottom: 16px;">
+                  <div style="font-size: 10px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; opacity: 0.8; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">${r}</div>
+                  ${habitsInRoutine.map(h => {
+                const isDone = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(todayStr));
+                return `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:13px;">
+                        <span style="${isDone ? 'text-decoration:line-through; color:var(--text-muted)' : ''}">${h.habit_name}</span>
+                        <div class="habit-check ${isDone ? 'done' : ''}" data-action="toggle-habit" data-id="${h.id}">
+                            ${isDone ? renderIcon('save', null, 'style="width:12px; color:white"') : ''}
+                        </div>
                     </div>
-                </div>
                 `;
-          }).join('')}
+              }).join('')}
+                </div>
+              `;
+            }).join('');
+          })()}
             </div>
          </div>
       </div>`;
@@ -927,8 +1012,18 @@ function renderDashboard() {
 
     if (visibleSections.some(s => s.id === 'kpis')) {
       renderDashSparkline(expenses);
-      // P2 Polish: Animate KPI Counters
+      // Animate KPI counters
       document.querySelectorAll('.kpi-value').forEach(el => animateValue(el));
+      // Render mini sparklines inside KPI cards
+      renderKpiSparklines();
+      // Animate progress bars (start from 0)
+      requestAnimationFrame(() => {
+        document.querySelectorAll('.kpi-progress__bar').forEach(bar => {
+          const w = bar.style.width;
+          bar.style.width = '0%';
+          requestAnimationFrame(() => { bar.style.width = w; });
+        });
+      });
     }
     if (visibleSections.some(s => s.id === 'cashflow')) renderDashMainChart(expenses);
     if (visibleSections.some(s => s.id === 'aiBriefing') && typeof checkAndShowInsight === 'function') {
@@ -973,6 +1068,83 @@ function animateValue(obj) {
     }
   };
   window.requestAnimationFrame(step);
+}
+
+// Mini sparkline renderer for KPI cards
+function renderKpiSparklines() {
+  document.querySelectorAll('.kpi-spark[data-spark]').forEach(container => {
+    try {
+      const data = JSON.parse(container.dataset.spark);
+      if (!data || data.length < 2) return;
+
+      const canvas = document.createElement('canvas');
+      container.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = container.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+      const max = Math.max(...data, 1);
+      const min = Math.min(...data, 0);
+      const range = max - min || 1;
+      const pad = 2;
+
+      // Get accent color from parent card
+      const card = container.closest('.kpi-card');
+      const accentColor = card ? getComputedStyle(card).getPropertyValue('--kpi-accent').trim() || '#818CF8' : '#818CF8';
+
+      // Draw filled area
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      data.forEach((v, i) => {
+        const x = (i / (data.length - 1)) * w;
+        const y = h - pad - ((v - min) / range) * (h - pad * 2);
+        if (i === 0) ctx.lineTo(x, y);
+        else {
+          const px = ((i - 1) / (data.length - 1)) * w;
+          const cpx = (px + x) / 2;
+          const py = h - pad - ((data[i - 1] - min) / range) * (h - pad * 2);
+          ctx.bezierCurveTo(cpx, py, cpx, y, x, y);
+        }
+      });
+      ctx.lineTo(w, h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, 'rgba(129, 140, 248, 0.2)');
+      grad.addColorStop(1, 'rgba(129, 140, 248, 0)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Draw line
+      ctx.beginPath();
+      data.forEach((v, i) => {
+        const x = (i / (data.length - 1)) * w;
+        const y = h - pad - ((v - min) / range) * (h - pad * 2);
+        if (i === 0) ctx.moveTo(x, y);
+        else {
+          const px = ((i - 1) / (data.length - 1)) * w;
+          const cpx = (px + x) / 2;
+          const py = h - pad - ((data[i - 1] - min) / range) * (h - pad * 2);
+          ctx.bezierCurveTo(cpx, py, cpx, y, x, y);
+        }
+      });
+      ctx.strokeStyle = accentColor;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Draw end dot
+      const lastX = w;
+      const lastY = h - pad - ((data[data.length - 1] - min) / range) * (h - pad * 2);
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = accentColor;
+      ctx.fill();
+    } catch (e) { /* silent */ }
+  });
 }
 
 // --- CUSTOMIZE MODAL ---

@@ -59,7 +59,8 @@ function renderSettings() {
     habit_summary_time: s.habit_summary_time || '08:00',
     // Logic parsed above
     task_default_view: taskDefaultView,
-    task_categories: s.task_categories || 'Personal,Work,Health,Learning,Finance,Other'
+    task_categories: s.task_categories || 'Personal,Work,Health,Learning,Finance,Other',
+    habit_routines: s.habit_routines || 'Morning,Work,Evening'
   };
 
   const main = document.getElementById('main');
@@ -439,14 +440,12 @@ function renderSettings() {
                 <span class="slider"></span>
             </label>
         </div>
-        
         <div class="setting-item">
             <button class="btn secondary" onclick="requestNotificationPermission()">
                 ${renderIcon('reminder')} Request Browser Permission
             </button>
             <span class="permission-status" id="notificationPermissionStatus"></span>
         </div>
-        
         <div class="setting-item">
             <label class="setting-label">Notification Sound</label>
             <div style="display:flex; gap:10px">
@@ -502,6 +501,39 @@ function renderSettings() {
             <p class="setting-hint">No notifications during quiet hours (except marked urgent)</p>
         </div>
         <button class="btn primary" onclick="saveAllSettings('notifications')" style="margin-top:12px">Save Notifications</button>
+        </div>
+      </details>
+      
+      <!-- 8. HABITS SETTINGS -->
+      <details class="settings-details" style="display:block; margin-top:16px; border:1px solid var(--border-color); border-radius:16px;">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title">${renderIcon('streak', null, 'style="width:18px; margin-right:8px;"')} Habits Settings</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
+        <p class="section-description">Manage habit routines and other preferences.</p>
+        
+        <div style="margin-bottom:20px;">
+          <label class="setting-label">Habit Routines</label>
+          <p style="font-size:12px; color:var(--text-muted); margin-top:0; margin-bottom:12px;">These routines will appear as options when adding or editing a habit.</p>
+          <div id="habitRoutineList" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+            ${(() => {
+    const raw = settings.habit_routines || 'Morning,Work,Evening';
+    const routines = raw.split(',').map(r => r.trim()).filter(Boolean);
+    return routines.map(r => `
+                <div style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;">
+                  <span>${r}</span>
+                  <button type="button" onclick="removeHabitRoutine(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">&times;</button>
+                </div>
+              `).join('');
+  })()}
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" id="newHabitRoutineInput" class="input" placeholder="New routine name..." style="flex:1;" onkeydown="if(event.key==='Enter'){addHabitRoutine(); event.preventDefault();}">
+            <button class="btn secondary" onclick="addHabitRoutine()">+ Add</button>
+          </div>
+        </div>
+        <button class="btn primary" onclick="saveAllSettings('habits')">Save Habits Settings</button>
         </div>
       </details>
 
@@ -1321,6 +1353,12 @@ window.saveAllSettings = async function (section = 'all') {
     newSettings.task_categories = `VIEW:${taskDefaultView}|${taskCatsBase || 'Personal,Work,Health,Learning,Finance,Other'}`;
   }
 
+  if (section === 'all' || section === 'habits') {
+    const pillSpans = Array.from(document.querySelectorAll('#habitRoutineList > div > span'));
+    const habitRoutines = pillSpans.map(s => s.textContent.trim()).filter(Boolean).join(',');
+    newSettings.habit_routines = habitRoutines;
+  }
+
   const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary', tasks: 'Tasks' };
   showToast(section === 'all' ? 'Saving settings...' : `Saving ${sectionNames[section] || 'settings'}...`);
 
@@ -1487,3 +1525,19 @@ window.playTestSound = async function () {
 function padZero(num) {
   return num.toString().padStart(2, '0');
 }
+
+window.addHabitRoutine = function () {
+  const input = document.getElementById('newHabitRoutineInput');
+  const routine = input.value.trim();
+  if (!routine) return;
+  const list = document.getElementById('habitRoutineList');
+  const div = document.createElement('div');
+  div.style = "display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;";
+  div.innerHTML = `<span>${routine}</span><button type="button" onclick="removeHabitRoutine(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">&times;</button>`;
+  list.appendChild(div);
+  input.value = '';
+};
+
+window.removeHabitRoutine = function (btn) {
+  btn.closest('div').remove();
+};

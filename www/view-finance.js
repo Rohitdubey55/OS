@@ -753,7 +753,6 @@ window.generateFinanceInsight = async function () {
       budget: state.data.settings?.[0]?.monthly_budget || 0,
       transactions: state.data.expenses.slice(-10)
     };
-
     const insight = await AI_SERVICE.generateInsight('finance', contextData);
     contentDiv.innerHTML = insight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   } catch (err) {

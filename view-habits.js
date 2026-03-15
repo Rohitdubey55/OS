@@ -145,8 +145,8 @@ function renderHabits() {
       const habitsInRoutine = grouped[r];
       return `
               <div class="habit-routine-group" style="margin-bottom: 24px;">
-                <div class="habit-routine-header" style="font-size: 14px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-left: 4px; border-left: 3px solid var(--primary); line-height: 1;">${r}</div>
-                <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div class="habit-routine-header" style="font-size: 13px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 14px; padding-left: 10px; border-left: 3px solid var(--primary); line-height: 1;">${r}</div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
                   ${habitsInRoutine.map(h => {
         const hLogs = logs.filter(l => String(l.habit_id) === String(h.id));
         const stats = calculateHabitStats(hLogs, today, h);
@@ -178,7 +178,7 @@ function renderHabits() {
             const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
             const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
             const text = diffHrs > 0 ? `${diffHrs}h ${diffMins}m` : `${diffMins}m`;
-            comingInText = `<span style="background:rgba(245, 158, 11, 0.1); color:#D97706; padding:2px 4px; border-radius:4px; font-size:9px; font-weight:700; margin-left:4px;">in ${text}</span>`;
+            comingInText = `<span style="background:rgba(245, 158, 11, 0.1); color:#D97706; padding:2px 6px; border-radius:6px; font-size:9px; font-weight:700;">in ${text}</span>`;
           }
         }
 
@@ -215,23 +215,23 @@ function renderHabits() {
                         </div>
                         ${stats.consecutiveMissed >= 3 && String(h.id) !== String(nextUpHabitId) && !isHabitTimeInFuture(h.reminder_time) ? `<div class="habit-missed-banner">🔗 Don't break the chain! ${stats.consecutiveMissed} day${stats.consecutiveMissed > 1 ? 's' : ''} missed in a row</div>` : ''}
                         <div class="habit-card-body">
-                          <div style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:10px;">
+                          <div class="habit-date-grid">
                             ${stats.dateButtonsHtml}
                           </div>
-                          <div style="display:flex; justify-content:space-between; margin-bottom:10px; background:var(--surface-2); padding:8px; border-radius:10px; border:1px solid var(--border-color);">
-                            <div style="text-align:center; flex:1;">
-                              <div style="font-size:16px; font-weight:800;">${stats.total}</div>
-                              <div style="font-size:8px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Total</div>
+                          <div class="habit-stats-row">
+                            <div class="habit-stat-item">
+                              <div class="habit-stat-value">${stats.total}</div>
+                              <div class="habit-stat-label">Total</div>
                             </div>
-                            <div style="text-align:center; flex:1; border-left:1px solid var(--border-color);">
-                              <div style="font-size:16px; font-weight:800; color:var(--primary);">${stats.completionRate}%</div>
-                              <div style="font-size:8px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Success</div>
+                            <div class="habit-stat-item">
+                              <div class="habit-stat-value primary">${stats.completionRate}%</div>
+                              <div class="habit-stat-label">Success</div>
                             </div>
                           </div>
-                          <div class="habit-action-row" style="display:flex; flex-wrap:wrap; gap:6px;">
-                            <button class="btn secondary small" onclick="event.stopPropagation(); openEditHabit('${h.id}')" style="flex:1; padding:6px; font-size:10px;">Edit</button>
-                            ${h.pomodoro_sessions > 0 ? `<button class="btn secondary small" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')" style="flex:1; padding:6px; font-size:10px;">Focus</button>` : ''}
-                            <button class="btn primary small ${isDoneSelectedDate ? 'done' : ''}" onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}" style="flex:2; padding:6px; font-size:10px;">${isDoneSelectedDate ? 'Done' : 'Mark Done'}</button>
+                          <div class="habit-action-row">
+                            <button class="btn secondary small" onclick="event.stopPropagation(); openEditHabit('${h.id}')">Edit</button>
+                            ${h.pomodoro_sessions > 0 ? `<button class="btn secondary small" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')">Focus</button>` : ''}
+                            <button class="btn primary small ${isDoneSelectedDate ? 'done' : ''}" onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}">${isDoneSelectedDate ? 'Done' : 'Mark Done'}</button>
                           </div>
                         </div>
                       </div>
@@ -526,17 +526,14 @@ function calculateHabitStats(logs, today, habit) {
     }
   }
 
-  // Date buttons (Last 14 days) - Clickable dates showing completion status
-  let dateButtonsHtml = '';
-  let missedCount = 0;
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date();
+  // Smart History: Find last 7 scheduled occurrences
+  let scheduledDates = [];
+  let daySearchDate = new Date();
+  for (let i = 0; i < 60; i++) {
+    const d = new Date(daySearchDate);
     d.setDate(d.getDate() - i);
     const iso = d.toISOString().slice(0, 10);
-    const isFilled = unique.includes(iso);
-    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-    // For weekly habits, check if this day was scheduled
     let isScheduled = true;
     if (habit && habit.frequency === 'weekly' && habit.days) {
       const dayIdx = d.getDay();
@@ -544,36 +541,30 @@ function calculateHabitStats(logs, today, habit) {
       isScheduled = habit.days.split(',').map(s => s.trim()).includes(dayName);
     }
 
-    // Count missed scheduled days (only in last 14 days for warning)
-    if (isScheduled && !isFilled && i <= 13) {
-      missedCount++;
+    if (isScheduled) {
+      scheduledDates.unshift({ iso, dateObj: d });
+      if (scheduledDates.length === 7) break;
     }
+  }
 
-    // For daily habits, count all missed days; for weekly only scheduled days
-    if (!isFilled && isScheduled) {
-      missedCount++;
-    }
+  let dateButtonsHtml = '';
+  scheduledDates.forEach(({ iso, dateObj }) => {
+    const isFilled = unique.includes(iso);
+    const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-    let btnClass = 'date-btn ';
-    let btnStyle = 'font-size:10px; padding:4px 6px; border-radius:4px; cursor:pointer; ';
+    let btnClass = 'date-btn';
     if (isFilled) {
-      btnClass += 'filled';
-      btnStyle += 'background:linear-gradient(135deg, var(--primary), var(--primary-dark, #3730A3)); color:white; border:none;';
-    } else if (!isScheduled) {
-      btnClass += 'skipped';
-      btnStyle += 'background:var(--surface-2); color:var(--text-muted); border:1px dashed var(--border-color); opacity:0.5;';
+      btnClass += ' filled';
     } else {
-      btnClass += 'missed';
-      btnStyle += 'background:var(--surface-1); color:var(--text-2); border:1px solid var(--border-color);';
+      btnClass += ' missed';
     }
 
-    // Clickable to toggle habit for that date
-    dateButtonsHtml += `<button class="${btnClass}" style="${btnStyle}" 
-      onclick="event.stopPropagation(); toggleHabitForDate('${habit?.id || ''}', '${iso}')" 
-      title="${iso}${isFilled ? ' - Completed' : (isScheduled ? ' - Click to mark done' : ' - Not scheduled')}">
+    dateButtonsHtml += `<button class="${btnClass}"
+      onclick="event.stopPropagation(); toggleHabitForDate('${habit?.id || ''}', '${iso}')"
+      title="${iso}${isFilled ? ' - Completed' : ' - Click to mark done'}">
       ${label}
     </button>`;
-  }
+  });
 
   // Calculate missed scheduled times (for warning)
   let consecutiveMissed = 0;
@@ -724,68 +715,111 @@ function getSelectedDays(containerId = 'mHabitDays') {
 // --- MODAL INJECTOR ---
 window.openHabitModal = function () {
   const modal = document.getElementById('universalModal');
+  modal.classList.add('bottom-sheet');
   const box = modal.querySelector('.modal-box');
-
-  // Categories list
+  const s = state.data.settings?.[0] || {};
+  const routinesStr = s.habit_routines || 'Morning,Work,Evening';
+  const routines = routinesStr.split(',').map(r => r.trim()).filter(Boolean);
   const categories = ['Health', 'Fitness', 'Learning', 'Productivity', 'Spiritual', 'Other'];
 
   box.innerHTML = `
-      <h3>New Habit</h3>
-      
-      <div style="display:flex; gap:10px; align-items:center">
-         <select class="input" id="mHabitEmoji" style="width:60px; font-size:20px; padding:0 8px;">
-             <option value="✨">✨</option>
-             <option value="💪">💪</option>
-             <option value="📚">📚</option>
-             <option value="🧘">🧘</option>
-             <option value="💧">💧</option>
-             <option value="🍎">🍎</option>
-             <option value="🏃">🏃</option>
-             <option value="💤">💤</option>
-         </select>
-         <input class="input" id="mHabitName" placeholder="Habit Name (e.g. Read 10 pages)" style="flex:1">
-      </div>
-
-      <div style="display:flex; gap:10px">
-          <select class="input" id="mHabitCat">
-              <option value="" disabled selected>Category</option>
-              ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
-          </select>
-          <select class="input" id="mHabitFreq" onchange="document.getElementById('dayPickerWrap').style.display = this.value === 'weekly' ? 'block' : 'none'">
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-          </select>
-          <input type="time" class="input" id="mHabitTime" required title="Time is required for Planner integration">
-          <input type="number" class="input" id="mHabitDuration" placeholder="Mins" value="45" style="width:70px" min="5" step="5" title="Duration in minutes">
-          <input class="input" id="mHabitRoutine" placeholder="Routine (e.g. Morning)" style="flex:1">
-      </div>
-      <div id="dayPickerWrap" style="display:none">
-        <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:8px; display:block;">Which days?</label>
-        ${getDayPickerHtml()}
+      <div class="modal-header-bar">
+          <i data-icon="streak"></i>
+          <h3>New Habit</h3>
       </div>
       
-      <div style="margin-top:16px; padding:12px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border-color);">
-        <label style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
-            <i data-icon="timer" style="width:14px"></i> Pomodoro Integration
-        </label>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;">
-            <div style="flex:1;">
-              <span style="font-size:12px; color:var(--text-2); display:block;">Sessions / day</span>
-              <input type="number" class="input" id="mHabitPomoSessions" placeholder="0" value="0" style="width:100%" min="0">
-            </div>
-            <div style="flex:1;">
-              <span style="font-size:12px; color:var(--text-2); display:block;">Length (min)</span>
-              <input type="number" class="input" id="mHabitPomoLength" placeholder="25" value="25" style="width:100%" min="5" step="5">
-            </div>
+      <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+        <!-- Identity Section -->
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Habit Details</label>
+          <div style="display:flex; gap:12px; align-items:center">
+             <div style="position: relative;">
+               <select class="input" id="mHabitEmoji" style="width:64px; font-size:20px; padding:0 8px; height: 48px; appearance: none; text-align: center;">
+                   <option value="✨">✨</option>
+                   <option value="💪">💪</option>
+                   <option value="📚">📚</option>
+                   <option value="🧘">🧘</option>
+                   <option value="💧">💧</option>
+                   <option value="🍎">🍎</option>
+                   <option value="🏃">🏃</option>
+                   <option value="💤">💤</option>
+               </select>
+             </div>
+             <input class="input" id="mHabitName" placeholder="What habit do you want to build?" style="flex:1; height: 48px; font-size: 15px;">
+          </div>
         </div>
-      </div>
-      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
-          <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-          <button class="btn primary" data-action="save-habit-modal">Save Habit</button>
+
+        <!-- Schedule Section -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Frequency</label>
+            <select class="input" id="mHabitFreq" style="width: 100%;" onchange="document.getElementById('dayPickerWrap').style.display = this.value === 'weekly' ? 'block' : 'none'">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Reminder Time</label>
+            <input type="time" class="input" id="mHabitTime" style="width: 100%;" required>
+          </div>
+        </div>
+
+        <div id="dayPickerWrap" style="display:none; margin-top: -4px;">
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Which days?</label>
+          ${getDayPickerHtml()}
+        </div>
+
+        <!-- Metadata Section -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Category</label>
+            <select class="input" id="mHabitCat" style="width: 100%;">
+                <option value="" disabled selected>Select...</option>
+                ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Routine</label>
+            <select class="input" id="mHabitRoutine" style="width: 100%;">
+              <option value="">None</option>
+              ${routines.map(r => `<option value="${r}">${r}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Duration</label>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <input type="number" class="input" id="mHabitDuration" value="45" style="flex:1; width: 40px;" min="5" step="5">
+              <span style="font-size: 12px; color: var(--text-3);">m</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Pomodoro Section -->
+        <div style="padding:16px; background:var(--primary-soft); border-radius:16px; border:1px solid var(--primary-light); opacity: 0.9;">
+          <label style="font-size:11px; font-weight:800; color:var(--primary); text-transform:uppercase; letter-spacing:0.8px; display:flex; align-items:center; gap:8px; margin-bottom: 12px;">
+              <i data-icon="timer" style="width:16px; height:16px;"></i> Pomodoro Integration
+          </label>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:20px;">
+              <div style="flex:1;">
+                <span style="font-size:12px; color:var(--text-2); display:block; margin-bottom: 6px; font-weight: 500;">Sessions / day</span>
+                <input type="number" class="input" id="mHabitPomoSessions" placeholder="0" value="0" style="width:100%; background: var(--surface-1);" min="0">
+              </div>
+              <div style="flex:1;">
+                <span style="font-size:12px; color:var(--text-2); display:block; margin-bottom: 6px; font-weight: 500;">Length (min)</span>
+                <input type="number" class="input" id="mHabitPomoLength" placeholder="25" value="25" style="width:100%; background: var(--surface-1);" min="5" step="5">
+              </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:8px;">
+            <button class="btn secondary" style="min-width: 100px;" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+            <button class="btn primary" style="min-width: 120px;" data-action="save-habit-modal">Create Habit</button>
+        </div>
       </div>
     `;
 
   modal.classList.remove('hidden');
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 };
 
 
@@ -823,64 +857,108 @@ window.openEditHabit = function (id) {
   const h = (state.data.habits || []).find(x => String(x.id) === String(id));
   if (!h) return;
   const modal = document.getElementById('universalModal');
+  modal.classList.add('bottom-sheet');
   const box = modal.querySelector('.modal-box');
   const isWeekly = h.frequency === 'weekly';
   const categories = ['Health', 'Fitness', 'Learning', 'Productivity', 'Spiritual', 'Other'];
   const reminderTimeValue = parseReminderTimeToHHMM(h.reminder_time);
+  const s = state.data.settings?.[0] || {};
+  const routinesStr = s.habit_routines || 'Morning,Work,Evening';
+  const routines = routinesStr.split(',').map(r => r.trim()).filter(Boolean);
 
   box.innerHTML = `
-    <h3>Edit Habit</h3>
-
-    <div style="display:flex; gap:10px; align-items:center">
-         <select class="input" id="mHabitEmoji" style="width:60px; font-size:20px; padding:0 8px;">
-             <option value="✨" ${h.emoji === '✨' ? 'selected' : ''}>✨</option>
-             <option value="💪" ${h.emoji === '💪' ? 'selected' : ''}>💪</option>
-             <option value="📚" ${h.emoji === '📚' ? 'selected' : ''}>📚</option>
-             <option value="🧘" ${h.emoji === '🧘' ? 'selected' : ''}>🧘</option>
-             <option value="💧" ${h.emoji === '💧' ? 'selected' : ''}>💧</option>
-             <option value="🍎" ${h.emoji === '🍎' ? 'selected' : ''}>🍎</option>
-             <option value="🏃" ${h.emoji === '🏃' ? 'selected' : ''}>🏃</option>
-             <option value="💤" ${h.emoji === '💤' ? 'selected' : ''}>💤</option>
-         </select>
-         <input class="input" id="mHabitName" value="${(h.habit_name || '').replace(/"/g, '"')}" placeholder="Habit Name" style="flex:1">
+    <div class="modal-header-bar">
+        <i data-icon="edit-3"></i>
+        <h3>Edit Habit</h3>
     </div>
 
-    <div style="display:flex; gap:10px">
-      <select class="input" id="mHabitCat">
-        ${categories.map(c => `<option value="${c}" ${h.category === c ? 'selected' : ''}>${c}</option>`).join('')}
-      </select>
-      <select class="input" id="mHabitFreq" onchange="document.getElementById('dayPickerWrap').style.display = this.value === 'weekly' ? 'block' : 'none'">
-        <option value="daily" ${h.frequency === 'daily' ? 'selected' : ''}>Daily</option>
-        <option value="weekly" ${h.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
-      </select>
-      <input type="time" class="input" id="mHabitTime" value="${reminderTimeValue}" required title="Time is required for Planner integration">
-      <input type="number" class="input" id="mHabitDuration" placeholder="Mins" value="${h.duration || 45}" style="width:70px" min="5" step="5" title="Duration in minutes">
-      <input class="input" id="mHabitRoutine" value="${(h.routine || '').replace(/"/g, '"')}" placeholder="Routine (e.g. Morning)" style="flex:1">
-    </div>
-    <div id="dayPickerWrap" style="display:${isWeekly ? 'block' : 'none'}">
-      <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:8px; display:block;">Which days?</label>
-      ${getDayPickerHtml(h.days || '')}
-    </div>
+    <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+      <!-- Identity Section -->
+      <div>
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Habit Details</label>
+        <div style="display:flex; gap:12px; align-items:center">
+           <select class="input" id="mHabitEmoji" style="width:64px; font-size:20px; padding:0 8px; height: 48px; text-align: center; appearance: none;">
+               <option value="✨" ${h.emoji === '✨' ? 'selected' : ''}>✨</option>
+               <option value="💪" ${h.emoji === '💪' ? 'selected' : ''}>💪</option>
+               <option value="📚" ${h.emoji === '📚' ? 'selected' : ''}>📚</option>
+               <option value="🧘" ${h.emoji === '🧘' ? 'selected' : ''}>🧘</option>
+               <option value="💧" ${h.emoji === '💧' ? 'selected' : ''}>💧</option>
+               <option value="🍎" ${h.emoji === '🍎' ? 'selected' : ''}>🍎</option>
+               <option value="🏃" ${h.emoji === '🏃' ? 'selected' : ''}>🏃</option>
+               <option value="💤" ${h.emoji === '💤' ? 'selected' : ''}>💤</option>
+           </select>
+           <input class="input" id="mHabitName" value="${(h.habit_name || h.name || '').replace(/"/g, '"')}" placeholder="What habit do you want to build?" style="flex:1; height: 48px; font-size: 15px;">
+        </div>
+      </div>
 
-    <div style="margin-top:16px; padding:12px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border-color);">
-      <label style="font-size:11px; font-weight:700; color:var(--primary); text-transform:uppercase; letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
-          <i data-icon="timer" style="width:14px"></i> Pomodoro Integration
-      </label>
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:8px; gap:10px;">
-          <div style="flex:1;">
-            <span style="font-size:12px; color:var(--text-2); display:block;">Sessions / day</span>
-            <input type="number" class="input" id="mHabitPomoSessions" placeholder="0" value="${h.pomodoro_sessions || 0}" style="width:100%" min="0">
+      <!-- Schedule Section -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Frequency</label>
+          <select class="input" id="mHabitFreq" style="width: 100%;" onchange="document.getElementById('dayPickerWrap').style.display = this.value === 'weekly' ? 'block' : 'none'">
+              <option value="daily" ${h.frequency === 'daily' ? 'selected' : ''}>Daily</option>
+              <option value="weekly" ${h.frequency === 'weekly' ? 'selected' : ''}>Weekly</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Reminder Time</label>
+          <input type="time" class="input" id="mHabitTime" value="${reminderTimeValue}" style="width: 100%;" required>
+        </div>
+      </div>
+
+      <div id="dayPickerWrap" style="display:${isWeekly ? 'block' : 'none'}; margin-top: -4px;">
+        <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Which days?</label>
+        ${getDayPickerHtml(h.days)}
+      </div>
+
+      <!-- Metadata Section -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Category</label>
+          <select class="input" id="mHabitCat" style="width: 100%;">
+              ${categories.map(c => `<option value="${c}" ${h.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Routine</label>
+          <select class="input" id="mHabitRoutine" style="width: 100%;">
+            <option value="">None</option>
+            ${routines.map(r => `<option value="${r}" ${h.routine === r ? 'selected' : ''}>${r}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Duration</label>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <input type="number" class="input" id="mHabitDuration" value="${h.duration || 45}" style="flex:1; width: 40px;" min="5" step="5">
+            <span style="font-size: 12px; color: var(--text-3);">m</span>
           </div>
-          <div style="flex:1;">
-            <span style="font-size:12px; color:var(--text-2); display:block;">Length (min)</span>
-            <input type="number" class="input" id="mHabitPomoLength" placeholder="25" value="${h.pomodoro_length || 25}" style="width:100%" min="5" step="5">
-          </div>
+        </div>
+      </div>
+      
+      <!-- Pomodoro Section -->
+      <div style="padding:16px; background:var(--primary-soft); border-radius:16px; border:1px solid var(--primary-light); opacity: 0.9;">
+        <label style="font-size:11px; font-weight:800; color:var(--primary); text-transform:uppercase; letter-spacing:0.8px; display:flex; align-items:center; gap:8px; margin-bottom: 12px;">
+            <i data-icon="timer" style="width:16px; height:16px;"></i> Pomodoro Integration
+        </label>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:20px;">
+            <div style="flex:1;">
+              <span style="font-size:12px; color:var(--text-2); display:block; margin-bottom: 6px; font-weight: 500;">Sessions / day</span>
+              <input type="number" class="input" id="mHabitPomoSessions" value="${h.pomodoro_sessions || 0}" style="width:100%; background: var(--surface-1);" min="0">
+            </div>
+            <div style="flex:1;">
+              <span style="font-size:12px; color:var(--text-2); display:block; margin-bottom: 6px; font-weight: 500;">Length (min)</span>
+              <input type="number" class="input" id="mHabitPomoLength" value="${h.pomodoro_length || 25}" style="width:100%; background: var(--surface-1);" min="5" step="5">
+            </div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:8px;">
+          <button class="btn secondary" style="min-width: 100px;" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+          <button class="btn primary" style="min-width: 120px;" onclick="updateHabit('${h.id}')">Update Habit</button>
       </div>
     </div>
-    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
-      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-      <button class="btn primary" data-action="update-habit-modal" data-edit-id="${h.id}">Update Habit</button>
-    </div>
   `;
+
   modal.classList.remove('hidden');
-}
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+};

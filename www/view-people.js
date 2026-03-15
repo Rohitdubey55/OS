@@ -98,7 +98,6 @@ function parseInteractionHistory(notes) {
 function getNeedsAttention(people) {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
-    const in7 = new Date(now.getTime() + 7 * 86400000);
     const nudges = [];
 
     for (const p of people) {
@@ -129,6 +128,18 @@ function getNeedsAttention(people) {
         return b.days - a.days;
     });
     return nudges.slice(0, 10);
+}
+
+function getUpcomingInteractions(people) {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const in14 = new Date(now.getTime() + 14 * 86400000).toISOString().slice(0, 10);
+
+    return people.filter(p => {
+        if (!p.next_interaction) return false;
+        // Keep if overdue or within next 14 days
+        return p.next_interaction <= in14;
+    }).sort((a, b) => a.next_interaction.localeCompare(b.next_interaction));
 }
 
 function getPeopleStats(people) {
@@ -220,17 +231,25 @@ function renderPeople() {
         people = people.filter(p => (p.name || '').toLowerCase().includes(peopleState.filter.toLowerCase()));
     }
 
-    // Filter by group
+    // Filter by group or special mode
     if (peopleState.groupFilter) {
-        people = people.filter(p => (p.relationship || 'Other') === peopleState.groupFilter);
+        if (peopleState.groupFilter === 'To Contact') {
+            const upcoming = getUpcomingInteractions(people);
+            const upcomingIds = upcoming.map(u => String(u.id));
+            people = people.filter(p => upcomingIds.includes(String(p.id)));
+        } else {
+            people = people.filter(p => (p.relationship || 'Other') === peopleState.groupFilter);
+        }
     }
 
+    const upcoming = getUpcomingInteractions(state.data.people || []);
     const stats = getPeopleStats(state.data.people || []);
     const nudges = getNeedsAttention(state.data.people || []);
     const allPeople = state.data.people || [];
-    const groups = ['All', ...new Set(allPeople.map(p => p.relationship || 'Other'))];
+    const groups = ['All', 'To Contact', ...new Set(allPeople.map(p => p.relationship || 'Other'))];
     const groupCounts = {};
     allPeople.forEach(p => { const g = p.relationship || 'Other'; groupCounts[g] = (groupCounts[g] || 0) + 1; });
+    groupCounts['To Contact'] = upcoming.length;
 
     // Birthday banner
     const todayMMDD = new Date().toISOString().slice(5, 10);
@@ -243,15 +262,19 @@ function renderPeople() {
         <div class="pp-stats-strip">
             <div class="pp-stat-card" onclick="peopleState.sortBy='name'; renderPeople()">
                 <div class="pp-stat-value">${stats.total}</div>
-                <div class="pp-stat-label">Contacts</div>
+                <div class="pp-stat-label">All</div>
+            </div>
+            <div class="pp-stat-card" onclick="window.openConnectSoonSheet()">
+                <div class="pp-stat-value" style="${upcoming.length > 0 ? 'color: var(--primary)' : ''}">${upcoming.length}</div>
+                <div class="pp-stat-label">Soon</div>
             </div>
             <div class="pp-stat-card" onclick="window.openNeedsAttentionSheet()">
                 <div class="pp-stat-value" style="${stats.needsAttention > 0 ? 'color: var(--danger)' : ''}">${stats.needsAttention}</div>
-                <div class="pp-stat-label">Need Attn</div>
+                <div class="pp-stat-label">Attn</div>
             </div>
             <div class="pp-stat-card" onclick="peopleState.sortBy='birthday'; renderPeople()">
                 <div class="pp-stat-value" style="${stats.upcomingBdays > 0 ? 'color: var(--warning)' : ''}">${stats.upcomingBdays}</div>
-                <div class="pp-stat-label">Birthdays</div>
+                <div class="pp-stat-label">Bdays</div>
             </div>
             <div class="pp-stat-card">
                 <div class="pp-stat-value" style="font-size: 14px;">${stats.totalBalance > 0 ? '₹' + Math.round(stats.totalBalance) : '—'}</div>
@@ -268,6 +291,7 @@ function renderPeople() {
                 <div class="pp-birthday-names">${bdays.map(p => p.name).join(', ')} — Don't forget to wish them!</div>
             </div>
         </div>` : ''}
+
 
         <!-- Controls Bar -->
         <div class="pp-controls-bar">
@@ -321,6 +345,49 @@ function renderPeople() {
 
     if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
+
+/* ============================================================
+   CONNECT SOON BOTTOM SHEET
+   ============================================================ */
+
+window.openConnectSoonSheet = function () {
+    const upcoming = getUpcomingInteractions(state.data.people || []);
+    if (upcoming.length === 0) { showToast('No contacts scheduled soon.'); return; }
+
+    const rows = upcoming.map(u => {
+        const grad = getAvatarGradient(u.name);
+        const initial = (u.name || '?').charAt(0).toUpperCase();
+        const todayStr = new Date().toISOString().slice(0, 10);
+        let dateLabel = '', isOverdue = false;
+
+        if (u.next_interaction === todayStr) dateLabel = 'Today';
+        else if (u.next_interaction < todayStr) { dateLabel = 'Overdue'; isOverdue = true; }
+        else {
+            const days = Math.floor((new Date(u.next_interaction) - new Date()) / 86400000);
+            dateLabel = days === 0 ? 'Tomorrow' : `In ${days + 1} days`;
+        }
+
+        return `
+        <div class="pp-attn-row" onclick="closePeopleSheet(); setTimeout(() => window.openPersonSheet('${u.id}'), 350)">
+            <div class="pp-attn-avatar" style="background:${grad}">${initial}</div>
+            <div class="pp-attn-info">
+                <div class="pp-attn-name">${u.name}</div>
+                <div class="pp-attn-reason" style="${isOverdue ? 'color:var(--danger)' : ''}">${dateLabel}</div>
+            </div>
+            <button class="pp-attn-action" onclick="event.stopPropagation(); closePeopleSheet(); setTimeout(() => window.logContact('${u.id}'), 350)">Log</button>
+        </div>`;
+    }).join('');
+
+    const html = `
+        <div style="padding: 8px 16px 0;">
+            <div style="font-size:17px; font-weight:800; color:var(--text-1);">Connect Soon</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Scheduled interactions for coming days</div>
+        </div>
+        <div class="pp-sheet-body" style="padding-top:12px;">
+            ${rows}
+        </div>`;
+    openPeopleSheet(html);
+};
 
 /* ============================================================
    NEEDS ATTENTION BOTTOM SHEET

@@ -1010,6 +1010,7 @@ window.tkModalGoStep1 = function() {
 window.openTaskModal = function () {
   _modalPriority = 'P2';
   const modal = document.getElementById('universalModal');
+  modal.classList.remove('bottom-sheet');
   const box = modal.querySelector('.modal-box');
   const categories = getAllTaskCategories();
 
