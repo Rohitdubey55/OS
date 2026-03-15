@@ -255,9 +255,9 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
     const ccolor = (climit > 0 && spent > climit) ? 'var(--danger)' : 'var(--primary)';
 
     return `
-        <div style="margin-bottom:8px;">
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px">
-                <span>${c}</span>
+        <div style="margin-bottom:12px; cursor:pointer;" onclick="showCategoryExpenses('${c}')" class="fin-cat-item">
+            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px">
+                <span style="font-weight:600">${c}</span>
                 <span>₹${spent} ${climit ? '/ ₹' + climit : ''}</span>
             </div>
             <div style="height:6px; background:var(--surface-3); border-radius:3px; overflow:hidden">
@@ -759,4 +759,57 @@ window.generateFinanceInsight = async function () {
   } catch (err) {
     contentDiv.innerHTML = `<span style="color:var(--danger)">${err.message}</span>`;
   }
+};
+
+window.showCategoryExpenses = function (category) {
+  const allExpenses = state.data.expenses || [];
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const filtered = allExpenses.filter(e => {
+    const d = new Date(e.date);
+    return e.category === category &&
+      d.getMonth() === currentMonth &&
+      d.getFullYear() === currentYear &&
+      e.type === 'expense';
+  }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // Create Bottom Sheet
+  const sheetId = 'fin-category-sheet';
+  const backdropId = 'fin-category-backdrop';
+
+  // Remove existing if any
+  if (document.getElementById(sheetId)) closeCategorySheet();
+
+  const backdrop = document.createElement('div');
+  backdrop.id = backdropId;
+  backdrop.className = 'modal-backdrop-ios';
+  backdrop.onclick = closeCategorySheet;
+  document.body.appendChild(backdrop);
+
+  const sheet = document.createElement('div');
+  sheet.id = sheetId;
+  sheet.className = 'quick-log-sheet';
+  sheet.innerHTML = `
+    <div class="quick-log-handle"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+      <h3 style="margin:0; font-size:20px;">${category} Expenses</h3>
+      <button class="btn icon" onclick="closeCategorySheet()">${renderIcon('x', null, 'style="width:20px"')}</button>
+    </div>
+    <div style="margin-bottom:16px; font-size:14px; color:var(--text-muted)">
+      Total: ₹${filtered.reduce((s, e) => s + Number(e.amount), 0).toLocaleString()} (${filtered.length} items)
+    </div>
+    <div class="transactions-list" style="padding:0">
+      ${filtered.length === 0 ? '<div class="empty-state">No transactions this month</div>' : ''}
+      ${filtered.map(renderTransactionCard).join('')}
+    </div>
+  `;
+  document.body.appendChild(sheet);
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+};
+
+window.closeCategorySheet = function () {
+  document.getElementById('fin-category-sheet')?.remove();
+  document.getElementById('fin-category-backdrop')?.remove();
 };

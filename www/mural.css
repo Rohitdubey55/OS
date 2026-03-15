@@ -1517,10 +1517,8 @@
    ══════════════════════════════════════ */
 .mural-page~.mobile-nav,
 .mural-page~.fab,
-.mural-page~.mobile-search-fab,
 body:has(.mural-page) .mobile-nav,
 body:has(.mural-page) .fab,
-body:has(.mural-page) .mobile-search-fab,
 body:has(.mural-page) .fab-overlay,
 body:has(.mural-page) .fab-menu {
     display: none !important;

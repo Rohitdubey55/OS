@@ -98,7 +98,6 @@ function parseInteractionHistory(notes) {
 function getNeedsAttention(people) {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
-    const in7 = new Date(now.getTime() + 7 * 86400000);
     const nudges = [];
 
     for (const p of people) {
@@ -129,6 +128,18 @@ function getNeedsAttention(people) {
         return b.days - a.days;
     });
     return nudges.slice(0, 10);
+}
+
+function getUpcomingInteractions(people) {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const in14 = new Date(now.getTime() + 14 * 86400000).toISOString().slice(0, 10);
+
+    return people.filter(p => {
+        if (!p.next_interaction) return false;
+        // Keep if overdue or within next 14 days
+        return p.next_interaction <= in14;
+    }).sort((a, b) => a.next_interaction.localeCompare(b.next_interaction));
 }
 
 function getPeopleStats(people) {
@@ -220,17 +231,25 @@ function renderPeople() {
         people = people.filter(p => (p.name || '').toLowerCase().includes(peopleState.filter.toLowerCase()));
     }
 
-    // Filter by group
+    // Filter by group or special mode
     if (peopleState.groupFilter) {
-        people = people.filter(p => (p.relationship || 'Other') === peopleState.groupFilter);
+        if (peopleState.groupFilter === 'To Contact') {
+            const upcoming = getUpcomingInteractions(people);
+            const upcomingIds = upcoming.map(u => String(u.id));
+            people = people.filter(p => upcomingIds.includes(String(p.id)));
+        } else {
+            people = people.filter(p => (p.relationship || 'Other') === peopleState.groupFilter);
+        }
     }
 
+    const upcoming = getUpcomingInteractions(state.data.people || []);
     const stats = getPeopleStats(state.data.people || []);
     const nudges = getNeedsAttention(state.data.people || []);
     const allPeople = state.data.people || [];
-    const groups = ['All', ...new Set(allPeople.map(p => p.relationship || 'Other'))];
+    const groups = ['All', 'To Contact', ...new Set(allPeople.map(p => p.relationship || 'Other'))];
     const groupCounts = {};
     allPeople.forEach(p => { const g = p.relationship || 'Other'; groupCounts[g] = (groupCounts[g] || 0) + 1; });
+    groupCounts['To Contact'] = upcoming.length;
 
     // Birthday banner
     const todayMMDD = new Date().toISOString().slice(5, 10);
@@ -266,6 +285,38 @@ function renderPeople() {
             <div>
                 <div class="pp-birthday-title">Birthday${bdays.length > 1 ? 's' : ''} Today!</div>
                 <div class="pp-birthday-names">${bdays.map(p => p.name).join(', ')} — Don't forget to wish them!</div>
+            </div>
+        </div>` : ''}
+
+        <!-- To Contact / Priority Row (Horizontal Story View) -->
+        ${upcoming.length > 0 ? `
+        <div class="pp-priority-section">
+            <div class="pp-section-header">
+                <span class="pp-section-title">Connect Soon</span>
+                <span class="pp-section-count">${upcoming.length} contacts</span>
+            </div>
+            <div class="pp-priority-row">
+                ${upcoming.map(u => {
+                    const grad = getAvatarGradient(u.name);
+                    const initial = (u.name || '?').charAt(0).toUpperCase();
+                    const todayStr = new Date().toISOString().slice(0, 10);
+                    let dateLabel = '';
+                    if (u.next_interaction === todayStr) dateLabel = 'Today';
+                    else if (u.next_interaction < todayStr) dateLabel = 'Overdue';
+                    else {
+                        const days = Math.floor((new Date(u.next_interaction) - new Date()) / 86400000);
+                        dateLabel = days === 0 ? 'Tmrw' : `In ${days + 1}d`;
+                    }
+                    return `
+                    <div class="pp-priority-item" onclick="window.openPersonSheet('${u.id}')">
+                        <div class="pp-priority-avatar-wrap">
+                            <div class="pp-priority-avatar" style="background:${grad}">${initial}</div>
+                            <div class="pp-priority-dot ${u.next_interaction <= todayStr ? 'overdue' : ''}"></div>
+                        </div>
+                        <div class="pp-priority-name">${u.name.split(' ')[0]}</div>
+                        <div class="pp-priority-date ${u.next_interaction < todayStr ? 'overdue' : ''}">${dateLabel}</div>
+                    </div>`;
+                }).join('')}
             </div>
         </div>` : ''}
 

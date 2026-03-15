@@ -1662,6 +1662,8 @@ document.addEventListener('click', async (e) => {
         const pomoSessions = pomoEl ? parseInt(pomoEl.value, 10) || 0 : 0;
         const pomoLenEl = document.getElementById('mHabitPomoLength');
         const pomoLength = pomoLenEl ? parseInt(pomoLenEl.value, 10) || 25 : 25;
+        const routineEl = document.getElementById('mHabitRoutine');
+        const routine = routineEl ? routineEl.value.trim() : '';
 
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
@@ -1674,6 +1676,7 @@ document.addEventListener('click', async (e) => {
             emoji: emoji,
             pomodoro_sessions: pomoSessions,
             pomodoro_length: pomoLength,
+            routine: routine,
             created_at: new Date().toISOString()
         };
         console.log('[Habit Save] Final payload:', habitPayload);
@@ -1903,6 +1906,8 @@ document.addEventListener('click', async (e) => {
         const pomoSessions = pomoEl ? parseInt(pomoEl.value, 10) || 0 : 0;
         const pomoLenEl = document.getElementById('mHabitPomoLength');
         const pomoLength = pomoLenEl ? parseInt(pomoLenEl.value, 10) || 25 : 25;
+        const routineEl = document.getElementById('mHabitRoutine');
+        const routine = routineEl ? routineEl.value.trim() : '';
 
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
@@ -1914,7 +1919,8 @@ document.addEventListener('click', async (e) => {
             duration: duration,
             emoji: emoji,
             pomodoro_sessions: pomoSessions,
-            pomodoro_length: pomoLength
+            pomodoro_length: pomoLength,
+            routine: routine
         };
         console.log('[Habit Update] Final payload:', updatePayload);
         await apiCall('update', 'habits', updatePayload, editId);

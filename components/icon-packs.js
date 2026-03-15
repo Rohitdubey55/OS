@@ -14,6 +14,7 @@ const ICON_MAPPINGS = {
   'calendar': { lucide: 'calendar', emoji: '📅', material: 'event', remix: 'calendar-line', tabler: 'calendar', fontawesome: 'fa-calendar', heroicons: 'calendar', feather: 'calendar' },
   'yearly': { lucide: 'calendar-days', emoji: '📆', material: 'calendar_month', remix: 'calendar-event-line', tabler: 'calendar-event', fontawesome: 'fa-calendar-days', heroicons: 'calendar-days', feather: 'calendar' },
   'insights': { lucide: 'bar-chart-3', emoji: '📊', material: 'insights', remix: 'bar-chart-2-line', tabler: 'chart-bar', fontawesome: 'fa-chart-bar', heroicons: 'chart-bar', feather: 'bar-chart-2' },
+  'weekly-review': { lucide: 'bar-chart-3', emoji: '📊', material: 'analytics', remix: 'bar-chart-2-line', tabler: 'chart-bar', fontawesome: 'fa-chart-bar', heroicons: 'chart-bar', feather: 'bar-chart-2' },
   'bar-chart-2': { lucide: 'bar-chart-2', emoji: '📊', material: 'bar_chart', remix: 'bar-chart-2-line', tabler: 'chart-bar', fontawesome: 'fa-chart-bar', heroicons: 'chart-bar', feather: 'bar-chart-2' },
   'tags': { lucide: 'tags', emoji: '🏷️', material: 'label', remix: 'price-tag-3-line', tabler: 'tags', fontawesome: 'fa-tags', heroicons: 'tag', feather: 'tag' },
 
@@ -100,6 +101,7 @@ const ICON_MAPPINGS = {
   // Notifications
   'reminder': { lucide: 'bell', emoji: '🔔', material: 'notifications', remix: 'notification-line', tabler: 'bell', fontawesome: 'fa-bell', heroicons: 'bell', feather: 'bell' },
   'bell': { lucide: 'bell', emoji: '🔔', material: 'notifications', remix: 'notification-line', tabler: 'bell', fontawesome: 'fa-bell', heroicons: 'bell', feather: 'bell' },
+  'bell-off': { lucide: 'bell-off', emoji: '🔕', material: 'notifications_off', remix: 'notification-off-line', tabler: 'bell-off', fontawesome: 'fa-bell-slash', heroicons: 'bell-slash', feather: 'bell-off' },
   'task-due': { lucide: 'clipboard-list', emoji: '📋', material: 'task', remix: 'questionnaire-line', tabler: 'clipboard-list', fontawesome: 'fa-clipboard-list', heroicons: 'clipboard-document-list', feather: 'clipboard' },
 
   // UI Elements
@@ -353,6 +355,7 @@ function getHeroIconPath(iconName) {
     'heart': 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
     'bolt': 'M13 10V3L4 14h7v7l9-11h-7z',
     'bell': 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9',
+    'bell-slash': 'M3.98 8.223A4.477 4.477 0 003 12.012v3.75m.98-7.538L3.132 7.062m.848 1.161l1.461 1.462m0 0l3.001 3.001m5.158 5.159l1.462 1.462m0 0l.848.847m-2.31-2.309L5.132 5.812m12.736 12.736A9 9 0 015.366 3.033m12.502 12.502L20.868 18.038M12 3v3.75m0 11.25V21m0-11.25a3 3 0 00-3 3v.163',
     'eye': 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z',
     'user': 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
     'clock': 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',

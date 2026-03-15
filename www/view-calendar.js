@@ -58,6 +58,9 @@ function renderCalendar() {
       }
     }, 10);
   }
+
+  // RE-INITIALIZE ICONS
+  if (typeof renderAllIcons === 'function') renderAllIcons();
 }
 
 /* --- LOGIC --- */

@@ -349,7 +349,7 @@ function exitMuralProject() {
 }
 
 function hideMuralAppChrome(hide) {
-    const selectors = ['.mobile-nav', '.fab', '.mobile-search-fab', '.fab-overlay', '.fab-menu', '.ai-fab'];
+    const selectors = ['.mobile-nav', '.fab', '.fab-overlay', '.fab-menu', '.ai-fab'];
     selectors.forEach(sel => {
         document.querySelectorAll(sel).forEach(el => {
             if (hide) {

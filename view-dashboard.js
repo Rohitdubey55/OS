@@ -753,17 +753,40 @@ function renderDashboard() {
          <div class="widget-body">
             <div>
                 ${displayedHabits.length === 0 ? '<div class="text-muted" style="font-size:13px">No habits for today.</div>' :
-          displayedHabits.map(h => {
-            const isDone = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(todayStr));
-            return `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; font-size:14px;">
-                    <span style="${isDone ? 'text-decoration:line-through; color:var(--text-muted)' : ''}">${h.habit_name}</span>
-                    <div class="habit-check ${isDone ? 'done' : ''}" data-action="toggle-habit" data-id="${h.id}">
-                        ${isDone ? renderIcon('save', null, 'style="width:12px; color:white"') : ''}
+          (() => {
+            const grouped = displayedHabits.reduce((acc, h) => {
+              const r = h.routine || 'General';
+              if (!acc[r]) acc[r] = [];
+              acc[r].push(h);
+              return acc;
+            }, {});
+
+            const routines = Object.keys(grouped).sort((a, b) => {
+              if (a === 'General') return 1;
+              if (b === 'General') return -1;
+              return a.localeCompare(b);
+            });
+
+            return routines.map(r => {
+              const habitsInRoutine = grouped[r];
+              return `
+                <div style="margin-bottom: 16px;">
+                  <div style="font-size: 10px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; opacity: 0.8; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">${r}</div>
+                  ${habitsInRoutine.map(h => {
+                const isDone = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(todayStr));
+                return `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:13px;">
+                        <span style="${isDone ? 'text-decoration:line-through; color:var(--text-muted)' : ''}">${h.habit_name}</span>
+                        <div class="habit-check ${isDone ? 'done' : ''}" data-action="toggle-habit" data-id="${h.id}">
+                            ${isDone ? renderIcon('save', null, 'style="width:12px; color:white"') : ''}
+                        </div>
                     </div>
-                </div>
                 `;
-          }).join('')}
+              }).join('')}
+                </div>
+              `;
+            }).join('');
+          })()}
             </div>
          </div>
       </div>`;
@@ -900,7 +923,7 @@ function renderDashboard() {
         <button id="qa-expense" class="qa-btn round-icon" onclick="showQuickLog('expense')" title="Quick Expense" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('wallet', null, 'style="width:20px;"')} <span>Expense</span></button>
         <button id="qa-habit" class="qa-btn round-icon" onclick="showQuickLog('habit')" title="Quick Habit" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('streak', null, 'style="width:20px;"')} <span>Habit</span></button>
         <button id="qa-note" class="qa-btn round-icon" onclick="showQuickLog('note')" title="Quick Note" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('entries', null, 'style="width:20px;"')} <span>Note</span></button>
-        <button class="qa-btn round-icon" onclick="openWeeklyReview()" title="Weekly Review" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> 📊 <span>Review</span></button>
+        <button class="qa-btn round-icon" onclick="openWeeklyReview()" title="Weekly Review" style="flex:1; height:52px; border-radius:14px; padding:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; background:var(--surface-1); border:1px solid rgba(0,0,0,0.06); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.06); color:var(--text-1); transition:transform 0.2s, box-shadow 0.2s; font-size:9px; font-weight:600; color:var(--text-muted);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''"> ${renderIcon('weekly-review', null, 'style="width:20px;"')} <span>Review</span></button>
       </div>
 
       <div class="dash-grid">

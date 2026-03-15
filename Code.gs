@@ -9,7 +9,7 @@ const SCHEMA = {
   "planner_events": ["id", "title", "start_datetime", "end_datetime", "category"],
   "tasks": ["id", "title", "due_date", "due_time", "priority", "status", "notes", "description", "category", "tags", "vision_id", "recurrence", "recurrence_days", "recurrence_end", "completed_dates", "duration", "subtasks", "pomodoro_estimate", "pomodoro_length"],
   "expenses": ["id", "date", "amount", "category", "description", "type"],
-  "habits": ["id", "habit_name", "frequency", "streak", "reminder_time", "emoji", "pomodoro_sessions", "pomodoro_length", "alarm_enabled"],
+  "habits": ["id", "habit_name", "frequency", "streak", "reminder_time", "emoji", "pomodoro_sessions", "pomodoro_length", "alarm_enabled", "routine"],
   "habit_logs": ["id", "habit_id", "date", "status", "pomodoro_completed"],
   "diary": ["id", "date", "content", "mood", "tags"],
   "vision_board": ["id", "category", "title", "description", "image_url", "target_date", "progress", "status", "notes", "linked_habits", "created_at", "updated_at", "video_url", "month_focus"],

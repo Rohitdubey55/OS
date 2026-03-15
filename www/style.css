@@ -3523,38 +3523,6 @@ body.spacious {
   text-shadow: none;
 }
 
-/* =========================================
-   MOBILE SEARCH FAB
-   ========================================= */
-.mobile-search-fab {
-  position: fixed;
-  bottom: 160px;
-  /* Above AI FAB */
-  right: 24px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--surface-1);
-  color: var(--text-main);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 98;
-  cursor: pointer;
-  border: 1px solid var(--border-color);
-  transition: transform 0.2s;
-}
-
-.mobile-search-fab:active {
-  transform: scale(0.95);
-}
-
-@media (min-width: 2001px) {
-  .mobile-search-fab {
-    display: none;
-  }
-}
 
 /* Quick Actions Bar - Horizontal toolbar for create actions */
 .quick-actions-bar {

@@ -125,96 +125,122 @@ function renderHabits() {
 
         <div class="habit-grid">
           ${habits.length === 0 ? '<div class="empty-state">No habits found.</div>' : ''}
-          ${habits.map(h => {
-    const hLogs = logs.filter(l => String(l.habit_id) === String(h.id));
-    const stats = calculateHabitStats(hLogs, today, h);
-    const isDoneToday = hLogs.some(l => (l.date || '').startsWith(today));
-    const isDoneSelectedDate = _backDateMode ? hLogs.some(l => (l.date || '').startsWith(_selectedBackDate)) : isDoneToday;
-    const scheduledToday = isHabitScheduledToday(h);
-    const isExpanded = _expandedHabitId === h.id;
+          ${(() => {
+    // Group habits by routine
+    const grouped = habits.reduce((acc, h) => {
+      const r = h.routine || 'General';
+      if (!acc[r]) acc[r] = [];
+      acc[r].push(h);
+      return acc;
+    }, {});
 
-    let displayTime = h.frequency || 'Daily';
-    if (h.reminder_time) {
-      const rt = String(h.reminder_time);
-      if (rt.startsWith('1899-12-30T')) displayTime = `@ ${rt.slice(11, 16)}`;
-      else if (rt.match(/^\d{2}:\d{2}/)) displayTime = `@ ${rt.slice(0, 5)}`;
-    }
+    // Define order: "General" last if multiple, otherwise alphabetical
+    const routines = Object.keys(grouped).sort((a, b) => {
+      if (a === 'General') return 1;
+      if (b === 'General') return -1;
+      return a.localeCompare(b);
+    });
 
-    let comingInText = '';
-    if (scheduledToday && !isDoneToday && h.reminder_time) {
-      const now = new Date();
-      const habitTime = new Date(now);
-      const rt = String(h.reminder_time);
-      if (rt.startsWith('1899-12-30T')) {
-        habitTime.setHours(parseInt(rt.slice(11, 13), 10), parseInt(rt.slice(14, 16), 10), 0, 0);
-      } else if (rt.match(/^\d{2}:\d{2}/)) {
-        const parts = rt.split(':');
-        habitTime.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
-      }
-      if (habitTime > now) {
-        const diffMs = habitTime.getTime() - now.getTime();
-        const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-        const text = diffHrs > 0 ? `${diffHrs}h ${diffMins}m` : `${diffMins}m`;
-        comingInText = `<span style="background:rgba(245, 158, 11, 0.1); color:#D97706; padding:2px 4px; border-radius:4px; font-size:9px; font-weight:700; margin-left:4px;">in ${text}</span>`;
-      }
-    }
+    return routines.map(r => {
+      const habitsInRoutine = grouped[r];
+      return `
+              <div class="habit-routine-group" style="margin-bottom: 24px;">
+                <div class="habit-routine-header" style="font-size: 14px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-left: 4px; border-left: 3px solid var(--primary); line-height: 1;">${r}</div>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                  ${habitsInRoutine.map(h => {
+        const hLogs = logs.filter(l => String(l.habit_id) === String(h.id));
+        const stats = calculateHabitStats(hLogs, today, h);
+        const isDoneToday = hLogs.some(l => (l.date || '').startsWith(today));
+        const isDoneSelectedDate = _backDateMode ? hLogs.some(l => (l.date || '').startsWith(_selectedBackDate)) : isDoneToday;
+        const scheduledToday = isHabitScheduledToday(h);
+        const isExpanded = _expandedHabitId === h.id;
 
-    return `
-              <div class="swipe-reveal-container">
-                <div class="swipe-bg swipe-bg-done">
-                  <div class="swipe-bg-inner">
-                    <span class="swipe-bg-icon">✅</span>
-                    <span class="swipe-bg-label">Mark Done</span>
-                  </div>
-                </div>
-                <div class="swipe-bg swipe-bg-delete">
-                  <div class="swipe-bg-inner">
-                    <span class="swipe-bg-icon">🗑️</span>
-                    <span class="swipe-bg-label">Delete</span>
-                  </div>
-                </div>
-                <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${isDoneToday ? 'done' : 'pending'} ${stats.consecutiveMissed >= 3 && !isHabitTimeInFuture(h.reminder_time) ? 'habit-card-warning' : ''} ${String(h.id) === String(nextUpHabitId) ? 'habit-next-up' : ''}" id="habit-card-${h.id}">
-                  <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
-                    <div class="habit-title-wrapper">
-                      <div class="habit-emoji-circle">${h.emoji || '✨'}</div>
-                      <div>
-                        <div class="habit-title-lg">${h.habit_name} ${comingInText}${String(h.id) === String(nextUpHabitId) ? '<span class="up-next-badge">Up Next</span>' : ''}</div>
-                        <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
+        let displayTime = h.frequency || 'Daily';
+        if (h.reminder_time) {
+          const rt = String(h.reminder_time);
+          if (rt.startsWith('1899-12-30T')) displayTime = `@ ${rt.slice(11, 16)}`;
+          else if (rt.match(/^\d{2}:\d{2}/)) displayTime = `@ ${rt.slice(0, 5)}`;
+        }
+
+        let comingInText = '';
+        if (scheduledToday && !isDoneToday && h.reminder_time) {
+          const now = new Date();
+          const habitTime = new Date(now);
+          const rt = String(h.reminder_time);
+          if (rt.startsWith('1899-12-30T')) {
+            habitTime.setHours(parseInt(rt.slice(11, 13), 10), parseInt(rt.slice(14, 16), 10), 0, 0);
+          } else if (rt.match(/^\d{2}:\d{2}/)) {
+            const parts = rt.split(':');
+            habitTime.setHours(parseInt(parts[0], 10), parseInt(parts[1], 10), 0, 0);
+          }
+          if (habitTime > now) {
+            const diffMs = habitTime.getTime() - now.getTime();
+            const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            const text = diffHrs > 0 ? `${diffHrs}h ${diffMins}m` : `${diffMins}m`;
+            comingInText = `<span style="background:rgba(245, 158, 11, 0.1); color:#D97706; padding:2px 4px; border-radius:4px; font-size:9px; font-weight:700; margin-left:4px;">in ${text}</span>`;
+          }
+        }
+
+        return `
+                    <div class="swipe-reveal-container">
+                      <div class="swipe-bg swipe-bg-done">
+                        <div class="swipe-bg-inner">
+                          <span class="swipe-bg-icon">✅</span>
+                          <span class="swipe-bg-label">Mark Done</span>
+                        </div>
                       </div>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                      <div class="streak-pill ${stats.streak >= 30 ? 'streak-30' : (stats.streak >= 7 ? 'streak-7' : '')}">
-                        ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : '⭐')} ${stats.streak}
+                      <div class="swipe-bg swipe-bg-delete">
+                        <div class="swipe-bg-inner">
+                          <span class="swipe-bg-icon">🗑️</span>
+                          <span class="swipe-bg-label">Delete</span>
+                        </div>
                       </div>
-                      ${h.reminder_time ? `<button class="habit-alarm-btn ${h.alarm_enabled === false ? 'off' : 'on'}" id="alarm-btn-${h.id}" onclick="event.stopPropagation(); toggleHabitAlarm('${h.id}')" title="${h.alarm_enabled === false ? 'Alarm off — tap to enable' : 'Alarm on — tap to disable'}">${renderIcon(h.alarm_enabled === false ? 'bell-off' : 'bell', null, 'style="width:14px;height:14px"')}</button>` : ''}
-                      ${renderIcon('down', null, 'class="collapse-icon"')}
-                    </div>
-                  </div>
-                  ${stats.consecutiveMissed >= 3 && String(h.id) !== String(nextUpHabitId) && !isHabitTimeInFuture(h.reminder_time) ? `<div class="habit-missed-banner">🔗 Don't break the chain! ${stats.consecutiveMissed} day${stats.consecutiveMissed > 1 ? 's' : ''} missed in a row</div>` : ''}
-                  <div class="habit-card-body">
-                    <div style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:10px;">
-                      ${stats.dateButtonsHtml}
-                    </div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px; background:var(--surface-2); padding:8px; border-radius:10px; border:1px solid var(--border-color);">
-                      <div style="text-align:center; flex:1;">
-                        <div style="font-size:16px; font-weight:800;">${stats.total}</div>
-                        <div style="font-size:8px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Total</div>
+                      <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${isDoneToday ? 'done' : 'pending'} ${stats.consecutiveMissed >= 3 && !isHabitTimeInFuture(h.reminder_time) ? 'habit-card-warning' : ''} ${String(h.id) === String(nextUpHabitId) ? 'habit-next-up' : ''}" id="habit-card-${h.id}">
+                        <div class="habit-card-header" onclick="toggleHabitCard('${h.id}')">
+                          <div class="habit-title-wrapper">
+                            <div class="habit-emoji-circle">${h.emoji || '✨'}</div>
+                            <div>
+                              <div class="habit-title-lg">${h.habit_name} ${comingInText}${String(h.id) === String(nextUpHabitId) ? '<span class="up-next-badge">Up Next</span>' : ''}</div>
+                              <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
+                            </div>
+                          </div>
+                          <div style="display:flex; align-items:center; gap:8px;">
+                            <div class="streak-pill ${stats.streak >= 30 ? 'streak-30' : (stats.streak >= 7 ? 'streak-7' : '')}">
+                              ${stats.streak >= 30 ? '🏆' : (stats.streak >= 7 ? '🔥' : '⭐')} ${stats.streak}
+                            </div>
+                            ${h.reminder_time ? `<button class="habit-alarm-btn ${h.alarm_enabled === false ? 'off' : 'on'}" id="alarm-btn-${h.id}" onclick="event.stopPropagation(); toggleHabitAlarm('${h.id}')" title="${h.alarm_enabled === false ? 'Alarm off — tap to enable' : 'Alarm on — tap to disable'}">${renderIcon(h.alarm_enabled === false ? 'bell-off' : 'bell', null, 'style="width:14px;height:14px"')}</button>` : ''}
+                            ${renderIcon('down', null, 'class="collapse-icon"')}
+                          </div>
+                        </div>
+                        ${stats.consecutiveMissed >= 3 && String(h.id) !== String(nextUpHabitId) && !isHabitTimeInFuture(h.reminder_time) ? `<div class="habit-missed-banner">🔗 Don't break the chain! ${stats.consecutiveMissed} day${stats.consecutiveMissed > 1 ? 's' : ''} missed in a row</div>` : ''}
+                        <div class="habit-card-body">
+                          <div style="display:flex; gap:3px; flex-wrap:wrap; margin-bottom:10px;">
+                            ${stats.dateButtonsHtml}
+                          </div>
+                          <div style="display:flex; justify-content:space-between; margin-bottom:10px; background:var(--surface-2); padding:8px; border-radius:10px; border:1px solid var(--border-color);">
+                            <div style="text-align:center; flex:1;">
+                              <div style="font-size:16px; font-weight:800;">${stats.total}</div>
+                              <div style="font-size:8px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Total</div>
+                            </div>
+                            <div style="text-align:center; flex:1; border-left:1px solid var(--border-color);">
+                              <div style="font-size:16px; font-weight:800; color:var(--primary);">${stats.completionRate}%</div>
+                              <div style="font-size:8px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Success</div>
+                            </div>
+                          </div>
+                          <div class="habit-action-row" style="display:flex; flex-wrap:wrap; gap:6px;">
+                            <button class="btn secondary small" onclick="event.stopPropagation(); openEditHabit('${h.id}')" style="flex:1; padding:6px; font-size:10px;">Edit</button>
+                            ${h.pomodoro_sessions > 0 ? `<button class="btn secondary small" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')" style="flex:1; padding:6px; font-size:10px;">Focus</button>` : ''}
+                            <button class="btn primary small ${isDoneSelectedDate ? 'done' : ''}" onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}" style="flex:2; padding:6px; font-size:10px;">${isDoneSelectedDate ? 'Done' : 'Mark Done'}</button>
+                          </div>
+                        </div>
                       </div>
-                      <div style="text-align:center; flex:1; border-left:1px solid var(--border-color);">
-                        <div style="font-size:16px; font-weight:800; color:var(--primary);">${stats.completionRate}%</div>
-                        <div style="font-size:8px; color:var(--text-muted); text-transform:uppercase; font-weight:700;">Success</div>
-                      </div>
-                    </div>
-                    <div class="habit-action-row" style="display:flex; flex-wrap:wrap; gap:6px;">
-                      <button class="btn secondary small" onclick="event.stopPropagation(); openEditHabit('${h.id}')" style="flex:1; padding:6px; font-size:10px;">Edit</button>
-                      ${h.pomodoro_sessions > 0 ? `<button class="btn secondary small" onclick="event.stopPropagation(); quickStartPomodoro('habit', '${h.id}')" style="flex:1; padding:6px; font-size:10px;">Focus</button>` : ''}
-                      <button class="btn primary small ${isDoneSelectedDate ? 'done' : ''}" onclick="event.stopPropagation(); ${_backDateMode ? `toggleHabitForDate('${h.id}', '${_selectedBackDate}')` : `toggleHabitOptimistic('${h.id}')`}" style="flex:2; padding:6px; font-size:10px;">${isDoneSelectedDate ? 'Done' : 'Mark Done'}</button>
-                    </div>
-                  </div>
+                    </div>`;
+      }).join('')}
                 </div>
               </div>`;
-  }).join('')}
+    }).join('');
+  })()}
         </div>
       </div>
     `;
@@ -731,6 +757,7 @@ window.openHabitModal = function () {
           </select>
           <input type="time" class="input" id="mHabitTime" required title="Time is required for Planner integration">
           <input type="number" class="input" id="mHabitDuration" placeholder="Mins" value="45" style="width:70px" min="5" step="5" title="Duration in minutes">
+          <input class="input" id="mHabitRoutine" placeholder="Routine (e.g. Morning)" style="flex:1">
       </div>
       <div id="dayPickerWrap" style="display:none">
         <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:8px; display:block;">Which days?</label>
@@ -828,6 +855,7 @@ window.openEditHabit = function (id) {
       </select>
       <input type="time" class="input" id="mHabitTime" value="${reminderTimeValue}" required title="Time is required for Planner integration">
       <input type="number" class="input" id="mHabitDuration" placeholder="Mins" value="${h.duration || 45}" style="width:70px" min="5" step="5" title="Duration in minutes">
+      <input class="input" id="mHabitRoutine" value="${(h.routine || '').replace(/"/g, '"')}" placeholder="Routine (e.g. Morning)" style="flex:1">
     </div>
     <div id="dayPickerWrap" style="display:${isWeekly ? 'block' : 'none'}">
       <label style="font-size:12px; font-weight:600; color:var(--text-muted); margin-top:8px; display:block;">Which days?</label>
