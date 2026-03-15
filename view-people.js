@@ -656,9 +656,9 @@ window.openContactOptions = function (id) {
 
     const grad = getAvatarGradient(p.name);
     const initial = (p.name || '?').charAt(0).toUpperCase();
-    const phone = (p.phone || '').replace(/[\s\-()]/g, '');
+    const phone = String(p.phone || '').replace(/[\s\-()]/g, '');
     const hasPhone = phone.length > 0;
-    const hasEmail = !!(p.email);
+    const hasEmail = !!(String(p.email || '').trim());
 
     // Build contact options
     let options = '';

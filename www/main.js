@@ -42,10 +42,10 @@ window.showToast = toast;
 
 // --- REFRESH ALL DATA ---
 async function refreshAll() {
-    console.log('Refreshing all data...');
+    console.log('Refreshing all data (forced)...');
     showToast('Refreshing...');
     try {
-        await loadAllData();
+        await loadAllData(true); // Pass true to force refresh
         // Re-render current view
         if (state.view) {
             routeTo(state.view);
@@ -2128,12 +2128,12 @@ function applyPostLoadSettings() {
     }
 }
 
-async function loadAllData() {
-    console.log('loadAllData: Starting...');
+async function loadAllData(force = false) {
+    console.log(`loadAllData: Starting (force=${force})...`);
     state.loading = true;
     updateLoader(5, 'Connecting...');
 
-    await fetchFreshData();
+    await fetchFreshData(force);
 
     state.loading = false;
     updateLoader(95, 'Processing & Rendering...');
@@ -2150,14 +2150,15 @@ async function loadAllData() {
 /**
  * Fetch fresh data (bulk or fallback), save to cache.
  */
-async function fetchFreshData() {
+async function fetchFreshData(force = false) {
     const startTime = performance.now();
 
     // Try bulk fetch first
     try {
         updateLoader(10, 'Fetching all data...');
-        const url = `${API_BASE}?action=getAll&t=${Date.now()}`;
-        console.log('loadAllData: Attempting bulk fetch...');
+        const forceParam = force ? '&force=true' : '';
+        const url = `${API_BASE}?action=getAll&t=${Date.now()}${forceParam}`;
+        console.log(`loadAllData: Attempting bulk fetch (force=${force})...`);
         const res = await fetch(url, { method: 'GET', redirect: 'follow' });
         const text = await res.text();
         const elapsed = Math.round(performance.now() - startTime);
