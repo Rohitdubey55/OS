@@ -902,6 +902,7 @@ function renderDashboard() {
         { id: 'chimes', label: 'Chimes', icon: 'bell', bg: 'linear-gradient(135deg,#10b981,#059669)', shadow: 'rgba(16,185,129,0.25)' },
         { id: 'books', label: 'Books', icon: 'book', bg: 'linear-gradient(135deg,#60a5fa,#2563eb)', shadow: 'rgba(96,165,250,0.25)' },
         { id: 'mural', label: 'Mural', icon: 'layout', bg: 'linear-gradient(135deg,#ec4899,#db2777)', shadow: 'rgba(236,72,153,0.25)' },
+        { id: 'tutor', label: 'Tutor', icon: 'languages', bg: 'linear-gradient(135deg,#06b6d4,#0891b2)', shadow: 'rgba(6,182,212,0.25)' },
       ];
       return `
         <div class="widget-card daily-tools-widget" data-widget-id="dailyTools">

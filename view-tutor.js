@@ -249,7 +249,11 @@ function connectTutorWS(topic, pastCtx) {
           inputAudioTranscription: {},
           realtimeInputConfig: {
             automaticActivityDetection: {
-              disabled: false
+              disabled: false,
+              startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
+              endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
+              prefixPaddingMs: 200,
+              silenceDurationMs: 1500
             }
           }
         }
@@ -417,6 +421,11 @@ function playNextTutorChunk() {
   if (_tutor.audioQueue.length === 0) {
     _tutor.isPlayingAudio = false;
     _tutor.isSpeaking = false;
+    // Reset UI to listening once all audio has actually finished playing
+    if (_tutor.isConnected && _tutor.sessionActive) {
+      setTutorStatus('🎙 Listening... your turn');
+      setMicState('listening');
+    }
     return;
   }
   _tutor.isPlayingAudio = true;
@@ -468,7 +477,83 @@ function stopTutorPlayback() {
 /* ═══════════════════════════════
    TRANSCRIPT
 ═══════════════════════════════ */
+
+/* Clean up noisy transcription text from Gemini */
+function _cleanTranscription(text) {
+  if (!text) return '';
+  // Remove <noise>, <laugh>, <cough>, etc. tags
+  let cleaned = text.replace(/<[^>]+>/g, '');
+  // Remove non-Latin/non-English characters (Thai, Chinese, Arabic, etc.)
+  // Keep basic Latin, extended Latin (accented chars), digits, punctuation
+  cleaned = cleaned.replace(/[^\u0000-\u024F\u1E00-\u1EFF0-9\s.,!?;:'"()\-–—…/&@#$%*+=]/g, '');
+  // Collapse multiple spaces
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+  return cleaned;
+}
+
+/*
+ * Transcription buffering — Gemini sends fragments word-by-word or in tiny chunks.
+ * We buffer them and flush after a short debounce to produce clean, complete sentences.
+ */
+const _tutorTranscriptBuffer = { user: '', coach: '', userTimer: null, coachTimer: null };
+
 function appendTutorTranscript(role, text) {
+  const cleaned = _cleanTranscription(text);
+  if (!cleaned || cleaned.length < 2) return;
+
+  const bufKey = role; // 'user' or 'coach'
+  const timerKey = role + 'Timer';
+
+  // Append to buffer
+  _tutorTranscriptBuffer[bufKey] += (_tutorTranscriptBuffer[bufKey] ? ' ' : '') + cleaned;
+
+  // Clear any existing flush timer
+  if (_tutorTranscriptBuffer[timerKey]) clearTimeout(_tutorTranscriptBuffer[timerKey]);
+
+  // Debounce: flush after 800ms of no new fragments for this role
+  // Coach fragments come faster (streamed audio transcript), user fragments may be slower
+  const delay = role === 'coach' ? 1000 : 800;
+  _tutorTranscriptBuffer[timerKey] = setTimeout(() => _flushTranscript(role), delay);
+
+  // Also update the live preview in the UI immediately (so user sees text appearing)
+  _updateLiveTranscriptUI(role, _tutorTranscriptBuffer[bufKey]);
+}
+
+/* Update the UI in real-time as fragments arrive (live preview) */
+function _updateLiveTranscriptUI(role, currentText) {
+  const inner = document.getElementById('tutorTranscriptInner');
+  if (!inner) return;
+
+  // Find or create a "live" bubble for this role
+  let liveEl = inner.querySelector(`.tutor-msg--live-${role}`);
+  if (!liveEl) {
+    // If last bubble is a different role, or no bubbles yet, create new live bubble
+    liveEl = document.createElement('div');
+    liveEl.className = `tutor-msg tutor-msg--${role} tutor-msg--live-${role}`;
+    liveEl.dataset.role = role;
+    liveEl.dataset.live = 'true';
+    liveEl.innerHTML = `
+      <span class="tutor-msg-role">${role === 'coach' ? 'Coach' : 'You'}</span>
+      <span class="tutor-msg-text"></span>
+    `;
+    inner.appendChild(liveEl);
+  }
+
+  const textEl = liveEl.querySelector('.tutor-msg-text');
+  if (textEl) textEl.textContent = currentText;
+  inner.scrollTop = inner.scrollHeight;
+}
+
+/* Flush the buffered text: finalize the live bubble and store the message */
+function _flushTranscript(role) {
+  const bufKey = role;
+  const timerKey = role + 'Timer';
+  const text = _tutorTranscriptBuffer[bufKey].trim();
+  _tutorTranscriptBuffer[bufKey] = '';
+  _tutorTranscriptBuffer[timerKey] = null;
+
+  if (!text || text.length < 3) return;
+
   // Store in messages array
   _tutor.messages.push({
     role: role === 'coach' ? 'tutor' : 'user',
@@ -476,36 +561,16 @@ function appendTutorTranscript(role, text) {
     timestamp: new Date().toISOString()
   });
 
-  // Update UI
+  // Finalize the live bubble — remove the live marker so next fragments create a new one
   const inner = document.getElementById('tutorTranscriptInner');
   if (!inner) return;
-
-  // Check if last message is same role — append to it
-  const lastEl = inner.lastElementChild;
-  if (lastEl && lastEl.dataset.role === role) {
-    const contentEl = lastEl.querySelector('.tutor-msg-text');
-    if (contentEl) {
-      contentEl.textContent += ' ' + text;
-      // Also update last stored message
-      const lastMsg = _tutor.messages[_tutor.messages.length - 2];
-      if (lastMsg && lastMsg.role === (role === 'coach' ? 'tutor' : 'user')) {
-        lastMsg.content += ' ' + text;
-        _tutor.messages.pop(); // Remove the duplicate
-      }
-      inner.scrollTop = inner.scrollHeight;
-      return;
-    }
+  const liveEl = inner.querySelector(`.tutor-msg--live-${role}`);
+  if (liveEl) {
+    liveEl.classList.remove(`tutor-msg--live-${role}`);
+    liveEl.dataset.live = 'false';
+    const textEl = liveEl.querySelector('.tutor-msg-text');
+    if (textEl) textEl.textContent = text;
   }
-
-  const msgEl = document.createElement('div');
-  msgEl.className = `tutor-msg tutor-msg--${role}`;
-  msgEl.dataset.role = role;
-  msgEl.innerHTML = `
-    <span class="tutor-msg-role">${role === 'coach' ? 'Coach' : 'You'}</span>
-    <span class="tutor-msg-text">${_escTutor(text)}</span>
-  `;
-  inner.appendChild(msgEl);
-  inner.scrollTop = inner.scrollHeight;
 }
 
 /* ═══════════════════════════════

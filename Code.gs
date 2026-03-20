@@ -353,24 +353,29 @@ function doPost(e) {
 
     // ── Upload audio file to Google Drive (POS/audio/ folder) ──
     if (body.action === "uploadAudio") {
-      const p = body.payload || {};
-      if (!p.filename || !p.data) {
-        return jsonResponse({ success: false, message: "Missing filename or data" });
+      try {
+        const p = body.payload || {};
+        if (!p.filename || !p.data) {
+          return jsonResponse({ success: false, message: "Missing filename or data" });
+        }
+        var posFolder = getOrCreateFolder_("POS");
+        var audioFolder = getOrCreateSubfolder_(posFolder, "audio");
+        var decoded = Utilities.base64Decode(p.data);
+        var blob = Utilities.newBlob(decoded, p.mimeType || 'audio/wav', p.filename);
+        // Remove old version if exists
+        var existing = audioFolder.getFilesByName(p.filename);
+        while (existing.hasNext()) existing.next().setTrashed(true);
+        var file = audioFolder.createFile(blob);
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        var url = "https://drive.google.com/uc?export=download&id=" + file.getId();
+        // If affirmation ID provided, update the record's audio_url
+        if (p.aff_id) {
+          try { updateData('vision_affirmations', p.aff_id, { audio_url: url }); } catch(e2) {}
+        }
+        return jsonResponse({ success: true, url: url, file_id: file.getId() });
+      } catch(driveErr) {
+        return jsonResponse({ success: false, message: "Drive upload error: " + driveErr.message });
       }
-      const posFolder = getOrCreateFolder_("POS");
-      const audioFolder = getOrCreateSubfolder_(posFolder, "audio");
-      const blob = Utilities.newBlob(Utilities.base64Decode(p.data), p.mimeType || 'audio/wav', p.filename);
-      // Remove old version if exists
-      const existing = audioFolder.getFilesByName(p.filename);
-      while (existing.hasNext()) existing.next().setTrashed(true);
-      const file = audioFolder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      const url = "https://drive.google.com/uc?export=download&id=" + file.getId();
-      // If affirmation ID provided, update the record's audio_url
-      if (p.aff_id) {
-        try { updateData('vision_affirmations', p.aff_id, { audio_url: url }); } catch(e) {}
-      }
-      return jsonResponse({ success: true, url: url, file_id: file.getId() });
     }
 
     if (body.action === "init") {
