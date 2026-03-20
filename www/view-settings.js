@@ -43,6 +43,8 @@ function renderSettings() {
     ai_model: s.ai_model || 'gemini-1.5-flash',
     elevenlabs_api_key: s.elevenlabs_api_key || '',
     elevenlabs_voice_id: s.elevenlabs_voice_id || '',
+    tts_provider: s.tts_provider || 'elevenlabs',
+    tts_voice_id: s.tts_voice_id || '21m00Tcm4TlvDq8ikWAM',
     category_budgets: s.category_budgets || '{}',
     // Orientation lock setting
     orientation_lock: s.orientation_lock || 'auto',
@@ -275,29 +277,30 @@ function renderSettings() {
             </div>
         </div>
         <div style="border-top:1px solid var(--border-color); margin:20px 0 16px; padding-top:16px;">
-            <p class="section-description" style="margin-bottom:12px;">🎙 <strong>ElevenLabs Voice</strong> — Generate realistic human voice for manifestation affirmations.</p>
+            <p class="section-description" style="margin-bottom:12px;">🎙 <strong>AI Voice for Affirmations</strong> — Free, realistic human voices via Puter.js. No API key needed!</p>
 
             <div class="setting-item">
-                <label class="setting-label">ElevenLabs API Key</label>
-                <div style="display:flex; gap:10px">
-                    <input type="password" class="input" id="sElevenLabsKey" value="${settings.elevenlabs_api_key}" placeholder="sk_...">
-                    <button class="btn secondary" onclick="testElevenLabsAPI()">Test</button>
-                </div>
-                <div style="font-size:11px; color:var(--text-muted); margin-top:4px">
-                    Get your key at <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" style="color:var(--primary);">elevenlabs.io</a>
-                </div>
+                <label class="setting-label">Voice Provider</label>
+                <select class="input" id="sTtsProvider" onchange="updateVoiceDropdown()">
+                    <option value="elevenlabs" ${settings.tts_provider === 'elevenlabs' ? 'selected' : ''}>ElevenLabs (most natural)</option>
+                    <option value="openai" ${settings.tts_provider === 'openai' ? 'selected' : ''}>OpenAI (clear & expressive)</option>
+                    <option value="aws" ${settings.tts_provider === 'aws' ? 'selected' : ''}>AWS Neural (fast & reliable)</option>
+                </select>
             </div>
             <div class="setting-item">
                 <label class="setting-label">Voice</label>
                 <div style="display:flex; gap:10px; align-items:center;">
-                    <select class="input" id="sElevenLabsVoice" style="flex:1;">
-                        <option value="">— Click Test to load voices —</option>
-                        ${settings.elevenlabs_voice_id ? `<option value="${settings.elevenlabs_voice_id}" selected>${settings.elevenlabs_voice_id}</option>` : ''}
+                    <select class="input" id="sTtsVoice" style="flex:1;">
                     </select>
-                    <button class="btn secondary" id="elPreviewBtn" onclick="previewElevenLabsVoice()" disabled>▶ Preview</button>
+                    <button class="btn secondary" id="elPreviewBtn" onclick="previewElevenLabsVoice()">▶ Preview</button>
                 </div>
+                <div style="font-size:11px; color:var(--success); margin-top:6px">✅ 100% free — powered by <a href="https://puter.com" target="_blank" style="color:var(--primary);">Puter.js</a>. No API key required.</div>
             </div>
         </div>
+
+        <!-- Legacy ElevenLabs key (hidden, kept for backward compat) -->
+        <input type="hidden" id="sElevenLabsKey" value="${settings.elevenlabs_api_key}">
+        <input type="hidden" id="sElevenLabsVoice" value="${settings.elevenlabs_voice_id}">
 
         <button class="btn primary" onclick="saveAllSettings('ai')">Save AI</button>
         </div>
@@ -622,6 +625,9 @@ function renderSettings() {
 
   // Load notification settings from localStorage
   loadNotificationSettingsUI();
+
+  // Initialize TTS voice dropdown
+  if (document.getElementById('sTtsProvider')) updateVoiceDropdown();
 }
 
 // Helpers
@@ -1303,10 +1309,14 @@ window.saveAllSettings = async function (section = 'all') {
   if (section === 'all' || section === 'ai') {
     newSettings.ai_api_key = apiKey;
     newSettings.ai_model = model;
+    // Legacy ElevenLabs fields
     const elKey = document.getElementById('sElevenLabsKey')?.value?.trim() || '';
     const elVoice = document.getElementById('sElevenLabsVoice')?.value?.trim() || '';
     newSettings.elevenlabs_api_key = elKey;
     newSettings.elevenlabs_voice_id = elVoice;
+    // New Puter.js TTS settings
+    newSettings.tts_provider = document.getElementById('sTtsProvider')?.value || 'elevenlabs';
+    newSettings.tts_voice_id = document.getElementById('sTtsVoice')?.value || '21m00Tcm4TlvDq8ikWAM';
   }
 
   if (section === 'all' || section === 'tabs') {
@@ -1436,69 +1446,146 @@ window.testGeminiAPI = async function () {
   } catch (e) { showToast('Connection Error', 'error'); }
 };
 
-window.testElevenLabsAPI = async function () {
-  const key = document.getElementById('sElevenLabsKey')?.value?.trim();
-  if (!key) { showToast('Enter ElevenLabs API Key', 'error'); return; }
-  try {
-    const res = await fetch('https://api.elevenlabs.io/v1/voices', {
-      headers: { 'xi-api-key': key }
-    });
-    if (!res.ok) { showToast('Invalid ElevenLabs Key', 'error'); return; }
-    const data = await res.json();
-    const voices = data.voices || [];
-
-    // Populate voice dropdown
-    const sel = document.getElementById('sElevenLabsVoice');
-    const savedVoice = sel?.value || '';
-    if (sel) {
-      sel.innerHTML = voices.map(v => {
-        const labels = v.labels ? Object.values(v.labels).join(', ') : '';
-        return `<option value="${v.voice_id}" ${v.voice_id === savedVoice ? 'selected' : ''}>${v.name}${labels ? ' (' + labels + ')' : ''}</option>`;
-      }).join('');
-    }
-
-    // Enable preview button
-    const prevBtn = document.getElementById('elPreviewBtn');
-    if (prevBtn) prevBtn.disabled = false;
-
-    showToast('Connected! ' + voices.length + ' voices loaded', 'success');
-  } catch (e) { showToast('Connection Error: ' + e.message, 'error'); }
+// Legacy — kept for backward compat but no longer needed with Puter.js
+window.testElevenLabsAPI = function() {
+  showToast('API keys are no longer needed! Voices are now free via Puter.js.', 'info');
 };
+
+// --- Voice Provider Dropdown & Preview (Puter.js) ---
+
+// Populate voice dropdown based on selected provider
+window.updateVoiceDropdown = function() {
+  const providerKey = document.getElementById('sTtsProvider')?.value || 'elevenlabs';
+  const sel = document.getElementById('sTtsVoice');
+  if (!sel) return;
+
+  // Get VOICE_PROVIDERS from view-vision.js
+  const providers = typeof VOICE_PROVIDERS !== 'undefined' ? VOICE_PROVIDERS : {
+    elevenlabs: { voices: [
+      { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (warm female)' },
+      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (soft female)' },
+      { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh (deep male)' },
+      { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold (strong male)' },
+      { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam (clear male)' },
+      { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam (calm male)' },
+    ]},
+    openai: { voices: [
+      { id: 'nova', name: 'Nova (warm female)' },
+      { id: 'shimmer', name: 'Shimmer (soft female)' },
+      { id: 'alloy', name: 'Alloy (neutral)' },
+      { id: 'echo', name: 'Echo (clear male)' },
+      { id: 'fable', name: 'Fable (expressive)' },
+      { id: 'onyx', name: 'Onyx (deep male)' },
+    ]},
+    aws: { voices: [
+      { id: 'Joanna', name: 'Joanna (US female)' },
+      { id: 'Matthew', name: 'Matthew (US male)' },
+      { id: 'Salli', name: 'Salli (US female)' },
+      { id: 'Amy', name: 'Amy (British female)' },
+      { id: 'Brian', name: 'Brian (British male)' },
+    ]}
+  };
+
+  const provider = providers[providerKey];
+  if (!provider) return;
+
+  const s = state.data.settings?.[0] || {};
+  const savedVoice = s.tts_voice_id || '';
+
+  sel.innerHTML = provider.voices.map(v =>
+    `<option value="${v.id}" ${v.id === savedVoice ? 'selected' : ''}>${v.name}</option>`
+  ).join('');
+};
+
+// Preview selected voice using Puter.js
+window._elPreviewAudio = null;
 
 window.previewElevenLabsVoice = async function () {
-  const key = document.getElementById('sElevenLabsKey')?.value?.trim();
-  const voiceId = document.getElementById('sElevenLabsVoice')?.value;
-  if (!key || !voiceId) { showToast('Select a voice first', 'error'); return; }
-
+  const providerKey = document.getElementById('sTtsProvider')?.value || 'elevenlabs';
+  const voiceId = document.getElementById('sTtsVoice')?.value;
   const btn = document.getElementById('elPreviewBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+
+  function resetBtn(label) {
+    if (btn) { btn.disabled = false; btn.textContent = label || '▶ Preview'; }
+  }
+
+  if (!voiceId) { showToast('Select a voice first', 'error'); return; }
+
+  if (typeof puter === 'undefined') {
+    showToast('Puter.js not loaded — check internet connection', 'error');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...'; }
+
+  // Stop any currently playing preview
+  if (window._elPreviewAudio) {
+    window._elPreviewAudio.pause();
+    window._elPreviewAudio = null;
+  }
+
+  const safetyTimer = setTimeout(() => {
+    if (btn && btn.textContent.includes('Generating')) {
+      showToast('Taking too long — try again', 'error');
+      resetBtn();
+    }
+  }, 20000);
 
   try {
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: 'POST',
-      headers: {
-        'xi-api-key': key,
-        'Content-Type': 'application/json',
-        'Accept': 'audio/mpeg'
-      },
-      body: JSON.stringify({
-        text: 'I am worthy of all the abundance flowing into my life. My dreams are manifesting into reality.',
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.65, similarity_boost: 0.75, style: 0.4 }
-      })
-    });
+    showToast('Generating preview...', 'info');
+    console.log('[TTS Preview] provider:', providerKey, 'voice:', voiceId);
 
-    if (!res.ok) { showToast('Preview failed — check key & voice', 'error'); return; }
+    const previewText = 'I am worthy of all the abundance flowing into my life.';
+    let audioEl;
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.onended = () => URL.revokeObjectURL(url);
-    audio.play();
+    if (providerKey === 'elevenlabs') {
+      audioEl = await puter.ai.txt2speech(previewText, {
+        provider: 'elevenlabs',
+        voice: voiceId,
+        model: 'eleven_multilingual_v2'
+      });
+    } else if (providerKey === 'openai') {
+      audioEl = await puter.ai.txt2speech(previewText, {
+        provider: 'openai',
+        voice: voiceId
+      });
+    } else {
+      audioEl = await puter.ai.txt2speech(previewText, {
+        voice: voiceId,
+        engine: 'neural',
+        language: 'en-US'
+      });
+    }
+
+    window._elPreviewAudio = audioEl;
+
+    if (btn) { btn.disabled = true; btn.textContent = '🔊 Playing...'; }
+
+    audioEl.onended = () => {
+      window._elPreviewAudio = null;
+      resetBtn();
+    };
+    audioEl.onerror = () => {
+      window._elPreviewAudio = null;
+      showToast('Playback error', 'error');
+      resetBtn();
+    };
+
+    await audioEl.play();
     showToast('Playing preview...', 'success');
-  } catch (e) { showToast('Preview error: ' + e.message, 'error'); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = '▶ Preview'; } }
+  } catch (e) {
+    showToast('Preview failed: ' + (e.message || 'unknown error'), 'error');
+    console.error('[TTS Preview]', e);
+    resetBtn();
+  } finally {
+    clearTimeout(safetyTimer);
+  }
 };
+
+// Initialize voice dropdown when settings page loads
+setTimeout(() => {
+  if (document.getElementById('sTtsProvider')) updateVoiceDropdown();
+}, 100);
 
 window.openGoogleSheet = function () {
   window.open('https://docs.google.com/spreadsheets/d/1m1r9fZ9cO8izkb-YIs-iz5hZljTpm3p0PzD-LiS0hZM/', '_blank');
