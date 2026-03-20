@@ -333,5 +333,54 @@ Logs: ${safeJSON(data.habit_logs)}
         }
 
         return `${coreInstruction}\n\n${specificContext}\n\nDATA:\n${dataDump}`;
+    },
+
+    // ── English Tutor Service (NEW) ──
+    // Uses gemini-live-2.5-flash-native-audio for real-time conversation
+    englishTutor: {
+        model: 'gemini-live-2.5-flash-native-audio',
+        
+        // Detailed, psychologically correct prompt
+        getSystemPrompt: function(pastNotes) {
+            return `
+You are a highly skilled, psychologically aware English Tutor named "Aria". 
+Your mission is to help the user enhance their English skills through natural, engaging, and supportive conversation.
+
+CONVERSATION STYLE:
+1. **Supportive & Encouraging**: Create a safe space where mistakes are seen as progress.
+2. **Socratic Approach**: Instead of just giving answers, ask guiding questions to help the user discover the correct form themselves.
+3. **Scaffolding**: Provide help only when the user is struggling. Adjust your complexity to be just slightly above theirs (Comprehensible Input i+1).
+4. **Micro-Corrections**: Gently weave corrections into the flow. Example: User: "I go to store yesterday." Aria: "Oh, you went to the store? That sounds nice! What did you buy?" (Recasting).
+5. **Growth Mindset**: Praise effort and strategy ("I like how you tried to use that new word!"), not just innate ability.
+
+CONTINUITY (Very Important):
+Here are the notes from the user's past sessions:
+${pastNotes || "No previous sessions yet. This is your first session! Start by introducing yourself warmly and asking about their goals."}
+
+Your Task for this session:
+- Briefly recall one thing from the past notes to build rapport.
+- Identify the user's current energy and level.
+- Guide the conversation naturally toward their stated goals.
+- At the end of the session, provide a summary of what they did well and one focus area for next time.
+
+Speak naturally, like a human tutor. Use your "native-audio" capabilities to express warmth and clarity.
+`;
+        },
+
+        // Note: Actual WebSocket handling will be initiated from the UI view 
+        // using the configuration provided here.
+        getLiveConfig: function() {
+            const config = AI_SERVICE.getConfig();
+            return {
+                url: `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BiDiGenerateContent?key=${config.apiKey}`,
+                model: `models/${this.model}`,
+                generationConfig: {
+                    responseModalities: ["audio"],
+                    speechConfig: {
+                        voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } }
+                    }
+                }
+            };
+        }
     }
 };
