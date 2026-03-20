@@ -12,6 +12,9 @@
 async function renderEnglishTutor() {
     const main = document.getElementById('main');
     
+    // Check for protocol limitation
+    const isFileProtocol = window.location.protocol === 'file:';
+    
     // 1. Fetch Past Sessions to build context
     const sessions = state.data.english_tutor_sessions || [];
     const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
@@ -57,6 +60,12 @@ async function renderEnglishTutor() {
 
             <!-- Controls -->
             <div class="tutor-controls" style="display: flex; flex-direction: column; gap: 16px; margin-top: auto;">
+                ${isFileProtocol ? `
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #ef4444; padding: 16px; border-radius: 16px; font-size: 13px; line-height: 1.5; text-align: center; margin-bottom: 16px;">
+                        <strong>⚠️ Protocol Restriction:</strong><br>
+                        Google AI Live requires a secure origin (http/https). Please run this via a local server (e.g., npx serve) or via Capacitor on your iPhone.
+                    </div>
+                ` : ''}
                 <button id="startTutorBtn" class="btn primary ui-polish hover-lift" style="height: 68px; border-radius: 22px; font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 12px 24px var(--primary-glow); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);" onclick="startEnglishSession()">
                     ${renderIcon('mic', null, 'style="width:24px"')} Start Live Session
                 </button>
@@ -110,7 +119,7 @@ let audioContext = null;
 let mediaStream = null;
 let processor = null;
 
-async function startEnglishSession() {
+async function startEnglishSession(isFallback = false) {
     const startBtn = document.getElementById('startTutorBtn');
     const stopBtn = document.getElementById('stopTutorBtn');
     const status = document.getElementById('tutorStatus');
@@ -118,24 +127,28 @@ async function startEnglishSession() {
     
     try {
         startBtn.disabled = true;
-        startBtn.textContent = "Connecting to Aria...";
+        startBtn.textContent = isFallback ? "Trying fallback model..." : "Connecting to Aria...";
         
-        // 1. Get Live Config from AI_SERVICE
+        // 1. Get Live Config
         const config = AI_SERVICE.englishTutor.getLiveConfig();
+        const modelToUse = isFallback ? config.fallbackModel : config.model;
+        
+        // Append model to URL (Some versions of the API require this)
+        const finalUrl = `${config.url}&model=${modelToUse}`;
         
         // 2. Fetch past notes
         const sessions = state.data.english_tutor_sessions || [];
         const pastNotesSummary = sessions.map(s => `${s.date}: ${s.notes_for_next_time}`).join('\n');
         
         // 3. Setup WebSocket
-        tutorLiveSocket = new WebSocket(config.url);
+        tutorLiveSocket = new WebSocket(finalUrl);
         
         tutorLiveSocket.onopen = () => {
-            console.log("English Tutor: Connected to Gemini Live");
+            console.log(`English Tutor: Connected using ${modelToUse}`);
             
             const setupMsg = {
                 setup: {
-                    model: config.model,
+                    model: modelToUse,
                     generation_config: config.generationConfig,
                     system_instruction: {
                         parts: [{ text: AI_SERVICE.englishTutor.getSystemPrompt(pastNotesSummary) }]
@@ -170,8 +183,13 @@ async function startEnglishSession() {
 
         tutorLiveSocket.onerror = (e) => {
             console.error("WebSocket Error:", e);
-            showToast("Connection Error. Check API Key.");
-            stopEnglishSession();
+            if (!isFallback) {
+                console.log("Primary model failed, trying fallback...");
+                startEnglishSession(true);
+            } else {
+                showToast("Connection Error. Check API Key or Model access.");
+                stopEnglishSession(false); // Don't save empty session
+            }
         };
 
         tutorLiveSocket.onclose = () => {
@@ -301,7 +319,7 @@ function updateTranscript(text) {
     bubble.scrollTo(0, bubble.scrollHeight);
 }
 
-async function stopEnglishSession() {
+async function stopEnglishSession(isSave = true) {
     if (tutorLiveSocket) tutorLiveSocket.close();
     if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
     if (audioContext && audioContext.state !== 'closed') audioContext.close();
@@ -310,6 +328,11 @@ async function stopEnglishSession() {
     audioContext = null;
     mediaStream = null;
     
+    if (!isSave) {
+        renderEnglishTutor();
+        return;
+    }
+
     // Finalize session notes
     // In a production app, we would wait for a summary from AI, but for prototype:
     const todayStr = new Date().toISOString().split('T')[0];

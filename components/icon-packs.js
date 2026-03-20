@@ -142,6 +142,9 @@ const ICON_MAPPINGS = {
   'target': { lucide: 'target', emoji: '🎯', material: 'adjust', remix: 'focus-line', tabler: 'target', fontawesome: 'fa-bullseye', heroicons: 'target', feather: 'target' },
   'landmark': { lucide: 'landmark', emoji: '🏛️', material: 'account_balance', remix: 'bank-line', tabler: 'building-bank', fontawesome: 'fa-landmark', heroicons: 'building-library', feather: 'home' },
   'activity': { lucide: 'activity', emoji: '📈', material: 'insights', remix: 'pulse-line', tabler: 'activity', fontawesome: 'fa-chart-simple', heroicons: 'chart-bar-square', feather: 'activity' },
+  'graduation-cap': { lucide: 'graduation-cap', emoji: '🎓', material: 'school', remix: 'honour-line', tabler: 'school', fontawesome: 'fa-graduation-cap', heroicons: 'academic-cap', feather: 'award' },
+  'history': { lucide: 'history', emoji: '⏳', material: 'history', remix: 'history-line', tabler: 'history', fontawesome: 'fa-history', heroicons: 'clock', feather: 'rotate-ccw' },
+  'mic-off': { lucide: 'mic-off', emoji: '🔇', material: 'mic_off', remix: 'mic-off-line', tabler: 'microphone-off', fontawesome: 'fa-microphone-slash', heroicons: 'microphone-slash', feather: 'mic-off' },
 
   // Misc
   'greeting-morning': { lucide: 'sunrise', emoji: '☀️', material: 'wb_sunny', remix: 'sun-line', tabler: 'sun', fontawesome: 'fa-sun', heroicons: 'sun', feather: 'sun' },

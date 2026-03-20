@@ -187,8 +187,9 @@ async function apiCall(action, sheet, payload = {}, id = null) {
         console.log(`API Response [${action} ${sheet}]:`, json);
 
         if (!json.success) {
-            console.error(`[API Debug] Action failed [${action} ${sheet}]:`, json.message);
-            throw new Error(json.message);
+            const errorMsg = json.message || json.error || 'Unknown Backend Error';
+            console.error(`[API Debug] Action failed [${action} ${sheet}]:`, errorMsg);
+            throw new Error(errorMsg);
         }
 
         console.log(`[API Debug] Action success [${action} ${sheet}]. Data type:`, Array.isArray(json.data) ? `Array(${json.data.length})` : typeof json.data);

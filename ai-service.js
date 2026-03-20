@@ -371,9 +371,14 @@ Speak naturally, like a human tutor. Use your "native-audio" capabilities to exp
         // using the configuration provided here.
         getLiveConfig: function() {
             const config = AI_SERVICE.getConfig();
+            // Some environments require the model in the query string
+            const baseUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BiDiGenerateContent`;
+            const url = `${baseUrl}?key=${config.apiKey}`;
+            
             return {
-                url: `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BiDiGenerateContent?key=${config.apiKey}`,
+                url: url,
                 model: `models/${this.model}`,
+                fallbackModel: 'models/gemini-2.0-flash-exp', // More widely supported Live model
                 generationConfig: {
                     responseModalities: ["audio"],
                     speechConfig: {
