@@ -528,66 +528,251 @@ async function _uploadAudioToDrive(affId) {
   }
 }
 
-// ── Auto-download audio from Google Drive on other devices ──
-// Uses Apps Script as proxy to avoid CORS issues with direct Drive downloads
+// ── Cloud Audio Sync (manual, user-triggered) ──
+// Checks if there are cloud-stored voices missing locally; shows a sync banner if so.
 window._audioSyncRunning = false;
-async function autoSyncAudioFromDrive() {
+
+async function _checkCloudAudioAvailable() {
+  const affs = state.data.vision_affirmations || [];
+  let missing = 0;
+  for (const aff of affs) {
+    if (aff.audio_url && !(await hasStoredAudio(aff.id))) missing++;
+  }
+  if (missing === 0) return;
+
+  // Show a small sync banner at top of vision page
+  const main = document.getElementById('main');
+  if (!main) return;
+  const existing = document.getElementById('audioSyncBanner');
+  if (existing) return; // Already showing
+
+  const banner = document.createElement('div');
+  banner.id = 'audioSyncBanner';
+  banner.style.cssText = 'background:var(--surface-2);border:1px solid var(--border-color);border-radius:12px;padding:12px 16px;margin:0 0 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;';
+  banner.innerHTML = `
+    <div style="font-size:13px;color:var(--text-2);">
+      <strong>☁️ ${missing} voice${missing > 1 ? 's' : ''}</strong> available from cloud
+    </div>
+    <button onclick="syncAudioFromCloud()" style="padding:8px 16px;border:none;border-radius:8px;background:var(--primary);color:white;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
+      Sync Now
+    </button>
+  `;
+  // Insert after the first child (header area)
+  const shell = main.querySelector('.vision-shell') || main;
+  shell.insertBefore(banner, shell.children[1] || null);
+}
+
+window.syncAudioFromCloud = async function() {
   if (window._audioSyncRunning) return;
-  if (!_getGeminiKey()) return;
   window._audioSyncRunning = true;
+
+  const banner = document.getElementById('audioSyncBanner');
 
   try {
     const affs = state.data.vision_affirmations || [];
     const toDownload = [];
-
     for (const aff of affs) {
-      if (aff.audio_url && !(await hasStoredAudio(aff.id))) {
-        toDownload.push(aff);
-      }
+      if (aff.audio_url && !(await hasStoredAudio(aff.id))) toDownload.push(aff);
     }
 
-    if (toDownload.length === 0) { window._audioSyncRunning = false; return; }
+    if (toDownload.length === 0) {
+      if (banner) banner.remove();
+      window._audioSyncRunning = false;
+      return;
+    }
 
-    showToast(`Syncing ${toDownload.length} voice${toDownload.length > 1 ? 's' : ''} from cloud...`, 'info');
+    // Update banner to show progress
+    if (banner) banner.innerHTML = `
+      <div style="font-size:13px;color:var(--text-2);flex:1;">
+        <strong>☁️ Syncing...</strong> <span id="syncProgress">0/${toDownload.length}</span>
+      </div>
+    `;
 
     let synced = 0;
-    for (const aff of toDownload) {
-      try {
-        // Extract file ID from audio_url (supports "drive:XXXX" or legacy "https://drive.google.com/uc?...id=XXXX")
-        let fileId = aff.audio_url;
-        if (fileId.startsWith('drive:')) {
-          fileId = fileId.substring(6);
-        } else if (fileId.includes('id=')) {
-          fileId = fileId.split('id=')[1];
-        } else {
-          continue; // Unknown format
+    // Download 3 at a time for speed
+    const BATCH = 3;
+    for (let i = 0; i < toDownload.length; i += BATCH) {
+      const batch = toDownload.slice(i, i + BATCH);
+      await Promise.all(batch.map(async (aff) => {
+        try {
+          let fileId = aff.audio_url;
+          if (fileId.startsWith('drive:')) fileId = fileId.substring(6);
+          else if (fileId.includes('id=')) fileId = fileId.split('id=')[1];
+          else return;
+
+          const result = await apiCall('downloadAudio', null, { file_id: fileId });
+          if (!result?.data) return;
+
+          const binaryStr = atob(result.data);
+          const len = binaryStr.length;
+          const bytes = new Uint8Array(len);
+          for (let j = 0; j < len; j++) bytes[j] = binaryStr.charCodeAt(j);
+          if (bytes.byteLength < 100) return;
+
+          await _VisionIDB.put('audio://' + aff.id, { type: result.mimeType || 'audio/wav', buffer: bytes.buffer });
+          synced++;
+        } catch (e) {
+          console.warn('[Cloud Sync] Failed for', aff.id, e.message);
         }
+      }));
 
-        // Download via Apps Script proxy (no CORS issues)
-        const result = await apiCall('downloadAudio', null, { file_id: fileId });
-        if (!result?.data) continue;
-
-        // Convert base64 back to ArrayBuffer
-        const binaryStr = atob(result.data);
-        const len = binaryStr.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
-
-        if (bytes.byteLength < 100) continue;
-        await _VisionIDB.put('audio://' + aff.id, { type: result.mimeType || 'audio/wav', buffer: bytes.buffer });
-        synced++;
-      } catch (e) {
-        console.warn('[Drive Sync] Failed to download audio for', aff.id, e.message);
-      }
+      // Update progress
+      const prog = document.getElementById('syncProgress');
+      if (prog) prog.textContent = `${Math.min(i + BATCH, toDownload.length)}/${toDownload.length}`;
     }
 
-    if (synced > 0) {
-      showToast(`Synced ${synced} voice${synced > 1 ? 's' : ''} from cloud ☁️`, 'success');
-    }
+    if (banner) banner.remove();
+    if (synced > 0) showToast(`Synced ${synced} voice${synced > 1 ? 's' : ''} from cloud ☁️`, 'success');
+    else showToast('No new voices to sync', 'info');
   } catch (e) {
-    console.warn('[Drive Sync] Error:', e.message);
+    console.warn('[Cloud Sync] Error:', e.message);
+    showToast('Sync failed: ' + e.message, 'error');
+    if (banner) banner.remove();
   }
   window._audioSyncRunning = false;
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// VISION MEDIA CLOUD SYNC — Images & Videos to/from Google Drive
+// ═══════════════════════════════════════════════════════════════════
+
+// Helper: convert ArrayBuffer to base64
+function _bufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + CHUNK, bytes.length)));
+  }
+  return btoa(binary);
+}
+
+// Upload a single media file (image or video) from IDB to Drive
+async function _uploadMediaToDrive(localKey, filename, mimeType) {
+  try {
+    const stored = await _VisionIDB.get(localKey);
+    if (!stored || !stored.buffer) return null;
+
+    const base64 = _bufferToBase64(stored.buffer);
+    const result = await apiCall('uploadMedia', null, {
+      filename: filename,
+      data: base64,
+      mimeType: mimeType || stored.type || 'application/octet-stream'
+    });
+
+    return result?.url || null; // "drive:XXXX"
+  } catch (e) {
+    console.warn('[Media Upload] Failed for', localKey, e.message);
+    return null;
+  }
+}
+
+// Download a media file from Drive to IDB
+async function _downloadMediaFromDrive(driveRef) {
+  try {
+    let fileId = driveRef;
+    if (fileId.startsWith('drive:')) fileId = fileId.substring(6);
+    else if (fileId.includes('id=')) fileId = fileId.split('id=')[1];
+    else return null;
+
+    const result = await apiCall('downloadMedia', null, { file_id: fileId });
+    if (!result?.data) return null;
+
+    const binaryStr = atob(result.data);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+
+    return { type: result.mimeType || 'application/octet-stream', buffer: bytes.buffer };
+  } catch (e) {
+    console.warn('[Media Download] Failed for', driveRef, e.message);
+    return null;
+  }
+}
+
+// After saving a vision goal, upload its media to Drive in background
+async function _syncVisionMediaToCloud(goalId) {
+  const goals = state.data.vision || state.data.visions || [];
+  const goal = goals.find(g => String(g.id) === String(goalId));
+  if (!goal) return;
+
+  // Upload image if it's a local reference
+  if (goal.image_url && goal.image_url.startsWith('local-img://')) {
+    const localKey = goal.image_url.replace('local-img://', '');
+    const ext = localKey.startsWith('img_') ? '.jpg' : '.dat';
+    const driveRef = await _uploadMediaToDrive(localKey, 'vision_' + goalId + '_img' + ext, 'image/jpeg');
+    if (driveRef) {
+      // Store both local + cloud ref: "local-img://KEY|drive:ID"
+      goal.image_url = 'local-img://' + localKey + '|' + driveRef;
+      apiCall('update', 'vision_board', { image_url: goal.image_url }, goalId).catch(() => {});
+    }
+  }
+
+  // Upload videos if they're local references
+  if (goal.video_url) {
+    const parts = goal.video_url.split(',');
+    let changed = false;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (part.startsWith('local://') && !part.includes('|drive:')) {
+        const localKey = part.replace('local://', '');
+        const ext = '.mp4';
+        const driveRef = await _uploadMediaToDrive(localKey, 'vision_' + goalId + '_vid' + i + ext, 'video/mp4');
+        if (driveRef) {
+          parts[i] = 'local://' + localKey + '|' + driveRef;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      goal.video_url = parts.join(',');
+      apiCall('update', 'vision_board', { video_url: goal.video_url }, goalId).catch(() => {});
+    }
+  }
+}
+
+// Sync missing cloud media to local IDB (called when loading a vision goal's media)
+async function _syncVisionMediaFromCloud(goal) {
+  if (!goal) return;
+  let changed = false;
+
+  // Check image
+  if (goal.image_url && goal.image_url.includes('|drive:')) {
+    const [localPart, drivePart] = goal.image_url.split('|');
+    const localKey = localPart.replace('local-img://', '');
+    const hasLocal = await _VisionIDB.get(localKey);
+    if (!hasLocal) {
+      const downloaded = await _downloadMediaFromDrive(drivePart);
+      if (downloaded) {
+        await _VisionIDB.put(localKey, downloaded);
+        const blob = new Blob([downloaded.buffer], { type: downloaded.type });
+        window._visionMediaCache[localKey] = URL.createObjectURL(blob);
+        changed = true;
+      }
+    }
+  }
+
+  // Check videos
+  if (goal.video_url) {
+    const parts = goal.video_url.split(',');
+    for (const part of parts) {
+      if (part.includes('|drive:')) {
+        const [localPart, drivePart] = part.split('|');
+        const localKey = localPart.replace('local://', '');
+        const hasLocal = await _VisionIDB.get(localKey);
+        if (!hasLocal) {
+          const downloaded = await _downloadMediaFromDrive(drivePart);
+          if (downloaded) {
+            await _VisionIDB.put(localKey, downloaded);
+            const blob = new Blob([downloaded.buffer], { type: downloaded.type });
+            window._visionMediaCache[localKey] = URL.createObjectURL(blob);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  return changed;
 }
 
 // Bulk generate voices — one call per affirmation, memory-safe for iOS
@@ -720,6 +905,136 @@ window.generateAllVoices = async function(goalId) {
   showToast(`Done! ${generated} generated, ${skipped} skipped, ${failed} failed`, failed === 0 ? 'success' : 'warning');
 };
 
+// ── Download missing cloud audio silently (called on manager open & ritual start) ──
+async function _syncMissingCloudAudio() {
+  const affs = state.data.vision_affirmations || [];
+  const toDownload = [];
+  for (const aff of affs) {
+    if (aff.audio_url && !(await hasStoredAudio(aff.id))) toDownload.push(aff);
+  }
+  if (toDownload.length === 0) return 0;
+
+  let synced = 0;
+  // Download 3 at a time
+  const BATCH = 3;
+  for (let i = 0; i < toDownload.length; i += BATCH) {
+    const batch = toDownload.slice(i, i + BATCH);
+    await Promise.all(batch.map(async (aff) => {
+      try {
+        let fileId = aff.audio_url;
+        if (fileId.startsWith('drive:')) fileId = fileId.substring(6);
+        else if (fileId.includes('id=')) fileId = fileId.split('id=')[1];
+        else return;
+        const result = await apiCall('downloadAudio', null, { file_id: fileId });
+        if (!result?.data) return;
+        const binaryStr = atob(result.data);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+        if (bytes.byteLength < 100) return;
+        await _VisionIDB.put('audio://' + aff.id, { type: result.mimeType || 'audio/wav', buffer: bytes.buffer });
+        synced++;
+      } catch (e) {
+        console.warn('[Cloud Sync] Failed for', aff.id, e.message);
+      }
+    }));
+  }
+  return synced;
+}
+
+// ── Delete stored audio for an affirmation ──
+window.deleteAffAudio = async function(affId) {
+  try {
+    await _VisionIDB.del('audio://' + affId);
+    // Clean cached blob URL
+    if (window._affAudioCache[affId]) {
+      URL.revokeObjectURL(window._affAudioCache[affId]);
+      delete window._affAudioCache[affId];
+    }
+    // Clear cloud reference in sheet
+    const aff = (state.data.vision_affirmations || []).find(a => String(a.id) === String(affId));
+    if (aff && aff.audio_url) {
+      aff.audio_url = '';
+      apiCall('update', 'vision_affirmations', { audio_url: '' }, affId).catch(() => {});
+    }
+    showToast('Voice deleted', 'success');
+    updateVoiceStatusIndicators();
+  } catch (e) {
+    showToast('Delete failed: ' + e.message, 'error');
+  }
+};
+
+// ── Delete ALL stored audio ──
+window.deleteAllAffAudio = async function() {
+  if (!confirm('Delete all generated voices? You can regenerate them later.')) return;
+  const affs = state.data.vision_affirmations || [];
+  let count = 0;
+  for (const aff of affs) {
+    try {
+      const has = await hasStoredAudio(aff.id);
+      if (has) {
+        await _VisionIDB.del('audio://' + aff.id);
+        count++;
+      }
+      if (window._affAudioCache[aff.id]) {
+        URL.revokeObjectURL(window._affAudioCache[aff.id]);
+        delete window._affAudioCache[aff.id];
+      }
+      if (aff.audio_url) {
+        aff.audio_url = '';
+        apiCall('update', 'vision_affirmations', { audio_url: '' }, aff.id).catch(() => {});
+      }
+    } catch (e) {}
+  }
+  showToast(`Deleted ${count} voice${count !== 1 ? 's' : ''}`, 'success');
+  updateVoiceStatusIndicators();
+};
+
+// ── Download ALL cloud audio to local — replaces any local copies with cloud versions ──
+window.downloadAllFromCloud = async function() {
+  const affs = state.data.vision_affirmations || [];
+  const toDownload = affs.filter(a => a.audio_url);
+
+  if (toDownload.length === 0) {
+    showToast('No cloud voices found', 'info');
+    return;
+  }
+
+  const btn = document.getElementById('downloadCloudBtn');
+  if (btn) { btn.disabled = true; btn.textContent = `☁️ 0/${toDownload.length}...`; }
+
+  let synced = 0;
+  const BATCH = 3;
+  for (let i = 0; i < toDownload.length; i += BATCH) {
+    const batch = toDownload.slice(i, i + BATCH);
+    await Promise.all(batch.map(async (aff) => {
+      try {
+        let fileId = aff.audio_url;
+        if (fileId.startsWith('drive:')) fileId = fileId.substring(6);
+        else if (fileId.includes('id=')) fileId = fileId.split('id=')[1];
+        else return;
+
+        const result = await apiCall('downloadAudio', null, { file_id: fileId });
+        if (!result?.data) return;
+
+        const binaryStr = atob(result.data);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+        if (bytes.byteLength < 100) return;
+
+        await _VisionIDB.put('audio://' + aff.id, { type: result.mimeType || 'audio/wav', buffer: bytes.buffer });
+        synced++;
+      } catch (e) {
+        console.warn('[Cloud Download] Failed for', aff.id, e.message);
+      }
+    }));
+    if (btn) btn.textContent = `☁️ ${Math.min(i + BATCH, toDownload.length)}/${toDownload.length}...`;
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '☁️ Download from Cloud'; }
+  showToast(`Downloaded ${synced} voice${synced !== 1 ? 's' : ''} from cloud`, 'success');
+  updateVoiceStatusIndicators();
+};
+
 // Pre-cached blob URLs for instant playback (avoids async IDB fetch in tap handler)
 window._affAudioCache = {};  // { affId: blobUrl }
 
@@ -754,9 +1069,15 @@ async function updateVoiceStatusIndicators() {
       window._affAudioCache[affId] = URL.createObjectURL(blob);
     }
   }
-  // Show/hide play preview buttons
+  // Show/hide play preview buttons + delete buttons
   const playBtns = document.querySelectorAll('.aff-voice-play-btn');
   for (const btn of playBtns) {
+    const affId = btn.dataset.affId;
+    if (!affId) continue;
+    btn.style.display = window._affAudioCache[affId] ? 'inline-flex' : 'none';
+  }
+  const delBtns = document.querySelectorAll('.aff-voice-del-btn');
+  for (const btn of delBtns) {
     const affId = btn.dataset.affId;
     if (!affId) continue;
     btn.style.display = window._affAudioCache[affId] ? 'inline-flex' : 'none';
@@ -834,12 +1155,21 @@ async function resolveMediaUrlAsync(url) {
   if (!url) return '';
   if (url.startsWith('local://') || url.startsWith('local-img://')) {
     const isImg = url.includes('local-img://');
-    const key = isImg ? url.slice(12) : url.slice(8);
+
+    // Handle "local-img://KEY|drive:ID" or "local://KEY|drive:ID" format
+    let fullRef = isImg ? url.slice(12) : url.slice(8);
+    let driveRef = null;
+    let key = fullRef;
+    if (fullRef.includes('|drive:')) {
+      const parts = fullRef.split('|');
+      key = parts[0];
+      driveRef = parts[1]; // "drive:XXXXX"
+    }
 
     // Check in-memory cache first
     if (window._visionMediaCache[key]) return window._visionMediaCache[key];
 
-    // Otherwise, fetch from IDB and create new Blob URL
+    // Try fetching from local IDB
     try {
       const stored = await _VisionIDB.get(key);
       const res = await _idbToObjectUrl(stored);
@@ -847,9 +1177,24 @@ async function resolveMediaUrlAsync(url) {
         window._visionMediaCache[key] = res.url;
         return res.url;
       }
-    } catch (e) {
-      console.warn('Async media resolution failed for:', key, e);
+    } catch (e) {}
+
+    // Not in local IDB — try downloading from Drive if we have a cloud ref
+    if (driveRef) {
+      try {
+        const downloaded = await _downloadMediaFromDrive(driveRef);
+        if (downloaded && downloaded.buffer) {
+          await _VisionIDB.put(key, downloaded);
+          const blob = new Blob([downloaded.buffer], { type: downloaded.type });
+          const blobUrl = URL.createObjectURL(blob);
+          window._visionMediaCache[key] = blobUrl;
+          return blobUrl;
+        }
+      } catch (e) {
+        console.warn('Cloud media download failed for:', key, e);
+      }
     }
+
     return '';
   }
   return sanitizeUrl(url);
@@ -1013,8 +1358,8 @@ async function renderVision() {
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   initVisionMediaElements(document.getElementById('main'));
 
-  // Auto-sync: download any cloud-stored audio missing from this device
-  setTimeout(() => autoSyncAudioFromDrive(), 2000);
+  // Check if cloud audio needs syncing — show button if so, don't auto-download
+  setTimeout(() => _checkCloudAudioAvailable(), 2000);
 }
 
 function renderFilterChips() {
@@ -2119,12 +2464,14 @@ document.addEventListener('click', async function (event) {
     if (!payload.title) { showToast('Title is required!', 'error'); return; }
     payload.status = 'active';
     showToast('Saving goal…');
-    await apiCall('post', 'vision_board', payload);
+    const createRes = await apiCall('post', 'vision_board', payload);
     document.getElementById('universalModal').classList.add('hidden');
     window._visionPendingImage = null;
     window._visionPendingVideo = null;
     await refreshData('vision');
-    showToast('Vision goal added! ' + renderIcon('target', null, 'style="width:16px;height:16px;margin-right:4px"'));
+    showToast('Vision goal added! ✅');
+    // Upload media to Drive in background
+    if (createRes?.id) _syncVisionMediaToCloud(createRes.id).catch(() => {});
   } else if (btn.dataset.action === 'update-vision-modal') {
     const id = btn.dataset.editId;
     const payload = collectVisionPayload();
@@ -2136,6 +2483,8 @@ document.addEventListener('click', async function (event) {
     window._visionPendingVideo = null;
     await refreshData('vision');
     showToast('Vision goal updated! ✅');
+    // Upload media to Drive in background
+    _syncVisionMediaToCloud(id).catch(() => {});
   }
 });
 
@@ -3458,6 +3807,7 @@ window.openAffirmationManager = function() {
           </div>
           <button class="aff-voice-play-btn" data-aff-id="${a.id}" onclick="event.stopPropagation(); previewAffVoice('${a.id}')" title="Preview voice" style="display:none;">▶</button>
           <button class="aff-voice-gen-btn" data-aff-id="${a.id}" onclick="event.stopPropagation(); genSingleVoice('${a.id}', '${escH(a.text).replace(/'/g, "\\'")}')" title="Generate voice">🎙</button>
+          <button class="aff-voice-del-btn" data-aff-id="${a.id}" onclick="event.stopPropagation(); deleteAffAudio('${a.id}')" title="Delete voice" style="display:none;">🗑</button>
           <span class="aff-voice-badge" data-aff-id="${a.id}"></span>
           <div class="aff-mgr-duration">
             <button class="aff-mgr-dur-btn" onclick="adjustAffDuration('${a.id}',-1)" title="Decrease">−</button>
@@ -3475,7 +3825,11 @@ window.openAffirmationManager = function() {
         <button onclick="document.getElementById('affManagerModal')?.remove()" style="background:var(--surface-3);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;color:var(--text-2);display:flex;align-items:center;justify-content:center;">✕</button>
       </div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;padding:0 4px;">Drag to reorder. Set display time per affirmation.</div>
-      <button id="bulkVoiceBtn" class="aff-voice-bulk-btn" onclick="generateAllVoices()">🎙 Generate All Voices</button>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button id="bulkVoiceBtn" class="aff-voice-bulk-btn" onclick="generateAllVoices()" style="flex:1;">🎙 Generate All</button>
+        <button class="aff-voice-bulk-btn" onclick="downloadAllFromCloud()" style="flex:1;background:var(--info);color:white;" id="downloadCloudBtn">☁️ Download from Cloud</button>
+        <button class="aff-voice-bulk-btn" onclick="deleteAllAffAudio()" style="flex:0 0 auto;background:var(--error);color:white;">🗑</button>
+      </div>
       <div class="aff-mgr-list" id="affMgrList">
         ${buildList()}
       </div>
@@ -3495,8 +3849,14 @@ window.openAffirmationManager = function() {
   // Setup drag-to-reorder via touch/pointer
   initAffManagerDrag();
 
-  // Check voice status for all affirmations (async, non-blocking)
+  // Check voice status + auto-sync missing cloud audio
   updateVoiceStatusIndicators();
+  _syncMissingCloudAudio().then(synced => {
+    if (synced > 0) {
+      showToast(`Synced ${synced} voice${synced > 1 ? 's' : ''} from cloud`, 'success');
+      updateVoiceStatusIndicators(); // Refresh UI after sync
+    }
+  }).catch(() => {});
 };
 
 // Generate voice for a single affirmation (from manager button)
@@ -3661,6 +4021,24 @@ window.startManifestationRitual = function(goalId) {
   }
 
   const ritualAffs = [...affirmations].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  // Sync missing cloud audio in background (fire-and-forget, won't block ritual start)
+  _syncMissingCloudAudio().then(synced => {
+    if (synced > 0) {
+      // Re-cache newly downloaded audio for the ritual
+      ritualAffs.forEach(async (aff) => {
+        if (!window._ritualAudioCache[aff.id]) {
+          try {
+            const stored = await _VisionIDB.get('audio://' + aff.id);
+            if (stored && stored.buffer) {
+              const blob = new Blob([stored.buffer], { type: stored.type || 'audio/wav' });
+              window._ritualAudioCache[aff.id] = URL.createObjectURL(blob);
+            }
+          } catch(e) {}
+        }
+      });
+    }
+  }).catch(() => {});
 
   // Unlock iOS audio + pre-cache all affirmation audio — MUST be within user tap callstack
   unlockRitualAudio(ritualAffs);

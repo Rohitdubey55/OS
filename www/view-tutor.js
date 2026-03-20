@@ -151,18 +151,27 @@ function renderTutor() {
       <!-- Active Session View (hidden initially) -->
       <div class="tutor-active hidden" id="tutorActive">
         <div class="tutor-active-header">
-          <span class="tutor-active-topic" id="tutorActiveTopic"></span>
-          <span class="tutor-active-timer" id="tutorTimer">00:00</span>
-          <button class="tutor-end-btn" onclick="endTutorSession()">End Session</button>
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+            <span class="tutor-active-topic" id="tutorActiveTopic" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            <span class="tutor-active-timer" id="tutorTimer">00:00</span>
+          </div>
+          <button class="tutor-end-btn" onclick="endTutorSession()">End</button>
         </div>
 
         <div class="tutor-voice-area">
           <div class="tutor-mic-ring" id="tutorMicRing">
-            <div class="tutor-mic-circle" id="tutorMicCircle" onclick="toggleTutorMic()">
+            <div class="tutor-mic-circle tutor-mic--idle" id="tutorMicCircle">
               <span class="tutor-mic-icon" id="tutorMicIcon">🎙</span>
             </div>
           </div>
           <div class="tutor-status" id="tutorStatus">Connecting...</div>
+          <button class="tutor-talk-btn" id="tutorTalkBtn"
+                  ontouchstart="tutorStartTalking(event)" ontouchend="tutorStopTalking(event)"
+                  onmousedown="tutorStartTalking(event)" onmouseup="tutorStopTalking(event)"
+                  oncontextmenu="return false">
+            Hold to Speak
+          </button>
+          <div class="tutor-talk-hint" id="tutorTalkHint">Hold the button while you speak, release when done</div>
         </div>
 
         <div class="tutor-transcript" id="tutorTranscript">
@@ -186,12 +195,36 @@ window.startTutorSession = async function(topicId) {
   if (!apiKey) { showToast('Set Gemini API key in Settings → AI', 'error'); return; }
 
   const topic = TUTOR_TOPICS.find(t => t.id === topicId) || TUTOR_TOPICS[7];
+
+  // ── iOS FIX: Request mic permission IMMEDIATELY in the user tap handler ──
+  // getUserMedia MUST be called directly in the gesture callstack on iOS
+  let micStream;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+  } catch (e) {
+    showToast('Microphone access denied — check Settings → Safari → Microphone', 'error');
+    return;
+  }
+
+  // Also create/resume AudioContext in the gesture handler (iOS requires this)
+  const playbackCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+  if (playbackCtx.state === 'suspended') await playbackCtx.resume();
+  _tutor.playbackCtx = playbackCtx;
+
   _tutor.topic = topic.label;
   _tutor.sessionStart = Date.now();
   _tutor.messages = [];
   _tutor.audioQueue = [];
   _tutor.isPlayingAudio = false;
   _tutor.sessionActive = true;
+  _tutor.micStream = micStream; // Store the stream obtained in gesture
 
   // Switch UI
   const pre = document.getElementById('tutorPresession');
@@ -208,7 +241,7 @@ window.startTutorSession = async function(topicId) {
   // Build past session context
   const pastCtx = buildPastSessionsContext();
 
-  // Connect WebSocket
+  // Connect WebSocket (mic stream already obtained above)
   try {
     await connectTutorWS(topic.label, pastCtx);
   } catch (e) {
@@ -249,11 +282,7 @@ function connectTutorWS(topic, pastCtx) {
           inputAudioTranscription: {},
           realtimeInputConfig: {
             automaticActivityDetection: {
-              disabled: false,
-              startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
-              endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
-              prefixPaddingMs: 200,
-              silenceDurationMs: 1500
+              disabled: true
             }
           }
         }
@@ -272,14 +301,16 @@ function connectTutorWS(topic, pastCtx) {
         if (msg.setupComplete) {
           setupDone = true;
           _tutor.isConnected = true;
-          setTutorStatus('Connected! Starting microphone...');
+          setTutorStatus('Setting up microphone...');
           try {
             await startTutorMic(ws);
-            setTutorStatus('🎙 Listening... speak freely');
-            setMicState('listening');
+            setTutorStatus('Ready! Hold the button to speak');
+            setMicState('idle');
+            const btn = document.getElementById('tutorTalkBtn');
+            if (btn) btn.style.display = '';
           } catch(e) {
-            setTutorStatus('Mic access denied — check permissions');
-            showToast('Microphone permission needed for voice chat', 'error');
+            setTutorStatus('Mic setup failed — ' + (e.message || 'unknown'));
+            showToast('Microphone error: ' + e.message, 'error');
           }
           resolve();
           return;
@@ -306,8 +337,11 @@ function connectTutorWS(topic, pastCtx) {
           if (txt.trim()) appendTutorTranscript('user', txt);
         }
 
-        // Turn complete — AI done speaking
+        // Turn complete — AI done speaking, finalize coach bubble
         if (msg.serverContent?.turnComplete) {
+          _finalizeTutorBubble('coach');
+          _tutorLiveText = '';
+          _tutorLastRole = null;
           setTutorStatus('🎙 Listening... your turn');
           setMicState('listening');
         }
@@ -337,24 +371,23 @@ function connectTutorWS(topic, pastCtx) {
    MICROPHONE CAPTURE (16kHz PCM)
 ═══════════════════════════════ */
 async function startTutorMic(ws) {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      sampleRate: { ideal: 16000 },
-      channelCount: 1,
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
-  });
-  _tutor.micStream = stream;
+  // Use the stream already obtained in the user gesture handler
+  const stream = _tutor.micStream;
+  if (!stream) throw new Error('No microphone stream available');
 
-  // Use AudioContext — may default to 44.1/48kHz, we'll downsample
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  // iOS doesn't support AudioContext at 16kHz — use native sample rate and downsample
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
   _tutor.inputAudioCtx = audioCtx;
+  const nativeSampleRate = audioCtx.sampleRate; // 44100 or 48000 on iOS
+  const targetRate = 16000;
+  const downsampleRatio = Math.round(nativeSampleRate / targetRate);
+
   const source = audioCtx.createMediaStreamSource(stream);
 
-  // ScriptProcessor for capturing chunks (4096 samples ~ 256ms at 16kHz)
-  const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+  // Use larger buffer for iOS stability
+  const bufSize = 4096;
+  const processor = audioCtx.createScriptProcessor(bufSize, 1, 1);
   _tutor.processorNode = processor;
 
   processor.onaudioprocess = (e) => {
@@ -362,14 +395,15 @@ async function startTutorMic(ws) {
 
     const float32 = e.inputBuffer.getChannelData(0);
 
-    // Convert Float32 [-1,1] → Int16 PCM
-    const int16 = new Int16Array(float32.length);
-    for (let i = 0; i < float32.length; i++) {
-      const s = Math.max(-1, Math.min(1, float32[i]));
+    // Downsample from native rate (44.1k/48k) to 16kHz
+    const outLen = Math.floor(float32.length / downsampleRatio);
+    const int16 = new Int16Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const s = Math.max(-1, Math.min(1, float32[i * downsampleRatio]));
       int16[i] = s < 0 ? s * 32768 : s * 32767;
     }
 
-    // Base64 encode — process in smaller chunks to avoid call stack issues
+    // Base64 encode
     const bytes = new Uint8Array(int16.buffer);
     let binary = '';
     const CHUNK = 8192;
@@ -390,7 +424,7 @@ async function startTutorMic(ws) {
 
   source.connect(processor);
   processor.connect(audioCtx.destination);
-  _tutor.isListening = true;
+  _tutor.isListening = false; // Don't auto-listen; wait for push-to-talk
 }
 
 function stopTutorMic() {
@@ -441,9 +475,10 @@ function playNextTutorChunk() {
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-  // Play via AudioContext at 24kHz
+  // Play via AudioContext at 24kHz (pre-created in gesture handler for iOS)
   const audioCtx = _tutor.playbackCtx || new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
   _tutor.playbackCtx = audioCtx;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
 
   const numSamples = bytes.length / 2;
   const buffer = audioCtx.createBuffer(1, numSamples, 24000);
@@ -492,46 +527,46 @@ function _cleanTranscription(text) {
 }
 
 /*
- * Transcription buffering — Gemini sends fragments word-by-word or in tiny chunks.
- * We buffer them and flush after a short debounce to produce clean, complete sentences.
+ * Transcription — Gemini sends fragments word-by-word.
+ * Strategy: ONE live bubble per role. When the OTHER role starts talking,
+ * we finalize the current role's bubble and start a new one.
+ * This keeps all of a speaker's text in a single bubble.
  */
-const _tutorTranscriptBuffer = { user: '', coach: '', userTimer: null, coachTimer: null };
+let _tutorLastRole = null;   // Track which role is currently "live"
+let _tutorLiveText = '';     // Accumulated text for the live bubble
 
 function appendTutorTranscript(role, text) {
   const cleaned = _cleanTranscription(text);
   if (!cleaned || cleaned.length < 2) return;
 
-  const bufKey = role; // 'user' or 'coach'
-  const timerKey = role + 'Timer';
+  // If role changed, finalize the previous role's bubble
+  if (_tutorLastRole && _tutorLastRole !== role) {
+    _finalizeTutorBubble(_tutorLastRole);
+    _tutorLiveText = '';
+  }
+  _tutorLastRole = role;
 
-  // Append to buffer
-  _tutorTranscriptBuffer[bufKey] += (_tutorTranscriptBuffer[bufKey] ? ' ' : '') + cleaned;
+  // Always join with a space
+  if (_tutorLiveText) {
+    _tutorLiveText += ' ' + cleaned;
+  } else {
+    _tutorLiveText = cleaned;
+  }
 
-  // Clear any existing flush timer
-  if (_tutorTranscriptBuffer[timerKey]) clearTimeout(_tutorTranscriptBuffer[timerKey]);
-
-  // Debounce: flush after 800ms of no new fragments for this role
-  // Coach fragments come faster (streamed audio transcript), user fragments may be slower
-  const delay = role === 'coach' ? 1000 : 800;
-  _tutorTranscriptBuffer[timerKey] = setTimeout(() => _flushTranscript(role), delay);
-
-  // Also update the live preview in the UI immediately (so user sees text appearing)
-  _updateLiveTranscriptUI(role, _tutorTranscriptBuffer[bufKey]);
+  // Update the live bubble in the UI
+  _updateLiveBubble(role, _tutorLiveText);
 }
 
-/* Update the UI in real-time as fragments arrive (live preview) */
-function _updateLiveTranscriptUI(role, currentText) {
+function _updateLiveBubble(role, text) {
   const inner = document.getElementById('tutorTranscriptInner');
   if (!inner) return;
 
-  // Find or create a "live" bubble for this role
-  let liveEl = inner.querySelector(`.tutor-msg--live-${role}`);
-  if (!liveEl) {
-    // If last bubble is a different role, or no bubbles yet, create new live bubble
+  let liveEl = inner.querySelector('.tutor-msg--live');
+  if (!liveEl || liveEl.dataset.role !== role) {
+    // Create new live bubble
     liveEl = document.createElement('div');
-    liveEl.className = `tutor-msg tutor-msg--${role} tutor-msg--live-${role}`;
+    liveEl.className = `tutor-msg tutor-msg--${role} tutor-msg--live`;
     liveEl.dataset.role = role;
-    liveEl.dataset.live = 'true';
     liveEl.innerHTML = `
       <span class="tutor-msg-role">${role === 'coach' ? 'Coach' : 'You'}</span>
       <span class="tutor-msg-text"></span>
@@ -540,34 +575,27 @@ function _updateLiveTranscriptUI(role, currentText) {
   }
 
   const textEl = liveEl.querySelector('.tutor-msg-text');
-  if (textEl) textEl.textContent = currentText;
+  if (textEl) textEl.textContent = text;
   inner.scrollTop = inner.scrollHeight;
 }
 
-/* Flush the buffered text: finalize the live bubble and store the message */
-function _flushTranscript(role) {
-  const bufKey = role;
-  const timerKey = role + 'Timer';
-  const text = _tutorTranscriptBuffer[bufKey].trim();
-  _tutorTranscriptBuffer[bufKey] = '';
-  _tutorTranscriptBuffer[timerKey] = null;
-
+function _finalizeTutorBubble(role) {
+  const text = _tutorLiveText.trim();
   if (!text || text.length < 3) return;
 
-  // Store in messages array
+  // Store in messages
   _tutor.messages.push({
     role: role === 'coach' ? 'tutor' : 'user',
     content: text,
     timestamp: new Date().toISOString()
   });
 
-  // Finalize the live bubble — remove the live marker so next fragments create a new one
+  // Remove the live marker from the bubble
   const inner = document.getElementById('tutorTranscriptInner');
   if (!inner) return;
-  const liveEl = inner.querySelector(`.tutor-msg--live-${role}`);
-  if (liveEl) {
-    liveEl.classList.remove(`tutor-msg--live-${role}`);
-    liveEl.dataset.live = 'false';
+  const liveEl = inner.querySelector('.tutor-msg--live');
+  if (liveEl && liveEl.dataset.role === role) {
+    liveEl.classList.remove('tutor-msg--live');
     const textEl = liveEl.querySelector('.tutor-msg-text');
     if (textEl) textEl.textContent = text;
   }
@@ -579,6 +607,9 @@ function _flushTranscript(role) {
 window.endTutorSession = async function() {
   if (!_tutor.sessionActive) return;
   _tutor.sessionActive = false;
+
+  // Finalize any pending transcript bubble
+  if (_tutorLastRole) { _finalizeTutorBubble(_tutorLastRole); _tutorLiveText = ''; _tutorLastRole = null; }
 
   stopTutorMic();
   stopTutorPlayback();
@@ -688,15 +719,53 @@ function setMicState(state) {
   }
 }
 
+/* ── Push-to-Talk: Hold to speak, release to send ── */
+window.tutorStartTalking = function(e) {
+  if (e) e.preventDefault();
+  if (!_tutor.isConnected || !_tutor.ws || _tutor.ws.readyState !== WebSocket.OPEN) return;
+
+  // Stop coach audio if playing (interrupt)
+  stopTutorPlayback();
+
+  // Resume AudioContexts on iOS (user gesture required)
+  if (_tutor.inputAudioCtx && _tutor.inputAudioCtx.state === 'suspended') _tutor.inputAudioCtx.resume();
+  if (_tutor.playbackCtx && _tutor.playbackCtx.state === 'suspended') _tutor.playbackCtx.resume();
+
+  // Send activity start signal
+  _tutor.ws.send(JSON.stringify({ realtimeInput: { activityStart: {} } }));
+
+  _tutor.isListening = true;
+  setMicState('listening');
+  setTutorStatus('🎙 Listening...');
+
+  const btn = document.getElementById('tutorTalkBtn');
+  if (btn) { btn.textContent = '🎙 Speaking...'; btn.classList.add('tutor-talk-btn--active'); }
+};
+
+window.tutorStopTalking = function(e) {
+  if (e) e.preventDefault();
+  if (!_tutor.isListening) return;
+
+  _tutor.isListening = false;
+
+  // Send activity end signal — tells Gemini user is done speaking
+  if (_tutor.ws && _tutor.ws.readyState === WebSocket.OPEN) {
+    _tutor.ws.send(JSON.stringify({ realtimeInput: { activityEnd: {} } }));
+  }
+
+  setMicState('idle');
+  setTutorStatus('Processing...');
+
+  const btn = document.getElementById('tutorTalkBtn');
+  if (btn) { btn.textContent = 'Hold to Speak'; btn.classList.remove('tutor-talk-btn--active'); }
+};
+
+// Legacy toggle (tap on mic circle)
 window.toggleTutorMic = function() {
   if (_tutor.isListening) {
-    _tutor.isListening = false;
-    setMicState('idle');
-    setTutorStatus('Mic paused — tap to resume');
-  } else if (_tutor.isConnected) {
-    _tutor.isListening = true;
-    setMicState('listening');
-    setTutorStatus('🎙 Listening...');
+    tutorStopTalking();
+  } else {
+    tutorStartTalking();
   }
 };
 
