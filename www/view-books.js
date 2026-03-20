@@ -37,6 +37,64 @@ function bookInitials(title) {
   return title.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 }
 
+/* ── Book Cover Helpers ── */
+
+// Returns cover <img> if cover_url exists, otherwise gradient+initials fallback
+function bookCoverHTML(book, sizeClass = '') {
+  const url = book.cover_url || '';
+  if (url) {
+    return `<img src="${escapeHtml(url)}" alt="" class="bl-cover-img ${sizeClass}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <span class="bl-cover-initials ${sizeClass}" style="display:none">${escapeHtml(bookInitials(book.title))}</span>`;
+  }
+  return `<span class="bl-cover-initials ${sizeClass}">${escapeHtml(bookInitials(book.title))}</span>`;
+}
+
+// Fetch cover from Open Library (free, no API key)
+async function fetchBookCover(title, author) {
+  try {
+    const q = encodeURIComponent(`${title} ${author || ''}`);
+    const resp = await fetch(`https://openlibrary.org/search.json?q=${q}&limit=1&fields=cover_i,isbn`);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const doc = (data.docs || [])[0];
+    if (!doc) return null;
+
+    // Prefer cover_i (Open Library cover ID) → gives us a direct image URL
+    if (doc.cover_i) {
+      return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
+    }
+    // Fallback: use ISBN
+    const isbn = (doc.isbn || [])[0];
+    if (isbn) {
+      return `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`;
+    }
+    return null;
+  } catch (e) {
+    console.warn('[BookCover] Fetch failed:', e.message);
+    return null;
+  }
+}
+
+// Auto-fetch and save cover for a book (non-blocking)
+async function autoFetchCover(bookId, title, author) {
+  try {
+    const coverUrl = await fetchBookCover(title, author);
+    if (!coverUrl) return;
+    // Save to backend
+    await apiCall('update', 'book_library', { cover_url: coverUrl }, bookId);
+    // Update local state
+    const book = (state.data.book_library || []).find(b => String(b.id) === String(bookId));
+    if (book) {
+      book.cover_url = coverUrl;
+      // Refresh cards if on books view
+      const main = document.getElementById('main');
+      if (main && main.querySelector('.bl-shell')) booksRenderList();
+    }
+  } catch (e) {
+    console.warn('[BookCover] Auto-fetch save failed:', e.message);
+  }
+}
+
 /* ═══════════════════════════════
    ENTRY POINT
 ═══════════════════════════════ */
@@ -69,6 +127,16 @@ async function booksLoadData() {
     state.data.book_summaries = sums || [];
     booksRenderList();
     if (typeof lucide !== 'undefined') lucide.createIcons();
+    // Auto-fetch missing covers in background (staggered to not overwhelm API)
+    const missing = (state.data.book_library || []).filter(b => !b.cover_url);
+    if (missing.length > 0) {
+      (async () => {
+        for (const book of missing) {
+          await autoFetchCover(book.id, book.title, book.author);
+          await new Promise(r => setTimeout(r, 500)); // 500ms stagger
+        }
+      })();
+    }
   } catch (e) {
     console.error('Books load error', e);
   }
@@ -196,26 +264,44 @@ function booksRenderList() {
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
+function getBookProgress(bookId) {
+  const progress = JSON.parse(localStorage.getItem('bookReadingProgress') || '{}');
+  const sum = (state.data.book_summaries || []).find(s => String(s.book_id) === String(bookId));
+  if (!sum) return null;
+  const totalPages = Number(sum.total_pages) || (() => { try { return JSON.parse(sum.summary_json || '[]').length; } catch(e) { return 0; } })();
+  if (!totalPages) return null;
+  const currentPage = progress[bookId] ?? 0;
+  const pct = Math.round(((currentPage + 1) / totalPages) * 100);
+  return { currentPage, totalPages, pct, done: pct >= 100 };
+}
+
 function blCardHTML(book) {
   const gradient = bookCoverGradient(book.title);
-  const initials = bookInitials(book.title);
   const status = BOOK_STATUS[book.status] || BOOK_STATUS.wishlist;
   const hasSummary = (state.data.book_summaries || []).some(s => String(s.book_id) === String(book.id));
+  const prog = getBookProgress(book.id);
 
   return `
 <div class="bl-card" onclick="openBookDetail('${book.id}')">
   <div class="bl-card-cover" style="background:${gradient}">
-    <span class="bl-cover-initials">${escapeHtml(initials)}</span>
+    ${bookCoverHTML(book)}
     ${hasSummary ? '<div class="bl-summary-badge"><i data-lucide="file-text" style="width:10px;height:10px"></i></div>' : ''}
   </div>
   <div class="bl-card-body">
     <div class="bl-card-status" style="color:${status.color}">${status.label}</div>
     <div class="bl-card-title">${escapeHtml(book.title || 'Untitled')}</div>
     <div class="bl-card-author">${escapeHtml(book.author || '')}</div>
+    ${prog ? `
+    <div class="bl-card-progress">
+      <div class="bl-card-progress-bar">
+        <div class="bl-card-progress-fill${prog.done ? ' done' : ''}" style="width:${prog.pct}%"></div>
+      </div>
+      <span class="bl-card-progress-text">${prog.done ? '✓ Done' : prog.pct + '%'}</span>
+    </div>` : ''}
     <div class="bl-card-footer">
       ${hasSummary
         ? `<button class="bl-read-btn" onclick="event.stopPropagation(); openBookReader('${book.id}')">
-             <i data-lucide="book-open" style="width:11px;height:11px"></i> Read
+             <i data-lucide="book-open" style="width:11px;height:11px"></i> ${prog && prog.currentPage > 0 ? 'Continue' : 'Read'}
            </button>`
         : `<button class="bl-summarize-btn" onclick="event.stopPropagation(); generateSummary('${book.id}')">
              <i data-lucide="zap" style="width:11px;height:11px"></i> Summarize
@@ -263,7 +349,6 @@ window.openBookDetail = function(bookId) {
   if (!book) return;
   const hasSummary = (state.data.book_summaries || []).some(s => String(s.book_id) === String(book.id));
   const gradient = bookCoverGradient(book.title);
-  const initials = bookInitials(book.title);
   const status = BOOK_STATUS[book.status] || BOOK_STATUS.wishlist;
 
   const overlay = document.getElementById('blDetailOverlay');
@@ -286,7 +371,10 @@ window.openBookDetail = function(bookId) {
     </div>
     <div class="bld-scroll">
       <div class="bld-hero" style="background:${gradient}">
-        <div class="bld-hero-cover">${escapeHtml(initials)}</div>
+        <div class="bld-hero-cover">${book.cover_url
+          ? `<img src="${escapeHtml(book.cover_url)}" alt="" class="bld-hero-img" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+             <span style="display:none">${escapeHtml(bookInitials(book.title))}</span>`
+          : escapeHtml(bookInitials(book.title))}</div>
       </div>
       <div class="bld-body">
         <div class="bld-status-chip" style="background:${status.color}22;color:${status.color}">${status.label}</div>
@@ -297,10 +385,22 @@ window.openBookDetail = function(bookId) {
         ${book.rating ? `<div class="bld-meta-row">${'★'.repeat(Number(book.rating))}${'☆'.repeat(5 - Number(book.rating))}</div>` : ''}
         ${book.notes ? `<div class="bld-notes">${escapeHtml(book.notes)}</div>` : ''}
 
+        <div class="bld-cover-actions" style="display:flex; gap:8px; margin-bottom:16px;">
+          <button class="bld-secondary-btn" style="flex:1; font-size:12px;" onclick="booksSetCoverUrl('${book.id}')">
+            <i data-lucide="image" style="width:14px;height:14px"></i> ${book.cover_url ? 'Change Cover' : 'Add Cover URL'}
+          </button>
+          ${!book.cover_url ? `<button class="bld-secondary-btn" style="flex:1; font-size:12px;" onclick="booksAutoFetchCover('${book.id}')">
+            <i data-lucide="download" style="width:14px;height:14px"></i> Auto-Find Cover
+          </button>` : ''}
+        </div>
+
         <div class="bld-actions">
           ${hasSummary
             ? `<button class="bld-primary-btn" onclick="openBookReader('${book.id}')">
                  <i data-lucide="book-open" style="width:16px;height:16px"></i> Read Summary
+               </button>
+               <button class="bld-secondary-btn" onclick="closeBookDetail(); regenerateSummary('${book.id}')">
+                 <i data-lucide="zap" style="width:16px;height:16px"></i> Regenerate Summary
                </button>`
             : `<button class="bld-primary-btn" onclick="closeBookDetail(); generateSummary('${book.id}')">
                  <i data-lucide="zap" style="width:16px;height:16px"></i> Generate AI Summary
@@ -317,6 +417,40 @@ window.openBookDetail = function(bookId) {
   overlay.classList.remove('hidden');
   requestAnimationFrame(() => sheet.classList.add('open'));
   if (typeof lucide !== 'undefined') lucide.createIcons();
+};
+
+// Manual cover URL input
+window.booksSetCoverUrl = async function(bookId) {
+  const book = (state.data.book_library || []).find(b => String(b.id) === String(bookId));
+  if (!book) return;
+  const url = prompt('Paste a cover image URL:', book.cover_url || '');
+  if (url === null) return; // cancelled
+  if (url === '') {
+    // Clear cover
+    await apiCall('update', 'book_library', { cover_url: '' }, bookId);
+    book.cover_url = '';
+  } else {
+    await apiCall('update', 'book_library', { cover_url: url }, bookId);
+    book.cover_url = url;
+  }
+  toast(url ? 'Cover updated!' : 'Cover removed');
+  openBookDetail(bookId); // refresh detail
+};
+
+// Auto-fetch cover from detail view
+window.booksAutoFetchCover = async function(bookId) {
+  const book = (state.data.book_library || []).find(b => String(b.id) === String(bookId));
+  if (!book) return;
+  toast('Finding cover...');
+  const coverUrl = await fetchBookCover(book.title, book.author);
+  if (coverUrl) {
+    await apiCall('update', 'book_library', { cover_url: coverUrl }, bookId);
+    book.cover_url = coverUrl;
+    toast('Cover found!');
+    openBookDetail(bookId); // refresh
+  } else {
+    toast('No cover found — try adding a URL manually');
+  }
 };
 
 window.closeBookDetail = function() {
@@ -440,6 +574,11 @@ window.blAddSuggestedBook = async function(title, author, category) {
     state.data.book_library = lib || [];
     booksRenderList();
     if (typeof lucide !== 'undefined') lucide.createIcons();
+    // Auto-fetch cover in background (non-blocking)
+    const newBook = (state.data.book_library || []).find(b => b.title === title && b.author === author);
+    if (newBook && !newBook.cover_url) {
+      autoFetchCover(newBook.id, title, author);
+    }
   } catch (e) {
     toast('Failed to add book: ' + e.message);
   }
@@ -462,16 +601,22 @@ window.generateSummary = async function(bookId) {
           <h2 class="bl-gen-title">${escapeHtml(book.title)}</h2>
           <p class="bl-gen-author">by ${escapeHtml(book.author || '')}</p>
           <div class="bl-gen-spinner"></div>
-          <p class="bl-gen-status" id="blGenStatus">Generating your 15-page summary...</p>
-          <p class="bl-gen-hint">This may take 30-60 seconds. AI is reading and analyzing the book for you.</p>
+          <p class="bl-gen-status" id="blGenStatus">Analyzing book structure...</p>
+          <p class="bl-gen-hint">AI is reading and summarizing every chapter. This may take 1-2 minutes for thorough coverage.</p>
         </div>
       </div>
     `;
   }
 
+  // Progress callback updates the status text live
+  const onProgress = (msg) => {
+    const el = document.getElementById('blGenStatus');
+    if (el) el.textContent = msg;
+  };
+
   try {
-    const goalTitles = (state.data.vision || []).map(v => v.title);
-    const summary = await AI_SERVICE.generateBookSummary(book.title, book.author, goalTitles);
+    const goalTitles = (state.data.vision_board || []).map(v => v.title);
+    const summary = await AI_SERVICE.generateBookSummary(book.title, book.author, goalTitles, onProgress);
 
     const payload = {
       book_id: bookId,
@@ -481,11 +626,12 @@ window.generateSummary = async function(bookId) {
       total_pages: (summary.pages || []).length,
       created_at: new Date().toISOString(),
       key_takeaways: JSON.stringify(summary.key_takeaways || []),
+      memorable_quotes: JSON.stringify(summary.memorable_quotes || []),
       action_items: JSON.stringify(summary.overall_action_plan || []),
     };
 
     const res = await apiCall('create', 'book_summaries', payload);
-    toast('Summary generated!');
+    toast('Summary generated — ' + (summary.pages || []).length + ' pages!');
 
     const sums = await apiGet('book_summaries');
     state.data.book_summaries = sums || [];
@@ -504,6 +650,22 @@ window.generateSummary = async function(bookId) {
     toast('Summarization failed: ' + e.message);
     renderBooks();
   }
+};
+
+/* ── Regenerate Summary (deletes old, creates new) ── */
+window.regenerateSummary = async function(bookId) {
+  if (!confirm('This will replace the existing summary. Continue?')) return;
+  // Delete old summary
+  const oldSum = (state.data.book_summaries || []).find(s => String(s.book_id) === String(bookId));
+  if (oldSum) {
+    try { await apiCall('delete', 'book_summaries', {}, oldSum.id); } catch(e) { console.warn('Delete old summary failed:', e); }
+  }
+  // Clear reading progress for this book
+  const progress = JSON.parse(localStorage.getItem('bookReadingProgress') || '{}');
+  delete progress[bookId];
+  localStorage.setItem('bookReadingProgress', JSON.stringify(progress));
+  // Generate fresh
+  await generateSummary(bookId);
 };
 
 /* ── Open Reader ── */

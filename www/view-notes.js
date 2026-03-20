@@ -398,40 +398,60 @@ function ncRenderMarkdown(text) {
     if (!text) return '<p class="nc-view-empty">No content yet.</p>';
     var lines = text.split('\n');
     var html = '';
-    var inUl = false;
+    var activeListType = null; // 'ul' or 'checklist'
+
+    function closeList() {
+        if (activeListType === 'ul') html += '</ul>';
+        else if (activeListType === 'checklist') html += '</ul>';
+        activeListType = null;
+    }
+
     lines.forEach(function (line) {
+        var trimLine = line.trim();
+        
+        // Headers
         if (line.match(/^### /)) {
-            if (inUl) { html += '</ul>'; inUl = false; }
+            closeList();
             html += '<h3>' + ncInlineMd(line.slice(4)) + '</h3>';
         } else if (line.match(/^## /)) {
-            if (inUl) { html += '</ul>'; inUl = false; }
+            closeList();
             html += '<h2>' + ncInlineMd(line.slice(3)) + '</h2>';
         } else if (line.match(/^# /)) {
-            if (inUl) { html += '</ul>'; inUl = false; }
+            closeList();
             html += '<h1>' + ncInlineMd(line.slice(2)) + '</h1>';
         } else if (line.match(/^> /)) {
-            if (inUl) { html += '</ul>'; inUl = false; }
+            closeList();
             html += '<blockquote>' + ncInlineMd(line.slice(2)) + '</blockquote>';
-        } else if (line.match(/^- \[x\] /i)) {
-            if (!inUl) { html += '<ul class="nc-md-checklist">'; inUl = true; }
-            html += '<li class="checked">&#10003; ' + ncInlineMd(line.slice(6)) + '</li>';
+        } 
+        // Checkboxes / Tasks
+        else if (line.match(/^- \[x\] /i)) {
+            if (activeListType !== 'checklist') { closeList(); html += '<ul class="nc-md-checklist">'; activeListType = 'checklist'; }
+            html += '<li class="checked"><span class="nc-cb-box">☑</span> ' + ncInlineMd(line.slice(6)) + '</li>';
         } else if (line.match(/^- \[ \] /)) {
-            if (!inUl) { html += '<ul class="nc-md-checklist">'; inUl = true; }
-            html += '<li>' + ncInlineMd(line.slice(6)) + '</li>';
-        } else if (line.match(/^- /)) {
-            if (!inUl) { html += '<ul>'; inUl = true; }
+            if (activeListType !== 'checklist') { closeList(); html += '<ul class="nc-md-checklist">'; activeListType = 'checklist'; }
+            html += '<li><span class="nc-cb-box">☐</span> ' + ncInlineMd(line.slice(6)) + '</li>';
+        } 
+        // Bullets
+        else if (line.match(/^- /)) {
+            if (activeListType !== 'ul') { closeList(); html += '<ul>'; activeListType = 'ul'; }
             html += '<li>' + ncInlineMd(line.slice(2)) + '</li>';
-        } else if (line.trim() === '---') {
-            if (inUl) { html += '</ul>'; inUl = false; }
+        } 
+        // Horizontal Rule
+        else if (trimLine === '---') {
+            closeList();
             html += '<hr class="nc-md-hr">';
-        } else if (line.trim() === '') {
-            if (inUl) { html += '</ul>'; inUl = false; }
-        } else {
-            if (inUl) { html += '</ul>'; inUl = false; }
+        } 
+        // Empty Line
+        else if (trimLine === '') {
+            closeList();
+        } 
+        // Paragraph
+        else {
+            closeList();
             html += '<p>' + ncInlineMd(line) + '</p>';
         }
     });
-    if (inUl) html += '</ul>';
+    closeList();
     return html;
 }
 
@@ -699,23 +719,35 @@ function ncRemoveTag(tag) {
 function notesFormat(type) {
     var ta = document.getElementById('ncEditorContent');
     if (!ta) return;
+    
+    // Save scroll position
+    var scrollPos = ta.scrollTop;
     var s = ta.selectionStart, en = ta.selectionEnd;
     var f = NOTES_FMT[type];
     if (!f) return;
-    var newVal, ns, ne;
+
+    var ns, ne, replacement;
     if (f.insert) {
-        newVal = ta.value.slice(0, s) + f.insert + ta.value.slice(en);
+        replacement = f.insert;
         ns = ne = s + f.insert.length;
     } else {
         var text = ta.value.slice(s, en) || f.ph;
         var prefix = (f.nl && s > 0 && ta.value[s - 1] !== '\n') ? '\n' : '';
-        newVal = ta.value.slice(0, s) + prefix + f.b + text + f.a + ta.value.slice(en);
+        replacement = prefix + f.b + text + f.a;
         ns = s + prefix.length + f.b.length;
         ne = ns + text.length;
     }
-    ta.value = newVal;
+
+    // Use setRangeText for better performance and scroll stability
+    ta.setRangeText(replacement, s, en, 'end');
+    
+    // Restore and refine focus
     ta.focus();
     ta.setSelectionRange(ns, ne);
+    
+    // If it was a large jump, manual scroll restoration helps
+    ta.scrollTop = scrollPos;
+
     notesDebounceSave();
     ncLiveCount(ta);
 }

@@ -241,6 +241,8 @@ function renderDiary() {
 .dr-toolbar { display:flex; align-items:center; gap:2px; padding:8px 12px; background:var(--surface-2); border-radius:12px 12px 0 0; border:1.5px solid var(--border-color); border-bottom:none; }
 .dr-toolbar-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; border:none; background:transparent; color:var(--text-2); font-size:14px; font-weight:700; cursor:pointer; transition:all .15s; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
 .dr-toolbar-btn:active { background:var(--surface-3); transform:scale(.92); }
+.dr-toolbar-btn.recording { color:#EF4444 !important; background:rgba(239, 68, 68, 0.1) !important; animation:pulse 1.5s infinite; }
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 .dr-toolbar-ai { display:inline-flex; align-items:center; gap:5px; padding:6px 12px; border-radius:10px; border:1px solid rgba(79,70,229,.15); background:rgba(79,70,229,.05); font-size:12px; font-weight:700; color:var(--primary); cursor:pointer; margin-left:auto; white-space:nowrap; -webkit-tap-highlight-color:transparent; touch-action:manipulation; min-height:36px; transition:all .15s; }
 .dr-toolbar-ai:active { background:rgba(79,70,229,.12); transform:scale(.96); }
 
@@ -330,8 +332,7 @@ function renderDiary() {
       <!-- Header -->
       <div class="dr-header">
         <div>
-          <h1 class="dr-greeting">${getGreeting()}, ${state.userName || 'Friend'}</h1>
-          <p class="dr-header-date">${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          <h1 class="dr-greeting">My Journal</h1>
         </div>
         <button class="dr-write-btn" onclick="openDiaryModal()">
           <i data-lucide="pen" style="width:14px;height:14px"></i>
@@ -1346,6 +1347,9 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
           <button type="button" class="dr-toolbar-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${defaultDate}')" title="Auto-Summarize Day">
             ✨ Summary
           </button>
+          <button type="button" class="dr-toolbar-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Speak to Write" style="margin-left:8px">
+            <i data-lucide="mic" style="width:16px;height:16px"></i>
+          </button>
         </div>
         <div class="rich-editor dr-zone-editor" id="mDiaryText" contenteditable="true"
              placeholder="What's on your mind...">${templateContent}</div>
@@ -1366,6 +1370,7 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
   });
 
   modal.classList.remove('hidden');
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 };
 
 // Load template in modal
@@ -1432,6 +1437,9 @@ window.openEditDiary = function (id) {
           <button type="button" class="dr-toolbar-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${(e.date || '').slice(0, 10)}')" title="Auto-Summarize Day">
             ✨ Summary
           </button>
+          <button type="button" class="dr-toolbar-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Speak to Write" style="margin-left:8px">
+            <i data-lucide="mic" style="width:16px;height:16px"></i>
+          </button>
         </div>
         <div class="rich-editor dr-zone-editor" id="mDiaryText" contenteditable="true">${(e.text || '').replace(/</g, '<')}</div>
         <div class="dr-zone-footer">
@@ -1451,6 +1459,7 @@ window.openEditDiary = function (id) {
   });
 
   modal.classList.remove('hidden');
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 };
 
 function getContextData(dateStr) {
@@ -1542,6 +1551,84 @@ window.insertDiarySummary = function (dateStr) {
   editor.dispatchEvent(event);
   showToast("Summary added!");
 };
+
+let _recognition = null;
+window.toggleSpeechToText = function() {
+  const btn = document.getElementById('speechBtn');
+  const editor = document.getElementById('mDiaryText');
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    showToast("Speech recognition not supported in this browser.");
+    return;
+  }
+
+  if (_recognition) {
+    _recognition.stop();
+    return;
+  }
+
+  _recognition = new SpeechRecognition();
+  _recognition.continuous = true;
+  _recognition.interimResults = false;
+  _recognition.lang = 'en-US';
+
+  _recognition.onstart = () => {
+    btn.classList.add('recording');
+    showToast("Listening...");
+  };
+
+  _recognition.onend = () => {
+    btn.classList.remove('recording');
+    _recognition = null;
+  };
+
+  _recognition.onerror = (event) => {
+    console.error('Speech recognition error', event.error);
+    btn.classList.remove('recording');
+    _recognition = null;
+    showToast("Speech recognition error: " + event.error);
+  };
+
+  _recognition.onresult = (event) => {
+    let finalTranscript = '';
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript;
+      }
+    }
+    
+    if (finalTranscript) {
+      insertAtCursor(editor, finalTranscript + ' ');
+    }
+  };
+
+  _recognition.start();
+};
+
+function insertAtCursor(editor, text) {
+  editor.focus();
+  const selection = window.getSelection();
+  if (selection.getRangeAt && selection.rangeCount) {
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode(text);
+    range.insertNode(textNode);
+    range.setStartAfter(textNode);
+    range.setEndAfter(textNode);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    
+    // Trigger input event to update word count
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  } else {
+    // If editor is empty or cursor not found
+    const currentText = editor.innerText;
+    editor.innerText = currentText + (currentText.length > 0 && !currentText.endsWith(' ') ? ' ' : '') + text;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
 
 function getMoodEmoji(score) {
   if (score <= 2) return '😞';

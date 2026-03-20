@@ -72,6 +72,15 @@ function parseDueTimeForInput(val) {
   return '';
 }
 
+function formatDueTimeForDisplay(val) {
+  if (!val) return '';
+  const s = String(val);
+  if (s.startsWith('1899-12-30T')) {
+    return s.slice(11, 16);
+  }
+  return s;
+}
+
 /* ══════════════════════════════════════════════════════
    QUICK-CAPTURE HANDLER
 ══════════════════════════════════════════════════════ */
@@ -409,6 +418,10 @@ function renderTasks(filter = '') {
 
     @media(max-width:480px) {
       .tk-shell { height:calc(100vh - env(safe-area-inset-top,44px) - 80px); }
+      /* Reduce side gaps on phone by overriding global main-content padding and component gutters */
+      .main-content { padding-left: 0 !important; padding-right: 0 !important; }
+      .tk-header, .tk-capture-wrap, .tk-filter-row, .tk-priority-row { padding-left: 12px; padding-right: 12px; }
+      .tk-list { padding-left: 12px; padding-right: 12px; padding-bottom: 80px; }
     }
   </style>
 
@@ -691,7 +704,7 @@ function _tkSheetHTML(t) {
     ${prioLabel ? `<span class="tk-sheet-chip ${prioClass}"><i data-lucide="flag" style="width:11px;height:11px"></i> ${prioLabel}</span>` : ''}
     ${t.category ? `<span class="tk-sheet-chip"><i data-lucide="tag" style="width:11px;height:11px"></i> ${escapeHtml(t.category)}</span>` : ''}
     ${recurLabel ? `<span class="tk-sheet-chip"><i data-lucide="repeat-2" style="width:11px;height:11px"></i> ${recurLabel}</span>` : ''}
-    ${t.due_time ? `<span class="tk-sheet-chip"><i data-lucide="clock" style="width:11px;height:11px"></i> ${t.due_time}</span>` : ''}
+    ${t.due_time ? `<span class="tk-sheet-chip"><i data-lucide="clock" style="width:11px;height:11px"></i> ${formatDueTimeForDisplay(t.due_time)}</span>` : ''}
     ${t.pomodoro_estimate > 0 ? `<span class="tk-sheet-chip p2"><i data-lucide="timer" style="width:11px;height:11px"></i> ${t.pomodoro_estimate} sessions</span>` : ''}
   </div>
 

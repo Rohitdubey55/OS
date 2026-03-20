@@ -516,14 +516,24 @@ function renderSettings() {
         <div style="margin-bottom:20px;">
           <label class="setting-label">Habit Routines</label>
           <p style="font-size:12px; color:var(--text-muted); margin-top:0; margin-bottom:12px;">These routines will appear as options when adding or editing a habit.</p>
-          <div id="habitRoutineList" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+          <div id="habitRoutineList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
             ${(() => {
     const raw = settings.habit_routines || 'Morning,Work,Evening';
     const routines = raw.split(',').map(r => r.trim()).filter(Boolean);
     return routines.map(r => `
-                <div style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;">
-                  <span>${r}</span>
-                  <button type="button" onclick="removeHabitRoutine(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">&times;</button>
+                <div class="routine-item" data-id="${r}" style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--surface-2); border-radius:8px; border:1px solid var(--border-color);">
+                  <span class="routine-name" style="font-weight:500; font-size:13px;">${r}</span>
+                  <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                       <button type="button" class="btn icon small" onclick="moveTab(event, this, -1)" style="padding:2px; height:auto;" title="Move Up">
+                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m18 15-6-6-6 6"/></svg>
+                       </button>
+                       <button type="button" class="btn icon small" onclick="moveTab(event, this, 1)" style="padding:2px; height:auto;" title="Move Down">
+                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+                       </button>
+                    </div>
+                    <button type="button" onclick="removeHabitRoutine(this)" style="border:none; background:none; cursor:pointer; color:var(--danger); font-size:18px; padding:0; display:flex; align-items:center;">&times;</button>
+                  </div>
                 </div>
               `).join('');
   })()}
@@ -800,7 +810,7 @@ window.moveTab = function (event, btnElement, direction) {
   event.preventDefault();
   event.stopPropagation();
 
-  const row = btnElement.closest('.tab-toggle-item, .dash-toggle-item');
+  const row = btnElement.closest('.tab-toggle-item, .dash-toggle-item, .routine-item');
   const list = row.parentElement;
 
   if (direction === -1) {
@@ -1354,7 +1364,7 @@ window.saveAllSettings = async function (section = 'all') {
   }
 
   if (section === 'all' || section === 'habits') {
-    const pillSpans = Array.from(document.querySelectorAll('#habitRoutineList > div > span'));
+    const pillSpans = Array.from(document.querySelectorAll('#habitRoutineList .routine-name'));
     const habitRoutines = pillSpans.map(s => s.textContent.trim()).filter(Boolean).join(',');
     newSettings.habit_routines = habitRoutines;
   }
@@ -1532,12 +1542,27 @@ window.addHabitRoutine = function () {
   if (!routine) return;
   const list = document.getElementById('habitRoutineList');
   const div = document.createElement('div');
-  div.style = "display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:20px; padding:5px 12px; font-size:13px;";
-  div.innerHTML = `<span>${routine}</span><button type="button" onclick="removeHabitRoutine(this)" style="border:none; background:none; cursor:pointer; color:var(--text-muted); font-size:16px; line-height:1; padding:0; display:flex; align-items:center;">&times;</button>`;
+  div.className = "routine-item";
+  div.dataset.id = routine;
+  div.style = "display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--surface-2); border-radius:8px; border:1px solid var(--border-color);";
+  div.innerHTML = `
+      <span class="routine-name" style="font-weight:500; font-size:13px;">${routine}</span>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="display:flex; flex-direction:column; gap:2px;">
+           <button type="button" class="btn icon small" onclick="moveTab(event, this, -1)" style="padding:2px; height:auto;" title="Move Up">
+               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m18 15-6-6-6 6"/></svg>
+           </button>
+           <button type="button" class="btn icon small" onclick="moveTab(event, this, 1)" style="padding:2px; height:auto;" title="Move Down">
+               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+           </button>
+        </div>
+        <button type="button" onclick="removeHabitRoutine(this)" style="border:none; background:none; cursor:pointer; color:var(--danger); font-size:18px; padding:0; display:flex; align-items:center;">&times;</button>
+      </div>
+  `;
   list.appendChild(div);
   input.value = '';
 };
 
 window.removeHabitRoutine = function (btn) {
-  btn.closest('div').remove();
+  btn.closest('.routine-item').remove();
 };

@@ -84,11 +84,8 @@ Task: Answer the user's question directly based on the data above. Be concise an
         }
     },
 
-    // Get personalized book recommendations
+    // Get personalized book recommendations based on user data
     generateBookRecommendations: async function (userData) {
-        const config = this.getConfig();
-        if (!config.apiKey) throw new Error("Missing API Key.");
-
         const prompt = `
 Analyze the user's goals, habits, and interests from the provided data below.
 Recommend 5-8 highly relevant books that would specifically help them achieve their goals or improve their life based on their habits and diary reflections.
@@ -100,10 +97,12 @@ For each book, provide:
 - Category/Genre
 
 DATA CONTEXT:
-Vision Board Goals: ${JSON.stringify(userData.vision || [])}
-Active Habits: ${JSON.stringify(userData.habits || [])}
-Recent Diary Reflections: ${JSON.stringify(userData.diary?.slice(0, 5) || [])}
-Tasks: ${JSON.stringify(userData.tasks?.slice(0, 10) || [])}
+Vision Board Goals: ${JSON.stringify((userData.vision_board || userData.vision || []).map(v => ({ title: v.title, category: v.category, description: v.description })))}
+Active Habits: ${JSON.stringify((userData.habits || []).slice(0, 15).map(h => ({ name: h.name, category: h.category })))}
+Recent Diary Reflections: ${JSON.stringify((userData.diary || []).slice(0, 5).map(d => ({ date: d.date, summary: (d.content || '').slice(0, 200) })))}
+Existing Library: ${JSON.stringify((userData.book_library || []).map(b => b.title))}
+
+IMPORTANT: Do NOT recommend books the user already has in their library.
 
 OUTPUT FORMAT: Return a valid JSON array of objects:
 [
@@ -117,84 +116,144 @@ OUTPUT FORMAT: Return a valid JSON array of objects:
 ]
 Do not include any other text, only the JSON.
 `;
-
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
-
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
-            if (!response.ok) throw new Error('AI Recommendation Failed');
-            const result = await response.json();
-            let text = result.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
-            // Clean up JSON if LLM added markdown blocks
-            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            return JSON.parse(text);
-        } catch (error) {
-            console.error("Recommendation Error:", error);
-            throw error;
-        }
+        return await this._callGemini(prompt);
     },
 
-    // Generate 15-page summary
-    generateBookSummary: async function (bookTitle, author, userGoals) {
+    // ── Gemini API helper (shared by all summary calls) ──
+    _callGemini: async function (prompt) {
         const config = this.getConfig();
         if (!config.apiKey) throw new Error("Missing API Key.");
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
+            })
+        });
+        if (!response.ok) throw new Error('AI request failed (' + response.status + ')');
+        const result = await response.json();
+        let text = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(text);
+    },
 
-        const prompt = `
-Generate a comprehensive, actionable 15-page summary of "${bookTitle}" by ${author}.
-Focus specifically on how the core ideas in this book can help the user achieve their goals: ${JSON.stringify(userGoals || [])}.
+    // ── Book Summary — comprehensive, pure book content, batched ──
+    generateBookSummary: async function (bookTitle, author, userGoals, onProgress) {
+        /*  STEP 1: Ask AI for the book's table of contents / chapter outline.
+         *  This determines how many pages we need (no arbitrary cap). */
+        const outlinePrompt = `
+You are a world-class book analyst. For the book "${bookTitle}" by ${author}, generate a detailed chapter-by-chapter outline that covers EVERY major idea, framework, story, and concept in the book. Do not skip anything — a reader of this summary should not miss a single important point.
 
-STRUCTURE REQUIRED (15 Distinct Sections/Pages):
-Page 1-2: Book Overview & Core Thesis.
-Page 3-4: Key Concepts Part 1 (The psychological or practical foundation).
-Page 5-6: Key Concepts Part 2 (Methodology and frameworks).
-Page 7-8: Advanced Strategies and Nuances.
-Page 9-10: Practical Applications for Daily Life.
-Page 11-12: Specific Action Items relative to user's goals.
-Page 13: The author's distilled system/framework.
-Page 14: Challenges & Common Pitfalls.
-Page 15: Final Recap & 5 Daily Mantras/Actions.
+RULES:
+- This is PURELY about the book's content. Do NOT reference any external goals, tasks, or user context.
+- Include every chapter, every key story/anecdote, every framework, every principle.
+- For each section, write a 1-line description of what it covers.
+- Aim for 25-40 sections to cover the book thoroughly. Longer, denser books should have more sections.
 
-OUTPUT FORMAT: Return a valid JSON object:
+OUTPUT FORMAT (JSON only, no other text):
 {
   "book_title": "${bookTitle}",
   "author": "${author}",
+  "total_sections": <number>,
+  "outline": [
+    { "section": 1, "title": "Section Title", "covers": "Brief description of what this section will cover" },
+    ...
+  ]
+}`;
+
+        if (onProgress) onProgress('Analyzing book structure...');
+        const outline = await this._callGemini(outlinePrompt);
+        const sections = outline.outline || [];
+        const totalSections = sections.length || 25;
+
+        /*  STEP 2: Generate content in batches of 8-10 sections.
+         *  Each batch gets full context of the outline so the narrative flows. */
+        const BATCH_SIZE = 8;
+        const allPages = [];
+        const batches = [];
+        for (let i = 0; i < totalSections; i += BATCH_SIZE) {
+            batches.push(sections.slice(i, i + BATCH_SIZE));
+        }
+
+        for (let b = 0; b < batches.length; b++) {
+            const batch = batches[b];
+            const startNum = b * BATCH_SIZE + 1;
+            const isFirst = b === 0;
+            const isLast = b === batches.length - 1;
+
+            if (onProgress) onProgress(`Writing pages ${startNum}-${startNum + batch.length - 1} of ${totalSections}...`);
+
+            const batchPrompt = `
+You are writing a comprehensive, flowing summary of "${bookTitle}" by ${author}.
+This is batch ${b + 1} of ${batches.length}. You are writing pages ${startNum} to ${startNum + batch.length - 1} out of ${totalSections} total.
+
+FULL BOOK OUTLINE (for context and flow):
+${JSON.stringify(sections.map(s => s.title), null, 1)}
+
+YOUR SECTIONS TO WRITE NOW:
+${JSON.stringify(batch, null, 2)}
+
+WRITING GUIDELINES:
+- Write PURELY about the book's content — its ideas, stories, frameworks, principles, examples.
+- Do NOT mention any user goals, tasks, personal context, or "how this helps you" language.
+- Write in a smooth, narrative, engaging style — like a premium Blinkist or Shortform summary.
+- Each page should have 3-5 substantial paragraphs of real content (300-500 words per page).
+- Include the author's actual examples, stories, research citations, and anecdotes where relevant.
+- Preserve the book's original voice and key quotes where memorable.
+- Transition smoothly between ideas — each page should flow naturally into the next.
+${isFirst ? '- Start with a compelling opening that captures the essence of the book.' : '- Continue naturally from where the previous batch left off.'}
+${isLast ? '- End with a powerful closing that ties together all the book\'s major themes.' : ''}
+
+OUTPUT FORMAT (JSON only, no other text):
+{
   "pages": [
     {
-      "page_number": 1,
+      "page_number": ${startNum},
       "title": "Section Title",
-      "content": "Full, deep content for this page (multiple paragraphs)...",
-      "key_points": ["point1", "point2"],
-      "action_items": ["action1"]
+      "content": "Full rich content with multiple paragraphs separated by \\n\\n ...",
+      "key_points": ["key insight 1", "key insight 2", "key insight 3"]
     },
-    ... up to page 15
-  ],
-  "key_takeaways": ["overall takeaway 1", ...],
-  "overall_action_plan": ["step 1", ...]
-}
-Ensure the content is deep and high-quality, not just bullet points. Do not include introductions, only JSON.
-`;
+    ... (${batch.length} pages)
+  ]${isLast ? `,
+  "key_takeaways": ["The 8-10 most important takeaways from the ENTIRE book"],
+  "memorable_quotes": ["Notable direct quotes from the book"]` : ''}
+}`;
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+            const batchResult = await this._callGemini(batchPrompt);
+            if (batchResult.pages) {
+                allPages.push(...batchResult.pages);
+            }
 
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
-            if (!response.ok) throw new Error('AI Summary Failed');
-            const result = await response.json();
-            let text = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            return JSON.parse(text);
-        } catch (error) {
-            console.error("Summary Generation Error:", error);
-            throw error;
+            // Capture final-batch extras
+            if (isLast && batchResult.key_takeaways) {
+                allPages._takeaways = batchResult.key_takeaways;
+                allPages._quotes = batchResult.memorable_quotes || [];
+            }
         }
+
+        if (onProgress) onProgress('Finalizing summary...');
+
+        return {
+            book_title: bookTitle,
+            author: author,
+            pages: allPages,
+            key_takeaways: allPages._takeaways || [],
+            memorable_quotes: allPages._quotes || [],
+            overall_action_plan: [] // No action plan — this is pure book content
+        };
+    },
+
+    // ── Separate: How to apply a specific book to user's goals ──
+    generateBookApplicationTips: async function (bookTitle, author, userGoals) {
+        if (!userGoals || !userGoals.length) return null;
+        const prompt = `
+Based on the book "${bookTitle}" by ${author}, suggest how the reader can apply its ideas to their specific goals:
+${JSON.stringify(userGoals)}
+
+Return JSON: { "recommendations": [ { "goal": "...", "ideas": ["idea1", "idea2", "idea3"] } ] }`;
+        return await this._callGemini(prompt);
     },
 
 

@@ -10,7 +10,7 @@ window.state = {
 
     view: "dashboard",
 
-    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_tdp: [], gym_plans: [], gym_sessions: [], gym_exercises: [], notes: [], book_library: [], book_summaries: [], reader_settings: [], mural: [], language_projects: [], language_sessions: [] },
+    data: { planner: [], tasks: [], expenses: [], habits: [], habit_logs: [], diary: [], vision: [], settings: [], funds: [], assets: [], people: [], reminders: [], vision_images: [], vision_affirmations: [], ritual_logs: [], vision_tdp: [], gym_plans: [], gym_sessions: [], gym_exercises: [], notes: [], book_library: [], book_summaries: [], reader_settings: [], mural: [], language_projects: [], language_sessions: [] },
 
     loading: false
 
@@ -2187,8 +2187,8 @@ async function fetchFreshData(force = false) {
 
     // Fallback: individual requests
     console.log('loadAllData: Fallback (individual requests)...');
-    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings', 'mural_projects', 'mural_categories', 'mural_elements'];
-    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings', 'mural_projects', 'mural_categories', 'mural_elements'];
+    const sheets = ['planner_events', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision_board', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_affirmations', 'ritual_logs', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings', 'mural_projects', 'mural_categories', 'mural_elements'];
+    const keys = ['planner', 'tasks', 'expenses', 'habits', 'habit_logs', 'diary', 'diary_templates', 'diary_tags', 'diary_achievements', 'vision', 'settings', 'funds', 'assets', 'people', 'people_debts', 'reminders', 'vision_images', 'vision_affirmations', 'ritual_logs', 'vision_tdp', 'gym_plans', 'gym_sessions', 'gym_exercises', 'notes', 'book_library', 'book_summaries', 'reader_settings', 'mural_projects', 'mural_categories', 'mural_elements'];
 
     let loaded = 0;
     const total = sheets.length;

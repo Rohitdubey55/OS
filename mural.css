@@ -52,7 +52,9 @@
     top: 0;
     left: 0;
     overflow: hidden;
-    background: var(--surface-base);
+    background-color: var(--surface-base);
+    background-image: radial-gradient(circle, var(--border-color) 0.8px, transparent 0.8px);
+    background-size: 32px 32px;
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
@@ -65,9 +67,6 @@
     position: absolute;
     top: 0;
     left: 0;
-    background-image:
-        radial-gradient(circle, var(--border-color) 0.8px, transparent 0.8px);
-    background-size: 32px 32px;
     transform-origin: 0 0;
     cursor: grab;
     will-change: transform;
@@ -155,6 +154,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 200px;
+}
+
+.mural-save-btn {
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 10px;
+    border: none;
+    background: var(--mural-accent);
+    color: white;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: var(--mural-transition);
+    -webkit-tap-highlight-color: transparent;
 }
 
 .mural-zoom-badge {
@@ -266,56 +282,82 @@
 }
 
 /* ══════════════════════════════════════
-   ZOOM CONTROLS — Compact Right Side
+   ZOOM CONTROLS (Top Bar Collapsible)
    ══════════════════════════════════════ */
-.mural-controls {
-    position: fixed;
-    right: 16px;
-    top: 72px;
+.mural-zoom-controls-wrapper {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
-    z-index: 9999;
-    background: var(--surface-1, #ffffff);
-    border-radius: var(--mural-radius-md);
-    padding: 5px;
-    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12));
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.1);
-    animation: muralSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
+    align-items: center;
+    background: var(--surface-2);
+    border-radius: 12px;
+    padding: 4px;
+    gap: 0;
+    overflow: hidden;
+    width: 36px;
+    transition: width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: 1px solid var(--mural-glass-border);
 }
 
-.mural-zoom-btn {
-    width: 38px;
-    height: 38px;
-    background: var(--surface-2, #f3f4f6);
-    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
-    border-radius: var(--mural-radius-sm);
+.mural-zoom-controls-wrapper.expanded {
+    width: 172px;
+    gap: 4px;
+}
+
+.mural-zoom-toggle {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    border-radius: 9px;
+    border: none;
+    background: transparent;
+    color: var(--text-2);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    color: var(--text-1, #1a1a1a);
     transition: var(--mural-transition);
-    -webkit-tap-highlight-color: transparent;
 }
 
-.mural-zoom-btn svg {
-    width: 18px;
-    height: 18px;
+.mural-zoom-controls-wrapper.expanded .mural-zoom-toggle {
+    background: var(--mural-accent-soft);
+    color: var(--mural-accent);
+}
+
+.mural-zoom-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
     pointer-events: none;
-    stroke-width: 2.5;
+    transition: opacity 0.2s ease;
 }
 
-.mural-zoom-btn:hover {
-    background: var(--mural-accent, #6366F1);
-    color: white;
-    border-color: var(--mural-accent, #6366F1);
+.mural-zoom-controls-wrapper.expanded .mural-zoom-actions {
+    opacity: 1;
+    pointer-events: auto;
 }
 
-.mural-zoom-btn:active {
-    transform: scale(0.9);
-    background: var(--mural-accent, #6366F1);
+.mural-zoom-btn-mini {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    border-radius: 9px;
+    border: none;
+    background: var(--surface-1);
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--mural-transition);
+}
+
+.mural-zoom-btn-mini:hover {
+    background: var(--mural-accent);
     color: white;
+}
+
+.mural-zoom-btn-mini svg {
+    width: 14px;
+    height: 14px;
 }
 
 /* ══════════════════════════════════════
@@ -411,8 +453,8 @@
 }
 
 .mural-element.sticky {
-    min-width: 140px;
-    min-height: 140px;
+    min-width: 20px;
+    min-height: 20px;
     padding: 16px;
     border-radius: 4px;
     box-shadow:
@@ -488,8 +530,8 @@
     border: 2px solid var(--mural-accent);
     border-radius: var(--mural-radius-sm);
     background: var(--mural-accent-soft);
-    min-width: 80px;
-    min-height: 80px;
+    min-width: 20px;
+    min-height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -551,6 +593,54 @@
     width: 90%;
     height: 90%;
     pointer-events: none;
+}
+
+/* ── Connection Anchors ── */
+.mural-anchor {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--surface-1);
+    border: 2px solid var(--mural-accent);
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.15s, transform 0.15s, background 0.15s;
+    z-index: 10;
+    cursor: crosshair;
+}
+
+.mural-anchor.top    { top: 0;   left: 50%; }
+.mural-anchor.bottom { top: 100%; left: 50%; }
+.mural-anchor.left   { top: 50%; left: 0; }
+.mural-anchor.right  { top: 50%; left: 100%; }
+
+/* Show anchors when connector tool is active, connector selected, or element hovered */
+.mural-element.show-anchors .mural-anchor,
+.mural-element:hover .mural-anchor,
+.connector-tool-active .mural-element .mural-anchor {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mural-anchor:hover {
+    transform: translate(-50%, -50%) scale(1.4);
+    background: var(--mural-accent);
+    box-shadow: 0 0 0 4px var(--mural-accent-glow);
+}
+
+/* Highlight the currently connected anchor */
+.mural-anchor.connected {
+    opacity: 1;
+    pointer-events: auto;
+    background: var(--mural-accent);
+    transform: translate(-50%, -50%) scale(1.2);
+    box-shadow: 0 0 0 3px var(--mural-accent-glow);
+}
+
+.mural-anchor.connected:hover {
+    transform: translate(-50%, -50%) scale(1.5);
 }
 
 /* Resize handle */
@@ -650,6 +740,22 @@
     background: var(--border-color);
     margin: 4px 6px;
     opacity: 0.5;
+}
+
+.mural-context-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-3);
+    padding: 4px 12px 2px;
+    opacity: 0.7;
+}
+
+.mural-context-item.active-style {
+    color: var(--mural-accent);
+    background: var(--mural-accent-soft);
+    font-weight: 600;
 }
 
 /* ══════════════════════════════════════
@@ -1407,8 +1513,8 @@
     }
 
     .mural-element.sticky {
-        min-width: 120px;
-        min-height: 120px;
+        min-width: 20px;
+        min-height: 20px;
         font-size: 13px;
         padding: 12px;
     }
@@ -1559,4 +1665,301 @@ body:has(.mural-page) .fab-menu {
 .mural-project-del:hover {
     background: var(--danger-soft);
     color: var(--danger);
+}
+/* ══════════════════════════════════════
+   SHORTCUTS MODAL
+   ══════════════════════════════════════ */
+.mural-shortcuts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.mural-shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    transition: var(--mural-transition);
+    cursor: pointer;
+}
+
+.mural-shortcut-row:hover {
+    border-color: var(--mural-accent);
+    background: var(--mural-accent-soft);
+}
+
+.mural-shortcut-row.recording {
+    border-color: var(--mural-warning);
+    background: rgba(245, 158, 11, 0.1);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+    animation: muralPulseWarning 1.5s infinite;
+}
+
+@keyframes muralPulseWarning {
+    0% { border-color: var(--mural-warning); }
+    50% { border-color: transparent; }
+    100% { border-color: var(--mural-warning); }
+}
+
+.mural-shortcut-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.mural-shortcut-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-1);
+}
+
+.mural-shortcut-desc {
+    font-size: 11px;
+    color: var(--text-3);
+}
+
+.mural-shortcut-key {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mural-key-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 6px;
+    background: var(--surface-1);
+    border: 1px solid var(--border-color);
+    border-bottom: 2px solid var(--border-color);
+    border-radius: 6px;
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-2);
+    box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+}
+
+
+
+.mural-shortcut-row.recording .mural-key-kbd {
+    color: var(--mural-warning);
+    border-color: var(--mural-warning);
+}
+
+/* ══════════════════════════════════════
+   TOGGLE SWITCH
+   ══════════════════════════════════════ */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: var(--surface-3, #ccc);
+    transition: .4s;
+    border-radius: 20px;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+input:checked + .slider {
+    background-color: var(--mural-accent, #6366F1);
+}
+input:checked + .slider:before {
+    transform: translateX(16px);
+}
+
+/* ══════════════════════════════════════
+   MARQUEE SELECTION
+   ══════════════════════════════════════ */
+.mural-marquee {
+    position: absolute;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1.5px solid var(--mural-accent);
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 99999;
+}
+
+/* ══════════════════════════════════════
+   SELECTION BOUNDING BOX — Group drag & resize
+   ══════════════════════════════════════ */
+.mural-selection-box {
+    position: absolute;
+    border: 1.5px dashed var(--mural-accent);
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 99998;
+    background: rgba(99, 102, 241, 0.04);
+}
+
+/* Handles are siblings on the canvas (not inside the box) for reliable PC pointer events */
+.mural-sel-handle {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border: 2px solid var(--mural-accent);
+    border-radius: 3px;
+    pointer-events: auto;
+    z-index: 99999;
+    transition: box-shadow 0.15s ease;
+    touch-action: none;
+}
+
+.mural-sel-handle:hover {
+    box-shadow: 0 0 0 4px var(--mural-accent-glow);
+    transform: scale(1.3);
+}
+
+.mural-sel-handle.nw { cursor: nwse-resize; }
+.mural-sel-handle.ne { cursor: nesw-resize; }
+.mural-sel-handle.sw { cursor: nesw-resize; }
+.mural-sel-handle.se { cursor: nwse-resize; }
+
+@media (prefers-color-scheme: dark) {
+    .mural-sel-handle {
+        background: #2d2d3d;
+    }
+}
+
+/* ══════════════════════════════════════
+   BACKGROUND OPTIONS PANEL & BUTTON
+   ══════════════════════════════════════ */
+.mural-bg-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: none;
+    background: var(--surface-2);
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--mural-transition);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mural-bg-btn:hover {
+    background: var(--mural-accent-soft);
+    color: var(--mural-accent);
+    transform: scale(1.05);
+}
+
+.mural-bg-panel {
+    position: fixed;
+    z-index: 100000;
+    background: var(--surface-1);
+    border: 1px solid var(--mural-glass-border);
+    border-radius: var(--mural-radius-md);
+    padding: 16px;
+    min-width: 240px;
+    box-shadow: var(--mural-shadow-elevated);
+    backdrop-filter: var(--mural-blur);
+    -webkit-backdrop-filter: var(--mural-blur);
+    animation: muralFadeIn 0.15s ease;
+}
+
+@keyframes muralFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.mural-bg-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-3);
+    margin-bottom: 8px;
+}
+
+.mural-bg-patterns {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.mural-bg-pattern-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    border-radius: 8px;
+    border: 1.5px solid transparent;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mural-bg-pattern-btn:hover {
+    border-color: var(--mural-accent);
+    color: var(--mural-accent);
+    background: var(--mural-accent-soft);
+}
+
+.mural-bg-pattern-btn.active {
+    border-color: var(--mural-accent);
+    background: var(--mural-accent-soft);
+    color: var(--mural-accent);
+}
+
+.mural-bg-colors {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+}
+
+.mural-bg-color-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mural-bg-color-btn:hover {
+    transform: scale(1.15);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.mural-bg-color-btn.active {
+    border-color: var(--mural-accent);
+    box-shadow: 0 0 0 3px var(--mural-accent-glow);
 }

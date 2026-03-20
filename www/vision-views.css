@@ -80,40 +80,55 @@
     transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Modal Overlay */
+/* Modal Overlay - Converged to Bottom Sheet */
 .tdp-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     z-index: 10000;
     display: flex;
-    align-items: center;
+    align-items: flex-end; /* Align to bottom */
     justify-content: center;
-    padding: 20px;
-    animation: tdpFadeIn 0.3s ease;
+    padding: 0;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
-@keyframes tdpFadeIn {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
+.tdp-modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
 }
 
 .tdp-modal {
-    width: min(100%, 700px);
-    max-height: 90vh;
+    width: min(100%, 600px);
+    max-height: 85vh;
     background: var(--surface-1);
-    border-radius: 24px;
+    border-radius: 28px 28px 0 0; /* Bottom sheet corners */
     border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4);
+    border-bottom: none;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    transform: translateY(100%); /* Start off-screen */
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tdp-modal.active {
+    transform: translateY(0);
+}
+
+/* Bottom Sheet Swipe Handle */
+.tdp-sheet-handle {
+    width: 40px;
+    height: 5px;
+    background: var(--surface-3);
+    border-radius: 3px;
+    margin: 12px auto 0;
+    flex-shrink: 0;
 }
 
 .tdp-modal-header {
@@ -198,37 +213,41 @@
 .tdp-list-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
+    gap: 14px;
+    padding: 12px 18px;
     background: var(--surface-2);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    margin-bottom: 8px;
-    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    border-radius: 16px;
+    margin-bottom: 10px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tdp-list-item:hover {
-    border-color: var(--primary-soft);
     background: var(--surface-3);
-    transform: translateX(4px);
+    transform: scale(1.01);
 }
 
 .tdp-checkbox {
-    width: 20px;
-    height: 20px;
-    border-radius: 6px;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
     border: 2px solid var(--border-color);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+}
+
+.tdp-checkbox:hover {
+    border-color: var(--primary);
 }
 
 .tdp-list-item.done .tdp-checkbox {
     background: var(--success);
     border-color: var(--success);
-    color: white;
+    transform: scale(1.1);
 }
 
 .tdp-checkbox::after {
@@ -607,6 +626,53 @@
     margin-bottom: 4px;
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
     line-height: 1.28;
+}
+
+.vision-aff-indicator {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+}
+.vision-aff-indicator:hover {
+    transform: scale(1.1);
+    background: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 12px rgba(255, 200, 50, 0.4);
+}
+.vision-aff-indicator:active {
+    transform: scale(0.92);
+}
+
+.style-choice.active {
+    border-color: var(--primary) !important;
+    background: var(--primary-soft) !important;
+    color: var(--primary);
+}
+
+.btn-icon.sm {
+    padding: 6px;
+    opacity: 0.6;
+}
+
+.btn-icon.sm:hover {
+    opacity: 1;
+    background: var(--surface-1);
+}
+
+.btn-icon.sm.delete:hover {
+    color: var(--danger);
 }
 
 .vision-card-category {
@@ -1620,4 +1686,878 @@
     background: white;
     transform: scale(1.3);
     box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+}
+
+/* ─── MANIFESTATION RITUAL v2 ─────────────────────────────────── */
+
+/* --- Overlay & Layout --- */
+.ritual-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    background: #050510;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    font-family: 'Inter', 'Outfit', sans-serif;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+}
+.ritual-overlay.visible { opacity: 1; }
+.ritual-overlay.fade-out { opacity: 0; transition: opacity 1.5s ease; }
+
+.ritual-close {
+    position: absolute;
+    top: max(env(safe-area-inset-top), 24px);
+    right: 24px;
+    z-index: 20010;
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.6);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.3s ease;
+}
+.ritual-close:hover { background: rgba(255,255,255,0.15); color: white; }
+
+.ritual-content {
+    position: relative;
+    z-index: 20004;
+    text-align: center;
+    max-width: 800px;
+    padding: 40px 24px;
+    width: 100%;
+}
+
+/* --- Ritual Media Layer (cinematic image/video behind text) --- */
+.ritual-media-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 20002;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.ritual-media-layer.visible {
+    opacity: 0.35;
+}
+
+.ritual-media-layer img,
+.ritual-media-layer video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(6px) brightness(0.55) saturate(1.2);
+    transform: scale(1.05);
+    animation: ritualKenBurns 14s ease-in-out infinite alternate;
+}
+
+.ritual-media-layer video {
+    filter: blur(4px) brightness(0.5) saturate(1.3);
+}
+
+@keyframes ritualKenBurns {
+    0% {
+        transform: scale(1.05) translate(0, 0);
+    }
+    100% {
+        transform: scale(1.15) translate(-2%, -1%);
+    }
+}
+
+/* Vignette overlay on media */
+.ritual-media-layer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(5, 5, 16, 0.7) 100%);
+    pointer-events: none;
+}
+
+/* --- Particle Canvas --- */
+.ritual-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 20003;
+    pointer-events: none;
+}
+
+/* --- Animated Gradient Mesh Background --- */
+.ritual-mesh {
+    position: absolute;
+    inset: 0;
+    z-index: 20000;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 3s ease;
+}
+.ritual-mesh.visible { opacity: 1; }
+
+.ritual-mesh-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(100px);
+    will-change: transform;
+}
+.ritual-mesh-blob:nth-child(1) {
+    width: 60vmax;
+    height: 60vmax;
+    top: -20%;
+    left: -10%;
+    animation: meshDrift1 25s ease-in-out infinite alternate;
+}
+.ritual-mesh-blob:nth-child(2) {
+    width: 50vmax;
+    height: 50vmax;
+    bottom: -15%;
+    right: -10%;
+    animation: meshDrift2 30s ease-in-out infinite alternate;
+}
+.ritual-mesh-blob:nth-child(3) {
+    width: 40vmax;
+    height: 40vmax;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    animation: meshDrift3 20s ease-in-out infinite alternate;
+}
+
+@keyframes meshDrift1 {
+    0%   { transform: translate(0, 0) scale(1); }
+    33%  { transform: translate(8%, -12%) scale(1.15); }
+    66%  { transform: translate(-5%, 8%) scale(0.9); }
+    100% { transform: translate(10%, 5%) scale(1.1); }
+}
+@keyframes meshDrift2 {
+    0%   { transform: translate(0, 0) scale(1); }
+    50%  { transform: translate(-12%, -8%) scale(1.2); }
+    100% { transform: translate(5%, -5%) scale(0.95); }
+}
+@keyframes meshDrift3 {
+    0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
+    50%  { transform: translate(-45%, -55%) scale(1.1); opacity: 0.8; }
+    100% { transform: translate(-55%, -45%) scale(0.9); opacity: 0.6; }
+}
+
+/* Theme mesh colors */
+.ritual-mesh[data-theme="dawn"] .ritual-mesh-blob:nth-child(1) { background: rgba(255,107,107,0.5); }
+.ritual-mesh[data-theme="dawn"] .ritual-mesh-blob:nth-child(2) { background: rgba(255,165,0,0.4); }
+.ritual-mesh[data-theme="dawn"] .ritual-mesh-blob:nth-child(3) { background: rgba(255,215,0,0.3); }
+
+.ritual-mesh[data-theme="ocean"] .ritual-mesh-blob:nth-child(1) { background: rgba(0,180,219,0.5); }
+.ritual-mesh[data-theme="ocean"] .ritual-mesh-blob:nth-child(2) { background: rgba(0,131,176,0.4); }
+.ritual-mesh[data-theme="ocean"] .ritual-mesh-blob:nth-child(3) { background: rgba(109,213,237,0.25); }
+
+.ritual-mesh[data-theme="deep"] .ritual-mesh-blob:nth-child(1) { background: rgba(123,104,238,0.4); }
+.ritual-mesh[data-theme="deep"] .ritual-mesh-blob:nth-child(2) { background: rgba(75,0,130,0.35); }
+.ritual-mesh[data-theme="deep"] .ritual-mesh-blob:nth-child(3) { background: rgba(147,112,219,0.2); }
+
+/* --- Breathing Guide --- */
+.breathing-guide {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 20003;
+    width: 280px;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    opacity: 0;
+    transition: opacity 1.5s ease;
+}
+.breathing-guide.visible { opacity: 1; }
+
+.breathing-rings {
+    position: absolute;
+    inset: 0;
+}
+
+.breathing-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.15);
+    transform: translate(-50%, -50%) scale(0.6);
+    transition: transform 4s cubic-bezier(0.37, 0, 0.63, 1), border-color 2s ease, box-shadow 2s ease;
+}
+.breathing-ring-1 { width: 280px; height: 280px; }
+.breathing-ring-2 { width: 200px; height: 200px; transition-delay: 0.1s; }
+.breathing-ring-3 { width: 120px; height: 120px; transition-delay: 0.2s; }
+
+.breathing-guide.inhale .breathing-ring {
+    transform: translate(-50%, -50%) scale(1);
+    border-color: rgba(255,255,255,0.3);
+    box-shadow: 0 0 30px rgba(255,255,255,0.05);
+}
+.breathing-guide.hold .breathing-ring {
+    transform: translate(-50%, -50%) scale(1);
+    border-color: rgba(255,255,255,0.25);
+}
+.breathing-guide.exhale .breathing-ring {
+    transform: translate(-50%, -50%) scale(0.6);
+    border-color: rgba(255,255,255,0.1);
+    box-shadow: none;
+}
+
+.breathing-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+    transition: width 4s cubic-bezier(0.37, 0, 0.63, 1), height 4s cubic-bezier(0.37, 0, 0.63, 1), opacity 2s ease;
+}
+.breathing-guide.inhale .breathing-glow { width: 260px; height: 260px; opacity: 1; }
+.breathing-guide.hold .breathing-glow { width: 260px; height: 260px; opacity: 0.8; }
+.breathing-guide.exhale .breathing-glow { width: 100px; height: 100px; opacity: 0.3; }
+
+.breathing-label {
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.6);
+    position: relative;
+    z-index: 1;
+    margin-bottom: 8px;
+    transition: opacity 0.5s ease;
+}
+
+.breathing-timer {
+    font-size: 42px;
+    font-weight: 200;
+    color: rgba(255,255,255,0.4);
+    position: relative;
+    z-index: 1;
+    line-height: 1;
+    transition: opacity 0.3s ease;
+}
+
+/* --- Ritual Prompt Text --- */
+.ritual-prompt {
+    font-size: clamp(18px, 4vw, 26px);
+    font-weight: 300;
+    letter-spacing: 2px;
+    opacity: 0;
+    transition: opacity 2s ease, transform 2s ease;
+    transform: translateY(10px);
+    color: rgba(255,255,255,0.8);
+}
+.ritual-prompt.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* --- Affirmation Display --- */
+.ritual-affirmation {
+    font-size: clamp(28px, 6vw, 52px);
+    font-weight: 800;
+    line-height: 1.25;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    padding: 0 16px;
+}
+.ritual-affirmation.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* --- Word-by-Word Kinetic Text --- */
+.ritual-word {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(24px) scale(0.85);
+    filter: blur(8px);
+    animation: ritualWordReveal 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    margin: 0 3px;
+}
+
+@keyframes ritualWordReveal {
+    0%   { opacity: 0; transform: translateY(24px) scale(0.85); filter: blur(8px); }
+    50%  { opacity: 0.8; filter: blur(2px); }
+    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+.ritual-word-emphasis {
+    color: #FFD700;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 0 0 60px rgba(255, 215, 0, 0.2);
+    font-weight: 900;
+}
+
+/* Legacy fallback */
+.kinetic-text {
+    display: inline-block;
+    filter: blur(10px);
+    animation: focusText 2s forwards;
+}
+@keyframes focusText { to { filter: blur(0); } }
+
+/* --- Progress Dots --- */
+.ritual-progress {
+    position: absolute;
+    bottom: 85px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 20006;
+    opacity: 0;
+    transition: opacity 1s ease;
+}
+.ritual-progress.visible { opacity: 1; }
+
+.ritual-progress-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ritual-progress-dot.active {
+    background: rgba(255,255,255,0.95);
+    transform: scale(1.6);
+    box-shadow: 0 0 12px rgba(255,255,255,0.5);
+}
+.ritual-progress-dot.done {
+    background: rgba(255,255,255,0.5);
+}
+
+/* --- Favorite Button --- */
+.ritual-favorite-btn {
+    position: absolute;
+    bottom: 130px;
+    right: 28px;
+    z-index: 20006;
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    color: rgba(255,255,255,0.5);
+    font-size: 22px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+}
+.ritual-favorite-btn.visible { opacity: 1; }
+.ritual-favorite-btn.active {
+    background: rgba(255, 71, 87, 0.2);
+    border-color: rgba(255, 71, 87, 0.4);
+    color: #ff4757;
+    transform: scale(1.15);
+    box-shadow: 0 0 20px rgba(255, 71, 87, 0.2);
+}
+.ritual-favorite-btn.pop {
+    animation: ritualFavPop 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes ritualFavPop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    100% { transform: scale(1.15); }
+}
+
+/* --- Controls Bar (Audio + Eyes-Closed) --- */
+.ritual-controls-bar {
+    position: absolute;
+    bottom: max(env(safe-area-inset-bottom, 20px), 30px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20006;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.ritual-control-btn {
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 10px 18px;
+    border-radius: 24px;
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+.ritual-control-btn:hover { background: rgba(255,255,255,0.12); color: white; }
+.ritual-control-btn.active {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: rgba(139, 92, 246, 0.4);
+    color: rgba(255,255,255,0.9);
+}
+
+/* --- Eyes-Closed Mode --- */
+.ritual-overlay.eyes-closed .ritual-mesh,
+.ritual-overlay.eyes-closed .ritual-canvas,
+.ritual-overlay.eyes-closed .ritual-content,
+.ritual-overlay.eyes-closed .ritual-progress,
+.ritual-overlay.eyes-closed .ritual-favorite-btn,
+.ritual-overlay.eyes-closed .breathing-guide,
+.ritual-overlay.eyes-closed .ritual-advance-hint {
+    opacity: 0.08;
+    transition: opacity 1.5s ease;
+}
+.ritual-overlay.eyes-closed::after {
+    content: '🧘  Close your eyes and listen';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 18px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 2px;
+    text-align: center;
+    pointer-events: none;
+    animation: eyesClosedPulse 4s ease-in-out infinite;
+}
+@keyframes eyesClosedPulse {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 0.5; }
+}
+
+/* --- Advance Hint --- */
+.ritual-advance-hint {
+    position: absolute;
+    bottom: 140px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20005;
+    font-size: 12px;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,0.25);
+    opacity: 0;
+    animation: ritualHintFade 4s ease forwards;
+}
+@keyframes ritualHintFade {
+    0%   { opacity: 0; }
+    30%  { opacity: 1; }
+    70%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* --- Post-Ritual Reflection Sheet --- */
+.ritual-reflection-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20010;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(12px);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+.ritual-reflection-overlay.visible { opacity: 1; }
+
+.ritual-reflection-sheet {
+    background: var(--surface-1, #1a1a2e);
+    border-radius: 24px 24px 0 0;
+    padding: 32px 24px max(env(safe-area-inset-bottom, 24px), 32px);
+    width: 100%;
+    max-width: 480px;
+    transform: translateY(100%);
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    text-align: center;
+    color: var(--text-1, white);
+}
+.ritual-reflection-overlay.visible .ritual-reflection-sheet {
+    transform: translateY(0);
+}
+
+.ritual-reflection-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.ritual-reflection-subtitle {
+    font-size: 13px;
+    color: var(--text-muted, rgba(255,255,255,0.5));
+    margin-bottom: 24px;
+}
+
+.ritual-mood-row {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 28px;
+}
+
+.ritual-mood-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    border: 2px solid var(--border-color, rgba(255,255,255,0.1));
+    background: var(--surface-2, rgba(255,255,255,0.05));
+    font-size: 26px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ritual-mood-btn:hover, .ritual-mood-btn.selected {
+    transform: scale(1.15);
+    border-color: var(--primary, #6366F1);
+    background: var(--primary-alpha, rgba(99,102,241,0.15));
+    box-shadow: 0 4px 20px rgba(99,102,241,0.2);
+}
+
+.ritual-streak-display {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface-2, rgba(255,255,255,0.05));
+    padding: 10px 20px;
+    border-radius: 16px;
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: var(--warning, #F59E0B);
+}
+
+.ritual-done-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 14px;
+    border: none;
+    background: var(--primary, #6366F1);
+    color: white;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.ritual-done-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+/* --- Creator Modal Live Preview --- */
+.aff-preview-container {
+    margin-top: 14px;
+}
+.aff-preview-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+.aff-preview-box {
+    height: 110px;
+    border-radius: 16px;
+    background: #050510;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 20px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border-color);
+}
+.aff-preview-text {
+    color: white;
+    font-size: 16px;
+    font-weight: 800;
+    text-align: center;
+    line-height: 1.4;
+}
+.aff-preview-text .ritual-word {
+    font-size: 16px;
+    animation-duration: 0.5s;
+}
+
+/* ── Affirmation Media Upload UI ────────────────────────────── */
+.aff-media-tabs {
+    display: flex;
+    gap: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.aff-media-tab {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    background: var(--surface-2);
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.aff-media-tab.active {
+    background: var(--primary);
+    color: white;
+}
+
+.aff-media-tab:not(.active):hover {
+    background: var(--surface-3);
+    color: var(--text-1);
+}
+
+.aff-media-panel.hidden {
+    display: none;
+}
+
+.aff-media-dropzone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    border: 2px dashed var(--border-color);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    background: var(--surface-2);
+}
+
+.aff-media-dropzone:hover,
+.aff-media-dropzone.dragover {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+}
+
+.aff-media-thumb {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 10px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.aff-media-thumb img {
+    max-height: 120px;
+    max-width: 100%;
+    display: block;
+    border-radius: 10px;
+    object-fit: cover;
+}
+
+.aff-media-thumb video {
+    max-height: 120px;
+    max-width: 100%;
+    display: block;
+    border-radius: 10px;
+}
+
+.aff-media-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    backdrop-filter: blur(4px);
+}
+
+.aff-media-remove:hover {
+    background: var(--danger);
+}
+
+/* ── Ritual Settings Chips ──────────────────────────────────── */
+.ritual-setting-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border-1, rgba(255,255,255,0.1));
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.ritual-setting-chip:active {
+    transform: scale(0.96);
+}
+.ritual-setting-chip.active {
+    background: rgba(124, 58, 237, 0.15);
+    border-color: #7c3aed;
+    color: #a78bfa;
+    font-weight: 600;
+}
+.ritual-setting-chip:disabled {
+    cursor: not-allowed;
+}
+
+/* ── Affirmation Manager Modal ──────────────────────────────── */
+.aff-mgr-container {
+    width: 94%;
+    max-width: 500px;
+    max-height: 85vh;
+    background: var(--surface-1);
+    border-radius: 20px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(30px) scale(0.95);
+    transition: transform 0.35s cubic-bezier(.32,.72,.24,1);
+}
+.aff-mgr-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.aff-mgr-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+    -webkit-overflow-scrolling: touch;
+}
+.aff-mgr-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface-2);
+    border-radius: 12px;
+    padding: 12px;
+    border: 1.5px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.aff-mgr-item:hover {
+    border-color: var(--border-1, rgba(255,255,255,0.08));
+}
+.aff-mgr-handle {
+    cursor: grab;
+    padding: 4px;
+    touch-action: none;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+.aff-mgr-handle:active { cursor: grabbing; }
+.aff-mgr-content {
+    flex: 1;
+    min-width: 0;
+}
+.aff-mgr-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-1);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+.aff-mgr-goal {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+}
+.aff-mgr-duration {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.aff-mgr-dur-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid var(--border-1, rgba(255,255,255,0.1));
+    background: var(--surface-3);
+    color: var(--text-2);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+.aff-mgr-dur-btn:active {
+    background: var(--primary);
+    color: white;
+}
+.aff-mgr-dur-val {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-1);
+    min-width: 32px;
+    text-align: center;
+}
+.aff-mgr-save {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 14px;
+    background: var(--primary);
+    color: white;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: opacity 0.2s;
+}
+.aff-mgr-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.aff-mgr-dragging {
+    position: fixed;
+    z-index: 20000;
+    opacity: 0.9;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    border-radius: 12px;
+    pointer-events: none;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+}
+.aff-mgr-placeholder {
+    border: 2px dashed var(--primary);
+    border-radius: 12px;
+    opacity: 0.4;
+    margin: 3px 0;
 }

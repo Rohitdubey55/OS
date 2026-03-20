@@ -18,7 +18,8 @@ let pomodoroState = {
     isBackgroundMode: false,
     linkedItemId: null,
     linkedItemType: null,
-    linkedDuration: null // Store custom duration for current linked item
+    linkedDuration: null, // Store custom duration for current linked item
+    wakeLock: null // Reference to screen wake lock
 };
 
 // Default Settings (loaded from sheet or these defaults)
@@ -1222,18 +1223,21 @@ function startPomodoro() {
     pomodoroState.currentPhase = 'work';
 
     startTimerInterval();
+    requestPomodoroWakeLock();
     renderPomodoro();
 }
 
 function pausePomodoro() {
     pomodoroState.isPaused = true;
     clearInterval(pomodoroState.timerInterval);
+    releasePomodoroWakeLock();
     renderPomodoro();
 }
 
 function resumePomodoro() {
     pomodoroState.isPaused = false;
     startTimerInterval();
+    requestPomodoroWakeLock();
     renderPomodoro();
 }
 
@@ -1254,6 +1258,7 @@ function resetPomodoro() {
     pomodoroState.timeRemaining = globalWork * 60;
     pomodoroState.totalTime = globalWork * 60;
 
+    releasePomodoroWakeLock();
     renderPomodoro();
 }
 
@@ -1362,6 +1367,12 @@ async function completePhase() {
         pomodoroState.timeRemaining = pomodoroSettings.work_duration * 60;
         pomodoroState.totalTime = pomodoroSettings.work_duration * 60;
         pomodoroState.isRunning = false;
+    }
+
+    if (pomodoroState.isRunning) {
+        requestPomodoroWakeLock();
+    } else {
+        releasePomodoroWakeLock();
     }
 
     renderPomodoro();
@@ -1643,3 +1654,36 @@ window.savePomodoroSettings = savePomodoroSettings;
 window.updatePomodoroSetting = updatePomodoroSetting;
 window.togglePomodoroFullscreen = togglePomodoroFullscreen;
 window.quickStartPomodoro = quickStartPomodoro;
+
+// Screen Wake Lock API Functions
+async function requestPomodoroWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            if (pomodoroState.wakeLock) return; // Already have one
+            
+            pomodoroState.wakeLock = await navigator.wakeLock.request('screen');
+            
+            pomodoroState.wakeLock.addEventListener('release', () => {
+                console.log('Screen Wake Lock was released');
+                pomodoroState.wakeLock = null;
+            });
+            console.log('Screen Wake Lock is active');
+        } catch (err) {
+            console.error(`${err.name}, ${err.message}`);
+        }
+    }
+}
+
+async function releasePomodoroWakeLock() {
+    if (pomodoroState.wakeLock) {
+        await pomodoroState.wakeLock.release();
+        pomodoroState.wakeLock = null;
+    }
+}
+
+// Handle re-acquiring wake lock on visibility change
+document.addEventListener('visibilitychange', async () => {
+    if (pomodoroState.wakeLock === null && document.visibilityState === 'visible' && pomodoroState.isRunning && !pomodoroState.isPaused) {
+        await requestPomodoroWakeLock();
+    }
+});

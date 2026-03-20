@@ -17,13 +17,29 @@ let muralTransform = { x: 0, y: 0, scale: 1 };
 let muralActiveTool = 'select';
 let muralIsDragging = false;
 let muralDragStart = { x: 0, y: 0 };
-let muralSelectedElementId = null;
+let muralDragInitialTransform = { x: 0, y: 0, scale: 1 };
+let muralSelectedElementIds = []; // Array of selected element IDs
 let muralPointerDown = false;
+let muralIsMarquee = false; // Whether we are drag-selecting
+let muralMarqueeStart = { x: 0, y: 0 };
+let muralMarqueeRect = { x: 0, y: 0, w: 0, h: 0 };
 let muralUndoStack = [];
 let muralContextMenuEl = null;
 let muralColorPickerEl = null;
 let muralIsResizing = false;
 let muralResizeStart = { w: 0, h: 0, x: 0, y: 0 };
+let muralZoomExpanded = false;
+
+/* ── Multi-select bounding box state ── */
+let muralGroupResizing = false;
+let muralGroupResizeEdge = null; // 'nw','ne','sw','se'
+let muralGroupResizeStart = { mouseX: 0, mouseY: 0, bounds: null, elemSnapshots: [] };
+let muralGroupDragging = false;
+let muralJustMarqueed = false; // Flag to prevent click from clearing marquee selection on PC
+
+/* ── Background settings ── */
+let muralBgPattern = 'dots';  // 'dots','grid','checks','lines','none'
+let muralBgColor = '';         // empty = default (var(--surface-base))
 
 /* ── Connector State ── */
 let muralConnectors = [];
@@ -108,6 +124,9 @@ async function renderMuralDashboard() {
                     </button>
                     <button class="mural-header-btn" onclick="openMuralCategoryManager()" title="Edit Categories">
                         <i data-lucide="settings-2" style="width:18px;height:18px"></i>
+                    </button>
+                    <button class="mural-header-btn" onclick="openMuralShortcutsModal()" title="Keyboard Shortcuts">
+                        <i data-lucide="keyboard" style="width:18px;height:18px"></i>
                     </button>
                     <button class="mural-add-btn" onclick="openNewMuralProjectModal()">
                         <i data-lucide="plus" style="width:18px;height:18px"></i>
@@ -212,7 +231,7 @@ function filterMuralBy(cat) {
 function openMuralProject(id) {
     muralActiveProjectId = id;
     muralTransform = { x: 0, y: 0, scale: 1 };
-    muralSelectedElementId = null;
+    muralSelectedElementIds = [];
     muralActiveTool = 'select';
     muralUndoStack = [];
     renderMural();
@@ -236,8 +255,30 @@ async function renderMuralCanvasView() {
                     <div class="mural-project-title-bar">${escapeHtml(project ? project.title : 'Project')}</div>
                 </div>
                 <div class="mural-topbar-right">
+                    <div class="mural-zoom-controls-wrapper ${muralZoomExpanded ? 'expanded' : ''}" id="muralZoomWrapper">
+                        <button class="mural-zoom-toggle" onclick="toggleMuralZoomMenu()" title="Zoom Controls">
+                            <i data-lucide="zoom-in"></i>
+                        </button>
+                        <div class="mural-zoom-actions">
+                            <button class="mural-zoom-btn-mini" onclick="zoomMural(1.25)" title="Zoom In">
+                                <i data-lucide="plus"></i>
+                            </button>
+                            <button class="mural-zoom-btn-mini" onclick="zoomMural(0.8)" title="Zoom Out">
+                                <i data-lucide="minus"></i>
+                            </button>
+                            <button class="mural-zoom-btn-mini" onclick="fitMuralToContent()" title="Fit to Content">
+                                <i data-lucide="maximize-2"></i>
+                            </button>
+                            <button class="mural-zoom-btn-mini" onclick="resetMuralView()" title="Reset View">
+                                <i data-lucide="scan"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button class="mural-bg-btn" id="muralBgBtn" onclick="toggleMuralBgPanel(event)" title="Canvas Background">
+                        <i data-lucide="palette" style="width:16px;height:16px"></i>
+                    </button>
                     <button class="mural-save-btn" id="muralManualSaveBtn" onclick="manualMuralSync()">
-                        <i data-lucide="save"></i> Save
+                        Save
                     </button>
                     <span class="mural-zoom-badge" id="muralZoomBadge">100%</span>
                 </div>
@@ -259,14 +300,29 @@ async function renderMuralCanvasView() {
                         <marker id="mural-arrowhead-selected" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
                             <polygon points="0 0, 10 3.5, 0 7" fill="#F59E0B" />
                         </marker>
+                        <marker id="mural-arrowhead-start" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                            <polygon points="10 0, 0 3.5, 10 7" fill="var(--mural-accent, #6366F1)" />
+                        </marker>
+                        <marker id="mural-arrowhead-start-selected" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                            <polygon points="10 0, 0 3.5, 10 7" fill="#F59E0B" />
+                        </marker>
+                        <marker id="mural-dot" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
+                            <circle cx="4" cy="4" r="3" fill="var(--mural-accent, #6366F1)" />
+                        </marker>
+                        <marker id="mural-dot-selected" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
+                            <circle cx="4" cy="4" r="3" fill="#F59E0B" />
+                        </marker>
                     </defs>
                 </svg>
             </div>
 
             <!-- Toolbar -->
             <div class="mural-toolbar" id="muralToolbar">
-                <button class="mural-tool active" data-tool="select" onclick="setMuralTool('select')" data-tooltip="Select & Move">
+                <button class="mural-tool active" data-tool="select" onclick="setMuralTool('select')" data-tooltip="Select & Move (V)">
                     <i data-lucide="mouse-pointer-2"></i>
+                </button>
+                <button class="mural-tool" data-tool="hand" onclick="setMuralTool('hand')" data-tooltip="Hand Tool / Pan (H)">
+                    <i data-lucide="hand"></i>
                 </button>
                 <button class="mural-tool" data-tool="sticky" onclick="addMuralSticky()" data-tooltip="Sticky Note">
                     <i data-lucide="sticky-note"></i>
@@ -294,28 +350,11 @@ async function renderMuralCanvasView() {
                 <button class="mural-tool" data-tool="connector" onclick="setMuralTool('connector')" data-tooltip="Connector (L)">
                     <i data-lucide="arrow-up-right"></i>
                 </button>
-                <div class="mural-toolbar-divider"></div>
-                <button class="mural-tool" onclick="duplicateMuralSelected()" data-tooltip="Duplicate">
-                    <i data-lucide="copy"></i>
+                <button class="mural-tool" id="muralUndoBtn" onclick="muralUndo()" data-tooltip="Undo (⌘Z)" style="opacity:0.4" disabled>
+                    <i data-lucide="undo-2"></i>
                 </button>
                 <button class="mural-tool danger" onclick="deleteMuralSelected()" data-tooltip="Delete">
                     <i data-lucide="trash-2"></i>
-                </button>
-            </div>
-
-            <!-- Zoom Controls -->
-            <div class="mural-controls">
-                <button class="mural-zoom-btn" onclick="zoomMural(1.25)" title="Zoom In">
-                    <i data-lucide="plus"></i>
-                </button>
-                <button class="mural-zoom-btn" onclick="zoomMural(0.8)" title="Zoom Out">
-                    <i data-lucide="minus"></i>
-                </button>
-                <button class="mural-zoom-btn" onclick="fitMuralToContent()" title="Fit to Content">
-                    <i data-lucide="maximize-2"></i>
-                </button>
-                <button class="mural-zoom-btn" onclick="resetMuralView()" title="Reset View">
-                    <i data-lucide="scan"></i>
                 </button>
             </div>
 
@@ -340,7 +379,7 @@ function exitMuralProject() {
     muralActiveProjectId = null;
     muralElements = [];
     muralTransform = { x: 0, y: 0, scale: 1 };
-    muralSelectedElementId = null;
+    muralSelectedElementIds = [];
     muralUndoStack = [];
     dismissMuralPopups();
     // Restore app chrome
@@ -403,6 +442,18 @@ function renderMuralElementsDOM() {
                 <marker id="mural-arrowhead-selected" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
                     <polygon points="0 0, 10 3.5, 0 7" fill="#F59E0B" />
                 </marker>
+                <marker id="mural-arrowhead-start" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                    <polygon points="10 0, 0 3.5, 10 7" fill="var(--mural-accent, #6366F1)" />
+                </marker>
+                <marker id="mural-arrowhead-start-selected" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                    <polygon points="10 0, 0 3.5, 10 7" fill="#F59E0B" />
+                </marker>
+                <marker id="mural-dot" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
+                    <circle cx="4" cy="4" r="3" fill="var(--mural-accent, #6366F1)" />
+                </marker>
+                <marker id="mural-dot-selected" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
+                    <circle cx="4" cy="4" r="3" fill="#F59E0B" />
+                </marker>
             </defs>`;
         canvas.appendChild(svg);
     }
@@ -429,7 +480,7 @@ function createMuralElementDOM(data) {
     else if (elType === 'icon') className += ' icon-el';
 
     div.className = className;
-    if (data.id === muralSelectedElementId) div.classList.add('selected');
+    if (muralSelectedElementIds.includes(data.id)) div.classList.add('selected');
     div.id = `mural-el-${data.id}`;
     div.style.left = `${data.x || 0}px`;
     div.style.top = `${data.y || 0}px`;
@@ -476,8 +527,9 @@ function createMuralElementDOM(data) {
         ['top', 'bottom', 'left', 'right'].forEach(side => {
             const anchor = document.createElement('div');
             anchor.className = `mural-anchor ${side}`;
-            anchor.addEventListener('click', (e) => {
+            anchor.addEventListener('pointerdown', (e) => {
                 e.stopPropagation();
+                e.preventDefault();
                 handleAnchorClick(data.id, side, e);
             });
             div.appendChild(anchor);
@@ -491,15 +543,16 @@ function createMuralElementDOM(data) {
         handle.addEventListener('pointerdown', (e) => {
             e.stopPropagation();
             e.preventDefault();
+            snapshotElementsForUndo([data.id], 'resize');
             muralIsResizing = true;
-            muralSelectedElementId = data.id;
+            muralSelectedElementIds = [data.id];
             muralResizeStart = {
                 w: data.w || 150,
                 h: data.h || 150,
                 x: e.clientX,
                 y: e.clientY
             };
-            highlightMuralElement(data.id);
+            highlightMuralElements([data.id]);
         });
         div.appendChild(handle);
     }
@@ -509,6 +562,9 @@ function createMuralElementDOM(data) {
         if (muralIsResizing) return;
         if (document.activeElement === div && div.contentEditable === 'true') return; // Don't drag while typing
 
+        // If hand tool is active, let the event bubble to the page for panning
+        if (muralActiveTool === 'hand') return;
+
         e.stopPropagation();
 
         // ── Connector tool: click to connect ──
@@ -517,17 +573,27 @@ function createMuralElementDOM(data) {
             return;
         }
 
-        muralSelectedElementId = data.id;
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+            // Toggle selection
+            if (muralSelectedElementIds.includes(data.id)) {
+                muralSelectedElementIds = muralSelectedElementIds.filter(id => id !== data.id);
+            } else {
+                muralSelectedElementIds.push(data.id);
+            }
+        } else {
+            // Single select (if not already part of a multi-selection)
+            if (!muralSelectedElementIds.includes(data.id)) {
+                muralSelectedElementIds = [data.id];
+            }
+        }
+        
         muralSelectedConnectorId = null;
-        highlightMuralElement(data.id);
+        highlightMuralElements(muralSelectedElementIds);
         highlightMuralConnector(null);
 
         if (muralActiveTool === 'select') {
             muralIsDragging = true;
-            muralDragStart = {
-                x: e.clientX / muralTransform.scale - data.x,
-                y: e.clientY / muralTransform.scale - data.y
-            };
+            muralDragStart = { x: e.clientX, y: e.clientY };
             div.setPointerCapture(e.pointerId);
         }
     });
@@ -536,8 +602,12 @@ function createMuralElementDOM(data) {
     div.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        muralSelectedElementId = data.id;
-        highlightMuralElement(data.id);
+        e.preventDefault();
+        e.stopPropagation();
+        if (!muralSelectedElementIds.includes(data.id)) {
+            muralSelectedElementIds = [data.id];
+        }
+        highlightMuralElements(muralSelectedElementIds);
         showMuralContextMenu(e.clientX, e.clientY, data.id);
     });
 
@@ -546,8 +616,10 @@ function createMuralElementDOM(data) {
     div.addEventListener('touchstart', (e) => {
         longPressTimer = setTimeout(() => {
             const touch = e.touches[0];
-            muralSelectedElementId = data.id;
-            highlightMuralElement(data.id);
+            if (!muralSelectedElementIds.includes(data.id)) {
+                muralSelectedElementIds = [data.id];
+            }
+            highlightMuralElements(muralSelectedElementIds);
             showMuralContextMenu(touch.clientX, touch.clientY, data.id);
         }, 300); // Reduced from 500ms
     }, { passive: true });
@@ -557,10 +629,194 @@ function createMuralElementDOM(data) {
     return div;
 }
 
-function highlightMuralElement(id) {
+function highlightMuralElements(ids) {
     document.querySelectorAll('.mural-element.selected').forEach(el => el.classList.remove('selected'));
-    const dom = document.getElementById(`mural-el-${id}`);
-    if (dom) dom.classList.add('selected');
+    (ids || []).forEach(id => {
+        const dom = document.getElementById(`mural-el-${id}`);
+        if (dom) dom.classList.add('selected');
+    });
+    updateSelectionBoundingBox();
+}
+
+/* ═══════════════════════════════════════
+   SELECTION BOUNDING BOX — Group drag & resize
+   ═══════════════════════════════════════ */
+function getSelectionBounds() {
+    if (muralSelectedElementIds.length < 2) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    muralSelectedElementIds.forEach(id => {
+        const el = muralElements.find(e => String(e.id) === String(id));
+        if (!el || el.type === 'connector') return;
+        const ex = el.x || 0, ey = el.y || 0;
+        const ew = el.w || 150, eh = el.h || 150;
+        minX = Math.min(minX, ex);
+        minY = Math.min(minY, ey);
+        maxX = Math.max(maxX, ex + ew);
+        maxY = Math.max(maxY, ey + eh);
+    });
+    if (minX === Infinity) return null;
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+function updateSelectionBoundingBox() {
+    let box = document.getElementById('muralSelectionBox');
+    const bounds = getSelectionBounds();
+    if (!bounds) {
+        removeSelectionBoundingBox();
+        return;
+    }
+    const canvas = document.getElementById('muralCanvas');
+    if (!canvas) return;
+
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'muralSelectionBox';
+        box.className = 'mural-selection-box';
+        canvas.appendChild(box);
+
+        // Append handles as SIBLINGS on the canvas (not inside the box)
+        // so pointer-events: none on the box doesn't block them on desktop
+        ['nw','ne','sw','se'].forEach(edge => {
+            const handle = document.createElement('div');
+            handle.className = `mural-sel-handle ${edge}`;
+            handle.id = `muralSelHandle-${edge}`;
+            handle.dataset.edge = edge;
+            handle.addEventListener('pointerdown', onSelBoxHandleDown);
+            canvas.appendChild(handle);
+        });
+    }
+
+    const pad = 8;
+    const bx = bounds.x - pad, by = bounds.y - pad;
+    const bw = bounds.w + pad * 2, bh = bounds.h + pad * 2;
+    box.style.left = `${bx}px`;
+    box.style.top = `${by}px`;
+    box.style.width = `${bw}px`;
+    box.style.height = `${bh}px`;
+
+    // Position corner handles
+    const hOff = 6; // half handle size
+    const positions = {
+        nw: { left: bx - hOff, top: by - hOff },
+        ne: { left: bx + bw - hOff, top: by - hOff },
+        sw: { left: bx - hOff, top: by + bh - hOff },
+        se: { left: bx + bw - hOff, top: by + bh - hOff }
+    };
+    ['nw','ne','sw','se'].forEach(edge => {
+        const h = document.getElementById(`muralSelHandle-${edge}`);
+        if (h) {
+            h.style.left = `${positions[edge].left}px`;
+            h.style.top = `${positions[edge].top}px`;
+        }
+    });
+}
+
+function onSelBoxHandleDown(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    const edge = e.target.dataset.edge;
+    if (!edge) return;
+    snapshotElementsForUndo(muralSelectedElementIds, 'resize');
+    muralGroupResizing = true;
+    muralGroupResizeEdge = edge;
+    const bounds = getSelectionBounds();
+    // Snapshot each element's relative position within the bounding box
+    const elemSnapshots = [];
+    muralSelectedElementIds.forEach(id => {
+        const el = muralElements.find(item => String(item.id) === String(id));
+        if (!el || el.type === 'connector') return;
+        elemSnapshots.push({
+            id: el.id,
+            rx: ((el.x || 0) - bounds.x) / bounds.w,
+            ry: ((el.y || 0) - bounds.y) / bounds.h,
+            rw: (el.w || 150) / bounds.w,
+            rh: (el.h || 150) / bounds.h
+        });
+    });
+    muralGroupResizeStart = {
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        bounds: { ...bounds },
+        elemSnapshots
+    };
+}
+
+function onGroupResizeMove(e) {
+    if (!muralGroupResizing) return;
+    const { bounds, elemSnapshots } = muralGroupResizeStart;
+    const dx = (e.clientX - muralGroupResizeStart.mouseX) / muralTransform.scale;
+    const dy = (e.clientY - muralGroupResizeStart.mouseY) / muralTransform.scale;
+    const edge = muralGroupResizeEdge;
+
+    let newX = bounds.x, newY = bounds.y, newW = bounds.w, newH = bounds.h;
+    if (edge.includes('e')) { newW = Math.max(60, bounds.w + dx); }
+    if (edge.includes('w')) { newW = Math.max(60, bounds.w - dx); newX = bounds.x + bounds.w - newW; }
+    if (edge.includes('s')) { newH = Math.max(60, bounds.h + dy); }
+    if (edge.includes('n')) { newH = Math.max(60, bounds.h - dy); newY = bounds.y + bounds.h - newH; }
+
+    // Apply proportional resize to all elements
+    elemSnapshots.forEach(snap => {
+        const el = muralElements.find(item => String(item.id) === String(snap.id));
+        if (!el) return;
+        el.x = newX + snap.rx * newW;
+        el.y = newY + snap.ry * newH;
+        el.w = Math.max(40, snap.rw * newW);
+        el.h = Math.max(40, snap.rh * newH);
+        const dom = document.getElementById(`mural-el-${el.id}`);
+        if (dom) {
+            dom.style.left = `${el.x}px`;
+            dom.style.top = `${el.y}px`;
+            dom.style.width = `${el.w}px`;
+            dom.style.height = `${el.h}px`;
+        }
+        updateConnectorsForElement(el.id);
+    });
+    updateSelectionBoundingBox();
+}
+
+function onGroupResizeUp(e) {
+    if (!muralGroupResizing) return;
+    muralGroupResizing = false;
+    muralGroupResizeEdge = null;
+    // Elements already updated in-place, will be saved on manual sync
+}
+
+function removeSelectionBoundingBox() {
+    const box = document.getElementById('muralSelectionBox');
+    if (box) box.remove();
+    // Remove sibling handles
+    ['nw','ne','sw','se'].forEach(edge => {
+        const h = document.getElementById(`muralSelHandle-${edge}`);
+        if (h) h.remove();
+    });
+}
+
+function updateSelectionBoundingBoxOffset(dx, dy) {
+    // Temporarily offset the bounding box + handles during drag (before el.x/y are committed)
+    const box = document.getElementById('muralSelectionBox');
+    if (!box || muralSelectedElementIds.length < 2) return;
+    const bounds = getSelectionBounds();
+    if (!bounds) return;
+    const pad = 8;
+    const bx = bounds.x + dx - pad, by = bounds.y + dy - pad;
+    const bw = bounds.w + pad * 2, bh = bounds.h + pad * 2;
+    box.style.left = `${bx}px`;
+    box.style.top = `${by}px`;
+    // Move handles too
+    const hOff = 6;
+    const positions = {
+        nw: { left: bx - hOff, top: by - hOff },
+        ne: { left: bx + bw - hOff, top: by - hOff },
+        sw: { left: bx - hOff, top: by + bh - hOff },
+        se: { left: bx + bw - hOff, top: by + bh - hOff }
+    };
+    ['nw','ne','sw','se'].forEach(edge => {
+        const h = document.getElementById(`muralSelHandle-${edge}`);
+        if (h) {
+            h.style.left = `${positions[edge].left}px`;
+            h.style.top = `${positions[edge].top}px`;
+        }
+    });
 }
 
 /* ═══════════════════════════════════════
@@ -569,8 +825,9 @@ function highlightMuralElement(id) {
 function showMuralContextMenu(x, y, elementId) {
     dismissMuralPopups();
 
+    const isMultiple = muralSelectedElementIds.length > 1;
     const el = muralElements.find(item => String(item.id) === String(elementId));
-    if (!el) return;
+    if (!el && !isMultiple) return;
 
     const menu = document.createElement('div');
     menu.className = 'mural-context-menu';
@@ -699,6 +956,7 @@ function showMuralColorPicker(x, y, elementId) {
 function changeMuralColor(elementId, color) {
     const el = muralElements.find(item => String(item.id) === String(elementId));
     if (!el) return;
+    snapshotElementsForUndo([elementId], 'color');
     el.color = color;
     const dom = document.getElementById(`mural-el-${elementId}`);
     if (dom) dom.style.backgroundColor = color;
@@ -713,7 +971,198 @@ function dismissMuralPopups() {
     if (muralColorPickerEl) { muralColorPickerEl.remove(); muralColorPickerEl = null; }
     const shapeMenu = document.getElementById('muralShapeMenu');
     if (shapeMenu) shapeMenu.classList.remove('visible');
+    const bgPanel = document.getElementById('muralBgPanel');
+    if (bgPanel) bgPanel.remove();
 }
+
+/* ═══════════════════════════════════════
+   BACKGROUND OPTIONS PANEL
+   ═══════════════════════════════════════ */
+const MURAL_BG_PATTERNS = [
+    { id: 'dots', label: 'Dots', icon: 'grip-horizontal' },
+    { id: 'grid', label: 'Grid', icon: 'grid-3x3' },
+    { id: 'checks', label: 'Checks', icon: 'check-square' },
+    { id: 'lines', label: 'Lines', icon: 'align-justify' },
+    { id: 'cross', label: 'Cross', icon: 'plus' },
+    { id: 'none', label: 'None', icon: 'square' }
+];
+
+const MURAL_BG_COLORS = [
+    { id: '', label: 'Default', color: '' },
+    { id: '#ffffff', label: 'White', color: '#ffffff' },
+    { id: '#f8fafc', label: 'Slate', color: '#f8fafc' },
+    { id: '#fefce8', label: 'Warm', color: '#fefce8' },
+    { id: '#f0fdf4', label: 'Green', color: '#f0fdf4' },
+    { id: '#eff6ff', label: 'Blue', color: '#eff6ff' },
+    { id: '#fdf2f8', label: 'Pink', color: '#fdf2f8' },
+    { id: '#faf5ff', label: 'Purple', color: '#faf5ff' },
+    { id: '#1e1e2e', label: 'Dark', color: '#1e1e2e' },
+    { id: '#1a1a2e', label: 'Navy', color: '#1a1a2e' },
+    { id: '#0f172a', label: 'Midnight', color: '#0f172a' },
+    { id: '#18181b', label: 'Zinc', color: '#18181b' }
+];
+
+function toggleMuralBgPanel(e) {
+    e.stopPropagation();
+    let panel = document.getElementById('muralBgPanel');
+    if (panel) { panel.remove(); return; }
+
+    const btn = document.getElementById('muralBgBtn');
+    const rect = btn.getBoundingClientRect();
+
+    panel = document.createElement('div');
+    panel.id = 'muralBgPanel';
+    panel.className = 'mural-bg-panel';
+    panel.style.top = `${rect.bottom + 8}px`;
+    panel.style.right = `${window.innerWidth - rect.right}px`;
+
+    // Pattern section
+    let html = `<div class="mural-bg-section-title">Pattern</div><div class="mural-bg-patterns">`;
+    MURAL_BG_PATTERNS.forEach(p => {
+        const active = muralBgPattern === p.id ? 'active' : '';
+        html += `<button class="mural-bg-pattern-btn ${active}" onclick="setMuralBgPattern('${p.id}')" title="${p.label}">
+            <i data-lucide="${p.icon}" style="width:16px;height:16px"></i>
+            <span>${p.label}</span>
+        </button>`;
+    });
+    html += `</div>`;
+
+    // Color section
+    html += `<div class="mural-bg-section-title" style="margin-top:12px">Color</div><div class="mural-bg-colors">`;
+    MURAL_BG_COLORS.forEach(c => {
+        const active = muralBgColor === c.id ? 'active' : '';
+        const isDark = c.id && ['#1e1e2e','#1a1a2e','#0f172a','#18181b'].includes(c.id);
+        const border = !c.id || c.id === '#ffffff' ? 'border:1px solid var(--border-color);' : '';
+        const bg = c.color || 'var(--surface-base)';
+        html += `<button class="mural-bg-color-btn ${active}" onclick="setMuralBgColor('${c.id}')" title="${c.label}" style="background:${bg}; ${border}">
+            ${active ? `<i data-lucide="check" style="width:14px;height:14px;color:${isDark ? '#fff' : '#333'}"></i>` : ''}
+        </button>`;
+    });
+    html += `</div>`;
+
+    panel.innerHTML = html;
+    document.body.appendChild(panel);
+    if (window.lucide) lucide.createIcons();
+
+    // Close on outside click
+    setTimeout(() => {
+        document.addEventListener('click', closeBgPanelOutside, { once: true });
+    }, 10);
+}
+
+function closeBgPanelOutside(e) {
+    const panel = document.getElementById('muralBgPanel');
+    if (panel && !panel.contains(e.target) && !e.target.closest('#muralBgBtn')) {
+        panel.remove();
+    }
+}
+
+function setMuralBgPattern(pattern) {
+    muralBgPattern = pattern;
+    applyMuralBackground();
+    // Refresh panel to update active state
+    const panel = document.getElementById('muralBgPanel');
+    if (panel) { panel.remove(); toggleMuralBgPanel({ stopPropagation: () => {} }); }
+    // Persist to project
+    saveMuralBgSettings();
+}
+
+function setMuralBgColor(color) {
+    muralBgColor = color;
+    applyMuralBackground();
+    const panel = document.getElementById('muralBgPanel');
+    if (panel) { panel.remove(); toggleMuralBgPanel({ stopPropagation: () => {} }); }
+    saveMuralBgSettings();
+}
+
+function applyMuralBackground() {
+    const page = document.getElementById('muralPage');
+    if (!page) return;
+
+    // Set background color
+    const bgColor = muralBgColor || '';
+    page.style.backgroundColor = bgColor || '';
+
+    // Determine pattern dot/line color based on bg darkness
+    const isDark = muralBgColor && ['#1e1e2e','#1a1a2e','#0f172a','#18181b'].includes(muralBgColor);
+    const dotColor = isDark ? 'rgba(255,255,255,0.12)' : 'var(--border-color)';
+    const lineColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    const majorColor = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
+
+    // Apply pattern to the page (viewport) so it's always infinite
+    switch (muralBgPattern) {
+        case 'dots':
+            page.style.backgroundImage = `radial-gradient(circle, ${dotColor} 0.8px, transparent 0.8px)`;
+            page.style.backgroundSize = '32px 32px';
+            break;
+        case 'grid':
+            // Graph paper: minor lines every 16px, major lines every 128px (8x)
+            page.style.backgroundImage = `
+                linear-gradient(${majorColor} 1px, transparent 1px),
+                linear-gradient(90deg, ${majorColor} 1px, transparent 1px),
+                linear-gradient(${lineColor} 0.5px, transparent 0.5px),
+                linear-gradient(90deg, ${lineColor} 0.5px, transparent 0.5px)`;
+            page.style.backgroundSize = '128px 128px, 128px 128px, 16px 16px, 16px 16px';
+            break;
+        case 'checks':
+            page.style.backgroundImage = `
+                linear-gradient(45deg, ${lineColor} 25%, transparent 25%),
+                linear-gradient(-45deg, ${lineColor} 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, ${lineColor} 75%),
+                linear-gradient(-45deg, transparent 75%, ${lineColor} 75%)`;
+            page.style.backgroundSize = '32px 32px';
+            break;
+        case 'lines':
+            page.style.backgroundImage = `linear-gradient(${lineColor} 1px, transparent 1px)`;
+            page.style.backgroundSize = '32px 32px';
+            break;
+        case 'cross':
+            page.style.backgroundImage = `
+                radial-gradient(circle, ${dotColor} 0.8px, transparent 0.8px),
+                linear-gradient(${lineColor} 1px, transparent 1px),
+                linear-gradient(90deg, ${lineColor} 1px, transparent 1px)`;
+            page.style.backgroundSize = '32px 32px, 32px 32px, 32px 32px';
+            break;
+        case 'none':
+            page.style.backgroundImage = 'none';
+            break;
+    }
+}
+
+function saveMuralBgSettings() {
+    const project = muralProjects.find(p => String(p.id) === String(muralActiveProjectId));
+    if (project) {
+        project.bg_pattern = muralBgPattern;
+        project.bg_color = muralBgColor;
+    }
+    // Persist to backend sheet
+    apiPost({
+        action: 'update',
+        sheet: 'mural_projects',
+        id: muralActiveProjectId,
+        payload: {
+            bg_pattern: muralBgPattern || '',
+            bg_color: muralBgColor || '',
+            updated_at: new Date().toISOString()
+        }
+    }).catch(err => console.error('Failed to save bg settings:', err));
+}
+
+function loadMuralBgSettings() {
+    // Load from project data (already fetched from backend)
+    const project = muralProjects.find(p => String(p.id) === String(muralActiveProjectId));
+    if (project && (project.bg_pattern || project.bg_color)) {
+        muralBgPattern = project.bg_pattern || 'dots';
+        muralBgColor = project.bg_color || '';
+    } else {
+        muralBgPattern = 'dots';
+        muralBgColor = '';
+    }
+    applyMuralBackground();
+}
+window.toggleMuralBgPanel = toggleMuralBgPanel;
+window.setMuralBgPattern = setMuralBgPattern;
+window.setMuralBgColor = setMuralBgColor;
 
 function dismissMuralPopupsOnOutside(e) {
     const ctx = document.getElementById('muralContextMenu');
@@ -947,11 +1396,16 @@ function initMuralCanvas() {
 
     // Click canvas background to deselect
     canvas.addEventListener('click', (e) => {
+        // Don't deselect when clicking selection handles or bounding box
+        if (e.target.classList && (e.target.classList.contains('mural-sel-handle') || e.target.classList.contains('mural-selection-box'))) return;
+        // Don't deselect right after a marquee selection (click fires after pointerup on PC)
+        if (muralJustMarqueed) { muralJustMarqueed = false; return; }
         if (e.target === canvas || e.target.closest('.mural-connector-svg')) {
-            muralSelectedElementId = null;
+            muralSelectedElementIds = [];
             muralSelectedConnectorId = null;
             highlightMuralConnector(null);
             document.querySelectorAll('.mural-element.selected').forEach(el => el.classList.remove('selected'));
+            removeSelectionBoundingBox();
             dismissMuralPopups();
             // Cancel connector creation if clicking empty space
             if (muralConnectorSource) cancelMuralConnector();
@@ -960,6 +1414,7 @@ function initMuralCanvas() {
 
     applyMuralTransform();
     updateMuralZoomBadge();
+    loadMuralBgSettings();
 }
 
 // Touch pinch zoom state
@@ -1027,13 +1482,48 @@ function updateMuralZoomBadge() {
 
 function onMuralPointerDown(e) {
     if (muralTouchState.isPinching) return;
+
+    // Don't intercept clicks on selection box handles
+    if (e.target.classList && e.target.classList.contains('mural-sel-handle')) return;
+
     muralPointerDown = true;
 
-    if (e.target.id === 'muralPage' || e.target.id === 'muralCanvas') {
+    // Handle Hand tool panning regardless of what's clicked (if it's not another UI element)
+    if (muralActiveTool === 'hand') {
+        const canvas = document.getElementById('muralCanvas');
+        if (canvas) canvas.style.cursor = 'grabbing';
         muralIsDragging = true;
-        muralDragStart = { x: e.clientX - muralTransform.x, y: e.clientY - muralTransform.y };
-        muralSelectedElementId = null;
-        document.querySelectorAll('.mural-element.selected').forEach(el => el.classList.remove('selected'));
+        muralDragStart = { x: e.clientX, y: e.clientY };
+        muralDragInitialTransform = { ...muralTransform };
+        return;
+    }
+
+    if (e.target.id === 'muralPage' || e.target.id === 'muralCanvas' || e.target.id === 'muralConnectorSvg') {
+        if (muralActiveTool === 'select') {
+            muralIsMarquee = true;
+            muralMarqueeStart = { 
+                x: (e.clientX - muralTransform.x) / muralTransform.scale, 
+                y: (e.clientY - muralTransform.y) / muralTransform.scale 
+            };
+            muralMarqueeRect = { x: muralMarqueeStart.x, y: muralMarqueeStart.y, w: 0, h: 0 };
+            
+            // Re-render marquee if exists
+            let marquee = document.getElementById('muralMarquee');
+            if (marquee) marquee.remove();
+            marquee = document.createElement('div');
+            marquee.id = 'muralMarquee';
+            marquee.className = 'mural-marquee';
+            document.getElementById('muralCanvas').appendChild(marquee);
+        }
+
+        muralIsDragging = !muralIsMarquee;
+        muralDragStart = { x: e.clientX, y: e.clientY };
+        muralDragInitialTransform = { ...muralTransform };
+        
+        if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+            muralSelectedElementIds = [];
+            highlightMuralElements([]);
+        }
         dismissMuralPopups();
     }
 }
@@ -1041,14 +1531,21 @@ function onMuralPointerDown(e) {
 function onMuralPointerMove(e) {
     if (muralTouchState.isPinching) return;
 
-    if (muralIsResizing && muralSelectedElementId) {
+    // Group resize from bounding box handles
+    if (muralGroupResizing) {
         e.preventDefault();
-        const el = muralElements.find(item => String(item.id) === String(muralSelectedElementId));
+        onGroupResizeMove(e);
+        return;
+    }
+
+    if (muralIsResizing && muralSelectedElementIds.length > 0) {
+        e.preventDefault();
+        const el = muralElements.find(item => String(item.id) === String(muralSelectedElementIds[0]));
         if (el) {
             const dx = (e.clientX - muralResizeStart.x) / muralTransform.scale;
             const dy = (e.clientY - muralResizeStart.y) / muralTransform.scale;
-            el.w = Math.max(80, muralResizeStart.w + dx);
-            el.h = Math.max(80, muralResizeStart.h + dy);
+            el.w = Math.max(20, muralResizeStart.w + dx);
+            el.h = Math.max(20, muralResizeStart.h + dy);
             const dom = document.getElementById(`mural-el-${el.id}`);
             if (dom) {
                 dom.style.width = `${el.w}px`;
@@ -1060,42 +1557,131 @@ function onMuralPointerMove(e) {
         return;
     }
 
+    if (muralIsMarquee) {
+        const curX = (e.clientX - muralTransform.x) / muralTransform.scale;
+        const curY = (e.clientY - muralTransform.y) / muralTransform.scale;
+        
+        muralMarqueeRect.x = Math.min(muralMarqueeStart.x, curX);
+        muralMarqueeRect.y = Math.min(muralMarqueeStart.y, curY);
+        muralMarqueeRect.w = Math.abs(curX - muralMarqueeStart.x);
+        muralMarqueeRect.h = Math.abs(curY - muralMarqueeStart.y);
+        
+        const marquee = document.getElementById('muralMarquee');
+        if (marquee) {
+            marquee.style.left = `${muralMarqueeRect.x}px`;
+            marquee.style.top = `${muralMarqueeRect.y}px`;
+            marquee.style.width = `${muralMarqueeRect.w}px`;
+            marquee.style.height = `${muralMarqueeRect.h}px`;
+        }
+        return;
+    }
+
     if (!muralIsDragging) return;
 
-    if (muralSelectedElementId) {
-        const el = muralElements.find(item => String(item.id) === String(muralSelectedElementId));
-        if (el) {
-            el.x = e.clientX / muralTransform.scale - muralDragStart.x;
-            el.y = e.clientY / muralTransform.scale - muralDragStart.y;
-            const dom = document.getElementById(`mural-el-${el.id}`);
-            if (dom) { dom.style.left = `${el.x}px`; dom.style.top = `${el.y}px`; }
-            // Live-update connectors attached to this element
-            updateConnectorsForElement(el.id);
-        }
+    if (muralSelectedElementIds.length > 0) {
+        const dx = (e.clientX - muralDragStart.x) / muralTransform.scale;
+        const dy = (e.clientY - muralDragStart.y) / muralTransform.scale;
+        
+        muralSelectedElementIds.forEach(id => {
+            const el = muralElements.find(item => String(item.id) === String(id));
+            if (el) {
+                // We use a temporary display offset, but we don't update el.x/y until pointerup
+                const dom = document.getElementById(`mural-el-${el.id}`);
+                if (dom) {
+                    dom.style.left = `${el.x + dx}px`;
+                    dom.style.top = `${el.y + dy}px`;
+                }
+                updateConnectorsForElement(el.id);
+            }
+        });
+        // Move selection bounding box in sync
+        updateSelectionBoundingBoxOffset(dx, dy);
     } else {
-        muralTransform.x = e.clientX - muralDragStart.x;
-        muralTransform.y = e.clientY - muralDragStart.y;
+        // If hand tool OR background drag
+        muralTransform.x = muralDragInitialTransform.x + (e.clientX - muralDragStart.x);
+        muralTransform.y = muralDragInitialTransform.y + (e.clientY - muralDragStart.y);
         applyMuralTransform();
     }
 }
 
-function onMuralPointerUp() {
-    if (muralIsResizing && muralSelectedElementId) {
-        const el = muralElements.find(item => String(item.id) === String(muralSelectedElementId));
-        if (el) saveMuralElement(el);
-        muralIsResizing = false;
-        showSaveIndicator('saving');
+function onMuralPointerUp(e) {
+    muralPointerDown = false;
+
+    if (muralGroupResizing) {
+        onGroupResizeUp(e);
+        return;
     }
 
-    if (muralSelectedElementId && muralIsDragging) {
-        const el = muralElements.find(item => String(item.id) === String(muralSelectedElementId));
-        if (el) {
-            saveMuralElement(el);
-            showSaveIndicator('saving');
+    if (muralActiveTool === 'hand') {
+        const canvas = document.getElementById('muralCanvas');
+        if (canvas) canvas.style.cursor = 'grab';
+        muralIsDragging = false;
+        return;
+    }
+
+    if (muralIsMarquee) {
+        muralIsMarquee = false;
+        const marquee = document.getElementById('muralMarquee');
+        if (marquee) marquee.remove();
+
+        // Find elements inside rectangle
+        const selected = [];
+        muralElements.forEach(el => {
+            if (el.type === 'connector') return;
+            const ex = el.x || 0;
+            const ey = el.y || 0;
+            const ew = el.w || 150;
+            const eh = el.h || 150;
+
+            if (ex < muralMarqueeRect.x + muralMarqueeRect.w &&
+                ex + ew > muralMarqueeRect.x &&
+                ey < muralMarqueeRect.y + muralMarqueeRect.h &&
+                ey + eh > muralMarqueeRect.y) {
+                selected.push(el.id);
+            }
+        });
+
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+            muralSelectedElementIds = [...new Set([...muralSelectedElementIds, ...selected])];
+        } else {
+            muralSelectedElementIds = selected;
+        }
+        highlightMuralElements(muralSelectedElementIds);
+
+        // On PC, the click event fires after pointerup and would clear the selection.
+        // Set a flag so the canvas click handler skips deselection.
+        if (muralSelectedElementIds.length > 0) {
+            muralJustMarqueed = true;
+            setTimeout(() => { muralJustMarqueed = false; }, 0);
         }
     }
+
+    if (muralIsResizing && muralSelectedElementIds.length > 0) {
+        const el = muralElements.find(item => String(item.id) === String(muralSelectedElementIds[0]));
+        if (el) saveMuralElement(el);
+        muralIsResizing = false;
+        // Changes kept locally until manual sync
+    }
+
+    if (muralSelectedElementIds.length > 0 && muralIsDragging) {
+        const dx = (e.clientX - muralDragStart.x) / muralTransform.scale;
+        const dy = (e.clientY - muralDragStart.y) / muralTransform.scale;
+
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+            // Snapshot BEFORE committing the move
+            snapshotElementsForUndo(muralSelectedElementIds, 'move');
+            muralSelectedElementIds.forEach(id => {
+                const el = muralElements.find(item => String(item.id) === String(id));
+                if (el) {
+                    el.x += dx;
+                    el.y += dy;
+                    saveMuralElement(el);
+                }
+            });
+        }
+        updateSelectionBoundingBox();
+    }
     muralIsDragging = false;
-    muralPointerDown = false;
 }
 
 function onMuralWheel(e) {
@@ -1156,80 +1742,271 @@ function setMuralTool(tool) {
         btn.classList.toggle('active', btn.getAttribute('data-tool') === tool);
     });
 
-    // Update canvas cursor for connector mode
+    // Update canvas cursor and anchor visibility
     const canvas = document.getElementById('muralCanvas');
+    const page = document.getElementById('muralPage');
     if (canvas) {
-        canvas.style.cursor = tool === 'connector' ? 'crosshair' : 'grab';
+        if (tool === 'connector') canvas.style.cursor = 'crosshair';
+        else if (tool === 'hand') canvas.style.cursor = 'grab';
+        else canvas.style.cursor = 'default';
+    }
+    if (page) {
+        page.classList.toggle('connector-tool-active', tool === 'connector');
     }
 }
 window.setMuralTool = setMuralTool;
 
 /* ═══════════════════════════════════════
-   KEYBOARD SHORTCUTS
+   KEYBOARD SHORTCUTS SYSTEM
    ═══════════════════════════════════════ */
+const MURAL_DEFAULT_SHORTCUTS = {
+    'delete_item': { key: 'delete', mods: [], label: 'Delete Item', desc: 'Delete selected element' },
+    'delete_item_alt': { key: 'backspace', mods: [], label: 'Delete Item (Alt)', desc: 'Delete selected element' },
+    'duplicate': { key: 'd', mods: ['meta'], label: 'Duplicate', desc: 'Duplicate selected element' },
+    'undo': { key: 'z', mods: ['meta'], label: 'Undo', desc: 'Undo last action' },
+    'tool_select': { key: 'v', mods: [], label: 'Select Tool', desc: 'Switch to select tool' },
+    'tool_hand': { key: 'h', mods: [], label: 'Hand Tool', desc: 'Switch to hand tool for panning' },
+    'add_sticky': { key: 'n', mods: [], label: 'New Sticky', desc: 'Create a new sticky note' },
+    'add_text': { key: 't', mods: [], label: 'New Text', desc: 'Create a text element' },
+    'add_rect': { key: 'r', mods: [], label: 'New Rectangle', desc: 'Create a rectangle shape' },
+    'tool_connector': { key: 'l', mods: [], label: 'Connector Tool', desc: 'Switch to connector tool' },
+    'reset_view': { key: '0', mods: ['meta'], label: 'Reset View', desc: 'Reset zoom and pan' },
+    'fit_content': { key: '1', mods: ['meta'], label: 'Fit to Content', desc: 'Zoom to fit all elements' },
+    'escape': { key: 'escape', mods: [], label: 'Cancel / Deselect', desc: 'Close menus or deselect' }
+};
+
+function getMuralShortcuts() {
+    const s = state.data.settings?.[0] || {};
+    if (s.mural_shortcuts) {
+        try {
+            return JSON.parse(s.mural_shortcuts);
+        } catch (e) {
+            console.error('Failed to parse mural shortcuts:', e);
+        }
+    }
+    return JSON.parse(JSON.stringify(MURAL_DEFAULT_SHORTCUTS));
+}
+
+function isMuralShortcutsEnabled() {
+    const s = state.data.settings?.[0] || {};
+    return s.mural_shortcuts_enabled !== false; // Default to true
+}
+
+async function setMuralShortcutsEnabled(enabled) {
+    if (!state.data.settings) state.data.settings = [{}];
+    const s = state.data.settings[0];
+    s.mural_shortcuts_enabled = enabled;
+    try {
+        if (s.id) await apiPost('settings', s);
+        else {
+            const res = await apiPost('settings', { action: 'create', payload: s });
+            if (res.success && res.id) s.id = res.id;
+        }
+    } catch (e) {
+        console.error('Error saving shortcuts toggle:', e);
+    }
+}
+
+async function saveMuralShortcuts(shortcuts) {
+    if (!state.data.settings) state.data.settings = [{}];
+    const s = state.data.settings[0];
+    s.mural_shortcuts = JSON.stringify(shortcuts);
+    
+    try {
+        if (s.id) {
+            await apiPost('settings', s);
+        } else {
+            const res = await apiPost('settings', { action: 'create', payload: s });
+            if (res.success && res.id) s.id = res.id;
+        }
+    } catch (e) {
+        console.error('Error saving shortcuts:', e);
+        toast('Failed to save shortcuts');
+    }
+}
+
+let _muralRecordingAction = null;
+
+window.openMuralShortcutsModal = function() {
+    const shortcuts = getMuralShortcuts();
+    const isEnabled = isMuralShortcutsEnabled();
+    const modal = document.getElementById('universalModal');
+    const box = modal.querySelector('.modal-box');
+    
+    _muralRecordingAction = null;
+
+    const renderList = () => {
+        box.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                <h3 style="margin:0">Keyboard Shortcuts</h3>
+                <div style="display:flex; align-items:center; gap:8px">
+                    <span style="font-size:12px; color:var(--text-3)">${isEnabled ? 'Enabled' : 'Disabled'}</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" ${isEnabled ? 'checked' : ''} onchange="toggleMuralShortcutsGlobal(this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <p style="color:var(--text-3); margin-bottom:20px; font-size:13px">Click a shortcut to remap it.</p>
+            
+            <div class="mural-shortcuts-list">
+                ${Object.entries(shortcuts).map(([id, s]) => `
+                    <div class="mural-shortcut-row ${_muralRecordingAction === id ? 'recording' : ''}" onclick="startMuralShortcutRecording('${id}')">
+                        <div class="mural-shortcut-info">
+                            <span class="mural-shortcut-label">${s.label}</span>
+                            <span class="mural-shortcut-desc">${s.desc}</span>
+                        </div>
+                        <div class="mural-shortcut-key">
+                            ${s.mods.includes('meta') ? '<span class="mural-key-kbd">⌘</span>' : ''}
+                            ${s.mods.includes('ctrl') ? '<span class="mural-key-kbd">Ctrl</span>' : ''}
+                            ${s.mods.includes('shift') ? '<span class="mural-key-kbd">Shift</span>' : ''}
+                            ${s.mods.includes('alt') ? '<span class="mural-key-kbd">Alt</span>' : ''}
+                            <span class="mural-key-kbd">${s.key.toUpperCase()}</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div style="display:flex; gap:12px; margin-top:24px;">
+                <button class="btn secondary" style="flex:1" onclick="resetMuralShortcutsToDefault()">Reset Defaults</button>
+                <button class="btn primary" style="flex:1" onclick="document.getElementById('universalModal').classList.add('hidden'); _muralRecordingAction = null;">Done</button>
+            </div>
+        `;
+        if (window.lucide) lucide.createIcons();
+    };
+
+    renderList();
+    modal.classList.remove('hidden');
+
+    window.startMuralShortcutRecording = (id) => {
+        _muralRecordingAction = id;
+        renderList();
+        
+        const handler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const forbiddenKeys = ['Control', 'Alt', 'Shift', 'Meta', 'CapsLock', 'Tab'];
+            if (forbiddenKeys.includes(e.key)) return;
+
+            const newKey = e.key.toLowerCase();
+            const mods = [];
+            if (e.metaKey) mods.push('meta');
+            if (e.ctrlKey) mods.push('ctrl');
+            if (e.shiftKey) mods.push('shift');
+            if (e.altKey) mods.push('alt');
+
+            shortcuts[id].key = newKey;
+            shortcuts[id].mods = mods;
+            
+            _muralRecordingAction = null;
+            document.removeEventListener('keydown', handler, true);
+            
+            saveMuralShortcuts(shortcuts);
+            renderList();
+        };
+
+        document.addEventListener('keydown', handler, true);
+    };
+
+    window.resetMuralShortcutsToDefault = async () => {
+        if (!confirm('Reset all shortcuts to default?')) return;
+        const defaults = JSON.parse(JSON.stringify(MURAL_DEFAULT_SHORTCUTS));
+        await saveMuralShortcuts(defaults);
+        document.getElementById('universalModal').classList.add('hidden');
+        toast('Shortcuts reset');
+        openMuralShortcutsModal();
+    };
+
+    window.toggleMuralShortcutsGlobal = async (checked) => {
+        await setMuralShortcutsEnabled(checked);
+        toast(`Shortcuts ${checked ? 'enabled' : 'disabled'}`);
+        openMuralShortcutsModal();
+    };
+};
 function onMuralKeyDown(e) {
-    // Only handle when on canvas view
     if (!muralActiveProjectId) return;
-    // Don't capture when typing in inputs/contenteditable
+    if (!isMuralShortcutsEnabled()) return; // Early return if shortcuts are disabled
+    if (_muralRecordingAction) return; // Don't catch while recording
     if (e.target.contentEditable === 'true' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
     const key = e.key.toLowerCase();
+    const shortcuts = getMuralShortcuts();
 
-    // Delete / Backspace → delete selected
-    if ((key === 'delete' || key === 'backspace') && muralSelectedElementId) {
-        e.preventDefault();
-        deleteMuralElement(muralSelectedElementId);
-        return;
-    }
+    const matches = (s) => {
+        if (s.key !== key) return false;
+        const needsMeta = s.mods.includes('meta');
+        const needsCtrl = s.mods.includes('ctrl');
+        const needsShift = s.mods.includes('shift');
+        const hasMeta = e.metaKey;
+        const hasCtrl = e.ctrlKey;
+        const hasShift = e.shiftKey;
+        // Meta or Ctrl usually treated similarly for shortcut purposes on Mac vs PC
+        // If shortcut doesn't need meta, check if it's strictly a plain key
+        // (Except for Cmd+D/Z which have meta in default shortcuts)
+        if (needsMeta && !(hasMeta || hasCtrl)) return false;
+        if (!needsMeta && (hasMeta || hasCtrl) && s.mods.length === 0) {
+            // If the shortcut is just a key (e.g., 'v') and meta/ctrl is pressed, it doesn't match
+            // unless the shortcut explicitly includes meta/ctrl.
+            // This prevents 'Cmd+V' from triggering 'v' tool_select.
+            if (hasMeta || hasCtrl) return false;
+        }
+        if (needsShift !== hasShift) return false;
+        return true;
+    };
 
-    // Cmd/Ctrl + D → duplicate
-    if ((e.metaKey || e.ctrlKey) && key === 'd' && muralSelectedElementId) {
-        e.preventDefault();
-        duplicateMuralElement(muralSelectedElementId);
-        return;
-    }
+    // Find the action for this key
+    const action = Object.keys(shortcuts).find(id => matches(shortcuts[id]));
+    if (!action) return;
 
-    // Cmd/Ctrl + Z → undo
-    if ((e.metaKey || e.ctrlKey) && key === 'z') {
+    // Handle Actions
+    if (action === 'delete_item' || action === 'delete_item_alt') {
+        if (muralSelectedConnectorId) {
+            e.preventDefault();
+            deleteMuralConnector(muralSelectedConnectorId);
+            muralSelectedConnectorId = null;
+            highlightMuralConnector(null);
+            dismissMuralPopups();
+        } else if (muralSelectedElementIds.length > 0) {
+            e.preventDefault();
+            deleteMuralSelected();
+        }
+    } else if (action === 'duplicate') {
+        if (muralSelectedElementIds.length > 0) {
+            e.preventDefault();
+            duplicateMuralSelected();
+        }
+    } else if (action === 'undo') {
         e.preventDefault();
         muralUndo();
-        return;
-    }
-
-    // V → select tool
-    if (key === 'v') { setMuralTool('select'); return; }
-    // N → new sticky
-    if (key === 'n') { addMuralSticky(); return; }
-    // T → new text
-    if (key === 't') { addMuralText(); return; }
-    // R → new rectangle
-    if (key === 'r') { addMuralShape('rect'); return; }
-    // L → connector tool
-    if (key === 'l') { setMuralTool('connector'); return; }
-    // Escape → deselect / cancel connector
-    if (key === 'escape') {
+    } else if (action === 'tool_select') {
+        setMuralTool('select');
+    } else if (action === 'tool_hand') {
+        setMuralTool('hand');
+    } else if (action === 'add_sticky') {
+        addMuralSticky();
+    } else if (action === 'add_text') {
+        addMuralText();
+    } else if (action === 'add_rect') {
+        addMuralShape('rect');
+    } else if (action === 'tool_connector') {
+        setMuralTool('connector');
+    } else if (action === 'escape') {
         if (muralConnectorSource) {
             cancelMuralConnector();
-            return;
         }
-        muralSelectedElementId = null;
+        // Always deselect/dismiss popups on escape
+        muralSelectedElementIds = [];
         muralSelectedConnectorId = null;
         highlightMuralConnector(null);
         document.querySelectorAll('.mural-element.selected').forEach(el => el.classList.remove('selected'));
         dismissMuralPopups();
-        return;
-    }
-    // 0 → reset view
-    if (key === '0' && (e.metaKey || e.ctrlKey)) {
+    } else if (action === 'reset_view') {
         e.preventDefault();
         resetMuralView();
-        return;
-    }
-    // 1 → fit to content
-    if (key === '1' && (e.metaKey || e.ctrlKey)) {
+    } else if (action === 'fit_content') {
         e.preventDefault();
         fitMuralToContent();
-        return;
     }
 }
 
@@ -1283,8 +2060,8 @@ async function addMuralShape(shape) {
         type: 'shape',
         shape: shape,
         x: center.x - 60,
-        y: center.y - 60,
-        w: 120, h: 120,
+        y: center.y - (shape === 'rect' ? 30 : 60),
+        w: 120, h: shape === 'rect' ? 60 : 120,
         content: '',
         color: 'rgba(99, 102, 241, 0.08)',
         z_index: muralElements.length + 1
@@ -1315,13 +2092,10 @@ function toggleMuralShapeMenu(e) {
     if (!isVisible) menu.classList.add('visible');
 }
 
-function openMuralIconLibrary() {
+window.openMuralIconLibrary = function() {
     const modal = document.getElementById('universalModal');
-    const title = document.getElementById('universalModalTitle');
-    const content = document.getElementById('universalModalContent');
-    if (!modal || !title || !content) return;
-
-    title.innerText = 'Icon Library';
+    const box = modal.querySelector('.modal-box');
+    if (!modal || !box) return;
 
     // Selection of useful icons for whiteboarding
     const icons = [
@@ -1330,10 +2104,13 @@ function openMuralIconLibrary() {
         'calendar', 'flag', 'award', 'target', 'rocket', 'lightbulb', 'zap', 'flame',
         'image', 'paperclip', 'link', 'mail', 'phone', 'home', 'search', 'settings',
         'navigation', 'map-pin', 'camera', 'mic', 'video', 'music', 'briefcase', 'book',
-        'file-text', 'folder', 'archive', 'trash-2', 'shield', 'lock', 'unlocked', 'key'
+        'file-text', 'folder', 'archive', 'trash-2', 'shield', 'lock', 'lock-open', 'key'
     ];
 
-    content.innerHTML = `
+    box.innerHTML = `
+        <h3 style="margin-bottom:8px">Icon Library</h3>
+        <p style="color:var(--text-3); margin-bottom:16px; font-size:13px">Choose an icon to add to the canvas.</p>
+        
         <div style="margin-bottom:16px;">
             <input type="text" id="muralIconSearch" placeholder="Search icons..." 
                 style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-1); font-size:14px;">
@@ -1384,9 +2161,13 @@ async function createMuralElement(newEl) {
                 sel.addRange(range);
             }, 50);
         }
-        muralSelectedElementId = newEl.id;
-        highlightMuralElement(newEl.id);
-        // Removed automatic server sync: new elements now stay local (temp_ID) 
+        if (newEl.type === 'icon' && window.lucide) {
+            lucide.createIcons();
+        }
+        muralSelectedElementIds = [newEl.id];
+        highlightMuralElements(muralSelectedElementIds);
+        pushMuralUndo({ action: 'create', snapshots: [{ ...newEl }] });
+        // Removed automatic server sync: new elements now stay local (temp_ID)
         // until manualMuralSync() is called.
     }
 }
@@ -1396,13 +2177,13 @@ async function deleteMuralElement(id) {
     if (!el) return;
 
     // Push to undo stack
-    muralUndoStack.push({ action: 'delete', element: { ...el } });
+    pushMuralUndo({ action: 'delete', snapshots: [{ ...el }] });
 
     // Optimistic: remove from DOM immediately
     const dom = document.getElementById(`mural-el-${id}`);
     if (dom) dom.remove();
     muralElements = muralElements.filter(item => item.id !== id);
-    muralSelectedElementId = null;
+    muralSelectedElementIds = muralSelectedElementIds.filter(item => item !== id);
 
     // Also remove any connectors attached to this element (optimistic)
     if (el.type !== 'connector') {
@@ -1435,10 +2216,14 @@ window.deleteMuralSelected = deleteMuralSelected;
 function deleteMuralSelected() {
     if (muralSelectedConnectorId) {
         deleteMuralConnector(muralSelectedConnectorId);
+        muralSelectedConnectorId = null;
         return;
     }
-    if (!muralSelectedElementId) return toast('Select an element first');
-    deleteMuralElement(muralSelectedElementId);
+    if (muralSelectedElementIds.length === 0) return toast('Select elements first');
+    
+    const idsToDelete = [...muralSelectedElementIds];
+    muralSelectedElementIds = [];
+    idsToDelete.forEach(id => deleteMuralElement(id));
 }
 
 async function duplicateMuralElement(id) {
@@ -1458,8 +2243,15 @@ async function duplicateMuralElement(id) {
 }
 
 function duplicateMuralSelected() {
-    if (!muralSelectedElementId) return toast('Select an element first');
-    duplicateMuralElement(muralSelectedElementId);
+    if (muralSelectedElementIds.length === 0) return toast('Select elements first');
+    
+    const idsToDuplicate = [...muralSelectedElementIds];
+    // Clear selection so we only select the new ones
+    muralSelectedElementIds = [];
+    
+    // Use a small delay between duplications to maintain stack order if needed, 
+    // or just loop. We'll loop.
+    idsToDuplicate.forEach(id => duplicateMuralElement(id));
 }
 window.duplicateMuralElement = duplicateMuralElement;
 window.duplicateMuralSelected = duplicateMuralSelected;
@@ -1489,27 +2281,101 @@ window.sendMuralToBack = sendMuralToBack;
 /* ═══════════════════════════════════════
    UNDO SYSTEM
    ═══════════════════════════════════════ */
+function pushMuralUndo(entry) {
+    muralUndoStack.push(entry);
+    // Cap stack size
+    if (muralUndoStack.length > 50) muralUndoStack.shift();
+    updateMuralUndoBtn();
+}
+
+function updateMuralUndoBtn() {
+    const btn = document.getElementById('muralUndoBtn');
+    if (!btn) return;
+    if (muralUndoStack.length > 0) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+    } else {
+        btn.disabled = true;
+        btn.style.opacity = '0.4';
+    }
+}
+
+// Snapshot helpers — call BEFORE mutating
+function snapshotElementsForUndo(ids, actionType) {
+    const snapshots = [];
+    (ids || []).forEach(id => {
+        const el = muralElements.find(e => String(e.id) === String(id));
+        if (el) snapshots.push({ ...el });
+    });
+    if (snapshots.length > 0) {
+        pushMuralUndo({ action: actionType, snapshots });
+    }
+}
+
 async function muralUndo() {
     if (muralUndoStack.length === 0) return;
-    const action = muralUndoStack.pop();
+    const entry = muralUndoStack.pop();
+    updateMuralUndoBtn();
 
-    if (action.action === 'delete') {
-        // Re-create the deleted element locally
-        const el = action.element;
-        muralElements.push(el);
-
+    if (entry.action === 'delete') {
+        // Re-create deleted element(s)
+        const els = entry.snapshots || (entry.element ? [entry.element] : []);
         const canvas = document.getElementById('muralCanvas');
-        if (canvas) {
-            canvas.appendChild(createMuralElementDOM(el));
-        }
-
-        if (el.type === 'connector') {
-            muralConnectors.push(el);
-            renderAllMuralConnectors();
-        }
-
-        toast('Undo successful');
+        els.forEach(snap => {
+            muralElements.push(snap);
+            if (canvas) canvas.appendChild(createMuralElementDOM(snap));
+            if (snap.type === 'connector') {
+                muralConnectors.push(snap);
+            }
+        });
+        renderAllMuralConnectors();
+        toast('Undo: restored deleted');
         hideMuralUndoToast();
+    } else if (entry.action === 'move' || entry.action === 'resize' || entry.action === 'color' || entry.action === 'edit') {
+        // Restore previous state for each element
+        (entry.snapshots || []).forEach(snap => {
+            const el = muralElements.find(e => String(e.id) === String(snap.id));
+            if (!el) return;
+            if (entry.action === 'move') {
+                el.x = snap.x; el.y = snap.y;
+            } else if (entry.action === 'resize') {
+                el.x = snap.x; el.y = snap.y;
+                el.w = snap.w; el.h = snap.h;
+            } else if (entry.action === 'color') {
+                el.color = snap.color;
+            } else if (entry.action === 'edit') {
+                el.content = snap.content;
+            }
+            // Update DOM
+            const dom = document.getElementById(`mural-el-${el.id}`);
+            if (dom) {
+                dom.style.left = `${el.x}px`;
+                dom.style.top = `${el.y}px`;
+                if (el.w) dom.style.width = `${el.w}px`;
+                if (el.h) dom.style.height = `${el.h}px`;
+                if (entry.action === 'color') dom.style.backgroundColor = el.color;
+                if (entry.action === 'edit') {
+                    const contentEl = dom.querySelector('.mural-element-content');
+                    if (contentEl) contentEl.innerText = el.content || '';
+                }
+            }
+            updateConnectorsForElement(el.id);
+        });
+        updateSelectionBoundingBox();
+        toast('Undo: ' + entry.action);
+    } else if (entry.action === 'create') {
+        // Remove the created element(s)
+        (entry.snapshots || []).forEach(snap => {
+            const idx = muralElements.findIndex(e => String(e.id) === String(snap.id));
+            if (idx !== -1) muralElements.splice(idx, 1);
+            const dom = document.getElementById(`mural-el-${snap.id}`);
+            if (dom) dom.remove();
+            // Also remove from connectors
+            const ci = muralConnectors.findIndex(c => String(c.id) === String(snap.id));
+            if (ci !== -1) muralConnectors.splice(ci, 1);
+        });
+        renderAllMuralConnectors();
+        toast('Undo: removed created element');
     }
 }
 window.muralUndo = muralUndo;
@@ -1615,9 +2481,12 @@ async function manualMuralSync() {
 
             showSaveIndicator('saved');
             toast('Mural saved successfully!');
-            // Refresh view to ensure everything is perfectly synced with the backend
-            if (typeof loadMuralElements === 'function') await loadMuralElements();
-            if (typeof loadMuralDashboardData === 'function') await loadMuralDashboardData();
+            // Sync data in memory without re-rendering DOM (which destroys the button ref)
+            try {
+                const freshData = await apiGet('mural_elements');
+                state.data.mural_elements = freshData || [];
+                muralElements = (freshData || []).filter(el => String(el.project_id) === String(muralActiveProjectId));
+            } catch(e) { /* non-critical refresh */ }
         } else {
             throw new Error(res.message);
         }
@@ -1626,10 +2495,15 @@ async function manualMuralSync() {
         toast('Sync failed — check connection');
         showSaveIndicator('error');
     } finally {
-        if (btn) {
-            btn.classList.remove('loading');
-            btn.innerHTML = '<i data-lucide="save"></i> Save';
-            if (window.lucide) lucide.createIcons();
+        // Re-query button from DOM (original ref may be stale)
+        const saveBtn = document.getElementById('muralManualSaveBtn');
+        if (saveBtn) {
+            saveBtn.classList.remove('loading');
+            saveBtn.innerHTML = 'Saved';
+            setTimeout(() => {
+                const b = document.getElementById('muralManualSaveBtn');
+                if (b) b.innerHTML = 'Save';
+            }, 2000);
         }
     }
 }
@@ -1715,6 +2589,21 @@ window.handleConnectorClick = handleConnectorClick;
  * Handle click on an anchor specifically.
  */
 async function handleAnchorClick(elementId, side, e) {
+    // If a connector is selected, re-route its endpoint to this anchor
+    if (muralSelectedConnectorId) {
+        const conn = muralConnectors.find(c => c.id === muralSelectedConnectorId);
+        if (conn) {
+            if (String(conn.from_id) === String(elementId)) {
+                conn.from_side = side;
+            } else if (String(conn.to_id) === String(elementId)) {
+                conn.to_side = side;
+            }
+            renderSingleConnector(conn);
+            showConnectorAnchors(conn);
+        }
+        return;
+    }
+
     if (muralActiveTool !== 'connector') return;
 
     if (!muralConnectorSource) {
@@ -1776,7 +2665,7 @@ async function deleteMuralConnector(connId) {
     const conn = muralConnectors.find(c => c.id === connId);
     if (!conn) return;
 
-    muralUndoStack.push({ action: 'delete', element: { ...conn } });
+    pushMuralUndo({ action: 'delete', snapshots: [{ ...conn }] });
 
     // Optimistic: remove immediately
     muralElements = muralElements.filter(item => item.id !== connId);
@@ -1876,24 +2765,38 @@ function getElementAnchorPoint(elId, side) {
 /**
  * Generate a bezier curve path between two elements.
  */
+/**
+ * Pick the best anchor side (top/bottom/left/right) for connecting
+ * fromEl to toEl, based on their relative positions.
+ * Returns the side of fromEl that faces toEl most directly.
+ */
+function getBestAnchorSide(fromId, toId) {
+    const fc = getElementCenter(fromId);
+    const tc = getElementCenter(toId);
+    if (!fc || !tc) return 'right';
+
+    const dx = tc.x - fc.x;
+    const dy = tc.y - fc.y;
+
+    // Pick the axis with the larger gap
+    if (Math.abs(dx) >= Math.abs(dy)) {
+        return dx >= 0 ? 'right' : 'left';
+    } else {
+        return dy >= 0 ? 'bottom' : 'top';
+    }
+}
+
 function getConnectorPath(conn) {
     const fromCenter = getElementCenter(conn.from_id);
     const toCenter = getElementCenter(conn.to_id);
     if (!fromCenter || !toCenter) return null;
 
-    let fromPt, toPt;
+    // Always use clean anchor midpoints (like diagrams.net)
+    const fromSide = conn.from_side || getBestAnchorSide(conn.from_id, conn.to_id);
+    const toSide = conn.to_side || getBestAnchorSide(conn.to_id, conn.from_id);
 
-    if (conn.from_side) {
-        fromPt = getElementAnchorPoint(conn.from_id, conn.from_side);
-    } else {
-        fromPt = getElementEdgePoint(conn.from_id, toCenter.x, toCenter.y);
-    }
-
-    if (conn.to_side) {
-        toPt = getElementAnchorPoint(conn.to_id, conn.to_side);
-    } else {
-        toPt = getElementEdgePoint(conn.to_id, fromCenter.x, fromCenter.y);
-    }
+    const fromPt = getElementAnchorPoint(conn.from_id, fromSide);
+    const toPt = getElementAnchorPoint(conn.to_id, toSide);
 
     if (!fromPt || !toPt) return null;
 
@@ -1906,29 +2809,54 @@ function getConnectorPath(conn) {
     }
 
     if (style === 'step') {
+        // Smart step routing based on anchor sides
+        return getStepPath(fx, fy, fromSide, tx, ty, toSide);
+    }
+
+    // Bezier — control points extend outward from the anchor side
+    const dist = Math.hypot(tx - fx, ty - fy);
+    const offset = Math.min(dist * 0.4, 150);
+
+    const cp1 = getControlPointForSide(fx, fy, fromSide, offset);
+    const cp2 = getControlPointForSide(tx, ty, toSide, offset);
+
+    return `M ${fx} ${fy} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${tx} ${ty}`;
+}
+
+/**
+ * Get a bezier control point that extends outward from the given side.
+ */
+function getControlPointForSide(x, y, side, offset) {
+    switch (side) {
+        case 'top':    return { x, y: y - offset };
+        case 'bottom': return { x, y: y + offset };
+        case 'left':   return { x: x - offset, y };
+        case 'right':  return { x: x + offset, y };
+        default:       return { x: x + offset, y };
+    }
+}
+
+/**
+ * Smart step/orthogonal routing that respects anchor sides.
+ */
+function getStepPath(fx, fy, fromSide, tx, ty, toSide) {
+    const gap = 20; // minimum gap before first turn
+
+    // Horizontal sides (left/right) → first segment is horizontal
+    if ((fromSide === 'left' || fromSide === 'right') && (toSide === 'left' || toSide === 'right')) {
         const midX = (fx + tx) / 2;
         return `M ${fx} ${fy} L ${midX} ${fy} L ${midX} ${ty} L ${tx} ${ty}`;
     }
-
-    const dx = tx - fx;
-    const dy = ty - fy;
-    const dist = Math.hypot(dx, dy);
-    const curvature = Math.min(dist * 0.3, 120);
-
-    let cp1x, cp1y, cp2x, cp2y;
-    if (Math.abs(dx) > Math.abs(dy)) {
-        cp1x = fx + curvature * Math.sign(dx);
-        cp1y = fy;
-        cp2x = tx - curvature * Math.sign(dx);
-        cp2y = ty;
-    } else {
-        cp1x = fx;
-        cp1y = fy + curvature * Math.sign(dy);
-        cp2x = tx;
-        cp2y = ty - curvature * Math.sign(dy);
+    // Vertical sides (top/bottom) → first segment is vertical
+    if ((fromSide === 'top' || fromSide === 'bottom') && (toSide === 'top' || toSide === 'bottom')) {
+        const midY = (fy + ty) / 2;
+        return `M ${fx} ${fy} L ${fx} ${midY} L ${tx} ${midY} L ${tx} ${ty}`;
     }
-
-    return `M ${fx} ${fy} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${tx} ${ty}`;
+    // Mixed: horizontal start → vertical end (or vice versa)
+    if (fromSide === 'left' || fromSide === 'right') {
+        return `M ${fx} ${fy} L ${tx} ${fy} L ${tx} ${ty}`;
+    }
+    return `M ${fx} ${fy} L ${fx} ${ty} L ${tx} ${ty}`;
 }
 
 /**
@@ -1960,7 +2888,7 @@ function renderSingleConnector(conn) {
     hitPath.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         muralSelectedConnectorId = conn.id;
-        muralSelectedElementId = null;
+        muralSelectedElementIds = [];
         document.querySelectorAll('.mural-element.selected').forEach(el => el.classList.remove('selected'));
         highlightMuralConnector(conn.id);
     });
@@ -1981,11 +2909,35 @@ function renderSingleConnector(conn) {
     path.setAttribute('stroke-width', isSelected ? '3' : '2');
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke-linecap', 'round');
-    path.setAttribute('marker-end', isSelected ? 'url(#mural-arrowhead-selected)' : 'url(#mural-arrowhead)');
     path.style.transition = 'stroke 0.2s, stroke-width 0.2s';
-    path.style.pointerEvents = 'none'; // hit area handles clicks
+    path.style.pointerEvents = 'none';
+
+    // Line style: solid (default), dashed, dotted
+    const lineStyle = conn.line_style || 'solid';
+    if (lineStyle === 'dashed') {
+        path.setAttribute('stroke-dasharray', '8 4');
+    } else if (lineStyle === 'dotted') {
+        path.setAttribute('stroke-dasharray', '2 4');
+        path.setAttribute('stroke-linecap', 'round');
+    }
+
+    // Arrow mode: arrow (default end), both, none, dot
+    const arrowMode = conn.arrow_mode || 'arrow';
+    const sel = isSelected;
+    if (arrowMode === 'arrow') {
+        path.setAttribute('marker-end', sel ? 'url(#mural-arrowhead-selected)' : 'url(#mural-arrowhead)');
+    } else if (arrowMode === 'both') {
+        path.setAttribute('marker-start', sel ? 'url(#mural-arrowhead-start-selected)' : 'url(#mural-arrowhead-start)');
+        path.setAttribute('marker-end', sel ? 'url(#mural-arrowhead-selected)' : 'url(#mural-arrowhead)');
+    } else if (arrowMode === 'reverse') {
+        path.setAttribute('marker-start', sel ? 'url(#mural-arrowhead-start-selected)' : 'url(#mural-arrowhead-start)');
+    } else if (arrowMode === 'dot') {
+        path.setAttribute('marker-start', sel ? 'url(#mural-dot-selected)' : 'url(#mural-dot)');
+        path.setAttribute('marker-end', sel ? 'url(#mural-dot-selected)' : 'url(#mural-dot)');
+    }
+    // arrowMode === 'none' → no markers
+
     if (isSelected) {
-        path.setAttribute('stroke-dasharray', '');
         path.classList.add('mural-connector-selected');
     }
     svg.appendChild(path);
@@ -2024,6 +2976,38 @@ function updateConnectorsForElement(elementId) {
 function highlightMuralConnector(connId) {
     muralSelectedConnectorId = connId;
     renderAllMuralConnectors();
+    // Clear previous connector anchor highlights
+    hideConnectorAnchors();
+    if (connId) {
+        const conn = muralConnectors.find(c => c.id === connId);
+        if (conn) showConnectorAnchors(conn);
+    }
+}
+
+function showConnectorAnchors(conn) {
+    hideConnectorAnchors();
+    [conn.from_id, conn.to_id].forEach(elId => {
+        const dom = document.getElementById(`mural-el-${elId}`);
+        if (dom) dom.classList.add('show-anchors');
+    });
+    // Highlight the currently connected sides
+    const fromSide = conn.from_side || getBestAnchorSide(conn.from_id, conn.to_id);
+    const toSide = conn.to_side || getBestAnchorSide(conn.to_id, conn.from_id);
+    const fromDom = document.getElementById(`mural-el-${conn.from_id}`);
+    const toDom = document.getElementById(`mural-el-${conn.to_id}`);
+    if (fromDom) {
+        const a = fromDom.querySelector(`.mural-anchor.${fromSide}`);
+        if (a) a.classList.add('connected');
+    }
+    if (toDom) {
+        const a = toDom.querySelector(`.mural-anchor.${toSide}`);
+        if (a) a.classList.add('connected');
+    }
+}
+
+function hideConnectorAnchors() {
+    document.querySelectorAll('.mural-element.show-anchors').forEach(el => el.classList.remove('show-anchors'));
+    document.querySelectorAll('.mural-anchor.connected').forEach(el => el.classList.remove('connected'));
 }
 
 /**
@@ -2048,8 +3032,11 @@ function showConnectorContextMenu(x, y, connId) {
     menu.style.top = `${y}px`;
 
     const currentStyle = conn.connector_style || 'bezier';
+    const currentLine = conn.line_style || 'solid';
+    const currentArrow = conn.arrow_mode || 'arrow';
 
     menu.innerHTML = `
+        <div class="mural-context-section-label">Route</div>
         <button class="mural-context-item ${currentStyle === 'bezier' ? 'active-style' : ''}" onclick="changeConnectorStyle('${connId}', 'bezier'); dismissMuralPopups();">
             <i data-lucide="spline"></i> Curved
         </button>
@@ -2058,6 +3045,34 @@ function showConnectorContextMenu(x, y, connId) {
         </button>
         <button class="mural-context-item ${currentStyle === 'step' ? 'active-style' : ''}" onclick="changeConnectorStyle('${connId}', 'step'); dismissMuralPopups();">
             <i data-lucide="git-commit-horizontal"></i> Stepped
+        </button>
+        <div class="mural-context-divider"></div>
+        <div class="mural-context-section-label">Line</div>
+        <button class="mural-context-item ${currentLine === 'solid' ? 'active-style' : ''}" onclick="changeConnectorLine('${connId}', 'solid'); dismissMuralPopups();">
+            <i data-lucide="minus"></i> Solid
+        </button>
+        <button class="mural-context-item ${currentLine === 'dashed' ? 'active-style' : ''}" onclick="changeConnectorLine('${connId}', 'dashed'); dismissMuralPopups();">
+            <i data-lucide="grip-horizontal"></i> Dashed
+        </button>
+        <button class="mural-context-item ${currentLine === 'dotted' ? 'active-style' : ''}" onclick="changeConnectorLine('${connId}', 'dotted'); dismissMuralPopups();">
+            <i data-lucide="more-horizontal"></i> Dotted
+        </button>
+        <div class="mural-context-divider"></div>
+        <div class="mural-context-section-label">Arrows</div>
+        <button class="mural-context-item ${currentArrow === 'arrow' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'arrow'); dismissMuralPopups();">
+            <i data-lucide="arrow-right"></i> End Arrow
+        </button>
+        <button class="mural-context-item ${currentArrow === 'both' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'both'); dismissMuralPopups();">
+            <i data-lucide="move-horizontal"></i> Both Arrows
+        </button>
+        <button class="mural-context-item ${currentArrow === 'reverse' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'reverse'); dismissMuralPopups();">
+            <i data-lucide="arrow-left"></i> Start Arrow
+        </button>
+        <button class="mural-context-item ${currentArrow === 'none' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'none'); dismissMuralPopups();">
+            <i data-lucide="minus"></i> No Arrows
+        </button>
+        <button class="mural-context-item ${currentArrow === 'dot' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'dot'); dismissMuralPopups();">
+            <i data-lucide="circle-dot"></i> Dot Ends
         </button>
         <div class="mural-context-divider"></div>
         <button class="mural-context-item danger" onclick="deleteMuralConnector('${connId}'); dismissMuralPopups();">
@@ -2086,6 +3101,24 @@ async function changeConnectorStyle(connId, style) {
     showSaveIndicator('saving');
 }
 window.changeConnectorStyle = changeConnectorStyle;
+
+async function changeConnectorLine(connId, lineStyle) {
+    const conn = muralConnectors.find(c => c.id === connId);
+    if (!conn) return;
+    conn.line_style = lineStyle;
+    renderSingleConnector(conn);
+    saveMuralElement(conn);
+}
+window.changeConnectorLine = changeConnectorLine;
+
+async function changeConnectorArrow(connId, arrowMode) {
+    const conn = muralConnectors.find(c => c.id === connId);
+    if (!conn) return;
+    conn.arrow_mode = arrowMode;
+    renderSingleConnector(conn);
+    saveMuralElement(conn);
+}
+window.changeConnectorArrow = changeConnectorArrow;
 window.deleteMuralConnector = deleteMuralConnector;
 
 /* ═══════════════════════════════════════
@@ -2102,3 +3135,12 @@ const _origExitMural = exitMuralProject;
 window.addEventListener('beforeunload', () => {
     document.removeEventListener('keydown', onMuralKeyDown);
 });
+
+function toggleMuralZoomMenu() {
+    muralZoomExpanded = !muralZoomExpanded;
+    const wrapper = document.getElementById('muralZoomWrapper');
+    if (wrapper) {
+        wrapper.classList.toggle('expanded', muralZoomExpanded);
+    }
+    if (window.lucide) lucide.createIcons();
+}

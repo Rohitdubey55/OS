@@ -33,8 +33,11 @@ function renderReader(summaryId) {
   }
 
   rdrSummary = sum;
-  rdrPage = 0;
   try { rdrPages = JSON.parse(sum.summary_json || '[]'); } catch (e) { rdrPages = []; }
+  // Restore last reading position
+  const savedProgress = JSON.parse(localStorage.getItem('bookReadingProgress') || '{}');
+  const savedPage = savedProgress[sum.book_id || sum.id];
+  rdrPage = (typeof savedPage === 'number' && savedPage >= 0 && savedPage < rdrPages.length) ? savedPage : 0;
 
   // Load saved settings
   const saved = state.data.reader_settings?.[0];
@@ -46,7 +49,7 @@ function renderReader(summaryId) {
 
   main.innerHTML = rdrShellHTML();
   rdrApplyTheme(rdrTheme, false);
-  rdrRenderPage(0);
+  rdrRenderPage(rdrPage);
 
   // Touch swipe
   const root = document.getElementById('rdrRoot');
@@ -190,6 +193,14 @@ function rdrRenderPage(idx) {
 
   scroll?.scrollTo({ top: 0, behavior: 'smooth' });
 
+  // Persist reading progress
+  if (rdrSummary) {
+    const key = rdrSummary.book_id || rdrSummary.id;
+    const progress = JSON.parse(localStorage.getItem('bookReadingProgress') || '{}');
+    progress[key] = idx;
+    localStorage.setItem('bookReadingProgress', JSON.stringify(progress));
+  }
+
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
@@ -233,7 +244,7 @@ function rdrPageHTML(page, idx) {
     </div>`;
   }
 
-  // Final page: show takeaways
+  // Final page: show takeaways + memorable quotes
   if (isLast) {
     try {
       const takeaways = JSON.parse(rdrSummary.key_takeaways || '[]');
@@ -247,6 +258,21 @@ function rdrPageHTML(page, idx) {
           <ul class="rdr-list">
             ${takeaways.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
           </ul>
+        </div>`;
+      }
+    } catch (e) {}
+    try {
+      const quotes = JSON.parse(rdrSummary.memorable_quotes || '[]');
+      if (quotes.length > 0) {
+        html += `
+        <div class="rdr-quotes">
+          <div class="rdr-block-header">
+            <i data-lucide="quote" style="width:14px;height:14px"></i>
+            Memorable Quotes
+          </div>
+          <div class="rdr-quotes-list">
+            ${quotes.map(q => `<blockquote class="rdr-quote">"${escapeHtml(q)}"</blockquote>`).join('')}
+          </div>
         </div>`;
       }
     } catch (e) {}

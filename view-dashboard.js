@@ -12,6 +12,7 @@ const DEFAULT_DASH_CONFIG = [
   { id: 'yearProgress', label: 'Year/Life Progress', visible: true },
   { id: 'tasks', label: 'High Priority Tasks', visible: true },
   { id: 'habits', label: 'Habit Tracker', visible: true },
+  { id: 'dailyAffirmation', label: 'Daily Affirmation', visible: true },
   { id: 'dailyTools', label: 'Daily Tools', visible: true }
 ];
 
@@ -897,8 +898,9 @@ function renderDashboard() {
         { id: 'gym', label: 'Gym', icon: 'fitness', bg: 'linear-gradient(135deg,#ef4444,#dc2626)', shadow: 'rgba(239,68,68,0.25)' },
         { id: 'notes', label: 'Notes', icon: 'entries', bg: 'linear-gradient(135deg,#6366f1,#4f46e5)', shadow: 'rgba(99,102,241,0.25)' },
         { id: 'pomodoro', label: 'Focus', icon: 'clock', bg: 'linear-gradient(135deg,#f59e0b,#d97706)', shadow: 'rgba(245,158,11,0.25)' },
+        { id: 'manifest', label: 'Manifest', icon: 'sparkles', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', shadow: 'rgba(139,92,246,0.25)' },
         { id: 'chimes', label: 'Chimes', icon: 'bell', bg: 'linear-gradient(135deg,#10b981,#059669)', shadow: 'rgba(16,185,129,0.25)' },
-        { id: 'books', label: 'Books', icon: 'book', bg: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', shadow: 'rgba(139,92,246,0.25)' },
+        { id: 'books', label: 'Books', icon: 'book', bg: 'linear-gradient(135deg,#60a5fa,#2563eb)', shadow: 'rgba(96,165,250,0.25)' },
         { id: 'mural', label: 'Mural', icon: 'layout', bg: 'linear-gradient(135deg,#ec4899,#db2777)', shadow: 'rgba(236,72,153,0.25)' },
       ];
       return `
@@ -909,13 +911,16 @@ function renderDashboard() {
           </div>
           <div class="widget-body">
             <div class="dt-grid">
-              ${tools.map(t => `
-                <button class="dt-tool" onclick="routeTo('${t.id}')" style="--dt-shadow:${t.shadow}">
+              ${tools.map(t => {
+                const clickAction = t.id === 'manifest' ? 'startManifestationRitual()' : `routeTo('${t.id}')`;
+                return `
+                <button class="dt-tool" onclick="${clickAction}" style="--dt-shadow:${t.shadow}">
                   <div class="dt-icon-wrap" style="background:${t.bg}">
                     ${renderIcon(t.icon, null, 'style="width:22px;height:22px;color:#fff"')}
                   </div>
                   <span class="dt-label">${t.label}</span>
-                </button>`).join('')}
+                </button>`;
+              }).join('')}
             </div>
           </div>
         </div>`;
@@ -943,6 +948,62 @@ function renderDashboard() {
           ${notes.length > 3 ? `<div style="font-size:12px;color:var(--primary);cursor:pointer;text-align:center;" onclick="routeTo('notes')">+${notes.length - 3} more notes</div>` : ''}
         </div>
       </div>`;
+    },
+
+    // ─── DAILY AFFIRMATION WIDGET ───
+    dailyAffirmation: () => {
+      const affirmations = state.data.vision_affirmations || [];
+      if (affirmations.length === 0) {
+        return `
+        <div class="widget-card" style="background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border: 1px solid var(--border-color);">
+           <div class="widget-body" style="padding: 24px; text-align: center;">
+              <div style="font-size: 24px; margin-bottom: 12px;">✨</div>
+              <div style="font-size: 14px; font-weight: 600; color: var(--text-main); margin-bottom: 8px;">No affirmations yet.</div>
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">Create personal manifestos to focus your mind.</div>
+              <button class="btn primary small" onclick="routeTo('vision')" style="margin: 0 auto;">Go to Vision Board</button>
+           </div>
+        </div>`;
+      }
+
+      // Pick a random pinned one, or a random one from all
+      const pinned = affirmations.filter(a => a.is_pinned === true || a.is_pinned === 'true' || a.is_pinned === 'TRUE');
+      const pool = pinned.length > 0 ? pinned : affirmations;
+      const affirmation = pool[Math.floor(Math.random() * pool.length)];
+
+      const bgMap = {
+        dawn: 'linear-gradient(135deg, #FF9A8B 0%, #FF6A88 55%, #FF99AC 100%)',
+        ocean: 'linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%)',
+        deep: 'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)'
+      };
+      const bgStyle = bgMap[(affirmation.bg_style || '').toLowerCase()] || bgMap.dawn;
+
+      return `
+      <div class="widget-card affirmation-widget-card" data-widget-id="dailyAffirmation" style="background: ${bgStyle}; color: white; border: none; overflow: hidden; position: relative;">
+         <!-- Subtle pattern overlay -->
+         <div style="position: absolute; inset: 0; opacity: 0.1; background-image: radial-gradient(circle at 1px 1px, white 1px, transparent 0); background-size: 20px 20px;"></div>
+         
+         <div class="widget-body" style="padding: 28px 24px; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; text-align: center;">
+            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 16px; opacity: 0.8; color: white;">Daily Focus</div>
+            <div style="font-size: 18px; font-weight: 700; line-height: 1.5; margin-bottom: 24px; font-style: ${affirmation.text.includes('*') ? 'italic' : 'normal'};">
+               "${escH(affirmation.text).replace(/\*(.*?)\*/g, '<span style="color:var(--warning);">$1</span>')}"
+            </div>
+            <div style="display: flex; gap: 12px; width: 100%; justify-content: center;">
+               <button class="btn" onclick="startManifestationRitual()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); color: white; border-radius: 12px; padding: 10px 20px; font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px);">
+                  <span style="font-size: 16px;">🧘</span> Manifest
+               </button>
+            </div>
+         </div>
+      </div>
+      <style>
+         .affirmation-widget-card {
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+         }
+         .affirmation-widget-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+         }
+      </style>`;
     },
   };
 

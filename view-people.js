@@ -136,10 +136,17 @@ function getUpcomingInteractions(people) {
     const in14 = new Date(now.getTime() + 14 * 86400000).toISOString().slice(0, 10);
 
     return people.filter(p => {
+        const isPri = p.is_priority === true || p.is_priority === 'true';
+        if (isPri) return true;
         if (!p.next_interaction) return false;
         // Keep if overdue or within next 14 days
         return p.next_interaction <= in14;
-    }).sort((a, b) => a.next_interaction.localeCompare(b.next_interaction));
+    }).sort((a, b) => {
+        const aPri = a.is_priority === true || a.is_priority === 'true';
+        const bPri = b.is_priority === true || b.is_priority === 'true';
+        if (aPri !== bPri) return aPri ? -1 : 1;
+        return (a.next_interaction || '9999').localeCompare(b.next_interaction || '9999');
+    });
 }
 
 function getPeopleStats(people) {
@@ -276,8 +283,10 @@ function renderPeople() {
                 <div class="pp-stat-value" style="${stats.upcomingBdays > 0 ? 'color: var(--warning)' : ''}">${stats.upcomingBdays}</div>
                 <div class="pp-stat-label">Bdays</div>
             </div>
-            <div class="pp-stat-card">
-                <div class="pp-stat-value" style="font-size: 14px;">${stats.totalBalance > 0 ? '₹' + Math.round(stats.totalBalance) : '—'}</div>
+            <div class="pp-stat-card" onclick="window.openPeopleBalanceSheet()">
+                <div class="pp-stat-value" style="font-size: 14px; ${stats.totalBalance !== 0 ? (stats.totalBalance > 0 ? 'color: var(--success)' : 'color: var(--danger)') : ''}">
+                    ${stats.totalBalance !== 0 ? (stats.totalBalance > 0 ? '₹' + Math.round(stats.totalBalance) : '-₹' + Math.round(Math.abs(stats.totalBalance))) : '—'}
+                </div>
                 <div class="pp-stat-label">Balance</div>
             </div>
         </div>
@@ -345,6 +354,55 @@ function renderPeople() {
 
     if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
+
+/* ============================================================
+   BALANCE BREAKDOWN BOTTOM SHEET
+   ============================================================ */
+
+window.openPeopleBalanceSheet = function () {
+    const allPeople = state.data.people || [];
+    const withBalance = allPeople.map(p => ({
+        ...p,
+        _balance: getPersonBalance(p.id)
+    })).filter(p => (p._balance || 0) !== 0)
+        .sort((a, b) => (b._balance || 0) - (a._balance || 0));
+
+    if (withBalance.length === 0) {
+        showToast('No outstanding balances.');
+        return;
+    }
+
+    const rows = withBalance.map(p => {
+        const bal = p._balance || 0;
+        const isPositive = bal > 0;
+        const grad = getAvatarGradient(p.name);
+        const initial = (p.name || '?').charAt(0).toUpperCase();
+
+        return `
+        <div class="pp-attn-row" onclick="closePeopleSheet(); setTimeout(() => window.openPersonSheet('${p.id}'), 350)">
+            <div class="pp-attn-avatar" style="background:${grad}">${initial}</div>
+            <div class="pp-attn-info">
+                <div class="pp-attn-name">${p.name}</div>
+                <div class="pp-attn-reason" style="color: ${isPositive ? 'var(--success)' : 'var(--danger)'}">
+                    ${isPositive ? 'Owes you' : 'You owe'} ₹${Math.abs(Math.round(bal))}
+                </div>
+            </div>
+            <div style="font-weight: 800; font-size: 14px; color: ${isPositive ? 'var(--success)' : 'var(--danger)'}">
+                ${isPositive ? '+' : '-'}${Math.abs(Math.round(bal))}
+            </div>
+        </div>`;
+    }).join('');
+
+    const html = `
+        <div style="padding: 8px 16px 0;">
+            <div style="font-size:17px; font-weight:800; color:var(--text-1);">Balance Breakdown</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Detailed view of who owes what</div>
+        </div>
+        <div class="pp-sheet-body" style="padding-top:12px;">
+            ${rows}
+        </div>`;
+    openPeopleSheet(html);
+};
 
 /* ============================================================
    CONNECT SOON BOTTOM SHEET
@@ -451,6 +509,7 @@ function renderPersonCard(p, index) {
     const decay = getDecayInfo(p);
     const streak = getContactStreak(p);
     const isFav = p.is_favorite === true || p.is_favorite === 'true';
+    const isPri = p.is_priority === true || p.is_priority === 'true';
     const balance = p._balance || 0;
     const grad = getAvatarGradient(p.name);
     const initial = (p.name || '?').charAt(0).toUpperCase();
@@ -465,8 +524,11 @@ function renderPersonCard(p, index) {
             <div class="pp-card-info">
                 <div class="pp-card-name-row">
                     <div class="pp-card-name">
-                        ${p.name}
-                        <svg class="pp-fav-star ${isFav ? 'is-fav' : ''}" onclick="event.stopPropagation(); window.toggleFavoritePerson('${p.id}', ${!isFav})" viewBox="0 0 24 24" width="16" height="16" fill="${isFav ? '#F59E0B' : 'none'}" stroke="${isFav ? '#F59E0B' : 'currentColor'}" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        <span class="pp-card-name-text">${p.name}</span>
+                        <div class="pp-card-actions-mini" onclick="event.stopPropagation()">
+                            <svg class="pp-fav-star ${isFav ? 'is-fav' : ''}" onclick="window.toggleFavoritePerson('${p.id}', ${!isFav})" viewBox="0 0 24 24" width="14" height="14" fill="${isFav ? '#F59E0B' : 'none'}" stroke="${isFav ? '#F59E0B' : 'currentColor'}" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            <svg class="pp-pri-toggle ${isPri ? 'is-pri' : ''}" onclick="window.togglePriorityPerson('${p.id}', ${!isPri})" viewBox="0 0 24 24" width="14" height="14" fill="${isPri ? '#A855F7' : 'none'}" stroke="${isPri ? '#A855F7' : 'currentColor'}" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                        </div>
                     </div>
                     <div class="pp-card-quick-actions" onclick="event.stopPropagation()">
                         <button class="pp-icon-btn" onclick="window.openContactOptions('${p.id}')" title="Contact">
@@ -1207,6 +1269,19 @@ window.toggleFavoritePerson = async function (id, isFav) {
         await apiCall('update', 'people', { is_favorite: isFav }, id);
     } catch (e) {
         console.error('Favorite toggle error:', e);
+    }
+};
+
+window.togglePriorityPerson = async function (id, isPri) {
+    const p = (state.data.people || []).find(x => String(x.id) === String(id));
+    if (p) p.is_priority = isPri;
+    renderPeople();
+    if (typeof triggerHapticBuzz === 'function') triggerHapticBuzz();
+
+    try {
+        await apiCall('update', 'people', { is_priority: isPri }, id);
+    } catch (e) {
+        console.error('Priority toggle error:', e);
     }
 };
 

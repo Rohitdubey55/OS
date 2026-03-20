@@ -2688,8 +2688,21 @@
 }
 
 .nc-md-checklist li.checked {
-    color: #10b981;
+    color: var(--text-muted);
+    opacity: 0.7;
     text-decoration: line-through;
+}
+
+.nc-cb-box {
+    display: inline-block;
+    width: 1.2em;
+    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif;
+    color: var(--primary);
+    opacity: 0.9;
+}
+
+.checked .nc-cb-box {
+    color: #10b981;
 }
 
 .nc-view-empty {

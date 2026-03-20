@@ -16,7 +16,7 @@ const SCHEMA = {
   "settings": ["id", "name", "dob", "morning_message", "afternoon_message", "evening_message", "weekly_budget", "monthly_budget", "category_budgets", "theme_color", "theme_mode", "orientation_lock", "ai_api_key", "ai_model", "nav_layout", "dashboard_config", "kpi_config", "notification_enabled", "notification_sound", "notification_method", "quiet_hours_start", "quiet_hours_end", "diary_default_mood", "diary_show_tasks", "diary_show_habits", "diary_show_expenses", "task_default_view", "task_categories", "habit_routines"],
   "funds": ["id", "name", "balance", "type", "currency"],
   "assets": ["id", "name", "value", "purchase_date", "notes"],
-  "people": ["id", "name", "relationship", "birthday", "phone", "email", "instagram", "last_contact", "notes"],
+  "people": ["id", "name", "relationship", "birthday", "phone", "email", "instagram", "last_contact", "next_interaction", "is_favorite", "is_priority", "notes"],
   "people_debts": ["id", "person_id", "amount", "type", "date", "notes"],
   "reminders": ["id", "title", "reminder_datetime", "is_active", "linked_item_id"],
   "diary_templates": ["id", "title", "content", "category", "is_default", "sort_order"],
@@ -31,11 +31,13 @@ const SCHEMA = {
   "pomodoro_badges": ["id", "user_id", "badge_type", "unlocked_at", "total_sessions"],
   "vision_tdp": ["id", "start_date", "end_date", "status", "categories_json", "created_at"],
   "book_library": ["id", "title", "author", "cover_url", "category", "status", "date_added", "date_completed", "rating", "notes", "linked_goals", "tags"],
-  "book_summaries": ["id", "book_id", "book_title", "author", "summary_json", "total_pages", "created_at", "linked_vision_ids", "key_takeaways", "action_items"],
+  "book_summaries": ["id", "book_id", "book_title", "author", "summary_json", "total_pages", "created_at", "linked_vision_ids", "key_takeaways", "action_items", "memorable_quotes"],
   "reader_settings": ["id", "background_color", "font_color", "font_family", "font_size", "line_spacing", "fullscreen_mode", "page_animation", "auto_save_position"],
-  "mural_projects": ["id", "title", "category", "created_at", "updated_at"],
+  "mural_projects": ["id", "title", "category", "created_at", "updated_at", "bg_pattern", "bg_color"],
   "mural_categories": ["id", "name", "color"],
-  "mural_elements": ["id", "project_id", "type", "x", "y", "w", "h", "content", "color", "z_index", "shape", "from_id", "to_id", "connector_style", "from_side", "to_side"]
+  "mural_elements": ["id", "project_id", "type", "x", "y", "w", "h", "content", "color", "z_index", "shape", "from_id", "to_id", "connector_style", "from_side", "to_side", "line_style", "arrow_mode"],
+  "vision_affirmations": ["id", "vision_id", "text", "order", "bg_style", "is_pinned", "created_at", "is_favorite", "favorite_at", "duration"],
+  "ritual_logs": ["id", "date", "duration_seconds", "affirmation_count", "mood_after", "completed"]
 };
 
 /**
