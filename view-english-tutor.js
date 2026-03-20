@@ -133,19 +133,24 @@ async function startEnglishSession(isFallback = false) {
         const config = AI_SERVICE.englishTutor.getLiveConfig();
         const modelToUse = isFallback ? config.fallbackModel : config.model;
         
-        // Append model to URL (Some versions of the API require this)
-        const finalUrl = `${config.url}&model=${modelToUse}`;
+        // Use v1alpha as a fallback if v1beta fails, or try v1alpha first for newer models
+        const version = isFallback ? 'v1beta' : 'v1alpha';
+        const baseUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${version}.GenerativeService.BiDiGenerateContent`;
+        const finalUrl = `${baseUrl}?key=${config.apiKey}&model=${modelToUse}`;
         
-        // 2. Fetch past notes
-        const sessions = state.data.english_tutor_sessions || [];
-        const pastNotesSummary = sessions.map(s => `${s.date}: ${s.notes_for_next_time}`).join('\n');
+        console.log(`English Tutor: Attempting connection to ${modelToUse} via ${version}`);
         
-        // 3. Setup WebSocket
-        tutorLiveSocket = new WebSocket(finalUrl);
-        
-        tutorLiveSocket.onopen = () => {
+        // 2. Setup WebSocket (Local instance to avoid race conditions)
+        const socket = new WebSocket(finalUrl);
+        let setupCompleted = false;
+
+        socket.onopen = () => {
             console.log(`English Tutor: Connected using ${modelToUse}`);
+            tutorLiveSocket = socket; // Now it's safe to set the global
             
+            const sessions = state.data.english_tutor_sessions || [];
+            const pastNotesSummary = sessions.map(s => `${s.date}: ${s.notes_for_next_time}`).join('\n');
+
             const setupMsg = {
                 setup: {
                     model: modelToUse,
@@ -155,7 +160,8 @@ async function startEnglishSession(isFallback = false) {
                     }
                 }
             };
-            tutorLiveSocket.send(JSON.stringify(setupMsg));
+            socket.send(JSON.stringify(setupMsg));
+            setupCompleted = true;
             
             status.textContent = "Aria is listening...";
             liveIndicator.style.opacity = "1";
@@ -165,43 +171,41 @@ async function startEnglishSession(isFallback = false) {
             initAudioStream();
         };
 
-        tutorLiveSocket.onmessage = async (event) => {
+        socket.onmessage = async (event) => {
             const data = JSON.parse(event.data);
-            
             if (data.serverContent && data.serverContent.modelTurn) {
                 const parts = data.serverContent.modelTurn.parts;
                 for (const part of parts) {
-                    if (part.inlineData) {
-                        playGeminiAudio(part.inlineData.data);
-                    }
-                    if (part.text) {
-                        updateTranscript(part.text);
-                    }
+                    if (part.inlineData) playGeminiAudio(part.inlineData.data);
+                    if (part.text) updateTranscript(part.text);
                 }
             }
         };
 
-        tutorLiveSocket.onerror = (e) => {
-            console.error("WebSocket Error:", e);
-            if (!isFallback) {
+        socket.onerror = (e) => {
+            console.error(`WebSocket Error (${modelToUse}):`, e);
+            if (!setupCompleted && !isFallback) {
                 console.log("Primary model failed, trying fallback...");
+                socket.close(); // Close this instance
                 startEnglishSession(true);
-            } else {
+            } else if (!setupCompleted) {
                 showToast("Connection Error. Check API Key or Model access.");
-                stopEnglishSession(false); // Don't save empty session
+                stopEnglishSession(false);
             }
         };
 
-        tutorLiveSocket.onclose = () => {
-            console.log("Session Closed");
-            stopEnglishSession();
+        socket.onclose = () => {
+            console.log(`Socket closed: ${modelToUse}`);
+            if (tutorLiveSocket === socket) {
+                stopEnglishSession();
+            }
         };
 
     } catch (err) {
         console.error("Session Start Failed:", err);
         showToast("Audio Access Denied");
         startBtn.disabled = false;
-        startBtn.textContent = "Start Session";
+        startBtn.textContent = "Start Live Session";
     }
 }
 

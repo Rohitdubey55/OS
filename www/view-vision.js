@@ -51,9 +51,11 @@ const _VisionIDB = {
 // In-memory cache: key → objectURL (or base64 for legacy)
 window._visionMediaCache = window._visionMediaCache || {};
 
-/* ─── AI VOICE TTS GENERATION (via Gemini API — FREE with your key) ──────
+/* ─── AI VOICE TTS GENERATION (via Gemini Native Audio Dialog — UNLIMITED FREE) ─
    Pre-generates realistic human voice for affirmations using Google Gemini
-   TTS API. Uses the same Gemini API key you already have. 30 voices!
+   Live API (WebSocket). Uses gemini-2.5-flash-native-audio which has
+   UNLIMITED free tier (unlike the TTS model which caps at 10 req/day).
+   Uses the same Gemini API key you already have. 30 voices!
    Stores audio in IndexedDB under key "audio://<affirmationId>".
    ─────────────────────────────────────────────────────────────────────────── */
 
@@ -130,7 +132,14 @@ function _base64ToArrayBuffer(base64) {
 
 // Convert base64 PCM (24kHz, 16-bit, mono) to WAV blob — memory-efficient
 function _pcmBase64ToWavBlob(base64Data) {
-  const pcmBytes = _base64ToArrayBuffer(base64Data);
+  // Support raw buffer from _concatBase64Chunks (WebSocket chunked audio)
+  let pcmBytes;
+  if (base64Data === '__RAW_BUFFER__' && _concatBase64Chunks._rawBuffer) {
+    pcmBytes = _concatBase64Chunks._rawBuffer;
+    _concatBase64Chunks._rawBuffer = null; // free immediately
+  } else {
+    pcmBytes = _base64ToArrayBuffer(base64Data);
+  }
   const sampleRate = 24000;
   const numChannels = 1;
   const bitsPerSample = 16;
@@ -171,40 +180,140 @@ function _writeString(view, offset, string) {
   }
 }
 
-// Generate TTS audio using Gemini API
+// Generate TTS audio using Gemini Native Audio Dialog (Live API via WebSocket)
+// This model has UNLIMITED free tier (unlike gemini-2.5-flash-preview-tts which caps at 10 RPD)
 async function _generateGeminiTTS(text, voiceName) {
   const apiKey = _getGeminiKey();
   if (!apiKey) throw new Error('Set Gemini API key in Settings → AI');
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: text }] }],
-        generationConfig: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: voiceName }
+  return new Promise((resolve, reject) => {
+    const WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+    let ws;
+    let audioChunks = [];
+    let setupDone = false;
+    let timeoutId;
+
+    try {
+      ws = new WebSocket(WS_URL);
+    } catch (e) {
+      return reject(new Error('WebSocket connection failed: ' + (e.message || 'unknown')));
+    }
+
+    // 30s timeout safety net
+    timeoutId = setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+      reject(new Error('Gemini Live API timeout (30s)'));
+    }, 30000);
+
+    ws.onopen = () => {
+      // Step 1: Send setup/config message
+      const configMsg = {
+        setup: {
+          model: 'models/gemini-2.5-flash-native-audio-preview',
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: voiceName }
+              }
+            }
+          },
+          systemInstruction: {
+            parts: [{ text: 'You are a text-to-speech engine. Read the user text aloud exactly as written. Do not add any extra words, commentary, or explanation. Just speak the text naturally and clearly.' }]
+          }
+        }
+      };
+      ws.send(JSON.stringify(configMsg));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+
+        // Setup complete acknowledgment
+        if (msg.setupComplete) {
+          setupDone = true;
+          // Step 2: Send the text to speak
+          const clientMsg = {
+            clientContent: {
+              turns: [{ role: 'user', parts: [{ text: text }] }],
+              turnComplete: true
+            }
+          };
+          ws.send(JSON.stringify(clientMsg));
+          return;
+        }
+
+        // Collect audio chunks from model response
+        if (msg.serverContent?.modelTurn?.parts) {
+          for (const part of msg.serverContent.modelTurn.parts) {
+            if (part.inlineData?.data) {
+              audioChunks.push(part.inlineData.data);
             }
           }
         }
-      })
-    }
-  );
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Gemini TTS error ${res.status}: ${errText.substring(0, 100)}`);
+        // Turn complete — assemble audio and resolve
+        if (msg.serverContent?.turnComplete) {
+          clearTimeout(timeoutId);
+          ws.close();
+
+          if (audioChunks.length === 0) {
+            return reject(new Error('No audio received from Gemini Live API'));
+          }
+
+          // Concatenate all base64 PCM chunks into one
+          const allPcm = _concatBase64Chunks(audioChunks);
+          audioChunks = null; // free memory
+
+          const wavBlob = _pcmBase64ToWavBlob(allPcm);
+          resolve(wavBlob);
+        }
+      } catch (e) {
+        console.error('[Live API] message parse error', e);
+      }
+    };
+
+    ws.onerror = (e) => {
+      clearTimeout(timeoutId);
+      reject(new Error('Gemini Live API WebSocket error'));
+    };
+
+    ws.onclose = (e) => {
+      clearTimeout(timeoutId);
+      if (!setupDone) {
+        reject(new Error(`Gemini Live API connection closed (code ${e.code}): ${e.reason || 'unknown'}`));
+      }
+      // If setupDone and turnComplete already resolved, this is fine
+    };
+  });
+}
+
+// Concatenate multiple base64 PCM chunks into one base64 string
+function _concatBase64Chunks(chunks) {
+  if (chunks.length === 1) return chunks[0];
+  // Decode each chunk, concatenate, return combined base64
+  // More memory-efficient: decode to buffers and concat
+  let totalLen = 0;
+  const buffers = [];
+  for (const chunk of chunks) {
+    const buf = _base64ToArrayBuffer(chunk);
+    buffers.push(buf);
+    totalLen += buf.length;
   }
-
-  const data = await res.json();
-  const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!audioData) throw new Error('No audio in Gemini response');
-
-  return _pcmBase64ToWavBlob(audioData);
+  // We don't actually need base64 again — modify _pcmBase64ToWavBlob to accept raw buffer
+  // For now, return a marker and store the buffers
+  const combined = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const buf of buffers) {
+    combined.set(buf, offset);
+    offset += buf.length;
+  }
+  // Store on a temp property so _pcmBase64ToWavBlob can use it
+  _concatBase64Chunks._rawBuffer = combined;
+  return '__RAW_BUFFER__';
 }
 
 window.generateGeminiAudio = async function(text, affId, opts = {}) {
