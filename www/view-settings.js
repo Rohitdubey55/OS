@@ -277,14 +277,13 @@ function renderSettings() {
             </div>
         </div>
         <div style="border-top:1px solid var(--border-color); margin:20px 0 16px; padding-top:16px;">
-            <p class="section-description" style="margin-bottom:12px;">🎙 <strong>AI Voice for Affirmations</strong> — Free, realistic human voices via Puter.js. No API key needed!</p>
+            <p class="section-description" style="margin-bottom:12px;">🎙 <strong>AI Voice for Affirmations</strong> — Realistic human voices. Free Puter.com account needed (one-time sign-in).</p>
 
             <div class="setting-item">
                 <label class="setting-label">Voice Provider</label>
                 <select class="input" id="sTtsProvider" onchange="updateVoiceDropdown()">
                     <option value="elevenlabs" ${settings.tts_provider === 'elevenlabs' ? 'selected' : ''}>ElevenLabs (most natural)</option>
                     <option value="openai" ${settings.tts_provider === 'openai' ? 'selected' : ''}>OpenAI (clear & expressive)</option>
-                    <option value="aws" ${settings.tts_provider === 'aws' ? 'selected' : ''}>AWS Neural (fast & reliable)</option>
                 </select>
             </div>
             <div class="setting-item">
@@ -294,7 +293,7 @@ function renderSettings() {
                     </select>
                     <button class="btn secondary" id="elPreviewBtn" onclick="previewElevenLabsVoice()">▶ Preview</button>
                 </div>
-                <div style="font-size:11px; color:var(--success); margin-top:6px">✅ 100% free — powered by <a href="https://puter.com" target="_blank" style="color:var(--primary);">Puter.js</a>. No API key required.</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:6px">Free via <a href="https://puter.com" target="_blank" style="color:var(--primary);">Puter.com</a> — first use will ask you to sign in (free account).</div>
             </div>
         </div>
 
@@ -1459,15 +1458,16 @@ window.updateVoiceDropdown = function() {
   const sel = document.getElementById('sTtsVoice');
   if (!sel) return;
 
-  // Get VOICE_PROVIDERS from view-vision.js
   const providers = typeof VOICE_PROVIDERS !== 'undefined' ? VOICE_PROVIDERS : {
     elevenlabs: { voices: [
       { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (warm female)' },
       { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (soft female)' },
+      { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli (young female)' },
       { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh (deep male)' },
       { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold (strong male)' },
       { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam (clear male)' },
       { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam (calm male)' },
+      { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi (playful female)' },
     ]},
     openai: { voices: [
       { id: 'nova', name: 'Nova (warm female)' },
@@ -1476,13 +1476,8 @@ window.updateVoiceDropdown = function() {
       { id: 'echo', name: 'Echo (clear male)' },
       { id: 'fable', name: 'Fable (expressive)' },
       { id: 'onyx', name: 'Onyx (deep male)' },
-    ]},
-    aws: { voices: [
-      { id: 'Joanna', name: 'Joanna (US female)' },
-      { id: 'Matthew', name: 'Matthew (US male)' },
-      { id: 'Salli', name: 'Salli (US female)' },
-      { id: 'Amy', name: 'Amy (British female)' },
-      { id: 'Brian', name: 'Brian (British male)' },
+      { id: 'coral', name: 'Coral (balanced female)' },
+      { id: 'sage', name: 'Sage (calm)' },
     ]}
   };
 
@@ -1497,7 +1492,7 @@ window.updateVoiceDropdown = function() {
   ).join('');
 };
 
-// Preview selected voice using Puter.js
+// Preview selected voice using Puter.js (ElevenLabs / OpenAI)
 window._elPreviewAudio = null;
 
 window.previewElevenLabsVoice = async function () {
@@ -1516,7 +1511,7 @@ window.previewElevenLabsVoice = async function () {
     return;
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Signing in...'; }
 
   // Stop any currently playing preview
   if (window._elPreviewAudio) {
@@ -1525,38 +1520,47 @@ window.previewElevenLabsVoice = async function () {
   }
 
   const safetyTimer = setTimeout(() => {
-    if (btn && btn.textContent.includes('Generating')) {
+    if (btn && (btn.textContent.includes('Generating') || btn.textContent.includes('Signing'))) {
       showToast('Taking too long — try again', 'error');
       resetBtn();
     }
-  }, 20000);
+  }, 25000);
 
   try {
-    showToast('Generating preview...', 'info');
+    // Ensure Puter auth first
+    try {
+      const signedIn = await puter.auth.isSignedIn();
+      if (!signedIn) {
+        showToast('Sign in to your free Puter.com account...', 'info');
+        await puter.auth.signIn();
+        showToast('Signed in! Generating voice...', 'success');
+      }
+    } catch (authErr) {
+      console.warn('[TTS Preview] Auth check:', authErr);
+      // Proceed anyway — puter may auto-prompt
+    }
+
+    if (btn) { btn.textContent = '⏳ Generating...'; }
+    showToast('Generating preview... 3-5s', 'info');
     console.log('[TTS Preview] provider:', providerKey, 'voice:', voiceId);
 
     const previewText = 'I am worthy of all the abundance flowing into my life.';
     let audioEl;
 
-    if (providerKey === 'elevenlabs') {
-      audioEl = await puter.ai.txt2speech(previewText, {
-        provider: 'elevenlabs',
-        voice: voiceId,
-        model: 'eleven_multilingual_v2'
-      });
-    } else if (providerKey === 'openai') {
+    if (providerKey === 'openai') {
       audioEl = await puter.ai.txt2speech(previewText, {
         provider: 'openai',
         voice: voiceId
       });
     } else {
       audioEl = await puter.ai.txt2speech(previewText, {
+        provider: 'elevenlabs',
         voice: voiceId,
-        engine: 'neural',
-        language: 'en-US'
+        model: 'eleven_multilingual_v2'
       });
     }
 
+    console.log('[TTS Preview] Got audio element:', audioEl?.src?.substring(0, 60));
     window._elPreviewAudio = audioEl;
 
     if (btn) { btn.disabled = true; btn.textContent = '🔊 Playing...'; }

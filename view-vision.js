@@ -51,16 +51,17 @@ const _VisionIDB = {
 // In-memory cache: key → objectURL (or base64 for legacy)
 window._visionMediaCache = window._visionMediaCache || {};
 
-/* ─── AI VOICE TTS GENERATION (via Puter.js — FREE, no API key) ──────────
-   Pre-generates high-quality human voice for affirmations using Puter.js
-   which provides free access to ElevenLabs, OpenAI & AWS Polly voices.
+/* ─── AI VOICE TTS GENERATION (via Puter.js — FREE human voices) ─────────
+   Pre-generates realistic human voice MP3 for affirmations.
+   Uses Puter.js which provides free access to ElevenLabs & OpenAI voices.
+   Requires a free Puter.com account (auto sign-in prompt on first use).
    Stores audio in IndexedDB under key "audio://<affirmationId>".
    ─────────────────────────────────────────────────────────────────────────── */
 
-// Voice provider configs
+// Voice provider configs — all free via Puter.js
 const VOICE_PROVIDERS = {
   elevenlabs: {
-    label: 'ElevenLabs',
+    label: 'ElevenLabs (realistic)',
     voices: [
       { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (warm female)' },
       { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (soft female)' },
@@ -72,16 +73,15 @@ const VOICE_PROVIDERS = {
       { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi (playful female)' },
     ],
     generate: async (text, voiceId) => {
-      const audio = await puter.ai.txt2speech(text, {
-        provider: 'elevenlabs',
-        voice: voiceId,
-        model: 'eleven_multilingual_v2'
+      const audioEl = await puter.ai.txt2speech(text, {
+        provider: 'elevenlabs', voice: voiceId, model: 'eleven_multilingual_v2'
       });
-      return audio;
+      const res = await fetch(audioEl.src);
+      return await res.blob();
     }
   },
   openai: {
-    label: 'OpenAI',
+    label: 'OpenAI (clear & expressive)',
     voices: [
       { id: 'nova', name: 'Nova (warm female)' },
       { id: 'shimmer', name: 'Shimmer (soft female)' },
@@ -93,35 +93,33 @@ const VOICE_PROVIDERS = {
       { id: 'sage', name: 'Sage (calm)' },
     ],
     generate: async (text, voiceId) => {
-      const audio = await puter.ai.txt2speech(text, {
-        provider: 'openai',
-        voice: voiceId
+      const audioEl = await puter.ai.txt2speech(text, {
+        provider: 'openai', voice: voiceId
       });
-      return audio;
-    }
-  },
-  aws: {
-    label: 'AWS Neural',
-    voices: [
-      { id: 'Joanna', name: 'Joanna (US female)' },
-      { id: 'Matthew', name: 'Matthew (US male)' },
-      { id: 'Salli', name: 'Salli (US female)' },
-      { id: 'Kendra', name: 'Kendra (US female)' },
-      { id: 'Kimberly', name: 'Kimberly (US female)' },
-      { id: 'Joey', name: 'Joey (US male)' },
-      { id: 'Amy', name: 'Amy (British female)' },
-      { id: 'Brian', name: 'Brian (British male)' },
-    ],
-    generate: async (text, voiceId) => {
-      const audio = await puter.ai.txt2speech(text, {
-        voice: voiceId,
-        engine: 'neural',
-        language: 'en-US'
-      });
-      return audio;
+      const res = await fetch(audioEl.src);
+      return await res.blob();
     }
   }
 };
+
+// Ensure Puter.js is loaded and user is signed in
+async function _ensurePuterAuth() {
+  if (typeof puter === 'undefined') {
+    throw new Error('Puter.js not loaded — check internet connection');
+  }
+  // Puter.js auto-prompts sign-in when accessing AI services.
+  // But let's check explicitly and prompt if needed.
+  try {
+    const signedIn = await puter.auth.isSignedIn();
+    if (!signedIn) {
+      showToast('Free Puter.com account required — signing in...', 'info');
+      await puter.auth.signIn();
+      showToast('Signed in! Generating voice...', 'success');
+    }
+  } catch (e) {
+    console.warn('[TTS] Auth check failed, proceeding anyway (Puter may auto-prompt)', e);
+  }
+}
 
 function _getVoiceConfig() {
   const s = state.data.settings?.[0] || {};
@@ -131,38 +129,21 @@ function _getVoiceConfig() {
   };
 }
 
-// Extract audio blob from HTMLAudioElement returned by puter.js
-async function _audioElementToBlob(audioEl) {
-  if (!audioEl || !audioEl.src) return null;
-  try {
-    const response = await fetch(audioEl.src);
-    return await response.blob();
-  } catch (e) {
-    console.warn('[TTS] Failed to extract blob from audio element', e);
-    return null;
-  }
-}
-
 window.generateElevenLabsAudio = async function(text, affId, opts = {}) {
   const config = _getVoiceConfig();
   const provider = VOICE_PROVIDERS[config.provider];
   if (!provider) { showToast('Invalid voice provider', 'error'); return false; }
 
-  if (typeof puter === 'undefined') {
-    showToast('Puter.js not loaded — check internet connection', 'error');
-    return false;
-  }
-
   const cleanText = text.replace(/\*/g, '').trim();
   if (!cleanText) return false;
 
   try {
+    // Ensure authenticated with Puter
+    await _ensurePuterAuth();
+
     console.log(`[TTS] Generating: provider=${config.provider}, voice=${config.voiceId}, text="${cleanText.substring(0, 40)}..."`);
 
-    const audioEl = await provider.generate(cleanText, config.voiceId);
-
-    // Extract audio data and store in IDB
-    const blob = await _audioElementToBlob(audioEl);
+    const blob = await provider.generate(cleanText, config.voiceId);
     if (!blob || blob.size < 100) {
       showToast('Voice generation returned empty audio', 'error');
       return false;
