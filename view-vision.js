@@ -51,6 +51,136 @@ const _VisionIDB = {
 // In-memory cache: key → objectURL (or base64 for legacy)
 window._visionMediaCache = window._visionMediaCache || {};
 
+/* ─── ELEVENLABS TTS GENERATION ───────────────────────────────────────────
+   Pre-generates high-quality human voice MP3 for affirmations.
+   Stores audio in IndexedDB under key "audio://<affirmationId>".
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function _getElevenLabsConfig() {
+  const s = state.data.settings?.[0] || {};
+  return {
+    apiKey: s.elevenlabs_api_key || '',
+    voiceId: s.elevenlabs_voice_id || ''
+  };
+}
+
+window.generateElevenLabsAudio = async function(text, affId, opts = {}) {
+  const config = _getElevenLabsConfig();
+  if (!config.apiKey) { showToast('Set ElevenLabs API key in Settings → AI', 'error'); return false; }
+  if (!config.voiceId) { showToast('Select a voice in Settings → AI', 'error'); return false; }
+
+  const cleanText = text.replace(/\*/g, '').trim();
+  if (!cleanText) return false;
+
+  try {
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${config.voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': config.apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg'
+      },
+      body: JSON.stringify({
+        text: cleanText,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.65,
+          similarity_boost: 0.75,
+          style: 0.4
+        }
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      showToast('ElevenLabs error: ' + (res.status === 401 ? 'Invalid API key' : res.status), 'error');
+      console.error('[ElevenLabs]', res.status, errText);
+      return false;
+    }
+
+    const arrayBuffer = await res.arrayBuffer();
+    await _VisionIDB.put('audio://' + affId, { type: 'audio/mpeg', buffer: arrayBuffer });
+
+    if (!opts.silent) showToast('Voice generated!', 'success');
+    return true;
+  } catch (e) {
+    showToast('Voice generation failed: ' + e.message, 'error');
+    console.error('[ElevenLabs]', e);
+    return false;
+  }
+};
+
+// Check if an affirmation has pre-generated audio
+window.hasElevenLabsAudio = async function(affId) {
+  try {
+    const stored = await _VisionIDB.get('audio://' + affId);
+    return !!stored;
+  } catch (e) { return false; }
+};
+
+// Bulk generate voice for all affirmations in a goal
+window.generateAllVoices = async function(goalId) {
+  const config = _getElevenLabsConfig();
+  if (!config.apiKey || !config.voiceId) { showToast('Set ElevenLabs API key & voice in Settings → AI', 'error'); return; }
+
+  const affs = (state.data.vision_affirmations || [])
+    .filter(a => !goalId || String(a.vision_id) === String(goalId))
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  if (!affs.length) { showToast('No affirmations found', 'error'); return; }
+
+  let generated = 0, skipped = 0, failed = 0;
+
+  for (let i = 0; i < affs.length; i++) {
+    const aff = affs[i];
+
+    // Update progress UI
+    const bulkBtn = document.getElementById('bulkVoiceBtn');
+    if (bulkBtn) bulkBtn.innerHTML = `⏳ Generating ${i + 1}/${affs.length}...`;
+
+    // Skip if already has audio
+    const hasAudio = await hasElevenLabsAudio(aff.id);
+    if (hasAudio) { skipped++; continue; }
+
+    const ok = await generateElevenLabsAudio(aff.text, aff.id, { silent: true });
+    if (ok) generated++;
+    else failed++;
+
+    // Small delay between requests to respect rate limits
+    if (i < affs.length - 1) await new Promise(r => setTimeout(r, 500));
+  }
+
+  // Restore button
+  const bulkBtn = document.getElementById('bulkVoiceBtn');
+  if (bulkBtn) bulkBtn.innerHTML = '🎙 Generate All Voices';
+
+  // Update voice status indicators
+  updateVoiceStatusIndicators();
+
+  showToast(`Done! ${generated} generated, ${skipped} skipped, ${failed} failed`, generated > 0 ? 'success' : 'info');
+};
+
+// Update the voice status badges in the affirmation manager
+async function updateVoiceStatusIndicators() {
+  const badges = document.querySelectorAll('.aff-voice-badge');
+  for (const badge of badges) {
+    const affId = badge.dataset.affId;
+    if (!affId) continue;
+    const has = await hasElevenLabsAudio(affId);
+    badge.textContent = has ? '🔊' : '';
+    badge.title = has ? 'Voice generated' : '';
+  }
+  // Also update individual generate buttons
+  const btns = document.querySelectorAll('.aff-voice-gen-btn');
+  for (const btn of btns) {
+    const affId = btn.dataset.affId;
+    if (!affId) continue;
+    const has = await hasElevenLabsAudio(affId);
+    btn.innerHTML = has ? '✅' : '🎙';
+    btn.title = has ? 'Voice ready — click to regenerate' : 'Generate voice';
+  }
+}
+
 // Read stored {type, buffer} from IDB and return an objectURL
 async function _idbToObjectUrl(stored) {
   if (!stored) return null;
@@ -2689,6 +2819,8 @@ window.openAffirmationManager = function() {
             <div class="aff-mgr-text">${escH(a.text)}</div>
             <div class="aff-mgr-goal">${goalName}</div>
           </div>
+          <button class="aff-voice-gen-btn" data-aff-id="${a.id}" onclick="event.stopPropagation(); genSingleVoice('${a.id}', '${escH(a.text).replace(/'/g, "\\'")}')" title="Generate voice">🎙</button>
+          <span class="aff-voice-badge" data-aff-id="${a.id}"></span>
           <div class="aff-mgr-duration">
             <button class="aff-mgr-dur-btn" onclick="adjustAffDuration('${a.id}',-1)" title="Decrease">−</button>
             <span class="aff-mgr-dur-val" id="durVal_${a.id}">${dur}s</span>
@@ -2704,7 +2836,8 @@ window.openAffirmationManager = function() {
         <div style="font-size:18px;font-weight:700;color:var(--text-1);">Manage Affirmations</div>
         <button onclick="document.getElementById('affManagerModal')?.remove()" style="background:var(--surface-3);border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;color:var(--text-2);display:flex;align-items:center;justify-content:center;">✕</button>
       </div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;padding:0 4px;">Drag to reorder. Set display time per affirmation.</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;padding:0 4px;">Drag to reorder. Set display time per affirmation.</div>
+      <button id="bulkVoiceBtn" class="aff-voice-bulk-btn" onclick="generateAllVoices()">🎙 Generate All Voices</button>
       <div class="aff-mgr-list" id="affMgrList">
         ${buildList()}
       </div>
@@ -2723,6 +2856,20 @@ window.openAffirmationManager = function() {
 
   // Setup drag-to-reorder via touch/pointer
   initAffManagerDrag();
+
+  // Check voice status for all affirmations (async, non-blocking)
+  updateVoiceStatusIndicators();
+};
+
+// Generate voice for a single affirmation (from manager button)
+window.genSingleVoice = async function(affId, text) {
+  const btn = document.querySelector(`.aff-voice-gen-btn[data-aff-id="${affId}"]`);
+  if (btn) { btn.innerHTML = '⏳'; btn.disabled = true; }
+  const ok = await generateElevenLabsAudio(text, affId);
+  if (btn) { btn.innerHTML = ok ? '✅' : '🎙'; btn.disabled = false; }
+  // Update badge
+  const badge = document.querySelector(`.aff-voice-badge[data-aff-id="${affId}"]`);
+  if (badge && ok) { badge.textContent = '🔊'; badge.title = 'Voice generated'; }
 };
 
 /* ─── Drag-to-Reorder ────────────────────────────────────────── */
@@ -3183,10 +3330,10 @@ async function runRitualSequence() {
     // Eyes-closed: speak the affirmation naturally, then hold for contemplation
     if (window._ritualEyesClosed) {
       await sleep(1000); // gentle pause before speaking
-      await speakText(aff.text, 0.78, 'affirm'); // confident, present
+      await speakAffirmation(aff.text, aff.id, 0.78, 'affirm'); // confident, present
       await sleep(2500); // silence for visualization after hearing it
       // Repeat once, slower and calmer, for deeper reinforcement
-      await speakText(aff.text, 0.70, 'calm');
+      await speakAffirmation(aff.text, aff.id, 0.70, 'calm');
       await sleep(2000);
     } else {
       // Wait — per-affirmation duration or default 8s
@@ -3408,7 +3555,35 @@ function speakText(text, rate = 0.85, mood = 'calm') {
   });
 }
 
+// Play pre-generated ElevenLabs audio or fall back to browser TTS
+async function speakAffirmation(text, affId, rate, mood) {
+  try {
+    const stored = await _VisionIDB.get('audio://' + affId);
+    if (stored && stored.buffer) {
+      const blob = new Blob([stored.buffer], { type: stored.type || 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      return new Promise(resolve => {
+        const audio = new Audio(url);
+        // Subtle rate variation: first play at normal speed, repeat slightly slower
+        audio.playbackRate = rate > 0.9 ? 1.0 : 0.92;
+        audio.volume = 0.92;
+        window._ritualCurrentAudio = audio; // for stopSpeaking()
+        audio.onended = () => { URL.revokeObjectURL(url); window._ritualCurrentAudio = null; resolve(); };
+        audio.onerror = () => { URL.revokeObjectURL(url); window._ritualCurrentAudio = null; resolve(); };
+        audio.play().catch(() => { URL.revokeObjectURL(url); window._ritualCurrentAudio = null; resolve(); });
+      });
+    }
+  } catch (e) { console.warn('[speakAffirmation] IDB error, falling back to TTS', e); }
+
+  // Fallback to browser TTS
+  return speakText(text, rate, mood);
+}
+
 function stopSpeaking() {
+  if (window._ritualCurrentAudio) {
+    window._ritualCurrentAudio.pause();
+    window._ritualCurrentAudio = null;
+  }
   if ('speechSynthesis' in window) speechSynthesis.cancel();
 }
 

@@ -41,6 +41,8 @@ function renderSettings() {
     // Map 'ai_api_key' from sheet to 'gemini_api_key' for UI
     gemini_api_key: s.ai_api_key || '',
     ai_model: s.ai_model || 'gemini-1.5-flash',
+    elevenlabs_api_key: s.elevenlabs_api_key || '',
+    elevenlabs_voice_id: s.elevenlabs_voice_id || '',
     category_budgets: s.category_budgets || '{}',
     // Orientation lock setting
     orientation_lock: s.orientation_lock || 'auto',
@@ -272,6 +274,31 @@ function renderSettings() {
                 <span class="model-chip" onclick="setModel('gemini-1.5-pro')">Pro</span>
             </div>
         </div>
+        <div style="border-top:1px solid var(--border-color); margin:20px 0 16px; padding-top:16px;">
+            <p class="section-description" style="margin-bottom:12px;">🎙 <strong>ElevenLabs Voice</strong> — Generate realistic human voice for manifestation affirmations.</p>
+
+            <div class="setting-item">
+                <label class="setting-label">ElevenLabs API Key</label>
+                <div style="display:flex; gap:10px">
+                    <input type="password" class="input" id="sElevenLabsKey" value="${settings.elevenlabs_api_key}" placeholder="sk_...">
+                    <button class="btn secondary" onclick="testElevenLabsAPI()">Test</button>
+                </div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:4px">
+                    Get your key at <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" style="color:var(--primary);">elevenlabs.io</a>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label class="setting-label">Voice</label>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <select class="input" id="sElevenLabsVoice" style="flex:1;">
+                        <option value="">— Click Test to load voices —</option>
+                        ${settings.elevenlabs_voice_id ? `<option value="${settings.elevenlabs_voice_id}" selected>${settings.elevenlabs_voice_id}</option>` : ''}
+                    </select>
+                    <button class="btn secondary" id="elPreviewBtn" onclick="previewElevenLabsVoice()" disabled>▶ Preview</button>
+                </div>
+            </div>
+        </div>
+
         <button class="btn primary" onclick="saveAllSettings('ai')">Save AI</button>
         </div>
       </details>
@@ -1276,6 +1303,10 @@ window.saveAllSettings = async function (section = 'all') {
   if (section === 'all' || section === 'ai') {
     newSettings.ai_api_key = apiKey;
     newSettings.ai_model = model;
+    const elKey = document.getElementById('sElevenLabsKey')?.value?.trim() || '';
+    const elVoice = document.getElementById('sElevenLabsVoice')?.value?.trim() || '';
+    newSettings.elevenlabs_api_key = elKey;
+    newSettings.elevenlabs_voice_id = elVoice;
   }
 
   if (section === 'all' || section === 'tabs') {
@@ -1403,6 +1434,70 @@ window.testGeminiAPI = async function () {
     if (res.ok) showToast('API Key Valid!');
     else showToast('Invalid Key', 'error');
   } catch (e) { showToast('Connection Error', 'error'); }
+};
+
+window.testElevenLabsAPI = async function () {
+  const key = document.getElementById('sElevenLabsKey')?.value?.trim();
+  if (!key) { showToast('Enter ElevenLabs API Key', 'error'); return; }
+  try {
+    const res = await fetch('https://api.elevenlabs.io/v1/voices', {
+      headers: { 'xi-api-key': key }
+    });
+    if (!res.ok) { showToast('Invalid ElevenLabs Key', 'error'); return; }
+    const data = await res.json();
+    const voices = data.voices || [];
+
+    // Populate voice dropdown
+    const sel = document.getElementById('sElevenLabsVoice');
+    const savedVoice = sel?.value || '';
+    if (sel) {
+      sel.innerHTML = voices.map(v => {
+        const labels = v.labels ? Object.values(v.labels).join(', ') : '';
+        return `<option value="${v.voice_id}" ${v.voice_id === savedVoice ? 'selected' : ''}>${v.name}${labels ? ' (' + labels + ')' : ''}</option>`;
+      }).join('');
+    }
+
+    // Enable preview button
+    const prevBtn = document.getElementById('elPreviewBtn');
+    if (prevBtn) prevBtn.disabled = false;
+
+    showToast('Connected! ' + voices.length + ' voices loaded', 'success');
+  } catch (e) { showToast('Connection Error: ' + e.message, 'error'); }
+};
+
+window.previewElevenLabsVoice = async function () {
+  const key = document.getElementById('sElevenLabsKey')?.value?.trim();
+  const voiceId = document.getElementById('sElevenLabsVoice')?.value;
+  if (!key || !voiceId) { showToast('Select a voice first', 'error'); return; }
+
+  const btn = document.getElementById('elPreviewBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+
+  try {
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': key,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg'
+      },
+      body: JSON.stringify({
+        text: 'I am worthy of all the abundance flowing into my life. My dreams are manifesting into reality.',
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.65, similarity_boost: 0.75, style: 0.4 }
+      })
+    });
+
+    if (!res.ok) { showToast('Preview failed — check key & voice', 'error'); return; }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.onended = () => URL.revokeObjectURL(url);
+    audio.play();
+    showToast('Playing preview...', 'success');
+  } catch (e) { showToast('Preview error: ' + e.message, 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '▶ Preview'; } }
 };
 
 window.openGoogleSheet = function () {
