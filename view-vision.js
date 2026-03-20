@@ -2907,6 +2907,9 @@ window.startManifestationRitual = function(goalId) {
     <div class="ritual-progress" id="ritualProgress">${dotsHtml}</div>
 
     <div class="ritual-controls-bar">
+      <button id="ritualSkipBtn" class="ritual-control-btn ritual-skip-btn" onclick="skipGrounding()">
+        ⏭ Skip to Affirmations
+      </button>
       <button id="ritualAudioBtn" class="ritual-control-btn" onclick="toggleRitualAudio()">
         ${localStorage.getItem('ritualAudioMuted') === 'true' ? '🔇 Sound Off' : '🔊 Sound On'}
       </button>
@@ -2975,6 +2978,15 @@ window.toggleRitualAudio = function() {
   RitualAudioEngine.setMute(newMuted);
 };
 
+window.skipGrounding = function() {
+  window._ritualSkipGrounding = true;
+  const skipBtn = document.getElementById('ritualSkipBtn');
+  if (skipBtn) {
+    skipBtn.innerHTML = '⏭ Skipping...';
+    skipBtn.disabled = true;
+  }
+};
+
 /* ─── RITUAL SEQUENCE (3-Phase) ───────────────────────────────── */
 async function runRitualSequence() {
   const overlay = document.getElementById('manifestationRitual');
@@ -3013,40 +3025,81 @@ async function runRitualSequence() {
     }
   }
 
-  // ═══ PHASE 1: GROUNDING ═══
+  // ═══ PHASE 1: GROUNDING (skippable) ═══
+  window._ritualSkipGrounding = false;
   overlay.setAttribute('data-phase', 'ground');
-  await sleep(800);
 
-  // Show prompt
-  prompt.classList.add('visible');
-  RitualAudioEngine.playChime();
-  ritualHaptic('chime');
-  await sayIfEyesClosed('Prepare for your manifestation.');
-  await sleep(3000);
+  // Show skip button during grounding
+  const skipBtn = document.getElementById('ritualSkipBtn');
+
+  // Helper: sleep that can be interrupted by skip
+  function skippableSleep(ms) {
+    return new Promise(resolve => {
+      if (window._ritualSkipGrounding) { resolve(); return; }
+      const timer = setTimeout(resolve, ms);
+      const check = setInterval(() => {
+        if (window._ritualSkipGrounding) {
+          clearTimeout(timer);
+          clearInterval(check);
+          resolve();
+        }
+      }, 100);
+      // Clean up interval when timer fires naturally
+      const origResolve = resolve;
+      setTimeout(() => clearInterval(check), ms + 50);
+    });
+  }
+
+  await skippableSleep(800);
+
+  if (!window._ritualSkipGrounding) {
+    // Show prompt
+    prompt.classList.add('visible');
+    RitualAudioEngine.playChime();
+    ritualHaptic('chime');
+    await sayIfEyesClosed('Prepare for your manifestation.');
+    await skippableSleep(3000);
+  }
   if (!alive()) return;
 
-  prompt.textContent = 'Take a deep breath...';
-  await sayIfEyesClosed('Take a deep breath.');
-  await sleep(2000);
+  if (!window._ritualSkipGrounding) {
+    prompt.textContent = 'Take a deep breath...';
+    await sayIfEyesClosed('Take a deep breath.');
+    await skippableSleep(2000);
+  }
   if (!alive()) return;
 
-  // Breathing cycles
-  prompt.classList.remove('visible');
-  await sleep(500);
-  const _rs = window._ritualSettings || {};
-  const breathCycles = _rs.breathing !== undefined ? _rs.breathing : 3;
-  if (breathCycles > 0) await runBreathingCycle(breathCycles);
+  if (!window._ritualSkipGrounding) {
+    // Breathing cycles
+    prompt.classList.remove('visible');
+    await skippableSleep(500);
+    const _rs = window._ritualSettings || {};
+    const breathCycles = _rs.breathing !== undefined ? _rs.breathing : 3;
+    if (breathCycles > 0 && !window._ritualSkipGrounding) await runBreathingCycle(breathCycles);
+  }
   if (!alive()) return;
 
-  // Post-breathing affirmation setup
-  prompt.textContent = 'Feel your intentions taking form...';
-  prompt.classList.add('visible');
-  RitualAudioEngine.playChime();
-  await sayIfEyesClosed('Feel your intentions taking form.');
-  await sleep(3000);
+  if (!window._ritualSkipGrounding) {
+    // Post-breathing affirmation setup
+    prompt.textContent = 'Feel your intentions taking form...';
+    prompt.classList.add('visible');
+    RitualAudioEngine.playChime();
+    await sayIfEyesClosed('Feel your intentions taking form.');
+    await skippableSleep(3000);
+    if (!alive()) return;
+    prompt.classList.remove('visible');
+    await skippableSleep(1000);
+  } else {
+    // Skipped — quick transition
+    prompt.classList.remove('visible');
+    const breathGuide = document.getElementById('breathingGuide');
+    if (breathGuide) breathGuide.classList.remove('visible');
+    stopSpeaking();
+  }
   if (!alive()) return;
-  prompt.classList.remove('visible');
-  await sleep(1000);
+
+  // Hide skip button once we're past grounding
+  if (skipBtn) skipBtn.style.display = 'none';
 
   // ═══ PHASE 2: AFFIRMATIONS ═══
   overlay.setAttribute('data-phase', 'affirm');

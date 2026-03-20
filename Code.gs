@@ -36,7 +36,7 @@ const SCHEMA = {
   "mural_projects": ["id", "title", "category", "created_at", "updated_at", "bg_pattern", "bg_color"],
   "mural_categories": ["id", "name", "color"],
   "mural_elements": ["id", "project_id", "type", "x", "y", "w", "h", "content", "color", "z_index", "shape", "from_id", "to_id", "connector_style", "from_side", "to_side", "line_style", "arrow_mode"],
-  "vision_affirmations": ["id", "vision_id", "text", "order", "bg_style", "is_pinned", "created_at", "is_favorite", "favorite_at", "duration"],
+  "vision_affirmations": ["id", "vision_id", "text", "order", "bg_style", "is_pinned", "created_at", "is_favorite", "favorite_at", "duration", "media_key"],
   "ritual_logs": ["id", "date", "duration_seconds", "affirmation_count", "mood_after", "completed"]
 };
 

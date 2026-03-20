@@ -2103,6 +2103,19 @@
     white-space: nowrap;
 }
 .ritual-control-btn:hover { background: rgba(255,255,255,0.12); color: white; }
+.ritual-skip-btn {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.75);
+}
+.ritual-skip-btn:hover {
+    background: rgba(255,255,255,0.18);
+    color: white;
+}
+.ritual-skip-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
 .ritual-control-btn.active {
     background: rgba(139, 92, 246, 0.2);
     border-color: rgba(139, 92, 246, 0.4);
