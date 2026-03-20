@@ -207,7 +207,7 @@ async function _generateGeminiTTS(text, voiceName) {
   return _pcmBase64ToWavBlob(audioData);
 }
 
-window.generateElevenLabsAudio = async function(text, affId, opts = {}) {
+window.generateGeminiAudio = async function(text, affId, opts = {}) {
   const config = _getVoiceConfig();
   const cleanText = text.replace(/\*/g, '').trim();
   if (!cleanText) return false;
@@ -235,7 +235,7 @@ window.generateElevenLabsAudio = async function(text, affId, opts = {}) {
 };
 
 // Check if an affirmation has pre-generated audio
-window.hasElevenLabsAudio = async function(affId) {
+window.hasStoredAudio = async function(affId) {
   try {
     const stored = await _VisionIDB.get('audio://' + affId);
     // Must have actual audio buffer (not stale batch-ref entries from previous attempts)
@@ -328,14 +328,14 @@ window.generateAllVoices = async function(goalId) {
     updatePanel(i, generated, skipped, failed, aff, 'processing');
 
     // Skip if already has audio (individual or batch-ref)
-    const hasAudio = await hasElevenLabsAudio(aff.id);
+    const hasAudio = await hasStoredAudio(aff.id);
     if (hasAudio) {
       skipped++;
       updatePanel(i, generated, skipped, failed, aff, 'skip');
       continue;
     }
 
-    const ok = await generateElevenLabsAudio(aff.text, aff.id, { silent: true });
+    const ok = await generateGeminiAudio(aff.text, aff.id, { silent: true });
     if (ok) {
       generated++;
       updatePanel(i, generated, skipped, failed, aff, 'done');
@@ -369,7 +369,7 @@ async function updateVoiceStatusIndicators() {
   for (const badge of badges) {
     const affId = badge.dataset.affId;
     if (!affId) continue;
-    const has = await hasElevenLabsAudio(affId);
+    const has = await hasStoredAudio(affId);
     badge.textContent = has ? '🔊' : '';
     badge.title = has ? 'Voice generated' : '';
   }
@@ -378,7 +378,7 @@ async function updateVoiceStatusIndicators() {
   for (const btn of btns) {
     const affId = btn.dataset.affId;
     if (!affId) continue;
-    const has = await hasElevenLabsAudio(affId);
+    const has = await hasStoredAudio(affId);
     btn.innerHTML = has ? '✅' : '🎙';
     btn.title = has ? 'Voice ready — click to regenerate' : 'Generate voice';
   }
@@ -387,7 +387,7 @@ async function updateVoiceStatusIndicators() {
   for (const btn of playBtns) {
     const affId = btn.dataset.affId;
     if (!affId) continue;
-    const has = await hasElevenLabsAudio(affId);
+    const has = await hasStoredAudio(affId);
     btn.style.display = has ? 'inline-flex' : 'none';
   }
 }
@@ -3151,7 +3151,7 @@ window.openAffirmationManager = function() {
 window.genSingleVoice = async function(affId, text) {
   const btn = document.querySelector(`.aff-voice-gen-btn[data-aff-id="${affId}"]`);
   if (btn) { btn.innerHTML = '⏳'; btn.disabled = true; }
-  const ok = await generateElevenLabsAudio(text, affId);
+  const ok = await generateGeminiAudio(text, affId);
   if (btn) { btn.innerHTML = ok ? '✅' : '🎙'; btn.disabled = false; }
   if (ok) {
     // Show play button
@@ -3862,7 +3862,7 @@ function unlockRitualAudio() {
   console.log('[Ritual] Audio element unlocked for iOS');
 }
 
-// Play pre-generated ElevenLabs audio or fall back to browser TTS
+// Play pre-generated Gemini audio or fall back to browser TTS
 async function speakAffirmation(text, affId, rate, mood) {
   try {
     const stored = await _VisionIDB.get('audio://' + affId);
@@ -3900,7 +3900,7 @@ async function speakAffirmation(text, affId, rate, mood) {
           console.warn('[speakAffirmation] play() rejected, falling back to TTS', playErr);
           URL.revokeObjectURL(url);
           window._ritualCurrentAudio = null;
-          // Fallback to TTS if ElevenLabs playback blocked
+          // Fallback to TTS if Gemini playback blocked
           speakText(text, rate, mood).then(resolve);
         });
       });
