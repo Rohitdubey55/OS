@@ -7,6 +7,7 @@ const AI_SERVICE = {
     // Get Configuration from State (Sheet Source of Truth)
     getConfig: function () {
         const fromState = state.data.settings?.[0];
+        console.log("AI_SERVICE: Fetching config from state:", fromState);
 
         return {
             apiKey: fromState?.ai_api_key || '',
@@ -377,6 +378,7 @@ Speak naturally, like a human tutor. Use your "native-audio" capabilities to exp
             
             return {
                 url: url,
+                apiKey: config.apiKey,
                 model: `models/${this.model}`,
                 fallbackModel: 'models/gemini-2.0-flash-exp', // More widely supported Live model
                 generationConfig: {
