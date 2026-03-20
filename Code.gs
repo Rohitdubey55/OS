@@ -322,7 +322,7 @@ function doPost(e) {
     }
 
     // Sheet is required for standard CRUD, but optional for some custom actions
-    if (!body.sheet && !['deleteMuralProject', 'syncMuralElements', 'repairMural', 'init', 'uploadAudio'].includes(body.action)) {
+    if (!body.sheet && !['deleteMuralProject', 'syncMuralElements', 'repairMural', 'init', 'uploadAudio', 'downloadAudio'].includes(body.action)) {
       return jsonResponse({ success: false, message: "Missing sheet" });
     }
 
@@ -354,7 +354,7 @@ function doPost(e) {
     // ── Upload audio file to Google Drive (POS/audio/ folder) ──
     if (body.action === "uploadAudio") {
       try {
-        const p = body.payload || {};
+        var p = body.payload || {};
         if (!p.filename || !p.data) {
           return jsonResponse({ success: false, message: "Missing filename or data" });
         }
@@ -367,14 +367,34 @@ function doPost(e) {
         while (existing.hasNext()) existing.next().setTrashed(true);
         var file = audioFolder.createFile(blob);
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        var url = "https://drive.google.com/uc?export=download&id=" + file.getId();
-        // If affirmation ID provided, update the record's audio_url
+        var fileId = file.getId();
+        // Store the file ID (not full URL) so we can proxy downloads to avoid CORS
+        var audioRef = "drive:" + fileId;
         if (p.aff_id) {
-          try { updateData('vision_affirmations', p.aff_id, { audio_url: url }); } catch(e2) {}
+          try { updateData('vision_affirmations', p.aff_id, { audio_url: audioRef }); } catch(e2) {}
         }
-        return jsonResponse({ success: true, url: url, file_id: file.getId() });
+        return jsonResponse({ success: true, url: audioRef, file_id: fileId });
       } catch(driveErr) {
         return jsonResponse({ success: false, message: "Drive upload error: " + driveErr.message });
+      }
+    }
+
+    // ── Download audio from Drive (proxy to avoid CORS) ──
+    if (body.action === "downloadAudio") {
+      try {
+        var dp = body.payload || {};
+        var driveFileId = dp.file_id || '';
+        // Support both "drive:XXXXX" format and raw file ID
+        if (driveFileId.indexOf('drive:') === 0) driveFileId = driveFileId.substring(6);
+        if (!driveFileId) {
+          return jsonResponse({ success: false, message: "Missing file_id" });
+        }
+        var driveFile = DriveApp.getFileById(driveFileId);
+        var fileBlob = driveFile.getBlob();
+        var b64 = Utilities.base64Encode(fileBlob.getBytes());
+        return jsonResponse({ success: true, data: b64, mimeType: fileBlob.getContentType() });
+      } catch(dlErr) {
+        return jsonResponse({ success: false, message: "Download error: " + dlErr.message });
       }
     }
 

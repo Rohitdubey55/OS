@@ -529,10 +529,11 @@ async function _uploadAudioToDrive(affId) {
 }
 
 // ── Auto-download audio from Google Drive on other devices ──
+// Uses Apps Script as proxy to avoid CORS issues with direct Drive downloads
 window._audioSyncRunning = false;
 async function autoSyncAudioFromDrive() {
   if (window._audioSyncRunning) return;
-  if (!_getGeminiKey()) return; // No API key = no voice features
+  if (!_getGeminiKey()) return;
   window._audioSyncRunning = true;
 
   try {
@@ -552,11 +553,28 @@ async function autoSyncAudioFromDrive() {
     let synced = 0;
     for (const aff of toDownload) {
       try {
-        const resp = await fetch(aff.audio_url);
-        if (!resp.ok) continue;
-        const arrayBuffer = await resp.arrayBuffer();
-        if (arrayBuffer.byteLength < 100) continue; // too small, skip
-        await _VisionIDB.put('audio://' + aff.id, { type: 'audio/wav', buffer: arrayBuffer });
+        // Extract file ID from audio_url (supports "drive:XXXX" or legacy "https://drive.google.com/uc?...id=XXXX")
+        let fileId = aff.audio_url;
+        if (fileId.startsWith('drive:')) {
+          fileId = fileId.substring(6);
+        } else if (fileId.includes('id=')) {
+          fileId = fileId.split('id=')[1];
+        } else {
+          continue; // Unknown format
+        }
+
+        // Download via Apps Script proxy (no CORS issues)
+        const result = await apiCall('downloadAudio', null, { file_id: fileId });
+        if (!result?.data) continue;
+
+        // Convert base64 back to ArrayBuffer
+        const binaryStr = atob(result.data);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+        if (bytes.byteLength < 100) continue;
+        await _VisionIDB.put('audio://' + aff.id, { type: result.mimeType || 'audio/wav', buffer: bytes.buffer });
         synced++;
       } catch (e) {
         console.warn('[Drive Sync] Failed to download audio for', aff.id, e.message);
