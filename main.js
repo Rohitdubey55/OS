@@ -2,7 +2,7 @@
 
 // REPLACE THIS URL with your deployed Web App URL
 
-const API_BASE = "https://script.google.com/macros/s/AKfycbxIirP2116jaZfKi8_SjAqlKi2c1IZ-9dx_7QHmlYbRhclX0QDtRYoC6u073WjaeXLHKQ/exec";
+const API_BASE = "https://script.google.com/macros/s/AKfycbzA4TVNQO42M3r6notPSFgEqZZgVJ8ge66Gl7dbW06tCmCkaif6qkVsiK820AB4a5nSrg/exec";
 const SCRIPT_URL = API_BASE; // Alias for compatibility
 
 
@@ -361,6 +361,7 @@ async function routeTo(viewName) {
             else if (viewName === 'books') renderBooks();
             else if (viewName === 'reader') renderReader();
             else if (viewName === 'mural') renderMural();
+            else if (viewName === 'tutor') renderTutor();
         } catch (e) {
             console.error('Error rendering view ' + viewName + ':', e);
             main.innerHTML = '<div style="padding:20px; color:red">Error loading view: ' + viewName + '<br><small>' + e.message + '</small></div>';

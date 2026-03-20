@@ -98,6 +98,13 @@ const VOICE_PROVIDERS = {
   }
 };
 
+// Psychologically-tuned system instruction for manifestation TTS
+// - Slow pace → parasympathetic activation, perceived authority/truth
+// - Warm conviction → mirror neuron response, listener internalizes belief
+// - Deliberate pauses → subconscious absorption (Zeigarnik effect)
+// - Identity emphasis → "I am" activates self-schema modification (Bem's theory)
+const TTS_SYSTEM_INSTRUCTION = `You are a manifestation guide speaking affirmations with deep conviction and warm authority. Speak as if you are the person's wisest inner voice — calm, certain, and deeply believing every word. Use a slow, deliberate pace with natural pauses between phrases. Emphasize identity statements like "I am", "I have", "I create" with quiet power. Your tone should evoke safety, strength, and absolute certainty — like a meditation teacher guiding someone into their highest self. Read ONLY the given text, no extra words.`;
+
 function _getGeminiKey() {
   const s = state.data.settings?.[0] || {};
   return s.ai_api_key || '';
@@ -208,11 +215,13 @@ async function _generateGeminiTTS(text, voiceName) {
     }, 30000);
 
     ws.onopen = () => {
+      console.log('[Live API] WebSocket connected, sending setup...');
       // Step 1: Send setup/config message
       const configMsg = {
         setup: {
-          model: 'models/gemini-2.5-flash-native-audio-preview',
+          model: 'models/gemini-2.5-flash-native-audio-preview-12-2025',
           generationConfig: {
+            temperature: 0.8,
             responseModalities: ['AUDIO'],
             speechConfig: {
               voiceConfig: {
@@ -221,20 +230,27 @@ async function _generateGeminiTTS(text, voiceName) {
             }
           },
           systemInstruction: {
-            parts: [{ text: 'You are a text-to-speech engine. Read the user text aloud exactly as written. Do not add any extra words, commentary, or explanation. Just speak the text naturally and clearly.' }]
+            parts: [{ text: TTS_SYSTEM_INSTRUCTION }]
           }
         }
       };
       ws.send(JSON.stringify(configMsg));
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       try {
-        const msg = JSON.parse(event.data);
+        // WebSocket may return Blob or string — handle both
+        let rawData = event.data;
+        if (rawData instanceof Blob) {
+          rawData = await rawData.text();
+        }
+        const msg = JSON.parse(rawData);
+        console.log('[Live API] msg keys:', Object.keys(msg).join(','), JSON.stringify(msg).substring(0, 200));
 
         // Setup complete acknowledgment
         if (msg.setupComplete) {
           setupDone = true;
+          console.log('[Live API] Setup complete, sending text...');
           // Step 2: Send the text to speak
           const clientMsg = {
             clientContent: {
@@ -251,6 +267,7 @@ async function _generateGeminiTTS(text, voiceName) {
           for (const part of msg.serverContent.modelTurn.parts) {
             if (part.inlineData?.data) {
               audioChunks.push(part.inlineData.data);
+              console.log('[Live API] Got audio chunk, total chunks:', audioChunks.length);
             }
           }
         }
@@ -258,6 +275,7 @@ async function _generateGeminiTTS(text, voiceName) {
         // Turn complete — assemble audio and resolve
         if (msg.serverContent?.turnComplete) {
           clearTimeout(timeoutId);
+          console.log('[Live API] Turn complete, total chunks:', audioChunks.length);
           ws.close();
 
           if (audioChunks.length === 0) {
@@ -269,6 +287,7 @@ async function _generateGeminiTTS(text, voiceName) {
           audioChunks = null; // free memory
 
           const wavBlob = _pcmBase64ToWavBlob(allPcm);
+          console.log('[Live API] WAV blob created:', wavBlob.size, 'bytes');
           resolve(wavBlob);
         }
       } catch (e) {
@@ -278,11 +297,13 @@ async function _generateGeminiTTS(text, voiceName) {
 
     ws.onerror = (e) => {
       clearTimeout(timeoutId);
+      console.error('[Live API] WebSocket error:', e);
       reject(new Error('Gemini Live API WebSocket error'));
     };
 
     ws.onclose = (e) => {
       clearTimeout(timeoutId);
+      console.log('[Live API] WebSocket closed, code:', e.code, 'reason:', e.reason, 'setupDone:', setupDone);
       if (!setupDone) {
         reject(new Error(`Gemini Live API connection closed (code ${e.code}): ${e.reason || 'unknown'}`));
       }
@@ -314,6 +335,128 @@ function _concatBase64Chunks(chunks) {
   // Store on a temp property so _pcmBase64ToWavBlob can use it
   _concatBase64Chunks._rawBuffer = combined;
   return '__RAW_BUFFER__';
+}
+
+// ── Batch TTS: Process multiple affirmations on ONE WebSocket (no repeated handshake) ──
+// Returns { generated: N, failed: N, results: [{id, success}] }
+async function _generateGeminiTTSBatch(items, voiceName, onItemDone) {
+  const apiKey = _getGeminiKey();
+  if (!apiKey) throw new Error('Missing API key');
+  if (!items.length) return { generated: 0, failed: 0, results: [] };
+
+  const WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+  const results = [];
+  let generated = 0, failed = 0;
+
+  return new Promise((resolveBatch) => {
+    let ws;
+    try { ws = new WebSocket(WS_URL); } catch(e) {
+      items.forEach(it => { failed++; results.push({id: it.id, success: false}); if (onItemDone) onItemDone(it, null); });
+      return resolveBatch({ generated, failed, results });
+    }
+
+    let setupDone = false;
+    let currentIdx = 0;
+    let audioChunks = [];
+    let turnTimeout = null;
+
+    function finishBatch() {
+      clearTimeout(turnTimeout);
+      try { if (ws.readyState <= 1) ws.close(); } catch(e) {}
+      resolveBatch({ generated, failed, results });
+    }
+
+    function sendNextItem() {
+      if (currentIdx >= items.length) { finishBatch(); return; }
+      const item = items[currentIdx];
+      audioChunks = [];
+      // 30s timeout per turn
+      clearTimeout(turnTimeout);
+      turnTimeout = setTimeout(() => {
+        failed++; results.push({id: item.id, success: false});
+        if (onItemDone) onItemDone(item, null);
+        currentIdx++;
+        sendNextItem();
+      }, 30000);
+      ws.send(JSON.stringify({
+        clientContent: { turns: [{ role: 'user', parts: [{ text: item.text }] }], turnComplete: true }
+      }));
+    }
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        setup: {
+          model: 'models/gemini-2.5-flash-native-audio-preview-12-2025',
+          generationConfig: {
+            temperature: 0.8,
+            responseModalities: ['AUDIO'],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
+          },
+          systemInstruction: { parts: [{ text: TTS_SYSTEM_INSTRUCTION }] }
+        }
+      }));
+    };
+
+    ws.onmessage = async (event) => {
+      try {
+        let raw = event.data;
+        if (raw instanceof Blob) raw = await raw.text();
+        const msg = JSON.parse(raw);
+
+        if (msg.setupComplete) { setupDone = true; sendNextItem(); return; }
+
+        // Collect audio chunks
+        if (msg.serverContent?.modelTurn?.parts) {
+          for (const part of msg.serverContent.modelTurn.parts) {
+            if (part.inlineData?.data) audioChunks.push(part.inlineData.data);
+          }
+        }
+
+        // Turn complete — assemble WAV and store
+        if (msg.serverContent?.turnComplete) {
+          clearTimeout(turnTimeout);
+          const item = items[currentIdx];
+          if (audioChunks.length > 0) {
+            try {
+              const allPcm = _concatBase64Chunks(audioChunks);
+              const wavBlob = _pcmBase64ToWavBlob(allPcm);
+              const arrayBuffer = await wavBlob.arrayBuffer();
+              await _VisionIDB.put('audio://' + item.id, { type: 'audio/wav', buffer: arrayBuffer });
+              generated++;
+              results.push({id: item.id, success: true});
+              if (onItemDone) onItemDone(item, wavBlob);
+            } catch(e) {
+              failed++; results.push({id: item.id, success: false});
+              if (onItemDone) onItemDone(item, null);
+            }
+          } else {
+            failed++; results.push({id: item.id, success: false});
+            if (onItemDone) onItemDone(item, null);
+          }
+          audioChunks = [];
+          currentIdx++;
+          sendNextItem();
+        }
+      } catch(e) { /* parse error, keep going */ }
+    };
+
+    ws.onerror = () => {
+      // Mark remaining as failed
+      for (let i = currentIdx; i < items.length; i++) {
+        failed++; results.push({id: items[i].id, success: false});
+        if (onItemDone) onItemDone(items[i], null);
+      }
+      finishBatch();
+    };
+
+    ws.onclose = () => {
+      if (!setupDone) {
+        items.forEach(it => { failed++; results.push({id: it.id, success: false}); if (onItemDone) onItemDone(it, null); });
+        finishBatch();
+      }
+      // If setupDone and all items processed, finishBatch already called
+    };
+  });
 }
 
 window.generateGeminiAudio = async function(text, affId, opts = {}) {
@@ -351,6 +494,83 @@ window.hasStoredAudio = async function(affId) {
     return !!(stored && stored.buffer);
   } catch (e) { return false; }
 };
+
+// ── Google Drive Sync: Upload audio after generation ──
+// Converts ArrayBuffer to base64, sends to GAS backend which stores in Drive POS/audio/
+async function _uploadAudioToDrive(affId) {
+  try {
+    const stored = await _VisionIDB.get('audio://' + affId);
+    if (!stored || !stored.buffer) return;
+
+    // Convert ArrayBuffer to base64
+    const bytes = new Uint8Array(stored.buffer);
+    let binary = '';
+    const CHUNK = 8192;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + CHUNK, bytes.length)));
+    }
+    const base64 = btoa(binary);
+
+    const result = await apiCall('uploadAudio', null, {
+      filename: 'aff_' + affId + '.wav',
+      data: base64,
+      mimeType: 'audio/wav',
+      aff_id: affId
+    });
+
+    if (result?.url) {
+      // Update local state with the Drive URL
+      const aff = (state.data.vision_affirmations || []).find(a => String(a.id) === String(affId));
+      if (aff) aff.audio_url = result.url;
+    }
+  } catch (e) {
+    console.warn('[Drive Upload] Failed for aff', affId, e.message);
+  }
+}
+
+// ── Auto-download audio from Google Drive on other devices ──
+window._audioSyncRunning = false;
+async function autoSyncAudioFromDrive() {
+  if (window._audioSyncRunning) return;
+  if (!_getGeminiKey()) return; // No API key = no voice features
+  window._audioSyncRunning = true;
+
+  try {
+    const affs = state.data.vision_affirmations || [];
+    const toDownload = [];
+
+    for (const aff of affs) {
+      if (aff.audio_url && !(await hasStoredAudio(aff.id))) {
+        toDownload.push(aff);
+      }
+    }
+
+    if (toDownload.length === 0) { window._audioSyncRunning = false; return; }
+
+    showToast(`Syncing ${toDownload.length} voice${toDownload.length > 1 ? 's' : ''} from cloud...`, 'info');
+
+    let synced = 0;
+    for (const aff of toDownload) {
+      try {
+        const resp = await fetch(aff.audio_url);
+        if (!resp.ok) continue;
+        const arrayBuffer = await resp.arrayBuffer();
+        if (arrayBuffer.byteLength < 100) continue; // too small, skip
+        await _VisionIDB.put('audio://' + aff.id, { type: 'audio/wav', buffer: arrayBuffer });
+        synced++;
+      } catch (e) {
+        console.warn('[Drive Sync] Failed to download audio for', aff.id, e.message);
+      }
+    }
+
+    if (synced > 0) {
+      showToast(`Synced ${synced} voice${synced > 1 ? 's' : ''} from cloud ☁️`, 'success');
+    }
+  } catch (e) {
+    console.warn('[Drive Sync] Error:', e.message);
+  }
+  window._audioSyncRunning = false;
+}
 
 // Bulk generate voices — one call per affirmation, memory-safe for iOS
 // Uses sequential processing with cleanup between each to stay under WKWebView memory limits
@@ -403,12 +623,14 @@ window.generateAllVoices = async function(goalId) {
   const vgCounts = document.getElementById('vgCounts');
   const vgLog = document.getElementById('vgLog');
 
-  function updatePanel(i, generated, skipped, failed, currentAff, status) {
-    const total = affs.length;
-    const done = i + 1;
-    const pct = Math.round((done / total) * 100);
+  let processed = 0, generated = 0, skipped = 0, failed = 0;
+
+  function updatePanel(currentAff, status) {
+    processed++;
+    const pct = Math.round((processed / affs.length) * 100);
     if (vgBar) vgBar.style.width = pct + '%';
-    if (vgStats) vgStats.textContent = `${done} / ${total}`;
+    if (vgStats) vgStats.textContent = `${processed} / ${affs.length}`;
+    if (bulkBtn) bulkBtn.innerHTML = `⏳ ${processed}/${affs.length}...`;
     if (vgCounts) vgCounts.innerHTML = `
       <span class="vg-count vg-count--done">✅ ${generated} done</span>
       <span class="vg-count vg-count--skip">⏭ ${skipped} skipped</span>
@@ -417,7 +639,7 @@ window.generateAllVoices = async function(goalId) {
     if (vgLog) {
       const shortText = (currentAff.text || '').replace(/\*/g, '').substring(0, 45);
       const icon = status === 'done' ? '✅' : status === 'skip' ? '⏭' : status === 'fail' ? '❌' : '⏳';
-      const statusLabel = status === 'done' ? 'Generated' : status === 'skip' ? 'Already exists' : status === 'fail' ? 'Failed' : 'Generating...';
+      const statusLabel = status === 'done' ? 'Generated' : status === 'skip' ? 'Already exists' : 'Failed';
       const entry = document.createElement('div');
       entry.className = `voice-gen-panel__entry voice-gen-panel__entry--${status}`;
       entry.innerHTML = `<span class="vg-entry-icon">${icon}</span><span class="vg-entry-text">${shortText}…</span><span class="vg-entry-status">${statusLabel}</span>`;
@@ -426,35 +648,43 @@ window.generateAllVoices = async function(goalId) {
     }
   }
 
-  let generated = 0, skipped = 0, failed = 0;
-
-  for (let i = 0; i < affs.length; i++) {
-    const aff = affs[i];
-
-    if (bulkBtn) bulkBtn.innerHTML = `⏳ ${i + 1}/${affs.length}...`;
-
-    // Show "processing" state
-    updatePanel(i, generated, skipped, failed, aff, 'processing');
-
-    // Skip if already has audio (individual or batch-ref)
-    const hasAudio = await hasStoredAudio(aff.id);
-    if (hasAudio) {
+  // Phase 1: Separate already-generated from needs-generation
+  const needsGen = [];
+  for (const aff of affs) {
+    const has = await hasStoredAudio(aff.id);
+    if (has) {
       skipped++;
-      updatePanel(i, generated, skipped, failed, aff, 'skip');
-      continue;
-    }
-
-    const ok = await generateGeminiAudio(aff.text, aff.id, { silent: true });
-    if (ok) {
-      generated++;
-      updatePanel(i, generated, skipped, failed, aff, 'done');
+      updatePanel(aff, 'skip');
     } else {
-      failed++;
-      updatePanel(i, generated, skipped, failed, aff, 'fail');
+      needsGen.push({ id: aff.id, text: (aff.text || '').replace(/\*/g, '').trim() });
+    }
+  }
+
+  // Phase 2: Run up to 3 parallel WebSocket batches
+  if (needsGen.length > 0) {
+    const PARALLEL = Math.min(3, needsGen.length);
+    const chunkSize = Math.ceil(needsGen.length / PARALLEL);
+    const groups = [];
+    for (let i = 0; i < needsGen.length; i += chunkSize) {
+      groups.push(needsGen.slice(i, i + chunkSize));
     }
 
-    // Delay between requests — lets iOS reclaim memory + respects Gemini rate limits
-    if (i < affs.length - 1) await new Promise(r => setTimeout(r, 800));
+    const affMap = {};
+    affs.forEach(a => affMap[a.id] = a);
+
+    await Promise.all(groups.map(group =>
+      _generateGeminiTTSBatch(group, config.voiceId, (item, blob) => {
+        if (blob) {
+          generated++;
+          updatePanel(affMap[item.id] || item, 'done');
+          // Fire-and-forget Drive upload
+          _uploadAudioToDrive(item.id).catch(() => {});
+        } else {
+          failed++;
+          updatePanel(affMap[item.id] || item, 'fail');
+        }
+      })
+    ));
   }
 
   // --- Final state ---
@@ -472,8 +702,17 @@ window.generateAllVoices = async function(goalId) {
   showToast(`Done! ${generated} generated, ${skipped} skipped, ${failed} failed`, failed === 0 ? 'success' : 'warning');
 };
 
+// Pre-cached blob URLs for instant playback (avoids async IDB fetch in tap handler)
+window._affAudioCache = {};  // { affId: blobUrl }
+
 // Update the voice status badges in the affirmation manager
 async function updateVoiceStatusIndicators() {
+  // Clean up old cached URLs
+  for (const id in window._affAudioCache) {
+    URL.revokeObjectURL(window._affAudioCache[id]);
+  }
+  window._affAudioCache = {};
+
   const badges = document.querySelectorAll('.aff-voice-badge');
   for (const badge of badges) {
     const affId = badge.dataset.affId;
@@ -482,35 +721,39 @@ async function updateVoiceStatusIndicators() {
     badge.textContent = has ? '🔊' : '';
     badge.title = has ? 'Voice generated' : '';
   }
-  // Also update individual generate buttons
+  // Also update individual generate buttons + pre-cache audio blob URLs
   const btns = document.querySelectorAll('.aff-voice-gen-btn');
   for (const btn of btns) {
     const affId = btn.dataset.affId;
     if (!affId) continue;
-    const has = await hasStoredAudio(affId);
+    const stored = await _VisionIDB.get('audio://' + affId);
+    const has = !!(stored && stored.buffer);
     btn.innerHTML = has ? '✅' : '🎙';
     btn.title = has ? 'Voice ready — click to regenerate' : 'Generate voice';
+    // Pre-cache blob URL for instant playback
+    if (has) {
+      const blob = new Blob([stored.buffer], { type: stored.type || 'audio/wav' });
+      window._affAudioCache[affId] = URL.createObjectURL(blob);
+    }
   }
   // Show/hide play preview buttons
   const playBtns = document.querySelectorAll('.aff-voice-play-btn');
   for (const btn of playBtns) {
     const affId = btn.dataset.affId;
     if (!affId) continue;
-    const has = await hasStoredAudio(affId);
-    btn.style.display = has ? 'inline-flex' : 'none';
+    btn.style.display = window._affAudioCache[affId] ? 'inline-flex' : 'none';
   }
 }
 
-// Preview/play a generated voice recording
+// Preview/play a generated voice recording — fully synchronous from tap
 window._affPreviewAudio = null;
-window.previewAffVoice = async function(affId) {
+window.previewAffVoice = function(affId) {
   const btn = document.querySelector(`.aff-voice-play-btn[data-aff-id="${affId}"]`);
 
   // If already playing this one, stop it
   if (window._affPreviewAudio && window._affPreviewAudio._affId === affId) {
     window._affPreviewAudio.pause();
     window._affPreviewAudio.currentTime = 0;
-    if (window._affPreviewAudio._objUrl) URL.revokeObjectURL(window._affPreviewAudio._objUrl);
     window._affPreviewAudio = null;
     if (btn) btn.innerHTML = '▶';
     return;
@@ -519,60 +762,39 @@ window.previewAffVoice = async function(affId) {
   // Stop any other preview playing
   if (window._affPreviewAudio) {
     window._affPreviewAudio.pause();
-    if (window._affPreviewAudio._objUrl) URL.revokeObjectURL(window._affPreviewAudio._objUrl);
     window._affPreviewAudio = null;
     document.querySelectorAll('.aff-voice-play-btn').forEach(b => b.innerHTML = '▶');
   }
 
-  // Pre-create Audio in user-gesture callstack (iOS requirement)
-  const audio = new Audio();
+  // Use pre-cached blob URL (set during updateVoiceStatusIndicators)
+  const cachedUrl = window._affAudioCache[affId];
+  if (!cachedUrl) {
+    showToast('No voice recording found — generate it first', 'error');
+    return;
+  }
+
+  // Create Audio and play immediately — no async gap, iOS gesture chain preserved
+  const audio = new Audio(cachedUrl);
   audio.volume = 1.0;
   audio._affId = affId;
-  // iOS unlock: trigger play on empty audio within tap event
-  try { await audio.play().catch(() => {}); } catch(e) {}
-  audio.pause();
   window._affPreviewAudio = audio;
 
-  try {
-    const stored = await _VisionIDB.get('audio://' + affId);
-    if (!stored || !stored.buffer) {
-      showToast('No voice recording found — generate it first', 'error');
-      window._affPreviewAudio = null;
-      return;
-    }
+  if (btn) btn.innerHTML = '⏸';
 
-    const blob = new Blob([stored.buffer], { type: stored.type || 'audio/mpeg' });
-    const url = URL.createObjectURL(blob);
-    audio._objUrl = url;
-    audio.src = url;
-
-    if (btn) btn.innerHTML = '⏸';
-
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      window._affPreviewAudio = null;
-      if (btn) btn.innerHTML = '▶';
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      window._affPreviewAudio = null;
-      if (btn) btn.innerHTML = '▶';
-      showToast('Audio playback error', 'error');
-      console.error('[previewAffVoice] audio error', audio.error);
-    };
-
-    try {
-      await audio.play();
-    } catch (playErr) {
-      showToast('Playback blocked — tap play again', 'warning');
-      console.error('[previewAffVoice] play() rejected', playErr);
-      if (btn) btn.innerHTML = '▶';
-    }
-  } catch (e) {
-    console.error('[previewAffVoice]', e);
-    showToast('Playback failed: ' + (e.message || 'unknown error'), 'error');
+  audio.onended = () => {
+    window._affPreviewAudio = null;
     if (btn) btn.innerHTML = '▶';
-  }
+  };
+  audio.onerror = () => {
+    window._affPreviewAudio = null;
+    if (btn) btn.innerHTML = '▶';
+    showToast('Audio playback error', 'error');
+  };
+
+  audio.play().catch(() => {
+    if (btn) btn.innerHTML = '▶';
+    showToast('Playback blocked by browser — tap again', 'warning');
+  });
 };
 
 // Read stored {type, buffer} from IDB and return an objectURL
@@ -772,6 +994,9 @@ async function renderVision() {
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   initVisionMediaElements(document.getElementById('main'));
+
+  // Auto-sync: download any cloud-stored audio missing from this device
+  setTimeout(() => autoSyncAudioFromDrive(), 2000);
 }
 
 function renderFilterChips() {
@@ -3263,12 +3488,23 @@ window.genSingleVoice = async function(affId, text) {
   const ok = await generateGeminiAudio(text, affId);
   if (btn) { btn.innerHTML = ok ? '✅' : '🎙'; btn.disabled = false; }
   if (ok) {
+    // Cache the new audio blob URL for instant playback
+    try {
+      const stored = await _VisionIDB.get('audio://' + affId);
+      if (stored && stored.buffer) {
+        if (window._affAudioCache[affId]) URL.revokeObjectURL(window._affAudioCache[affId]);
+        const blob = new Blob([stored.buffer], { type: stored.type || 'audio/wav' });
+        window._affAudioCache[affId] = URL.createObjectURL(blob);
+      }
+    } catch(e) {}
     // Show play button
     const playBtn = document.querySelector(`.aff-voice-play-btn[data-aff-id="${affId}"]`);
     if (playBtn) playBtn.style.display = 'inline-flex';
     // Update badge
     const badge = document.querySelector(`.aff-voice-badge[data-aff-id="${affId}"]`);
     if (badge) { badge.textContent = '🔊'; badge.title = 'Voice generated'; }
+    // Fire-and-forget upload to Google Drive for cross-device sync
+    _uploadAudioToDrive(affId).catch(() => {});
   }
 };
 
@@ -3406,10 +3642,10 @@ window.startManifestationRitual = function(goalId) {
     return;
   }
 
-  // Unlock audio element for iOS — MUST be within user tap event callstack
-  unlockRitualAudio();
-
   const ritualAffs = [...affirmations].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  // Unlock iOS audio + pre-cache all affirmation audio — MUST be within user tap callstack
+  unlockRitualAudio(ritualAffs);
   window._ritualAffs = ritualAffs;
   window._ritualSettings = {};
   window._ritualStartTime = Date.now();
@@ -3495,6 +3731,7 @@ window.closeRitual = function() {
   window._ritualClosed = true;
   releaseWakeLock();
   stopSpeaking();
+  cleanupRitualAudioCache();
   window._ritualEyesClosed = false;
   // Cleanup ritual media
   const mediaLayer = document.getElementById('ritualMediaLayer');
@@ -3958,65 +4195,72 @@ function speakText(text, rate = 0.85, mood = 'calm') {
   });
 }
 
-// Pre-unlocked audio element for iOS — created once at ritual start within user gesture
-window._ritualAudioElement = null;
+// Pre-cached ritual audio blob URLs — loaded at ritual start
+window._ritualAudioCache = {};  // { affId: blobUrl }
 
-// Call this at ritual start (within the button tap callstack) to unlock audio on iOS
-function unlockRitualAudio() {
-  const audio = new Audio();
-  audio.volume = 1.0;
-  // Play empty to unlock — iOS remembers this element as user-gesture-authorized
-  audio.play().then(() => audio.pause()).catch(() => {});
-  window._ritualAudioElement = audio;
-  console.log('[Ritual] Audio element unlocked for iOS');
+// Tiny silent WAV (44 bytes header + 2 bytes silence) for iOS audio unlock
+const _SILENT_WAV = 'data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YQIAAAB/fw==';
+
+// Call at ritual start (within user tap) to unlock iOS audio AND pre-cache all audio
+async function unlockRitualAudio(affirmations) {
+  // 1. Unlock iOS audio by playing a tiny silent WAV in the gesture handler
+  try {
+    const silentAudio = new Audio(_SILENT_WAV);
+    silentAudio.volume = 0.01;
+    await silentAudio.play();
+    silentAudio.pause();
+  } catch(e) {}
+
+  // 2. Pre-load all affirmation audio from IDB into blob URLs
+  window._ritualAudioCache = {};
+  for (const aff of (affirmations || [])) {
+    try {
+      const stored = await _VisionIDB.get('audio://' + aff.id);
+      if (stored && stored.buffer) {
+        const blob = new Blob([stored.buffer], { type: stored.type || 'audio/wav' });
+        window._ritualAudioCache[aff.id] = URL.createObjectURL(blob);
+      }
+    } catch(e) {}
+  }
+}
+
+// Clean up ritual audio cache
+function cleanupRitualAudioCache() {
+  for (const id in window._ritualAudioCache) {
+    URL.revokeObjectURL(window._ritualAudioCache[id]);
+  }
+  window._ritualAudioCache = {};
 }
 
 // Play pre-generated Gemini audio or fall back to browser TTS
 async function speakAffirmation(text, affId, rate, mood) {
-  try {
-    const stored = await _VisionIDB.get('audio://' + affId);
-    if (stored && stored.buffer) {
-      const blob = new Blob([stored.buffer], { type: stored.type || 'audio/mpeg' });
-      const url = URL.createObjectURL(blob);
+  // Use pre-cached blob URL (loaded at ritual start — no async IDB fetch needed)
+  const cachedUrl = window._ritualAudioCache[affId];
+  if (cachedUrl) {
+    const audio = new Audio(cachedUrl);
+    audio.playbackRate = rate > 0.9 ? 1.0 : 0.92;
+    audio.volume = 0.92;
+    window._ritualCurrentAudio = audio;
 
-      // Reuse the pre-unlocked audio element (iOS) or create a new one
-      const audio = window._ritualAudioElement || new Audio();
-      window._ritualAudioElement = null; // consume it, will recreate for next affirmation
-
-      audio.src = url;
-      audio.playbackRate = rate > 0.9 ? 1.0 : 0.92;
-      audio.volume = 0.92;
-      audio.currentTime = 0;
-      window._ritualCurrentAudio = audio;
-
-      return new Promise(resolve => {
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          window._ritualCurrentAudio = null;
-          // Pre-create next unlocked audio element for the next affirmation
-          window._ritualAudioElement = new Audio();
-          window._ritualAudioElement.volume = 1.0;
-          resolve();
-        };
-        audio.onerror = (e) => {
-          console.warn('[speakAffirmation] audio error', audio.error);
-          URL.revokeObjectURL(url);
-          window._ritualCurrentAudio = null;
-          window._ritualAudioElement = new Audio();
-          resolve();
-        };
-        audio.play().catch((playErr) => {
-          console.warn('[speakAffirmation] play() rejected, falling back to TTS', playErr);
-          URL.revokeObjectURL(url);
-          window._ritualCurrentAudio = null;
-          // Fallback to TTS if Gemini playback blocked
-          speakText(text, rate, mood).then(resolve);
-        });
+    return new Promise(resolve => {
+      audio.onended = () => {
+        window._ritualCurrentAudio = null;
+        resolve();
+      };
+      audio.onerror = () => {
+        window._ritualCurrentAudio = null;
+        // Fallback to browser TTS on error
+        speakText(text, rate, mood).then(resolve);
+      };
+      audio.play().catch((playErr) => {
+        console.warn('[speakAffirmation] play() rejected, falling back to TTS', playErr);
+        window._ritualCurrentAudio = null;
+        speakText(text, rate, mood).then(resolve);
       });
-    }
-  } catch (e) { console.warn('[speakAffirmation] IDB error, falling back to TTS', e); }
+    });
+  }
 
-  // Fallback to browser TTS
+  // Fallback to browser TTS (no pre-generated audio)
   return speakText(text, rate, mood);
 }
 

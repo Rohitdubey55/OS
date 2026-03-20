@@ -1,0 +1,353 @@
+/* ── English Tutor Styles ── */
+
+.tutor-shell {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 0 16px 100px;
+  min-height: 80vh;
+}
+
+/* ── Header ── */
+.tutor-header {
+  text-align: center;
+  padding: 24px 0 16px;
+}
+.tutor-title {
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.tutor-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+/* ── Section Labels ── */
+.tutor-section-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin: 24px 0 12px;
+}
+
+/* ── Topic Grid ── */
+.tutor-topic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.tutor-topic-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface-1);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+}
+.tutor-topic-chip:active {
+  transform: scale(0.97);
+  background: var(--surface-2);
+}
+.tutor-topic-icon {
+  font-size: 22px;
+}
+.tutor-topic-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.tutor-topic-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* ── Past Session Cards ── */
+.tutor-past-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tutor-session-card {
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+.tutor-session-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.tutor-session-card__topic {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-1);
+}
+.tutor-session-card__date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.tutor-session-card__meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.tutor-session-card__weak {
+  font-size: 11px;
+  color: var(--warning);
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  border-radius: 6px;
+  display: inline-block;
+}
+
+/* ══════════════════════════════════════
+   ACTIVE SESSION — Voice UI
+══════════════════════════════════════ */
+.tutor-active {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px);
+  padding-bottom: 0;
+}
+
+.tutor-active-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  gap: 12px;
+}
+.tutor-active-topic {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-1);
+}
+.tutor-active-timer {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+.tutor-end-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--error);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ── Mic Circle ── */
+.tutor-voice-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 0 20px;
+  flex-shrink: 0;
+}
+
+.tutor-mic-ring {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.4s ease;
+}
+
+.tutor-mic-circle {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 32px;
+  transition: all 0.3s ease;
+  background: var(--surface-2);
+  border: 3px solid var(--border-color);
+}
+
+/* Listening state — green pulse */
+.tutor-mic--listening .tutor-mic-circle {
+  background: color-mix(in srgb, var(--success) 15%, var(--surface-1));
+  border-color: var(--success);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 40%, transparent);
+  animation: tutorPulse 2s infinite;
+}
+
+/* Speaking state — blue pulse */
+.tutor-mic--speaking .tutor-mic-circle {
+  background: color-mix(in srgb, var(--info) 15%, var(--surface-1));
+  border-color: var(--info);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--info) 40%, transparent);
+  animation: tutorPulseSpeaking 1.2s infinite;
+}
+
+/* Idle state */
+.tutor-mic--idle .tutor-mic-circle {
+  background: var(--surface-2);
+  border-color: var(--border-color);
+  opacity: 0.7;
+}
+
+@keyframes tutorPulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 40%, transparent); }
+  70%  { box-shadow: 0 0 0 18px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes tutorPulseSpeaking {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--info) 40%, transparent); }
+  50%  { box-shadow: 0 0 0 14px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.tutor-status {
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* ── Transcript ── */
+.tutor-transcript {
+  flex: 1;
+  overflow-y: auto;
+  border-top: 1px solid var(--border-color);
+  margin-top: 12px;
+  padding-top: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tutor-transcript-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 20px;
+}
+
+.tutor-msg {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: tutorMsgIn 0.3s ease;
+}
+
+@keyframes tutorMsgIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.tutor-msg--coach {
+  align-self: flex-start;
+  background: var(--surface-2);
+  color: var(--text-1);
+  border-bottom-left-radius: 4px;
+}
+
+.tutor-msg--user {
+  align-self: flex-end;
+  background: var(--primary);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.tutor-msg-role {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+  margin-bottom: 2px;
+}
+
+.tutor-msg-text {
+  display: block;
+}
+
+/* ══════════════════════════════════════
+   SESSION SUMMARY
+══════════════════════════════════════ */
+.tutor-summary-content {
+  text-align: center;
+  padding: 40px 20px;
+}
+.tutor-summary-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.tutor-summary-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0 0 20px;
+  color: var(--text-1);
+}
+.tutor-summary-stats {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+.tutor-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.tutor-stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--primary);
+}
+.tutor-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.tutor-summary-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+.tutor-btn-primary {
+  padding: 12px 28px;
+  border: none;
+  border-radius: 12px;
+  background: var(--primary);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tutor-btn-primary:active {
+  transform: scale(0.97);
+}
+
+/* ── Utility ── */
+.hidden { display: none !important; }

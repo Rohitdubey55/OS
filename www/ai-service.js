@@ -7,10 +7,14 @@ const AI_SERVICE = {
     // Get Configuration from State (Sheet Source of Truth)
     getConfig: function () {
         const fromState = state.data.settings?.[0];
-
+        let model = fromState?.ai_model || this.defaultModel;
+        // Guard: audio/live models can't do text generateContent — fall back to default
+        if (model.includes('native-audio') || model.includes('live')) {
+            model = this.defaultModel;
+        }
         return {
             apiKey: fromState?.ai_api_key || '',
-            model: fromState?.ai_model || this.defaultModel
+            model: model
         };
     },
 

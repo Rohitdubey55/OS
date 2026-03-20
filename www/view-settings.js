@@ -1500,6 +1500,91 @@ window.updateVoiceDropdown = function() {
   ).join('');
 };
 
+// Generate TTS via Gemini Native Audio Dialog WebSocket (unlimited free tier)
+function _settingsGenerateTTS(text, voiceName, apiKey) {
+  return new Promise((resolve, reject) => {
+    const WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+    let ws, audioChunks = [], setupDone = false;
+
+    try { ws = new WebSocket(WS_URL); } catch (e) {
+      return reject(new Error('WebSocket failed: ' + (e.message || 'unknown')));
+    }
+
+    const timeoutId = setTimeout(() => {
+      if (ws.readyState <= 1) ws.close();
+      reject(new Error('Timeout (30s)'));
+    }, 30000);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        setup: {
+          model: 'models/gemini-2.5-flash-native-audio-preview-12-2025',
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
+          },
+          systemInstruction: { parts: [{ text: 'Read the user text aloud exactly as written. No extra words.' }] }
+        }
+      }));
+    };
+
+    ws.onmessage = async (event) => {
+      try {
+        let rawData = event.data;
+        if (rawData instanceof Blob) rawData = await rawData.text();
+        const msg = JSON.parse(rawData);
+        if (msg.setupComplete) {
+          setupDone = true;
+          ws.send(JSON.stringify({
+            clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true }
+          }));
+          return;
+        }
+        if (msg.serverContent?.modelTurn?.parts) {
+          for (const p of msg.serverContent.modelTurn.parts) {
+            if (p.inlineData?.data) audioChunks.push(p.inlineData.data);
+          }
+        }
+        if (msg.serverContent?.turnComplete) {
+          clearTimeout(timeoutId);
+          ws.close();
+          if (!audioChunks.length) return reject(new Error('No audio received'));
+          // Decode all chunks and build WAV
+          let totalLen = 0;
+          const bufs = audioChunks.map(b64 => {
+            const bin = atob(b64);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            totalLen += arr.length;
+            return arr;
+          });
+          const pcm = new Uint8Array(totalLen);
+          let off = 0;
+          for (const b of bufs) { pcm.set(b, off); off += b.length; }
+          // WAV header
+          const sr = 24000, ch = 1, bps = 16;
+          const wavBuf = new ArrayBuffer(44 + pcm.length);
+          const v = new DataView(wavBuf);
+          const ws2 = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+          ws2(0, 'RIFF'); v.setUint32(4, 36 + pcm.length, true); ws2(8, 'WAVE');
+          ws2(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+          v.setUint16(22, ch, true); v.setUint32(24, sr, true);
+          v.setUint32(28, sr * ch * (bps / 8), true); v.setUint16(32, ch * (bps / 8), true);
+          v.setUint16(34, bps, true); ws2(36, 'data'); v.setUint32(40, pcm.length, true);
+          new Uint8Array(wavBuf).set(pcm, 44);
+          resolve(new Blob([wavBuf], { type: 'audio/wav' }));
+        }
+      } catch (e) { console.error('[Settings TTS] parse error', e); }
+    };
+
+    ws.onerror = () => { clearTimeout(timeoutId); reject(new Error('WebSocket error')); };
+    ws.onclose = (e) => {
+      clearTimeout(timeoutId);
+      if (!setupDone) reject(new Error(`Connection closed (${e.code}): ${e.reason || 'unknown'}`));
+    };
+  });
+}
+
 // Preview selected voice using Gemini TTS API
 window._elPreviewAudio = null;
 
@@ -1549,59 +1634,10 @@ window.previewGeminiVoice = async function () {
 
     const previewText = 'I am worthy of all the abundance flowing into my life.';
 
-    // Use Gemini TTS API directly (same as _generateGeminiTTS in view-vision.js)
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-live-2.5-flash-native-audio:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: previewText }] }],
-          generationConfig: {
-            responseModalities: ['AUDIO'],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: voiceId }
-              }
-            }
-          }
-        })
-      }
-    );
+    // Use Gemini Native Audio Dialog via WebSocket (unlimited free tier)
+    const wavBlob = await _settingsGenerateTTS(previewText, voiceId, apiKey);
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`Gemini TTS error ${res.status}: ${errText.substring(0, 100)}`);
-    }
-
-    const data = await res.json();
-    const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!audioData) throw new Error('No audio in Gemini response');
-
-    // Convert PCM to WAV (same as _pcmBase64ToWavBlob)
-    const pcmBytes = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
-    const sampleRate = 24000, numChannels = 1, bitsPerSample = 16;
-    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-    const blockAlign = numChannels * (bitsPerSample / 8);
-    const dataLength = pcmBytes.length;
-    const buffer = new ArrayBuffer(44 + dataLength);
-    const view = new DataView(buffer);
-    // RIFF header
-    ['R','I','F','F'].forEach((c,i) => view.setUint8(i, c.charCodeAt(0)));
-    view.setUint32(4, 36 + dataLength, true);
-    ['W','A','V','E'].forEach((c,i) => view.setUint8(8+i, c.charCodeAt(0)));
-    ['f','m','t',' '].forEach((c,i) => view.setUint8(12+i, c.charCodeAt(0)));
-    view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-    view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitsPerSample, true);
-    ['d','a','t','a'].forEach((c,i) => view.setUint8(36+i, c.charCodeAt(0)));
-    view.setUint32(40, dataLength, true);
-    new Uint8Array(buffer).set(pcmBytes, 44);
-
-    const blob = new Blob([buffer], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
-
+    const url = URL.createObjectURL(wavBlob);
     previewAudio.src = url;
     previewAudio._objUrl = url;
     window._elPreviewAudio = previewAudio;
