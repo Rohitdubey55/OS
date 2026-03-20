@@ -51,106 +51,178 @@ const _VisionIDB = {
 // In-memory cache: key → objectURL (or base64 for legacy)
 window._visionMediaCache = window._visionMediaCache || {};
 
-/* ─── AI VOICE TTS GENERATION (via Puter.js — FREE human voices) ─────────
-   Pre-generates realistic human voice MP3 for affirmations.
-   Uses Puter.js which provides free access to ElevenLabs & OpenAI voices.
-   Requires a free Puter.com account (auto sign-in prompt on first use).
+/* ─── AI VOICE TTS GENERATION (via Gemini API — FREE with your key) ──────
+   Pre-generates realistic human voice for affirmations using Google Gemini
+   TTS API. Uses the same Gemini API key you already have. 30 voices!
    Stores audio in IndexedDB under key "audio://<affirmationId>".
    ─────────────────────────────────────────────────────────────────────────── */
 
-// Voice provider configs — all free via Puter.js
+// Gemini TTS voice options (30 voices)
 const VOICE_PROVIDERS = {
-  elevenlabs: {
-    label: 'ElevenLabs (realistic)',
+  gemini: {
+    label: 'Gemini AI Voices',
     voices: [
-      { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (warm female)' },
-      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (soft female)' },
-      { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli (young female)' },
-      { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh (deep male)' },
-      { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold (strong male)' },
-      { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam (clear male)' },
-      { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam (calm male)' },
-      { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi (playful female)' },
-    ],
-    generate: async (text, voiceId) => {
-      const audioEl = await puter.ai.txt2speech(text, {
-        provider: 'elevenlabs', voice: voiceId, model: 'eleven_multilingual_v2'
-      });
-      const res = await fetch(audioEl.src);
-      return await res.blob();
-    }
-  },
-  openai: {
-    label: 'OpenAI (clear & expressive)',
-    voices: [
-      { id: 'nova', name: 'Nova (warm female)' },
-      { id: 'shimmer', name: 'Shimmer (soft female)' },
-      { id: 'alloy', name: 'Alloy (neutral)' },
-      { id: 'echo', name: 'Echo (clear male)' },
-      { id: 'fable', name: 'Fable (expressive)' },
-      { id: 'onyx', name: 'Onyx (deep male)' },
-      { id: 'coral', name: 'Coral (balanced female)' },
-      { id: 'sage', name: 'Sage (calm)' },
-    ],
-    generate: async (text, voiceId) => {
-      const audioEl = await puter.ai.txt2speech(text, {
-        provider: 'openai', voice: voiceId
-      });
-      const res = await fetch(audioEl.src);
-      return await res.blob();
-    }
+      { id: 'Sulafat', name: 'Sulafat (Warm)' },
+      { id: 'Achernar', name: 'Achernar (Soft)' },
+      { id: 'Vindemiatrix', name: 'Vindemiatrix (Gentle)' },
+      { id: 'Aoede', name: 'Aoede (Breezy)' },
+      { id: 'Leda', name: 'Leda (Youthful)' },
+      { id: 'Kore', name: 'Kore (Firm)' },
+      { id: 'Puck', name: 'Puck (Upbeat)' },
+      { id: 'Zephyr', name: 'Zephyr (Bright)' },
+      { id: 'Charon', name: 'Charon (Informative)' },
+      { id: 'Fenrir', name: 'Fenrir (Excitable)' },
+      { id: 'Orus', name: 'Orus (Firm)' },
+      { id: 'Algieba', name: 'Algieba (Smooth)' },
+      { id: 'Despina', name: 'Despina (Smooth)' },
+      { id: 'Erinome', name: 'Erinome (Clear)' },
+      { id: 'Gacrux', name: 'Gacrux (Mature)' },
+      { id: 'Achird', name: 'Achird (Friendly)' },
+      { id: 'Umbriel', name: 'Umbriel (Easy-going)' },
+      { id: 'Enceladus', name: 'Enceladus (Breathy)' },
+      { id: 'Iapetus', name: 'Iapetus (Clear)' },
+      { id: 'Schedar', name: 'Schedar (Even)' },
+      { id: 'Alnilam', name: 'Alnilam (Firm)' },
+      { id: 'Rasalgethi', name: 'Rasalgethi (Informative)' },
+      { id: 'Callirrhoe', name: 'Callirrhoe (Easy-going)' },
+      { id: 'Autonoe', name: 'Autonoe (Bright)' },
+      { id: 'Pulcherrima', name: 'Pulcherrima (Forward)' },
+      { id: 'Sadachbia', name: 'Sadachbia (Lively)' },
+      { id: 'Sadaltager', name: 'Sadaltager (Knowledgeable)' },
+      { id: 'Algenib', name: 'Algenib (Gravelly)' },
+      { id: 'Laomedeia', name: 'Laomedeia (Upbeat)' },
+      { id: 'Zubenelgenubi', name: 'Zubenelgenubi (Casual)' },
+    ]
   }
 };
 
-// Ensure Puter.js is loaded and user is signed in
-async function _ensurePuterAuth() {
-  if (typeof puter === 'undefined') {
-    throw new Error('Puter.js not loaded — check internet connection');
-  }
-  // Puter.js auto-prompts sign-in when accessing AI services.
-  // But let's check explicitly and prompt if needed.
-  try {
-    const signedIn = await puter.auth.isSignedIn();
-    if (!signedIn) {
-      showToast('Free Puter.com account required — signing in...', 'info');
-      await puter.auth.signIn();
-      showToast('Signed in! Generating voice...', 'success');
-    }
-  } catch (e) {
-    console.warn('[TTS] Auth check failed, proceeding anyway (Puter may auto-prompt)', e);
-  }
+function _getGeminiKey() {
+  const s = state.data.settings?.[0] || {};
+  return s.ai_api_key || '';
 }
 
 function _getVoiceConfig() {
   const s = state.data.settings?.[0] || {};
   return {
-    provider: s.tts_provider || 'elevenlabs',
-    voiceId: s.tts_voice_id || '21m00Tcm4TlvDq8ikWAM'
+    provider: s.tts_provider || 'gemini',
+    voiceId: s.tts_voice_id || 'Sulafat'
   };
+}
+
+// Memory-efficient base64 to ArrayBuffer (avoids atob + Uint8Array.from which doubles memory)
+function _base64ToArrayBuffer(base64) {
+  // Decode in 32KB chunks to avoid huge intermediate strings on iOS
+  const CHUNK = 32768;
+  const binLen = Math.ceil(base64.length * 3 / 4);
+  const buf = new Uint8Array(binLen);
+  let offset = 0;
+
+  for (let i = 0; i < base64.length; i += CHUNK) {
+    const slice = base64.substring(i, Math.min(i + CHUNK, base64.length));
+    const bin = atob(slice);
+    for (let j = 0; j < bin.length; j++) {
+      buf[offset++] = bin.charCodeAt(j);
+    }
+  }
+  // Trim to actual size (padding may cause slight over-allocation)
+  return buf.subarray(0, offset);
+}
+
+// Convert base64 PCM (24kHz, 16-bit, mono) to WAV blob — memory-efficient
+function _pcmBase64ToWavBlob(base64Data) {
+  const pcmBytes = _base64ToArrayBuffer(base64Data);
+  const sampleRate = 24000;
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataLength = pcmBytes.length;
+
+  // WAV header (44 bytes) — write directly into the blob parts to avoid copying
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+
+  // RIFF header
+  _writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  _writeString(view, 8, 'WAVE');
+
+  // fmt sub-chunk
+  _writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+
+  // data sub-chunk
+  _writeString(view, 36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  // Use Blob constructor with 2 parts (header + PCM) — avoids allocating a combined buffer
+  return new Blob([header, pcmBytes.buffer], { type: 'audio/wav' });
+}
+
+function _writeString(view, offset, string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+// Generate TTS audio using Gemini API
+async function _generateGeminiTTS(text, voiceName) {
+  const apiKey = _getGeminiKey();
+  if (!apiKey) throw new Error('Set Gemini API key in Settings → AI');
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: text }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: voiceName }
+            }
+          }
+        }
+      })
+    }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Gemini TTS error ${res.status}: ${errText.substring(0, 100)}`);
+  }
+
+  const data = await res.json();
+  const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!audioData) throw new Error('No audio in Gemini response');
+
+  return _pcmBase64ToWavBlob(audioData);
 }
 
 window.generateElevenLabsAudio = async function(text, affId, opts = {}) {
   const config = _getVoiceConfig();
-  const provider = VOICE_PROVIDERS[config.provider];
-  if (!provider) { showToast('Invalid voice provider', 'error'); return false; }
-
   const cleanText = text.replace(/\*/g, '').trim();
   if (!cleanText) return false;
 
   try {
-    // Ensure authenticated with Puter
-    await _ensurePuterAuth();
+    console.log(`[TTS] Generating: voice=${config.voiceId}, text="${cleanText.substring(0, 40)}..."`);
 
-    console.log(`[TTS] Generating: provider=${config.provider}, voice=${config.voiceId}, text="${cleanText.substring(0, 40)}..."`);
-
-    const blob = await provider.generate(cleanText, config.voiceId);
+    const blob = await _generateGeminiTTS(cleanText, config.voiceId);
     if (!blob || blob.size < 100) {
       showToast('Voice generation returned empty audio', 'error');
       return false;
     }
 
     const arrayBuffer = await blob.arrayBuffer();
-    await _VisionIDB.put('audio://' + affId, { type: blob.type || 'audio/mpeg', buffer: arrayBuffer });
+    await _VisionIDB.put('audio://' + affId, { type: 'audio/wav', buffer: arrayBuffer });
 
     console.log(`[TTS] Saved: ${blob.size} bytes for aff ${affId}`);
     if (!opts.silent) showToast('Voice generated!', 'success');
@@ -166,14 +238,17 @@ window.generateElevenLabsAudio = async function(text, affId, opts = {}) {
 window.hasElevenLabsAudio = async function(affId) {
   try {
     const stored = await _VisionIDB.get('audio://' + affId);
-    return !!stored;
+    // Must have actual audio buffer (not stale batch-ref entries from previous attempts)
+    return !!(stored && stored.buffer);
   } catch (e) { return false; }
 };
 
-// Bulk generate voice for all affirmations in a goal
+// Bulk generate voices — one call per affirmation, memory-safe for iOS
+// Uses sequential processing with cleanup between each to stay under WKWebView memory limits
 window.generateAllVoices = async function(goalId) {
-  const config = _getElevenLabsConfig();
-  if (!config.apiKey || !config.voiceId) { showToast('Set ElevenLabs API key & voice in Settings → AI', 'error'); return; }
+  const apiKey = _getGeminiKey();
+  const config = _getVoiceConfig();
+  if (!apiKey) { showToast('Set Gemini API key in Settings → AI', 'error'); return; }
 
   const affs = (state.data.vision_affirmations || [])
     .filter(a => !goalId || String(a.vision_id) === String(goalId))
@@ -211,7 +286,6 @@ window.generateAllVoices = async function(goalId) {
     const ref = document.getElementById('bulkVoiceBtn');
     if (ref && ref.nextSibling) container.insertBefore(panel, ref.nextSibling);
     else container.appendChild(panel);
-    // Animate in
     requestAnimationFrame(() => panel.classList.add('visible'));
   }
 
@@ -234,12 +308,11 @@ window.generateAllVoices = async function(goalId) {
     if (vgLog) {
       const shortText = (currentAff.text || '').replace(/\*/g, '').substring(0, 45);
       const icon = status === 'done' ? '✅' : status === 'skip' ? '⏭' : status === 'fail' ? '❌' : '⏳';
-      const statusLabel = status === 'done' ? 'Generated' : status === 'skip' ? 'Already exists' : status === 'fail' ? 'Failed' : 'Processing...';
+      const statusLabel = status === 'done' ? 'Generated' : status === 'skip' ? 'Already exists' : status === 'fail' ? 'Failed' : 'Generating...';
       const entry = document.createElement('div');
       entry.className = `voice-gen-panel__entry voice-gen-panel__entry--${status}`;
       entry.innerHTML = `<span class="vg-entry-icon">${icon}</span><span class="vg-entry-text">${shortText}…</span><span class="vg-entry-status">${statusLabel}</span>`;
       vgLog.prepend(entry);
-      // Keep only last 20 entries visible
       while (vgLog.children.length > 20) vgLog.removeChild(vgLog.lastChild);
     }
   }
@@ -254,7 +327,7 @@ window.generateAllVoices = async function(goalId) {
     // Show "processing" state
     updatePanel(i, generated, skipped, failed, aff, 'processing');
 
-    // Skip if already has audio
+    // Skip if already has audio (individual or batch-ref)
     const hasAudio = await hasElevenLabsAudio(aff.id);
     if (hasAudio) {
       skipped++;
@@ -271,19 +344,17 @@ window.generateAllVoices = async function(goalId) {
       updatePanel(i, generated, skipped, failed, aff, 'fail');
     }
 
-    // Small delay between requests to respect rate limits
-    if (i < affs.length - 1) await new Promise(r => setTimeout(r, 500));
+    // Delay between requests — lets iOS reclaim memory + respects Gemini rate limits
+    if (i < affs.length - 1) await new Promise(r => setTimeout(r, 800));
   }
 
   // --- Final state ---
   if (bulkBtn) { bulkBtn.innerHTML = '🎙 Generate All Voices'; bulkBtn.disabled = false; }
 
-  // Mark panel as complete
   if (panel) {
     panel.classList.add('complete');
     const header = panel.querySelector('.voice-gen-panel__title');
     if (header) header.textContent = failed > 0 ? '⚠️ Generation Complete (with errors)' : '✅ All Voices Ready!';
-    // Auto-collapse after 8s
     setTimeout(() => { if (panel) panel.classList.add('collapsed'); }, 8000);
   }
 
@@ -3082,9 +3153,14 @@ window.genSingleVoice = async function(affId, text) {
   if (btn) { btn.innerHTML = '⏳'; btn.disabled = true; }
   const ok = await generateElevenLabsAudio(text, affId);
   if (btn) { btn.innerHTML = ok ? '✅' : '🎙'; btn.disabled = false; }
-  // Update badge
-  const badge = document.querySelector(`.aff-voice-badge[data-aff-id="${affId}"]`);
-  if (badge && ok) { badge.textContent = '🔊'; badge.title = 'Voice generated'; }
+  if (ok) {
+    // Show play button
+    const playBtn = document.querySelector(`.aff-voice-play-btn[data-aff-id="${affId}"]`);
+    if (playBtn) playBtn.style.display = 'inline-flex';
+    // Update badge
+    const badge = document.querySelector(`.aff-voice-badge[data-aff-id="${affId}"]`);
+    if (badge) { badge.textContent = '🔊'; badge.title = 'Voice generated'; }
+  }
 };
 
 /* ─── Drag-to-Reorder ────────────────────────────────────────── */

@@ -43,8 +43,8 @@ function renderSettings() {
     ai_model: s.ai_model || 'gemini-1.5-flash',
     elevenlabs_api_key: s.elevenlabs_api_key || '',
     elevenlabs_voice_id: s.elevenlabs_voice_id || '',
-    tts_provider: s.tts_provider || 'elevenlabs',
-    tts_voice_id: s.tts_voice_id || '21m00Tcm4TlvDq8ikWAM',
+    tts_provider: s.tts_provider || 'gemini',
+    tts_voice_id: s.tts_voice_id || 'Sulafat',
     category_budgets: s.category_budgets || '{}',
     // Orientation lock setting
     orientation_lock: s.orientation_lock || 'auto',
@@ -277,13 +277,12 @@ function renderSettings() {
             </div>
         </div>
         <div style="border-top:1px solid var(--border-color); margin:20px 0 16px; padding-top:16px;">
-            <p class="section-description" style="margin-bottom:12px;">🎙 <strong>AI Voice for Affirmations</strong> — Realistic human voices. Free Puter.com account needed (one-time sign-in).</p>
+            <p class="section-description" style="margin-bottom:12px;">🎙 <strong>AI Voice for Affirmations</strong> — 30 realistic human voices powered by Gemini. Uses your Gemini API key above (free tier!).</p>
 
             <div class="setting-item">
                 <label class="setting-label">Voice Provider</label>
-                <select class="input" id="sTtsProvider" onchange="updateVoiceDropdown()">
-                    <option value="elevenlabs" ${settings.tts_provider === 'elevenlabs' ? 'selected' : ''}>ElevenLabs (most natural)</option>
-                    <option value="openai" ${settings.tts_provider === 'openai' ? 'selected' : ''}>OpenAI (clear & expressive)</option>
+                <select class="input" id="sTtsProvider" onchange="updateVoiceDropdown()" disabled>
+                    <option value="gemini" selected>Gemini AI (free with your API key)</option>
                 </select>
             </div>
             <div class="setting-item">
@@ -291,13 +290,13 @@ function renderSettings() {
                 <div style="display:flex; gap:10px; align-items:center;">
                     <select class="input" id="sTtsVoice" style="flex:1;">
                     </select>
-                    <button class="btn secondary" id="elPreviewBtn" onclick="previewElevenLabsVoice()">▶ Preview</button>
+                    <button class="btn secondary" id="elPreviewBtn" onclick="previewGeminiVoice()">▶ Preview</button>
                 </div>
-                <div style="font-size:11px; color:var(--text-muted); margin-top:6px">Free via <a href="https://puter.com" target="_blank" style="color:var(--primary);">Puter.com</a> — first use will ask you to sign in (free account).</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:6px">Uses your Gemini API key — all 30 voices are free. Generate voices in Vision → Manage Affirmations.</div>
             </div>
         </div>
 
-        <!-- Legacy ElevenLabs key (hidden, kept for backward compat) -->
+        <!-- Legacy fields (hidden, kept for backward compat) -->
         <input type="hidden" id="sElevenLabsKey" value="${settings.elevenlabs_api_key}">
         <input type="hidden" id="sElevenLabsVoice" value="${settings.elevenlabs_voice_id}">
 
@@ -1313,9 +1312,9 @@ window.saveAllSettings = async function (section = 'all') {
     const elVoice = document.getElementById('sElevenLabsVoice')?.value?.trim() || '';
     newSettings.elevenlabs_api_key = elKey;
     newSettings.elevenlabs_voice_id = elVoice;
-    // New Puter.js TTS settings
-    newSettings.tts_provider = document.getElementById('sTtsProvider')?.value || 'elevenlabs';
-    newSettings.tts_voice_id = document.getElementById('sTtsVoice')?.value || '21m00Tcm4TlvDq8ikWAM';
+    // Gemini TTS settings
+    newSettings.tts_provider = document.getElementById('sTtsProvider')?.value || 'gemini';
+    newSettings.tts_voice_id = document.getElementById('sTtsVoice')?.value || 'Sulafat';
   }
 
   if (section === 'all' || section === 'tabs') {
@@ -1445,58 +1444,66 @@ window.testGeminiAPI = async function () {
   } catch (e) { showToast('Connection Error', 'error'); }
 };
 
-// Legacy — kept for backward compat but no longer needed with Puter.js
+// Legacy — kept for backward compat
 window.testElevenLabsAPI = function() {
-  showToast('API keys are no longer needed! Voices are now free via Puter.js.', 'info');
+  showToast('Voices now use Gemini AI — select a voice and click Preview!', 'info');
 };
 
-// --- Voice Provider Dropdown & Preview (Puter.js) ---
+// --- Voice Provider Dropdown & Preview (Gemini TTS) ---
 
-// Populate voice dropdown based on selected provider
+// Populate voice dropdown with Gemini voices
 window.updateVoiceDropdown = function() {
-  const providerKey = document.getElementById('sTtsProvider')?.value || 'elevenlabs';
   const sel = document.getElementById('sTtsVoice');
   if (!sel) return;
 
-  const providers = typeof VOICE_PROVIDERS !== 'undefined' ? VOICE_PROVIDERS : {
-    elevenlabs: { voices: [
-      { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel (warm female)' },
-      { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella (soft female)' },
-      { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli (young female)' },
-      { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh (deep male)' },
-      { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold (strong male)' },
-      { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam (clear male)' },
-      { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam (calm male)' },
-      { id: 'jBpfuIE2acCO8z3wKNLl', name: 'Gigi (playful female)' },
-    ]},
-    openai: { voices: [
-      { id: 'nova', name: 'Nova (warm female)' },
-      { id: 'shimmer', name: 'Shimmer (soft female)' },
-      { id: 'alloy', name: 'Alloy (neutral)' },
-      { id: 'echo', name: 'Echo (clear male)' },
-      { id: 'fable', name: 'Fable (expressive)' },
-      { id: 'onyx', name: 'Onyx (deep male)' },
-      { id: 'coral', name: 'Coral (balanced female)' },
-      { id: 'sage', name: 'Sage (calm)' },
-    ]}
-  };
-
-  const provider = providers[providerKey];
-  if (!provider) return;
+  // Use VOICE_PROVIDERS from view-vision.js if available, otherwise use inline list
+  const geminiVoices = (typeof VOICE_PROVIDERS !== 'undefined' && VOICE_PROVIDERS.gemini)
+    ? VOICE_PROVIDERS.gemini.voices
+    : [
+      { id: 'Sulafat', name: 'Sulafat (Warm)' },
+      { id: 'Achernar', name: 'Achernar (Soft)' },
+      { id: 'Vindemiatrix', name: 'Vindemiatrix (Gentle)' },
+      { id: 'Aoede', name: 'Aoede (Breezy)' },
+      { id: 'Leda', name: 'Leda (Youthful)' },
+      { id: 'Kore', name: 'Kore (Firm)' },
+      { id: 'Puck', name: 'Puck (Upbeat)' },
+      { id: 'Zephyr', name: 'Zephyr (Bright)' },
+      { id: 'Charon', name: 'Charon (Informative)' },
+      { id: 'Fenrir', name: 'Fenrir (Excitable)' },
+      { id: 'Orus', name: 'Orus (Firm)' },
+      { id: 'Algieba', name: 'Algieba (Smooth)' },
+      { id: 'Despina', name: 'Despina (Smooth)' },
+      { id: 'Erinome', name: 'Erinome (Clear)' },
+      { id: 'Gacrux', name: 'Gacrux (Mature)' },
+      { id: 'Achird', name: 'Achird (Friendly)' },
+      { id: 'Umbriel', name: 'Umbriel (Easy-going)' },
+      { id: 'Enceladus', name: 'Enceladus (Breathy)' },
+      { id: 'Iapetus', name: 'Iapetus (Clear)' },
+      { id: 'Schedar', name: 'Schedar (Even)' },
+      { id: 'Alnilam', name: 'Alnilam (Firm)' },
+      { id: 'Rasalgethi', name: 'Rasalgethi (Informative)' },
+      { id: 'Callirrhoe', name: 'Callirrhoe (Easy-going)' },
+      { id: 'Autonoe', name: 'Autonoe (Bright)' },
+      { id: 'Pulcherrima', name: 'Pulcherrima (Forward)' },
+      { id: 'Sadachbia', name: 'Sadachbia (Lively)' },
+      { id: 'Sadaltager', name: 'Sadaltager (Knowledgeable)' },
+      { id: 'Algenib', name: 'Algenib (Gravelly)' },
+      { id: 'Laomedeia', name: 'Laomedeia (Upbeat)' },
+      { id: 'Zubenelgenubi', name: 'Zubenelgenubi (Casual)' },
+    ];
 
   const s = state.data.settings?.[0] || {};
-  const savedVoice = s.tts_voice_id || '';
+  const savedVoice = s.tts_voice_id || 'Sulafat';
 
-  sel.innerHTML = provider.voices.map(v =>
+  sel.innerHTML = geminiVoices.map(v =>
     `<option value="${v.id}" ${v.id === savedVoice ? 'selected' : ''}>${v.name}</option>`
   ).join('');
 };
 
-// Preview selected voice using Puter.js (ElevenLabs / OpenAI)
+// Preview selected voice using Gemini TTS API
 window._elPreviewAudio = null;
 
-window.previewElevenLabsVoice = async function () {
-  const providerKey = document.getElementById('sTtsProvider')?.value || 'elevenlabs';
+window.previewGeminiVoice = async function () {
   const voiceId = document.getElementById('sTtsVoice')?.value;
   const btn = document.getElementById('elPreviewBtn');
 
@@ -1506,76 +1513,114 @@ window.previewElevenLabsVoice = async function () {
 
   if (!voiceId) { showToast('Select a voice first', 'error'); return; }
 
-  if (typeof puter === 'undefined') {
-    showToast('Puter.js not loaded — check internet connection', 'error');
+  // Check for Gemini API key
+  const s = state.data.settings?.[0] || {};
+  const apiKey = s.ai_api_key || '';
+  if (!apiKey) {
+    showToast('Set your Gemini API key above first!', 'error');
     return;
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Signing in...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...'; }
 
   // Stop any currently playing preview
   if (window._elPreviewAudio) {
     window._elPreviewAudio.pause();
+    if (window._elPreviewAudio._objUrl) URL.revokeObjectURL(window._elPreviewAudio._objUrl);
     window._elPreviewAudio = null;
   }
 
+  // Pre-create Audio in user-gesture callstack (iOS requirement)
+  const previewAudio = new Audio();
+  previewAudio.volume = 1.0;
+  try { await previewAudio.play().catch(() => {}); } catch(e) {}
+  previewAudio.pause();
+
   const safetyTimer = setTimeout(() => {
-    if (btn && (btn.textContent.includes('Generating') || btn.textContent.includes('Signing'))) {
+    if (btn && btn.textContent.includes('Generating')) {
       showToast('Taking too long — try again', 'error');
       resetBtn();
     }
-  }, 25000);
+  }, 15000);
 
   try {
-    // Ensure Puter auth first
-    try {
-      const signedIn = await puter.auth.isSignedIn();
-      if (!signedIn) {
-        showToast('Sign in to your free Puter.com account...', 'info');
-        await puter.auth.signIn();
-        showToast('Signed in! Generating voice...', 'success');
-      }
-    } catch (authErr) {
-      console.warn('[TTS Preview] Auth check:', authErr);
-      // Proceed anyway — puter may auto-prompt
-    }
-
-    if (btn) { btn.textContent = '⏳ Generating...'; }
-    showToast('Generating preview... 3-5s', 'info');
-    console.log('[TTS Preview] provider:', providerKey, 'voice:', voiceId);
+    showToast('Generating preview with Gemini...', 'info');
+    console.log('[TTS Preview] Gemini voice:', voiceId);
 
     const previewText = 'I am worthy of all the abundance flowing into my life.';
-    let audioEl;
 
-    if (providerKey === 'openai') {
-      audioEl = await puter.ai.txt2speech(previewText, {
-        provider: 'openai',
-        voice: voiceId
-      });
-    } else {
-      audioEl = await puter.ai.txt2speech(previewText, {
-        provider: 'elevenlabs',
-        voice: voiceId,
-        model: 'eleven_multilingual_v2'
-      });
+    // Use Gemini TTS API directly (same as _generateGeminiTTS in view-vision.js)
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: previewText }] }],
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: voiceId }
+              }
+            }
+          }
+        })
+      }
+    );
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Gemini TTS error ${res.status}: ${errText.substring(0, 100)}`);
     }
 
-    console.log('[TTS Preview] Got audio element:', audioEl?.src?.substring(0, 60));
-    window._elPreviewAudio = audioEl;
+    const data = await res.json();
+    const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!audioData) throw new Error('No audio in Gemini response');
+
+    // Convert PCM to WAV (same as _pcmBase64ToWavBlob)
+    const pcmBytes = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
+    const sampleRate = 24000, numChannels = 1, bitsPerSample = 16;
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const dataLength = pcmBytes.length;
+    const buffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(buffer);
+    // RIFF header
+    ['R','I','F','F'].forEach((c,i) => view.setUint8(i, c.charCodeAt(0)));
+    view.setUint32(4, 36 + dataLength, true);
+    ['W','A','V','E'].forEach((c,i) => view.setUint8(8+i, c.charCodeAt(0)));
+    ['f','m','t',' '].forEach((c,i) => view.setUint8(12+i, c.charCodeAt(0)));
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true); view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true); view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    ['d','a','t','a'].forEach((c,i) => view.setUint8(36+i, c.charCodeAt(0)));
+    view.setUint32(40, dataLength, true);
+    new Uint8Array(buffer).set(pcmBytes, 44);
+
+    const blob = new Blob([buffer], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+
+    previewAudio.src = url;
+    previewAudio._objUrl = url;
+    window._elPreviewAudio = previewAudio;
 
     if (btn) { btn.disabled = true; btn.textContent = '🔊 Playing...'; }
 
-    audioEl.onended = () => {
+    previewAudio.onended = () => {
+      URL.revokeObjectURL(url);
       window._elPreviewAudio = null;
       resetBtn();
     };
-    audioEl.onerror = () => {
+    previewAudio.onerror = () => {
+      URL.revokeObjectURL(url);
       window._elPreviewAudio = null;
       showToast('Playback error', 'error');
       resetBtn();
     };
 
-    await audioEl.play();
+    await previewAudio.play();
     showToast('Playing preview...', 'success');
   } catch (e) {
     showToast('Preview failed: ' + (e.message || 'unknown error'), 'error');
