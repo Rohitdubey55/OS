@@ -3601,3 +3601,7 @@ body.tiles-editing .main-header-bar .page-action-btn#lumiaEditBtn:hover {
     border-radius: 12px;
     margin-left: 4px;
 }
+
+/* Tab-hide class — overrides any display rule from theme/native-chrome CSS. */
+.nav-item.tab-hidden,
+.mob-item.tab-hidden { display: none !important; }

@@ -957,11 +957,17 @@ window.updateTabVisibility = function () {
     items.forEach(item => {
       container.appendChild(item);
 
-      // Also apply visibility while we're looping through them
+      // Apply visibility via BOTH a CSS class (so theme styles can't fight us)
+      // and inline display. dashboard stays always visible.
       const target = item.dataset.target;
       if (target && target !== 'dashboard') {
-        if (hiddenList.includes(target)) item.style.display = 'none';
-        else item.style.display = 'flex';
+        if (hiddenList.includes(target)) {
+          item.classList.add('tab-hidden');
+          item.style.display = 'none';
+        } else {
+          item.classList.remove('tab-hidden');
+          item.style.removeProperty('display');
+        }
       }
     });
   };
@@ -969,6 +975,7 @@ window.updateTabVisibility = function () {
   // Run the reordering and visibility updates on both navigation menus
   reorderNodes('.sidebar nav', '.nav-item');
   reorderNodes('.mobile-nav', '.mob-item');
+  console.log('[Tab Visibility] hiding:', hiddenList, 'order:', orderList);
 }
 
 // --- APPLY SETTINGS (Unified Logic) ---
