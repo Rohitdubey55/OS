@@ -94,27 +94,77 @@
         }
     }
 
+    // Per-table allowlist of columns that exist in Postgres. Any payload field
+    // not in this list is silently dropped — prevents "schema doesn't have column X"
+    // errors from view code that sends legacy fields like habit_summary_time.
+    const ALLOWED_COLUMNS = {
+        settings: new Set(['id','user_id','name','dob','morning_message','afternoon_message','evening_message','weekly_budget','monthly_budget','category_budgets','theme_color','theme_mode','orientation_lock','ai_api_key','ai_model','nav_layout','dashboard_config','kpi_config','bento_config','dashboard_tiles','mobile_dashboard_tiles','notification_enabled','notification_sound','notification_method','quiet_hours_start','quiet_hours_end','diary_default_mood','diary_show_tasks','diary_show_habits','diary_show_expenses','task_default_view','task_categories','habit_routines','elevenlabs_api_key','elevenlabs_voice_id','tts_provider','tts_voice_id']),
+        reader_settings: new Set(['id','user_id','background_color','font_color','font_family','font_size','line_spacing','fullscreen_mode','page_animation','auto_save_position']),
+        pomodoro_settings: new Set(['id','user_id','work_duration','short_break','long_break','long_break_interval','sound_work','sound_break','auto_start_break','background_mode']),
+        tasks: new Set(['id','user_id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','duration','subtasks','pomodoro_estimate','pomodoro_length']),
+        habits: new Set(['id','user_id','habit_name','frequency','streak','reminder_time','emoji','pomodoro_sessions','pomodoro_length','alarm_enabled','routine']),
+        habit_logs: new Set(['id','user_id','habit_id','date','status','pomodoro_completed']),
+        expenses: new Set(['id','user_id','date','amount','category','description','type']),
+        diary: new Set(['id','user_id','date','content','mood','tags']),
+        planner_events: new Set(['id','user_id','title','start_datetime','end_datetime','category']),
+        vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus']),
+        funds: new Set(['id','user_id','name','balance','type','currency']),
+        assets: new Set(['id','user_id','name','value','purchase_date','notes']),
+        people: new Set(['id','user_id','name','relationship','birthday','phone','email','instagram','last_contact','next_interaction','is_favorite','is_priority','notes']),
+        people_debts: new Set(['id','user_id','person_id','amount','type','date','notes']),
+        notes: new Set(['id','user_id','title','content','category','is_pinned','tags']),
+        reminders: new Set(['id','user_id','title','reminder_datetime','is_active','linked_item_id']),
+        book_library: new Set(['id','user_id','title','author','cover_url','category','status','date_added','date_completed','rating','notes','linked_goals','tags']),
+        book_summaries: new Set(['id','user_id','book_id','book_title','author','summary_json','total_pages','linked_vision_ids','key_takeaways','action_items','memorable_quotes']),
+        vision_affirmations: new Set(['id','user_id','vision_id','text','order','bg_style','is_pinned','is_favorite','favorite_at','duration','media_key','audio_url']),
+        ritual_logs: new Set(['id','user_id','date','duration_seconds','affirmation_count','mood_after','completed']),
+        gym_workouts: new Set(['id','user_id','date','exercise_name','workout_type','duration_minutes','sets','reps','weight','notes']),
+        gym_exercises: new Set(['id','user_id','name','muscle_group','equipment','description']),
+        pomodoro_sessions: new Set(['id','user_id','date','type','duration','habit_id','task_id','completed']),
+        pomodoro_badges: new Set(['id','user_id','badge_type','unlocked_at','total_sessions']),
+        diary_templates: new Set(['id','user_id','title','content','category','is_default','sort_order']),
+        diary_tags: new Set(['id','user_id','name','color','usage_count']),
+        diary_achievements: new Set(['id','user_id','type','name','description','target_value','unlocked_at']),
+        vision_images: new Set(['id','user_id','vision_id','file_id','url','name','uploaded_at']),
+        vision_tdp: new Set(['id','user_id','start_date','end_date','status','categories_json']),
+        mural_projects: new Set(['id','user_id','title','category','bg_pattern','bg_color']),
+        mural_categories: new Set(['id','user_id','name','color']),
+        mural_elements: new Set(['id','user_id','project_id','type','x','y','w','h','content','color','z_index','shape','from_id','to_id','connector_style','from_side','to_side','line_style','arrow_mode']),
+        english_sessions: new Set(['id','user_id','date','duration_seconds','topic','level','score','weak_areas','strong_areas','summary','message_count']),
+        english_messages: new Set(['id','user_id','session_id','role','content','correction','feedback','timestamp'])
+    };
+
+    // Drop any keys in payload that aren't in the table's allowlist.
+    function _filterToAllowed(sheet, row) {
+        const allow = ALLOWED_COLUMNS[sheet];
+        if (!allow) return row;   // no allowlist → pass through
+        const out = {};
+        Object.keys(row).forEach(k => {
+            if (allow.has(k)) out[k] = row[k];
+            // Don't even console.warn for stripped keys — too spammy on every save
+        });
+        return out;
+    }
+
     // Normalize a row for INSERT: ensure id (string) and user_id
     function _normalizeForInsert(sheet, payload, userId) {
         const row = { ...(payload || {}) };
-        // Ensure id is set as a string (app convention)
         if (!row.id) row.id = String(Date.now()) + Math.floor(Math.random() * 1000);
         else row.id = String(row.id);
         row.user_id = userId;
-        // Strip server-managed columns if accidentally set
         delete row.created_at;
         delete row.updated_at;
-        return _coerceTypes(sheet, row);
+        return _filterToAllowed(sheet, _coerceTypes(sheet, row));
     }
 
-    // Normalize a row for UPDATE: strip user_id (RLS check covers it), strip id
+    // Normalize a row for UPDATE: strip server fields, filter to allowed columns
     function _normalizeForUpdate(sheet, payload) {
         const row = { ...(payload || {}) };
         delete row.user_id;
         delete row.id;
         delete row.created_at;
         delete row.updated_at;
-        return _coerceTypes(sheet, row);
+        return _filterToAllowed(sheet, _coerceTypes(sheet, row));
     }
 
     // Coerce string-y values to the right type for Postgres

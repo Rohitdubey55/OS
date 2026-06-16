@@ -326,6 +326,12 @@ function getIconPackClass(pack = null) {
 
 // Render icon HTML
 function renderIcon(iconName, pack = null, customAttrs = '') {
+  // ─── Inline SVG path (preferred — no CDN, no race conditions, no emoji fallback) ───
+  if (typeof window.renderInlineIcon === 'function'
+      && window.INLINE_ICON_SVGS
+      && window.INLINE_ICON_SVGS[iconName]) {
+    return window.renderInlineIcon(iconName, customAttrs);
+  }
   const iconPack = pack || getCurrentIconPack();
   // Lazy-load this pack's CDN stylesheet the first time we render with it.
   ensureIconPackLoaded(iconPack);

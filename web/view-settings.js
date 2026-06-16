@@ -1444,23 +1444,33 @@ window.saveAllSettings = async function (section = 'all') {
   const sectionNames = { profile: 'Profile', budget: 'Budget', appearance: 'Appearance', ai: 'AI', tabs: 'Tab Visibility', notifications: 'Notifications', diary: 'Diary', tasks: 'Tasks' };
   showToast(section === 'all' ? 'Saving settings...' : `Saving ${sectionNames[section] || 'settings'}...`);
 
-  // Optimistic Update
+  // Optimistic Update — apply immediately so UI reflects the change
   if (state.data.settings?.[0]) {
     Object.assign(state.data.settings[0], newSettings);
-    if (section === 'all' || section === 'appearance') applySettings();
-    if (section === 'all' || section === 'tabs') updateTabVisibility();
+  } else {
+    // No settings row yet — seed one in memory so applySettings has something to read
+    state.data.settings = [{ id: null, ...newSettings }];
   }
+  // Always re-apply (covers appearance, theme color, icon pack, tabs, etc.)
+  if (typeof applySettings === 'function') applySettings();
+  if (typeof updateTabVisibility === 'function') updateTabVisibility();
 
   const existingId = state.data.settings?.[0]?.id;
-
+  let result;
   if (existingId) {
-    await apiCall('update', 'settings', newSettings, existingId);
+    result = await apiCall('update', 'settings', newSettings, existingId);
   } else {
-    // If no settings exist, Create
-    await apiCall('create', 'settings', newSettings);
+    result = await apiCall('create', 'settings', newSettings);
     await refreshData('settings');
+    if (typeof applySettings === 'function') applySettings();
   }
 
+  // Check whether the apiCall actually succeeded
+  if (result && result.success === false) {
+    showToast('Could not save: ' + (result.message || 'unknown error'), 'error');
+    console.error('[Settings] save failed:', result);
+    return;
+  }
   showToast('Save Successful!', 'success');
 };
 

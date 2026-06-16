@@ -2819,18 +2819,27 @@ function applySettings() {
     const settings = state.data.settings?.[0];
     if (!settings) return;
 
-    // Apply theme color
+    // 1. Theme color
     const color = settings.theme_color || '#4F46E5';
     document.documentElement.style.setProperty('--primary', color);
 
-    // Apply theme mode (light/dark/forest/midnight)
-    const [mode] = (settings.theme_mode || 'light').split('|');
+    // 2. Theme mode + icon pack (theme_mode is stored as "mode|iconpack", e.g. "dark|lucide")
+    const [mode, iconPack] = (settings.theme_mode || 'light').split('|');
     document.documentElement.setAttribute('data-theme', mode || 'light');
 
-    // Sync the native status bar / nav bar with the web theme.
+    // 3. Icon pack — persist to localStorage so getCurrentIconPack picks it up
+    if (iconPack) {
+        try {
+            const appSettings = JSON.parse(localStorage.getItem('app_settings') || '{}');
+            appSettings.icon_pack = iconPack;
+            localStorage.setItem('app_settings', JSON.stringify(appSettings));
+        } catch (e) { /* ignore */ }
+    }
+
+    // 4. Sync the native status bar / nav bar with the web theme.
     syncNativeChromeToTheme(mode || 'light');
 
-    // Apply orientation lock
+    // 5. Orientation lock
     const orientation = settings.orientation_lock || 'auto';
     if (orientation !== 'auto' && screen.orientation) {
         screen.orientation.lock(orientation + '-primary').catch(e => console.log('Orientation lock failed:', e));
@@ -2838,7 +2847,14 @@ function applySettings() {
         screen.orientation.unlock();
     }
 
-    console.log('Theme applied:', mode, color);
+    // 6. Notification state
+    if (window.notificationState) {
+        if (settings.notification_enabled !== undefined) window.notificationState.enabled = settings.notification_enabled;
+        if (settings.notification_sound) window.notificationState.sound = settings.notification_sound;
+        if (settings.notification_method) window.notificationState.defaultMethod = settings.notification_method;
+    }
+
+    console.log('Theme applied:', mode, color, 'icon pack:', iconPack || 'default');
 }
 
 // Refresh all data and re-render current view
