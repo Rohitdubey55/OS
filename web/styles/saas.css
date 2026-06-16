@@ -3826,9 +3826,9 @@ body.tiles-editing .lumia-tile.sortable-chosen {
    ============================================================================ */
 .lumia-compact.lumia-compact--flat {
     display: grid;
-    grid-template-rows: auto auto 1fr auto;
+    grid-template-rows: 32px auto 1fr auto;     /* explicit icon height — no overlap possible */
     grid-template-columns: 1fr;
-    row-gap: 4px;
+    row-gap: 8px;                                 /* explicit gap between rows */
     padding: 12px;
     width: 100%;
     height: 100%;
@@ -3838,7 +3838,6 @@ body.tiles-editing .lumia-tile.sortable-chosen {
     border-radius: var(--r-lg, 12px);
     box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06));
     overflow: hidden;
-    align-content: space-between;
     justify-items: start;
     text-align: left;
 }
@@ -3917,3 +3916,33 @@ body.tiles-editing .lumia-tile.sortable-chosen {
 .lumia-tile--colored .lumia-compact--flat .lumia-compact__value,
 .lumia-tile--colored .lumia-compact--flat .lumia-compact__label,
 .lumia-tile--colored .lumia-compact--flat .lumia-compact__sub { color: #FFFFFF; }
+
+/* ============================================================================
+   31. ICON SIZING FIXES — explicit dimensions, no flex-shrink
+   Some browsers (esp. iOS Safari) collapse inline SVGs to width:0 inside flex
+   containers if height isn't explicitly set. Force both dimensions.
+   ============================================================================ */
+.tool-tile__icon svg {
+    width: 22px !important;
+    height: 22px !important;
+    flex-shrink: 0;
+    display: block;
+}
+.lumia-compact__icon svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: block;
+}
+.kpi-icon svg,
+.lw-card__icon svg,
+.lw-addtile__icon svg,
+.lumia-tile__icon svg {
+    flex-shrink: 0;
+    display: block;
+}
+@media (max-width: 767px) {
+    .tool-tile { padding: 14px 10px !important; }
+    .tool-tile__icon { width: 40px !important; height: 40px !important; }
+    .tool-tile__icon svg { width: 22px !important; height: 22px !important; }
+}
