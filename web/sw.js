@@ -1,4 +1,4 @@
-const CACHE_NAME = 'personal-os-v8';
+const CACHE_NAME = 'personal-os-v9';
 
 // Get the base path for GitHub Pages compatibility
 const BASE_PATH = self.location.pathname.replace('/sw.js', '');
@@ -48,53 +48,81 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
-    console.log('[SW v8] Installing service worker...');
-    console.log('[SW v8] Base path:', BASE_PATH);
-    console.log('[SW v8] Full sw location:', self.location.href);
-    
+    console.log('[SW v9] Installing service worker...');
+    console.log('[SW v9] Base path:', BASE_PATH);
+    console.log('[SW v9] Full sw location:', self.location.href);
+
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            console.log('[SW v8] Caching assets individually...');
-            
+            console.log('[SW v9] Caching assets individually...');
+
             // Cache assets one by one to identify failures
             return Promise.all(
                 ASSETS_TO_CACHE.map((url) => {
                     return cache.add(url).then(() => {
-                        console.log('[SW v8] ✓ Cached:', url);
+                        console.log('[SW v9] ✓ Cached:', url);
                     }).catch((err) => {
-                        console.error('[SW v8] ✗ Failed to cache:', url, err);
+                        console.error('[SW v9] ✗ Failed to cache:', url, err);
                     });
                 })
             );
         }).then(() => {
-            console.log('[SW v8] Cache operation complete');
+            console.log('[SW v9] Cache operation complete');
             return self.skipWaiting();
         })
     );
 });
 
+// NETWORK-FIRST for JS / CSS / HTML / JSON so we never get stuck on a stale
+// cached bundle when we deploy fixes. Fall back to cache only if offline.
+// CACHE-FIRST is kept for images, fonts, and other binary assets that don't
+// change often (and tend to be expensive to refetch).
+function isVolatileAsset(url) {
+    return /\.(js|css|html|json)(\?.*)?$/i.test(url) || url.endsWith('/') || url.endsWith('/index.html');
+}
+
 self.addEventListener('fetch', (event) => {
+    const req = event.request;
+    // Only handle GET. Let the browser do its thing for POST/PUT/etc.
+    if (req.method !== 'GET') return;
+
+    const url = req.url;
+
+    if (isVolatileAsset(url)) {
+        // Network-first: try fresh, fall back to cache on failure (offline).
+        event.respondWith(
+            fetch(req).then((response) => {
+                // Cache a copy of successful responses so we still work offline.
+                if (response && response.status === 200 && response.type === 'basic') {
+                    const cloned = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(req, cloned)).catch(() => {});
+                }
+                return response;
+            }).catch(() => caches.match(req))
+        );
+        return;
+    }
+
+    // Cache-first for everything else (images, fonts, etc.)
     event.respondWith(
-        caches.match(event.request).then((response) => {
-            return response || fetch(event.request);
-        })
+        caches.match(req).then((response) => response || fetch(req))
     );
 });
 
 self.addEventListener('activate', (event) => {
-    console.log('[SW v8] Activating service worker...');
+    console.log('[SW v9] Activating service worker...');
     event.waitUntil(
         caches.keys().then((cacheNames) => {
             return Promise.all(
                 cacheNames.map((cacheName) => {
                     if (cacheName !== CACHE_NAME) {
-                        console.log('[SW v8] Deleting old cache:', cacheName);
+                        console.log('[SW v9] Deleting old cache:', cacheName);
                         return caches.delete(cacheName);
                     }
                 })
             );
         }).then(() => {
-            console.log('[SW v8] Claiming clients...');
+            console.log('[SW v9] Claiming clients...');
             return self.clients.claim();
         })
     );
@@ -117,7 +145,7 @@ self.addEventListener('message', (event) => {
 
 // Push event listener for push notifications from push service
 self.addEventListener('push', (event) => {
-    console.log('[SW v8] Push received:', event);
+    console.log('[SW v9] Push received:', event);
     
     let data = {
         title: 'PersonalOS',
@@ -151,7 +179,7 @@ self.addEventListener('push', (event) => {
 
 // Push subscription change listener
 self.addEventListener('pushsubscriptionchange', (event) => {
-    console.log('[SW v8] Push subscription changed');
+    console.log('[SW v9] Push subscription changed');
     
     event.waitUntil(
         // Notify the app about subscription change
@@ -165,7 +193,7 @@ self.addEventListener('pushsubscriptionchange', (event) => {
                 });
             })
             .catch((error) => {
-                console.error('[SW v8] Failed to resubscribe:', error);
+                console.error('[SW v9] Failed to resubscribe:', error);
             })
     );
 });
