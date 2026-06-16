@@ -223,7 +223,22 @@
                     .filter(r => r && r.id);
 
                 console.log(`Transformed: ${rows.length} rows`);
-                console.log('Sample:', rows[0]);
+                console.log('Sample (raw from sheet):', raw[0]);
+                console.log('Sample (after transform):', rows[0]);
+                // Diagnostic: warn about text fields that look empty across the board
+                const textFieldsToCheck = {
+                    diary: 'content',
+                    expenses: 'description',
+                    notes: 'content',
+                    tasks: 'title'
+                };
+                const textKey = textFieldsToCheck[table];
+                if (textKey) {
+                    const withText = rows.filter(r => r[textKey] && String(r[textKey]).trim() !== '').length;
+                    if (withText < rows.length) {
+                        console.warn(`⚠ ${rows.length - withText}/${rows.length} rows have empty ${textKey}. Check if your sheet column is named "${textKey}" (case-insensitive now supported).`);
+                    }
+                }
 
                 if (dryRun) {
                     summary.ok.push({ table, rows: rows.length, dryRun: true });
@@ -283,21 +298,31 @@
         if (!sourceRow || typeof sourceRow !== 'object') return null;
         const out = {};
 
-        // 1. Strip to allowed columns only
+        // 1. Strip to allowed columns only — case-insensitive match so
+        // capitalized sheet headers like "Content" still map to "content".
         if (allowed) {
+            const allowedLower = allowed.map(c => c.toLowerCase());
             Object.keys(sourceRow).forEach(k => {
-                if (allowed.includes(k)) out[k] = sourceRow[k];
+                const idx = allowedLower.indexOf(String(k).toLowerCase());
+                if (idx !== -1) out[allowed[idx]] = sourceRow[k];
             });
         } else {
             Object.assign(out, sourceRow);
         }
 
-        // 2. Clean empty values
+        // 2. Clean ONLY truly garbage values. Keep '' and null — they belong
+        // in Postgres TEXT columns as NULL but we don't want to lose distinct
+        // empty-vs-missing semantics. PostgREST converts '' to NULL anyway,
+        // but for non-id text columns we must NOT strip data that has actual
+        // content like the diary 'content' field.
         Object.keys(out).forEach(k => {
             const v = out[k];
-            if (v === '' || v === null || v === undefined || v === 'undefined' || v === 'null' || v === 'NULL') {
+            // Only strip the literal string 'undefined' or 'null' (which come
+            // from Apps Script CACHE eviction artifacts) and the JS undefined.
+            if (v === undefined || v === 'undefined' || v === 'null') {
                 delete out[k];
             }
+            // Keep null and '' — Postgres accepts both for TEXT columns.
         });
 
         // 3. Ensure id is a non-empty string
