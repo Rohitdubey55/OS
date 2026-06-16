@@ -783,6 +783,21 @@ window._startManifest = () => {
 
 // Default layout — no colors (tiles render in their original widget look).
 // User can recolor any tile via the editor.
+// Detect phone-sized viewport (under 768px). Used to pick the right config.
+function _isMobile() {
+    try { return window.matchMedia && window.matchMedia('(max-width: 767px)').matches; }
+    catch (e) { return window.innerWidth < 768; }
+}
+
+// Allow the user to TEMPORARILY override which layout they're editing
+// (e.g. preview/edit mobile config from desktop or vice versa).
+window._lumiaEditTarget = null;   // 'mobile' | 'desktop' | null (auto = current device)
+function _currentLayoutKey() {
+    if (window._lumiaEditTarget === 'mobile') return 'mobile';
+    if (window._lumiaEditTarget === 'desktop') return 'desktop';
+    return _isMobile() ? 'mobile' : 'desktop';
+}
+
 const DEFAULT_LUMIA_TILES = [
     { uid: 't1',  catalogId: 'widget-greeting',      w: 4, h: 2 },
     { uid: 't2',  catalogId: 'widget-yearProgress',  w: 2, h: 2 },
@@ -802,6 +817,26 @@ const DEFAULT_LUMIA_TILES = [
     { uid: 't16', catalogId: 'route-vision',         w: 1, h: 1 }
 ];
 
+// Mobile defaults — phone has only 4 cols, so tiles capped at width 4.
+// Curated to give a compact, scannable first impression on a phone.
+const DEFAULT_LUMIA_TILES_MOBILE = [
+    { uid: 'm1',  catalogId: 'widget-greeting',     w: 4, h: 2 },
+    { uid: 'm2',  catalogId: 'kpi-tasksDone',       w: 2, h: 2 },
+    { uid: 'm3',  catalogId: 'kpi-habits',          w: 2, h: 2 },
+    { uid: 'm4',  catalogId: 'kpi-monthSpend',      w: 2, h: 2 },
+    { uid: 'm5',  catalogId: 'kpi-streak',          w: 2, h: 2 },
+    { uid: 'm6',  catalogId: 'add-task',            w: 1, h: 1 },
+    { uid: 'm7',  catalogId: 'add-expense',         w: 1, h: 1 },
+    { uid: 'm8',  catalogId: 'add-journal',         w: 1, h: 1 },
+    { uid: 'm9',  catalogId: 'add-habit',           w: 1, h: 1 },
+    { uid: 'm10', catalogId: 'list-recentTasks',    w: 4, h: 3 },
+    { uid: 'm11', catalogId: 'list-recentTransactions', w: 4, h: 3 },
+    { uid: 'm12', catalogId: 'route-tasks',         w: 1, h: 1 },
+    { uid: 'm13', catalogId: 'route-habits',        w: 1, h: 1 },
+    { uid: 'm14', catalogId: 'route-finance',       w: 1, h: 1 },
+    { uid: 'm15', catalogId: 'route-diary',         w: 1, h: 1 }
+];
+
 // Normalize a tile: migrate legacy `size`, clamp w/h, drop nullish fields
 function _normalizeTile(t) {
     if (!t || !t.catalogId) return null;
@@ -819,48 +854,74 @@ function _normalizeTile(t) {
     return out;
 }
 
+// Resolve which fields/keys to read+write based on current layout target.
+function _layoutKeys() {
+    const isMobile = _currentLayoutKey() === 'mobile';
+    return {
+        isMobile,
+        sheetField: isMobile ? 'mobile_dashboard_tiles' : 'dashboard_tiles',
+        localKey:   isMobile ? 'lumiaTilesMobile'      : 'lumiaTiles',
+        defaultArr: isMobile ? DEFAULT_LUMIA_TILES_MOBILE : DEFAULT_LUMIA_TILES
+    };
+}
+
 function getLumiaConfig() {
     const tryParse = (raw) => {
         if (!raw) return null;
         try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (e) { return null; }
     };
     const normalize = (arr) => (Array.isArray(arr) ? arr.map(_normalizeTile).filter(Boolean) : null);
-    // 1. Sheet (source of truth)
+    const k = _layoutKeys();
+    // 1. Settings (source of truth — per-device column)
     const settings = state.data?.settings?.[0];
-    const fromSheet = normalize(tryParse(settings?.dashboard_tiles));
+    const fromSheet = normalize(tryParse(settings?.[k.sheetField]));
     if (fromSheet && fromSheet.length > 0) return fromSheet;
-    // 2. Local cache
-    const fromLocal = normalize(tryParse(localStorage.getItem('lumiaTiles')));
+    // 2. Local cache (per-device)
+    const fromLocal = normalize(tryParse(localStorage.getItem(k.localKey)));
     if (fromLocal && fromLocal.length > 0) return fromLocal;
-    // 3. Defaults
-    return DEFAULT_LUMIA_TILES.map(t => _normalizeTile(t));
+    // 3. Defaults (per-device)
+    return k.defaultArr.map(t => _normalizeTile(t));
 }
 
 async function saveLumiaConfig(tiles) {
     const clean = (tiles || []).map(_normalizeTile).filter(Boolean);
     const json = JSON.stringify(clean);
+    const k = _layoutKeys();
     // 1. localStorage
-    try { localStorage.setItem('lumiaTiles', json); } catch (e) {}
+    try { localStorage.setItem(k.localKey, json); } catch (e) {}
     // 2. State
     if (state.data?.settings?.[0]) {
-        state.data.settings[0].dashboard_tiles = json;
+        state.data.settings[0][k.sheetField] = json;
     }
-    // 3. Sheet
+    // 3. Backend
     try {
         const settings = state.data?.settings?.[0] || {};
+        const payload = { [k.sheetField]: json };
         if (settings.id) {
-            await apiCall('update', 'settings', { dashboard_tiles: json }, settings.id);
+            await apiCall('update', 'settings', payload, settings.id);
         } else {
-            await apiCall('create', 'settings', { dashboard_tiles: json });
+            await apiCall('create', 'settings', payload);
         }
     } catch (e) { /* offline-safe */ }
 }
 
 function resetLumiaConfig() {
-    try { localStorage.removeItem('lumiaTiles'); } catch (e) {}
-    if (state.data?.settings?.[0]) state.data.settings[0].dashboard_tiles = '';
-    return DEFAULT_LUMIA_TILES.map(t => ({ ...t }));
+    const k = _layoutKeys();
+    try { localStorage.removeItem(k.localKey); } catch (e) {}
+    if (state.data?.settings?.[0]) state.data.settings[0][k.sheetField] = '';
+    return k.defaultArr.map(t => ({ ...t }));
 }
+
+// Toggle which layout the user is editing (mobile vs desktop).
+// Re-renders the dashboard so they see the layout they're now editing.
+window.toggleLumiaLayoutTarget = function () {
+    const current = _currentLayoutKey();
+    window._lumiaEditTarget = current === 'mobile' ? 'desktop' : 'mobile';
+    if (typeof renderDashboard === 'function') renderDashboard();
+    if (typeof showToast === 'function') {
+        showToast(`Now editing ${window._lumiaEditTarget} layout`, 'info');
+    }
+};
 
 // Render the INNER content of a tile, preserving original widget look
 function _renderTileContent(cat, tile, sectionRenderers) {
@@ -1328,15 +1389,17 @@ window.resetLumiaTiles = async function () {
 // off to the original optimistic toggle for data + sheet sync.
 
 window._tileHabitToggle = async function (cellEl, habitId) {
-    if (!cellEl) return;
+    console.log('[HabitToggle] click', { habitId, cellEl });
+    if (!cellEl) { console.warn('[HabitToggle] no cellEl'); return; }
     const check = cellEl.querySelector('.hg-check');
-    if (!check) return;
+    if (!check) { console.warn('[HabitToggle] no .hg-check inside cell'); return; }
     const goingDone = !check.classList.contains('is-done');
     // Instant visual flip
     check.classList.toggle('is-done', goingDone);
     check.innerHTML = goingDone
         ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
         : '';
+    console.log('[HabitToggle] visual flipped, goingDone=', goingDone);
     // Update day-score % for today's row
     const row = cellEl.closest('.hg-row');
     if (row) {
@@ -1349,33 +1412,36 @@ window._tileHabitToggle = async function (cellEl, habitId) {
         const fillEl = row.querySelector('.hg-score-fill');
         if (fillEl) fillEl.style.width = pct + '%';
     }
-    // Do the data write DIRECTLY (not via view-habits.js's toggleHabitOptimistic
-    // because that calls renderHabits() which would replace the dashboard page).
+    // Do the data write DIRECTLY (not via view-habits.js's toggleHabitOptimistic).
     try {
+        if (typeof window.apiCall !== 'function') {
+            console.error('[HabitToggle] window.apiCall is not a function!');
+            return;
+        }
         if (!state.data.habit_logs) state.data.habit_logs = [];
         const today = new Date().toISOString().slice(0, 10);
         const existingIdx = state.data.habit_logs.findIndex(
             l => String(l.habit_id) === String(habitId) && (l.date || '').startsWith(today)
         );
         if (existingIdx !== -1) {
-            // Unmark — remove the log entry
             const toDelete = state.data.habit_logs[existingIdx];
+            console.log('[HabitToggle] DELETING habit_log id=', toDelete.id);
             state.data.habit_logs.splice(existingIdx, 1);
-            await apiCall('delete', 'habit_logs', {}, toDelete.id);
+            const r = await window.apiCall('delete', 'habit_logs', {}, toDelete.id);
+            console.log('[HabitToggle] delete result:', r);
         } else {
-            // Mark done — add a log entry
             const tempId = 'temp-' + Date.now() + Math.floor(Math.random() * 1000);
-            state.data.habit_logs.push({ id: tempId, habit_id: habitId, date: today, status: 'completed' });
-            const result = await apiCall('create', 'habit_logs', {
-                habit_id: habitId, date: today, status: 'completed'
-            });
-            // Replace temp id with the real id returned by the server
+            const payload = { habit_id: habitId, date: today, status: 'completed' };
+            console.log('[HabitToggle] CREATING habit_log', payload);
+            state.data.habit_logs.push({ id: tempId, ...payload });
+            const result = await window.apiCall('create', 'habit_logs', payload);
+            console.log('[HabitToggle] create result:', result);
             const log = state.data.habit_logs.find(l => l.id === tempId);
             if (log && result && result.data && result.data.id) log.id = result.data.id;
         }
         if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
     } catch (e) {
-        console.warn('[Dashboard] habit write failed', e);
+        console.error('[HabitToggle] WRITE FAILED', e);
     }
 };
 
@@ -1399,27 +1465,30 @@ window._dashOpenModal = async function (viewName, modalFn, ...args) {
 };
 
 window._tileTaskToggle = async function (checkEl, taskId) {
-    if (!checkEl) return;
+    console.log('[TaskToggle] click', { taskId, checkEl });
+    if (!checkEl) { console.warn('[TaskToggle] no checkEl'); return; }
     const goingDone = !checkEl.classList.contains('is-done');
     checkEl.classList.toggle('is-done', goingDone);
-    // Show a checkmark inside the box when done
     checkEl.innerHTML = goingDone
         ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
         : '';
-    // Fade the row so it reads as completed
     const row = checkEl.closest('.tl-row');
     if (row) row.style.opacity = goingDone ? '0.45' : '1';
-    // Direct data write — bypass view-tasks.js completely so we never touch
-    // the dashboard DOM tree from a sibling view's render function.
+    console.log('[TaskToggle] visual flipped, goingDone=', goingDone);
     try {
+        if (typeof window.apiCall !== 'function') {
+            console.error('[TaskToggle] window.apiCall is not a function!');
+            return;
+        }
         const t = (state.data.tasks || []).find(x => String(x.id) === String(taskId));
-        if (!t) return;
+        if (!t) { console.warn('[TaskToggle] task not in state.data.tasks, id=', taskId); return; }
         const newStatus = goingDone ? 'completed' : 'pending';
         t.status = newStatus;
-        const result = await apiCall('update', 'tasks', { status: newStatus }, taskId);
+        console.log('[TaskToggle] UPDATING task id=', taskId, 'status=', newStatus);
+        const result = await window.apiCall('update', 'tasks', { status: newStatus }, taskId);
+        console.log('[TaskToggle] update result:', result);
         if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
         if (!result || result.success === false) {
-            // Revert on failure
             t.status = goingDone ? 'pending' : 'completed';
             checkEl.classList.toggle('is-done', !goingDone);
             checkEl.innerHTML = '';
@@ -1427,7 +1496,7 @@ window._tileTaskToggle = async function (checkEl, taskId) {
             if (typeof showToast === 'function') showToast('Error updating task');
         }
     } catch (e) {
-        console.warn('[Dashboard] task write failed', e);
+        console.error('[TaskToggle] WRITE FAILED', e);
     }
 };
 
@@ -2852,7 +2921,8 @@ function renderDashboard() {
     <div class="dash-wrapper">
       ${renderLumiaGrid(sectionRenderers)}
       <div class="lumia-editing-bar">
-        <span class="lumia-editing-bar__hint">Editing mode · drag to reorder · tap any tile to edit</span>
+        <span class="lumia-editing-bar__layout-pill">Editing: <strong>${_currentLayoutKey()}</strong> layout</span>
+        <button class="lumia-editing-bar__btn" onclick="toggleLumiaLayoutTarget()" title="Switch to the other layout">Switch</button>
         <button class="lumia-editing-bar__btn" onclick="openLumiaTilePicker()">+ Add tile</button>
         <button class="lumia-editing-bar__btn" onclick="resetLumiaTiles()">Reset</button>
         <button class="lumia-editing-bar__btn lumia-editing-bar__btn--done" onclick="toggleLumiaEditMode()">Done</button>

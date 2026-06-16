@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS public.settings (
     kpi_config TEXT,
     bento_config TEXT,
     dashboard_tiles TEXT,
+    mobile_dashboard_tiles TEXT,
     notification_enabled BOOLEAN,
     notification_sound TEXT,
     notification_method TEXT,
