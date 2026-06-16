@@ -492,7 +492,7 @@ function getMoodStats(entries) {
 // Render entry card (new dr- classes)
 function renderEntryCard(entry) {
   const score = Number(entry.mood_score || 5);
-  const wordCount = entry.text ? entry.text.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length : 0;
+  const wordCount = entry.content ? entry.content.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length : 0;
   const dateStr = getRelativeDate(entry.date);
 
   let moodColor = '#F59E0B';
@@ -509,7 +509,7 @@ function renderEntryCard(entry) {
     <div class="dr-entry-card" style="border-left-color:${moodColor}" onclick="openEditDiary('${entry.id}')">
       <div class="dr-entry-main">
         <div class="dr-entry-date">${dateStr}</div>
-        <p class="dr-entry-preview">${(entry.text || '').replace(/<[^>]*>/g, '').substring(0, 200)}</p>
+        <p class="dr-entry-preview">${(entry.content || '').replace(/<[^>]*>/g, '').substring(0, 200)}</p>
       </div>
       ${hasTags ? `
         <div class="dr-entry-tags-row">
@@ -616,13 +616,13 @@ function renderTimelineView(sorted) {
     const moodBg = getMoodBg(entry.mood_score);
     const score = Number(entry.mood_score || 5);
     const dateStr = entry.date ? new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
-    const preview = (entry.text || '').substring(0, 200);
+    const preview = (entry.content || '').substring(0, 200);
     const tags = entry.tags ? entry.tags.split(/[,\s]+/).filter(t => t).slice(0, 3) : [];
 
     return `
           <div class="timeline-entry" style="border-left-color:${moodColor}; background:${moodBg}; animation-delay:${i * 0.05}s;">
             <div class="timeline-entry-date">${dateStr}</div>
-            <div class="timeline-entry-text">${preview}${(entry.text || '').length > 200 ? '...' : ''}</div>
+            <div class="timeline-entry-text">${preview}${(entry.content || '').length > 200 ? '...' : ''}</div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:6px;">
               <div style="display:flex;gap:4px;">
                 ${tags.map(t => `<span style="font-size:10px;padding:2px 7px;background:var(--surface-2);border-radius:10px;color:var(--text-muted);">#${t}</span>`).join('')}
@@ -816,7 +816,7 @@ function renderInsightsView(entries) {
     return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear();
   });
 
-  const totalWords = entries.reduce((acc, e) => acc + (e.text ? e.text.split(/\s+/).length : 0), 0);
+  const totalWords = entries.reduce((acc, e) => acc + (e.content ? e.content.split(/\s+/).length : 0), 0);
 
   return `
     <div class="dr-insights">
@@ -1004,7 +1004,7 @@ function filterEntries(entries) {
   if (currentSearchQuery) {
     const query = currentSearchQuery.toLowerCase();
     filtered = filtered.filter(e =>
-      (e.text && e.text.toLowerCase().includes(query)) ||
+      (e.content && e.content.toLowerCase().includes(query)) ||
       (e.tags && e.tags.toLowerCase().includes(query))
     );
   }
@@ -1441,10 +1441,10 @@ window.openEditDiary = function (id) {
             <i data-lucide="mic" style="width:16px;height:16px"></i>
           </button>
         </div>
-        <div class="rich-editor dr-zone-editor" id="mDiaryText" contenteditable="true">${(e.text || '').replace(/</g, '<')}</div>
+        <div class="rich-editor dr-zone-editor" id="mDiaryText" contenteditable="true">${(e.content || '').replace(/</g, '<')}</div>
         <div class="dr-zone-footer">
           <input class="dr-zone-tags" id="mDiaryTags" value="${(e.tags || '')}" placeholder="#tags (comma separated)">
-          <span class="dr-zone-wc" id="diaryWordCount">${e.text ? e.text.split(/\s+/).length : 0} words</span>
+          <span class="dr-zone-wc" id="diaryWordCount">${e.content ? e.content.split(/\s+/).length : 0} words</span>
         </div>
       </div>
     </div>
@@ -1650,7 +1650,7 @@ window.exportDiary = function () {
       date: e.date,
       mood_score: e.mood_score,
       tags: e.tags,
-      text: e.text
+      text: e.content
     }))
   };
 

@@ -376,7 +376,7 @@ function renderTransactionCard(tx) {
     <div class="transaction-card" onclick="openEditTransaction('${tx.id}')">
       <div class="transaction-date">${dateStr}</div>
       <div class="transaction-details">
-        ${tx.notes ? `<div class="transaction-notes" style="font-weight:600; margin-bottom:4px;">${tx.notes}</div>` : ''}
+        ${(tx.description || tx.notes) ? `<div class="transaction-notes" style="font-weight:600; margin-bottom:4px;">${tx.description || tx.notes}</div>` : ''}
         <div class="transaction-category" style="font-size:12px; color:var(--text-muted)">${tx.category || 'Uncategorized'}</div>
       </div>
       <div class="transaction-amount" style="color: ${isIncome ? 'var(--success)' : 'var(--danger)'}">
@@ -429,7 +429,7 @@ function renderFinAssets(container) {
     <div class="card" style="padding:0; overflow:hidden">
       ${assets.map(a => `
         <div class="asset-item">
-          <div><div style="font-weight:600">${a.asset_name}</div><div class="asset-type">${a.type}</div></div>
+          <div><div style="font-weight:600">${a.name || 'Untitled'}</div><div class="asset-type">${a.type || a.notes || ''}</div></div>
           <div style="display:flex; align-items:center; gap:10px">
              <div style="font-weight:600">₹${Number(a.value).toLocaleString()}</div>
              <button class="btn icon" onclick="openEditAsset('${a.id}')" title="Edit">${renderIcon('edit', null, 'style="width:14px"')}</button>
@@ -531,7 +531,7 @@ window.openEditAsset = function (id) {
   const box = modal.querySelector('.modal-box');
   box.innerHTML = `
     <h3>Edit Asset</h3>
-    <input class="input" id="mAssetName" value="${(a.asset_name || '').replace(/"/g, '&quot;')}" placeholder="Asset Name">
+    <input class="input" id="mAssetName" value="${(a.name || '').replace(/"/g, '&quot;')}" placeholder="Asset Name">
     <select class="input" id="mAssetType">
       <option value="Cash" ${a.type === 'Cash' ? 'selected' : ''}>Cash</option>
       <option value="Investment" ${a.type === 'Investment' ? 'selected' : ''}>Investment</option>
