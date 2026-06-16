@@ -1007,16 +1007,15 @@ function _renderCompactTileInner(cat, tile, opts) {
                 <div class="lumia-compact__label">${label}</div>
             </div>`;
     }
+    // FLAT structure (no __top / __bottom wrappers) so CSS Grid can place
+    // each row directly. Eliminates the icon-vs-label overlap bug on iOS Safari
+    // where `display: contents` is buggy.
     return `
-        <div class="lumia-compact ${colored ? 'lumia-compact--colored' : ''}">
-            <div class="lumia-compact__top">
-                <div class="lumia-compact__icon">${renderIcon(iconKey, null, 'style="width:28px;height:28px"')}</div>
-                ${value ? `<div class="lumia-compact__value">${value}</div>` : ''}
-            </div>
-            <div class="lumia-compact__bottom">
-                <div class="lumia-compact__label">${label}</div>
-                ${sub ? `<div class="lumia-compact__sub">${sub}</div>` : ''}
-            </div>
+        <div class="lumia-compact lumia-compact--flat ${colored ? 'lumia-compact--colored' : ''}">
+            <div class="lumia-compact__icon">${renderIcon(iconKey, null, 'style="width:28px;height:28px"')}</div>
+            ${value ? `<div class="lumia-compact__value">${value}</div>` : '<div class="lumia-compact__value lumia-compact__value--empty"></div>'}
+            <div class="lumia-compact__label">${label}</div>
+            ${sub ? `<div class="lumia-compact__sub">${sub}</div>` : '<div class="lumia-compact__sub lumia-compact__sub--empty"></div>'}
         </div>`;
 }
 

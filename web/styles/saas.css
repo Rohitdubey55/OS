@@ -3817,3 +3817,103 @@ body.tiles-editing .lumia-tile.sortable-chosen {
     .lumia-tile--w1.lumia-tile--h1 .lw-addtile__hint { display: none; }
     .lumia-tile--w1.lumia-tile--h1 .lw-addtile__title { text-align: center; align-self: center; }
 }
+
+/* ============================================================================
+   30. PHONE COMPACT TILE V2 — flat HTML, 4-row grid (NO display:contents)
+   This is the bulletproof fix. The renderer emits 4 sibling divs directly
+   inside .lumia-compact--flat — CSS grid maps each to its own row. There's
+   physically no way for them to overlap.
+   ============================================================================ */
+.lumia-compact.lumia-compact--flat {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    grid-template-columns: 1fr;
+    row-gap: 4px;
+    padding: 12px;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    background: var(--saas-surface, #FFFFFF);
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.06));
+    border-radius: var(--r-lg, 12px);
+    box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06));
+    overflow: hidden;
+    align-content: space-between;
+    justify-items: start;
+    text-align: left;
+}
+.lumia-compact--flat .lumia-compact__icon {
+    grid-row: 1;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--saas-accent-soft, rgba(79,70,229,0.10));
+    color: var(--saas-accent, var(--primary, #4F46E5));
+    display: flex; align-items: center; justify-content: center;
+}
+.lumia-compact--flat .lumia-compact__icon svg { width: 20px; height: 20px; stroke: currentColor; }
+.lumia-compact--flat .lumia-compact__value {
+    grid-row: 2;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--saas-text, #0F172A);
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lumia-compact--flat .lumia-compact__value--empty {
+    height: 0;
+    padding: 0;
+    margin: 0;
+}
+.lumia-compact--flat .lumia-compact__label {
+    grid-row: 3;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--saas-text-muted, #5B6470);
+    align-self: end;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lumia-compact--flat .lumia-compact__sub {
+    grid-row: 4;
+    font-size: 11px;
+    color: var(--saas-text-dim, #9097A1);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.lumia-compact--flat .lumia-compact__sub--empty { height: 0; }
+
+@media (max-width: 767px) {
+    .lumia-compact--flat {
+        padding: 10px;
+        row-gap: 2px;
+    }
+    .lumia-compact--flat .lumia-compact__icon { width: 28px; height: 28px; }
+    .lumia-compact--flat .lumia-compact__icon svg { width: 18px; height: 18px; }
+    .lumia-compact--flat .lumia-compact__value { font-size: 18px; }
+    .lumia-compact--flat .lumia-compact__label { font-size: 10px; }
+    .lumia-compact--flat .lumia-compact__sub { font-size: 10px; }
+}
+
+/* Colored variant on flat compact tile */
+.lumia-tile--colored .lumia-compact--flat {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+.lumia-tile--colored .lumia-compact--flat .lumia-compact__icon {
+    background: rgba(255,255,255,0.18);
+    color: #FFFFFF;
+}
+.lumia-tile--colored .lumia-compact--flat .lumia-compact__value,
+.lumia-tile--colored .lumia-compact--flat .lumia-compact__label,
+.lumia-tile--colored .lumia-compact--flat .lumia-compact__sub { color: #FFFFFF; }
