@@ -38,6 +38,9 @@ function renderSettings() {
     theme_mode: themeMode || 'light',
     icon_pack: iconPack || 'emoji',
     hidden_tabs: s.hidden_tabs || '',
+    nav_layout: s.nav_layout || '',     // ← was missing, broke checkbox state on reload
+    dashboard_config: s.dashboard_config || '',
+    kpi_config: s.kpi_config || '',
     // Map 'ai_api_key' from sheet to 'gemini_api_key' for UI
     gemini_api_key: s.ai_api_key || '',
     ai_model: s.ai_model || 'gemini-1.5-flash',

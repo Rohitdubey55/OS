@@ -3701,3 +3701,119 @@ body.tiles-editing .lumia-tile.sortable-chosen {
     animation: lumia-press-feedback 200ms ease-out forwards;
     z-index: 50;
 }
+
+/* ============================================================================
+   29. PHONE COMPACT TILE — vertical stack (eliminates overlap permanently)
+   On phone, compact tiles ALWAYS stack as:  Icon · Value · Label · Sub
+   Each gets its own row. No flexbox fights. No icon-vs-label collision.
+   ============================================================================ */
+@media (max-width: 767px) {
+    .lumia-compact {
+        display: grid !important;
+        grid-template-rows: auto auto 1fr auto;  /* icon | value | label | sub */
+        gap: 4px !important;
+        padding: 10px !important;
+        align-items: center;
+        justify-items: start;
+        text-align: left;
+    }
+    /* Top row is no longer flex — just the icon */
+    .lumia-compact__top {
+        display: contents !important;          /* dissolves __top, lets icon + value live in the grid directly */
+    }
+    .lumia-compact__bottom {
+        display: contents !important;          /* dissolves __bottom too */
+        margin-top: 0 !important;
+    }
+    .lumia-compact__icon {
+        width: 28px !important;
+        height: 28px !important;
+        border-radius: 8px;
+        flex-shrink: 0;
+        align-self: start;
+    }
+    .lumia-compact__icon svg { width: 18px !important; height: 18px !important; }
+    .lumia-compact__value {
+        font-size: 22px !important;
+        font-weight: 800;
+        line-height: 1;
+        text-align: left !important;
+        color: var(--saas-text, #0F172A);
+        word-break: break-word;
+        align-self: center;
+    }
+    .lumia-compact__label {
+        font-size: 10px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        align-self: end;
+        max-width: 100%;
+    }
+    .lumia-compact__sub {
+        font-size: 10px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: left !important;
+        align-self: end;
+        max-width: 100%;
+    }
+
+    /* For XS (1×1) tiles, only show icon + label, centered */
+    .lumia-compact--xs {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 4px !important;
+        text-align: center;
+    }
+    .lumia-compact--xs .lumia-compact__icon { align-self: center; }
+    .lumia-compact--xs .lumia-compact__label { align-self: center; text-align: center; }
+
+    /* Quick-add tile follows the same pattern: icon on top, title on the next line, hint last */
+    .lw-addtile {
+        display: grid !important;
+        grid-template-rows: auto 1fr auto !important;
+        gap: 4px !important;
+        padding: 10px !important;
+        position: relative;
+    }
+    .lw-addtile__icon {
+        width: 30px !important;
+        height: 30px !important;
+        border-radius: 8px;
+        align-self: start;
+    }
+    .lw-addtile__icon svg { width: 18px !important; height: 18px !important; }
+    .lw-addtile__plus {
+        font-size: 16px !important;
+        top: 8px !important;
+        right: 10px !important;
+    }
+    .lw-addtile__title {
+        font-size: 13px;
+        line-height: 1.2;
+        align-self: end;
+    }
+    .lw-addtile__hint {
+        font-size: 10px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* Very small add tiles: only icon + title, centered */
+    .lumia-tile--w1.lumia-tile--h1 .lw-addtile {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    .lumia-tile--w1.lumia-tile--h1 .lw-addtile__plus { display: none; }
+    .lumia-tile--w1.lumia-tile--h1 .lw-addtile__hint { display: none; }
+    .lumia-tile--w1.lumia-tile--h1 .lw-addtile__title { text-align: center; align-self: center; }
+}
