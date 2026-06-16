@@ -25,3 +25,5 @@ ios/App/build/
 # Editor
 .vscode/
 .idea/
+~$*
+.claude/
