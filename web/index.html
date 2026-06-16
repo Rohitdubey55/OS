@@ -511,6 +511,10 @@
          If SUPABASE_CONFIG.enabled is false, this script no-ops. -->
     <script src="supabase-api.js"></script>
 
+    <!-- One-shot Google Sheets → Supabase importer. Exposes window.importFromSheets()
+         which you can run from the browser console. Does nothing until called. -->
+    <script src="supabase-importer.js"></script>
+
     <!-- View modules are loaded lazily by routeTo() in main.js (VIEW_MAP).
          This drops the cold-start JS payload from ~2.7 MB to ~200 KB. -->
 
