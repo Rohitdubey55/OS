@@ -3824,72 +3824,96 @@ body.tiles-editing .lumia-tile.sortable-chosen {
    inside .lumia-compact--flat — CSS grid maps each to its own row. There's
    physically no way for them to overlap.
    ============================================================================ */
+/* These rules FIGHT all earlier .lumia-compact styles via !important so the
+   flat grid layout actually wins on every browser and breakpoint. */
 .lumia-compact.lumia-compact--flat {
-    display: grid;
-    grid-template-rows: 32px auto 1fr auto;     /* explicit icon height — no overlap possible */
-    grid-template-columns: 1fr;
-    row-gap: 8px;                                 /* explicit gap between rows */
-    padding: 12px;
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
+    display: grid !important;
+    grid-template-rows: 32px auto 1fr auto !important;
+    grid-template-columns: 1fr !important;
+    row-gap: 8px !important;
+    padding: 12px !important;
+    width: 100% !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
     background: var(--saas-surface, #FFFFFF);
     border: 1px solid var(--saas-border, rgba(0,0,0,0.06));
     border-radius: var(--r-lg, 12px);
     box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06));
-    overflow: hidden;
-    justify-items: start;
-    text-align: left;
+    overflow: hidden !important;
+    justify-items: start !important;
+    text-align: left !important;
+    /* nuke any old flex behavior */
+    flex-direction: unset !important;
+    justify-content: unset !important;
+    align-items: unset !important;
 }
-.lumia-compact--flat .lumia-compact__icon {
-    grid-row: 1;
-    width: 32px; height: 32px;
+.lumia-compact.lumia-compact--flat .lumia-compact__icon {
+    grid-row: 1 !important;
+    grid-column: 1 !important;
+    width: 32px !important;
+    height: 32px !important;
     border-radius: 8px;
     background: var(--saas-accent-soft, rgba(79,70,229,0.10));
     color: var(--saas-accent, var(--primary, #4F46E5));
-    display: flex; align-items: center; justify-content: center;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    align-self: start !important;
+    margin: 0 !important;
 }
-.lumia-compact--flat .lumia-compact__icon svg { width: 20px; height: 20px; stroke: currentColor; }
-.lumia-compact--flat .lumia-compact__value {
-    grid-row: 2;
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--saas-text, #0F172A);
+.lumia-compact.lumia-compact--flat .lumia-compact__icon svg {
+    width: 20px !important; height: 20px !important; stroke: currentColor;
+}
+.lumia-compact.lumia-compact--flat .lumia-compact__value {
+    grid-row: 2 !important;
+    grid-column: 1 !important;
+    font-size: 22px !important;
+    font-weight: 800 !important;
+    color: var(--saas-text, #0F172A) !important;
     letter-spacing: -0.02em;
-    line-height: 1.1;
+    line-height: 1.1 !important;
+    text-align: left !important;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    margin: 0 !important;
+    align-self: start !important;
 }
-.lumia-compact--flat .lumia-compact__value--empty {
-    height: 0;
-    padding: 0;
-    margin: 0;
+.lumia-compact.lumia-compact--flat .lumia-compact__value--empty {
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
 }
-.lumia-compact--flat .lumia-compact__label {
-    grid-row: 3;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
+.lumia-compact.lumia-compact--flat .lumia-compact__label {
+    grid-row: 3 !important;
+    grid-column: 1 !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
     letter-spacing: 0.06em;
-    color: var(--saas-text-muted, #5B6470);
-    align-self: end;
+    color: var(--saas-text-muted, #5B6470) !important;
+    align-self: end !important;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    margin: 0 !important;
 }
-.lumia-compact--flat .lumia-compact__sub {
-    grid-row: 4;
-    font-size: 11px;
-    color: var(--saas-text-dim, #9097A1);
+.lumia-compact.lumia-compact--flat .lumia-compact__sub {
+    grid-row: 4 !important;
+    grid-column: 1 !important;
+    font-size: 11px !important;
+    color: var(--saas-text-dim, #9097A1) !important;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    margin: 0 !important;
+    align-self: start !important;
 }
-.lumia-compact--flat .lumia-compact__sub--empty { height: 0; }
+.lumia-compact.lumia-compact--flat .lumia-compact__sub--empty { height: 0 !important; }
 
 @media (max-width: 767px) {
     .lumia-compact--flat {
