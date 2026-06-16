@@ -525,7 +525,7 @@ const WIDGET_RENDERERS = {
         if (tasks.length === 0) return _listShell(c, 0, _emptyState('No pending tasks.'));
         const prioColor = { P1: '#EF4444', P2: '#F59E0B', P3: '#10B981' };
         const rows = tasks.map(x => `
-            <button class="lw-row" onclick="event.stopPropagation();openTaskModal('${x.id}')">
+            <button class="lw-row" onclick="event.stopPropagation();_dashOpenModal('tasks','openTaskModal','${x.id}')">
                 <span class="lw-row__dot" style="background:${prioColor[x.priority] || '#9CA3AF'}"></span>
                 <span class="lw-row__main">
                     <span class="lw-row__title">${escapeHtml(x.title || 'Untitled')}</span>
@@ -1352,6 +1352,25 @@ window._tileHabitToggle = function (cellEl, habitId) {
     // Hand off to the existing optimistic toggle (state + sheet sync)
     if (typeof window.toggleHabitOptimistic === 'function') {
         try { window.toggleHabitOptimistic(habitId); } catch (e) { console.warn('habit toggle failed', e); }
+    }
+};
+
+// Lazy-load a view module's JS, then call one of its modal/export functions.
+// Lets dashboard widgets open Tasks/Habits/etc. modals without leaving the page.
+window._dashOpenModal = async function (viewName, modalFn, ...args) {
+    try {
+        if (typeof window.ensureViewLoaded === 'function') {
+            await window.ensureViewLoaded(viewName);
+        }
+        const fn = window[modalFn];
+        if (typeof fn === 'function') {
+            fn(...args);
+        } else {
+            console.warn('[Dashboard] modal function not loaded yet:', modalFn);
+            if (typeof showToast === 'function') showToast('Loading…');
+        }
+    } catch (e) {
+        console.error('[Dashboard] _dashOpenModal failed', e);
     }
 };
 
@@ -2621,9 +2640,9 @@ function renderDashboard() {
           <div class="widget-card habits-grid-widget" data-widget-id="habitsGrid">
             <div class="hg-header">
               <span class="hg-title">Habits</span>
-              <button class="hg-newbtn" onclick="routeTo('habits')">+ New habit</button>
+              <button class="hg-newbtn" onclick="event.stopPropagation();_dashOpenModal('habits','openHabitModal')">+ New habit</button>
             </div>
-            <div class="hg-empty">No habits yet. Add one in the Habits page.</div>
+            <div class="hg-empty">No habits yet. Tap + New habit above.</div>
           </div>`;
       }
 
@@ -2685,7 +2704,7 @@ function renderDashboard() {
         <div class="widget-card habits-grid-widget" data-widget-id="habitsGrid">
           <div class="hg-header">
             <span class="hg-title">Habits</span>
-            <button class="hg-newbtn" onclick="routeTo('habits')">Open ↗</button>
+            <button class="hg-newbtn" onclick="event.stopPropagation();_dashOpenModal('habits','openHabitModal')">+ New habit</button>
           </div>
           <div class="hg-scroll">
             <div class="hg-grid" style="--hg-cols: ${habits.length};">
@@ -2730,7 +2749,7 @@ function renderDashboard() {
         const meta = PRIO_META[t.priority] || PRIO_META.P3;
         const safeTitle = escapeHtml(t.title || 'Untitled');
         return `
-          <div class="tl-row" onclick="openTaskModal('${t.id}')">
+          <div class="tl-row" onclick="_dashOpenModal('tasks','openTaskModal','${t.id}')">
             <span class="tl-check" onclick="event.stopPropagation(); _tileTaskToggle(this, '${t.id}');"></span>
             <span class="tl-name">${safeTitle}</span>
             <span class="tl-prio ${meta.cls}"><span class="tl-prio-dot"></span>${meta.label}</span>
@@ -2742,7 +2761,7 @@ function renderDashboard() {
         <div class="widget-card tasks-list-widget" data-widget-id="tasksList">
           <div class="tl-header">
             <span class="tl-title">Tasks</span>
-            <button class="tl-newbtn" onclick="openTaskModal()">+ New task</button>
+            <button class="tl-newbtn" onclick="event.stopPropagation();_dashOpenModal('tasks','openTaskModal')">+ New task</button>
           </div>
           <div class="tl-col-heads">
             <span class="tl-col-name">Name</span>
@@ -2751,7 +2770,7 @@ function renderDashboard() {
           </div>
           <div class="tl-body">${rows}</div>
           ${all.length > visible.length ? `
-            <div class="tl-footer"><button class="tl-allbtn" onclick="routeTo('tasks')">View all ${all.length} tasks →</button></div>
+            <div class="tl-footer"><span class="tl-allbtn-static">+${all.length - visible.length} more tasks</span></div>
           ` : ''}
         </div>`;
     },
