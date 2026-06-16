@@ -3605,3 +3605,99 @@ body.tiles-editing .main-header-bar .page-action-btn#lumiaEditBtn:hover {
 /* Tab-hide class — overrides any display rule from theme/native-chrome CSS. */
 .nav-item.tab-hidden,
 .mob-item.tab-hidden { display: none !important; }
+
+/* ============================================================================
+   28. PHONE FIXES — overlap, spacing, scroll-vs-drag
+   ============================================================================ */
+@media (max-width: 767px) {
+    /* Compact tile — give icon and label room to breathe; never overlap */
+    .lumia-compact {
+        padding: 10px !important;
+        gap: 6px;
+    }
+    .lumia-compact__top {
+        gap: 6px;
+        min-height: 32px;
+        align-items: center;
+    }
+    .lumia-compact__icon {
+        width: 28px !important;
+        height: 28px !important;
+        border-radius: 8px;
+        flex-shrink: 0;
+    }
+    .lumia-compact__icon svg { width: 18px !important; height: 18px !important; }
+    .lumia-compact__bottom {
+        margin-top: 6px;       /* explicit gap from __top */
+    }
+    .lumia-compact__label {
+        font-size: 10px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .lumia-compact__value {
+        font-size: 16px;
+        line-height: 1.1;
+    }
+    .lumia-compact__sub {
+        font-size: 10px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Quick-add tile compresses on phone too */
+    .lw-addtile {
+        padding: 10px !important;
+    }
+    .lw-addtile__icon {
+        width: 30px !important;
+        height: 30px !important;
+        border-radius: 8px;
+    }
+    .lw-addtile__icon svg { width: 18px !important; height: 18px !important; }
+    .lw-addtile__plus {
+        font-size: 18px;
+        top: 8px; right: 10px;
+    }
+    .lw-addtile__title {
+        font-size: 13px;
+        line-height: 1.2;
+    }
+    .lw-addtile__hint {
+        font-size: 11px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Habits widget header — give "+ New habit" button room */
+    .habits-grid-widget .hg-header,
+    .tasks-list-widget .tl-header {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .habits-grid-widget .hg-newbtn,
+    .tasks-list-widget .tl-newbtn {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+}
+
+/* While dragging tiles, prevent the body from scrolling (avoids
+   conflict between scroll gesture and drag gesture). */
+body.tiles-editing.is-dragging-tile { overflow: hidden; touch-action: none; }
+.lumia-tile--ghost { opacity: 0.4 !important; }
+
+/* During the long-press delay, give visual feedback */
+@keyframes lumia-press-feedback {
+    0%   { transform: scale(1); }
+    100% { transform: scale(0.97); }
+}
+body.tiles-editing .lumia-tile.sortable-chosen {
+    animation: lumia-press-feedback 200ms ease-out forwards;
+    z-index: 50;
+}

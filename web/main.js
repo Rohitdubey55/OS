@@ -2309,6 +2309,60 @@ function applyBulkDataToState(bulkData) {
     });
 }
 
+// Minimal tab visibility implementation. ALWAYS available (defined in main.js,
+// not in lazy-loaded view-settings.js). view-settings.js's richer version
+// overrides this when the user visits Settings — but on initial app load this
+// fallback ensures hidden tabs are hidden from the first paint.
+if (typeof window.updateTabVisibility !== 'function') {
+    window.updateTabVisibility = function () {
+        const settings = state.data?.settings?.[0];
+        if (!settings) return;
+        const layoutStr = settings.nav_layout || '';
+        let orderList = [];
+        let hiddenList = [];
+        if (layoutStr) {
+            try {
+                const layoutData = typeof layoutStr === 'string' ? JSON.parse(layoutStr) : layoutStr;
+                if (Array.isArray(layoutData)) {
+                    orderList = layoutData.map(i => i.id);
+                    hiddenList = layoutData.filter(i => !i.visible).map(i => i.id);
+                }
+            } catch (e) { console.error('[Tab Visibility/main.js] parse failed:', e); }
+        }
+        const apply = (containerSelector, itemSelector) => {
+            const container = document.querySelector(containerSelector);
+            if (!container) return;
+            const items = Array.from(container.querySelectorAll(itemSelector));
+            items.sort((a, b) => {
+                const ta = a.dataset.target, tb = b.dataset.target;
+                if (ta === 'dashboard') return -1;
+                if (tb === 'dashboard') return 1;
+                const ia = orderList.indexOf(ta), ib = orderList.indexOf(tb);
+                if (ia === -1 && ib === -1) return 0;
+                if (ia === -1) return 1;
+                if (ib === -1) return -1;
+                return ia - ib;
+            });
+            items.forEach(item => {
+                container.appendChild(item);
+                const target = item.dataset.target;
+                if (target && target !== 'dashboard') {
+                    if (hiddenList.includes(target)) {
+                        item.classList.add('tab-hidden');
+                        item.style.display = 'none';
+                    } else {
+                        item.classList.remove('tab-hidden');
+                        item.style.removeProperty('display');
+                    }
+                }
+            });
+        };
+        apply('.sidebar nav', '.nav-item');
+        apply('.mobile-nav', '.mob-item');
+        console.log('[Tab Visibility/main.js] hiding:', hiddenList);
+    };
+}
+
 function applyPostLoadSettings() {
     applyThemeOnLoad();
     if (state.data.settings && state.data.settings.length > 0) {

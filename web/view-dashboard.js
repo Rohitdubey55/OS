@@ -1133,7 +1133,15 @@ function _initLumiaSortable() {
         ghostClass: 'lumia-tile--ghost',
         filter: '.lumia-tile--add, .lumia-tile__edit-handle, .lumia-tile__remove-handle',
         preventOnFilter: false,
-        onEnd: async () => {
+        // Touch tweaks — quick taps scroll the page; only a HOLD starts dragging.
+        delay: 350,                          // 350ms hold before drag activates
+        delayOnTouchOnly: true,              // mouse still drags instantly on desktop
+        touchStartThreshold: 8,              // small finger jitter doesn't break the hold
+        forceFallback: true,                 // consistent touch behavior across browsers
+        fallbackTolerance: 4,                // tap-vs-drag detection threshold
+        onStart: () => { document.body.classList.add('is-dragging-tile'); },
+        onEnd: async (evt) => {
+            document.body.classList.remove('is-dragging-tile');
             // Read order from DOM, persist
             const order = [...grid.querySelectorAll('.lumia-tile[data-tile-uid]')]
                 .map(el => el.dataset.tileUid);
