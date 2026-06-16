@@ -44,6 +44,44 @@
 
     // Columns that exist in the Postgres schema, per table.
     // Anything NOT in this list (e.g. legacy view_mode, hidden_tabs) gets stripped.
+    // COLUMN_ALIASES — for each table, the destination Postgres column maps
+    // to a list of source sheet column names that should populate it.
+    // Add new aliases here as we discover sheet column variants.
+    const COLUMN_ALIASES = {
+        expenses: {
+            description: ['description', 'desc', 'notes', 'note', 'details', 'detail', 'remark', 'remarks', 'memo', 'name', 'item', 'fund_type', 'fundtype'],
+            type: ['type', 'transaction_type', 'tx_type'],
+            category: ['category', 'cat']
+        },
+        diary: {
+            content: ['content', 'text', 'entry', 'note', 'notes', 'body', 'message', 'thoughts'],
+            mood: ['mood', 'mood_score', 'moodscore', 'mood_rating', 'feeling', 'rating', 'score']
+        },
+        tasks: {
+            title: ['title', 'name', 'task', 'task_name'],
+            description: ['description', 'desc', 'details', 'notes']
+        },
+        habits: {
+            habit_name: ['habit_name', 'name', 'habit', 'title']
+        },
+        assets: {
+            name: ['name', 'asset_name', 'title', 'item', 'description']
+        },
+        funds: {
+            name: ['name', 'fund_name', 'title']
+        },
+        people: {
+            name: ['name', 'full_name', 'person_name', 'contact_name']
+        },
+        notes: {
+            content: ['content', 'text', 'body', 'note', 'notes']
+        },
+        book_library: {
+            title: ['title', 'book_title', 'name'],
+            author: ['author', 'authors', 'writer']
+        }
+    };
+
     const ALLOWED = {
         planner_events: ['id','title','start_datetime','end_datetime','category'],
         tasks: ['id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','duration','subtasks','pomodoro_estimate','pomodoro_length'],
@@ -298,12 +336,29 @@
         if (!sourceRow || typeof sourceRow !== 'object') return null;
         const out = {};
 
-        // 1. Strip to allowed columns only — case-insensitive match so
-        // capitalized sheet headers like "Content" still map to "content".
+        // 1. Map source columns → allowed columns.
+        //    - Case-insensitive ("Content" → "content")
+        //    - Aliases per table (your sheet uses different header names)
         if (allowed) {
             const allowedLower = allowed.map(c => c.toLowerCase());
+            const aliases = COLUMN_ALIASES[table] || {};
+            const aliasMap = {};
+            Object.keys(aliases).forEach(target => {
+                aliases[target].forEach(src => { aliasMap[src.toLowerCase()] = target; });
+            });
             Object.keys(sourceRow).forEach(k => {
-                const idx = allowedLower.indexOf(String(k).toLowerCase());
+                const kLower = String(k).toLowerCase();
+                // First check aliases for this table
+                if (aliasMap[kLower]) {
+                    const target = aliasMap[kLower];
+                    // Only fill if not already filled (real column wins over alias)
+                    if (out[target] === undefined || out[target] === '' || out[target] === null) {
+                        out[target] = sourceRow[k];
+                    }
+                    return;
+                }
+                // Then check direct allowed match (case-insensitive)
+                const idx = allowedLower.indexOf(kLower);
                 if (idx !== -1) out[allowed[idx]] = sourceRow[k];
             });
         } else {
