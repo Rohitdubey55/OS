@@ -253,42 +253,42 @@ const LUMIA_SWATCHES = [
 // Catalog — what can be added as a tile (grouped by category).
 // minW/minH = minimum size before we fall back to a compact (icon + label + value) render.
 const LUMIA_TILE_CATALOG = [
-    // Quick Actions (routes) — always fine at 1×1
-    { id: 'route-tasks',     kind: 'route', route: 'tasks',     icon: 'priority', label: 'Tasks',     category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-habits',    kind: 'route', route: 'habits',    icon: 'streak',   label: 'Habits',    category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-finance',   kind: 'route', route: 'finance',   icon: 'wallet',   label: 'Finance',   category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-diary',     kind: 'route', route: 'diary',     icon: 'entries',  label: 'Diary',     category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-calendar',  kind: 'route', route: 'calendar',  icon: 'calendar', label: 'Planner',   category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-vision',    kind: 'route', route: 'vision',    icon: 'goals',    label: 'Vision',    category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-notes',     kind: 'route', route: 'notes',     icon: 'entries',  label: 'Notes',     category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-people',    kind: 'route', route: 'people',    icon: 'chat',     label: 'People',    category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-books',     kind: 'route', route: 'books',     icon: 'open',     label: 'Books',     category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-mural',     kind: 'route', route: 'mural',     icon: 'sparkle',  label: 'Mural',     category: 'Quick Actions', minW: 1, minH: 1 },
-    { id: 'route-lifeCal',   kind: 'route', route: 'lifeCalendar', icon: 'goals', label: 'Life',     category: 'Quick Actions', minW: 1, minH: 1 },
-    // KPI live tiles — minimum 1×1 (compact icon+value), great at 2×2
-    { id: 'kpi-tasksDone',   kind: 'kpi', stat: 'tasksDone',   icon: 'priority', label: 'Tasks Done',    category: 'KPIs', route: 'tasks',   minW: 1, minH: 1 },
-    { id: 'kpi-monthSpend',  kind: 'kpi', stat: 'monthSpend',  icon: 'wallet',   label: 'Month Spend',   category: 'KPIs', route: 'finance', minW: 1, minH: 1 },
-    { id: 'kpi-weeklySpend', kind: 'kpi', stat: 'weeklySpend', icon: 'wallet',   label: 'This Week',     category: 'KPIs', route: 'finance', minW: 1, minH: 1 },
-    { id: 'kpi-habits',      kind: 'kpi', stat: 'habits',      icon: 'streak',   label: 'Habits Today',  category: 'KPIs', route: 'habits',  minW: 1, minH: 1 },
-    { id: 'kpi-habitScore',  kind: 'kpi', stat: 'habitScore',  icon: 'streak',   label: 'Habit Score',   category: 'KPIs', route: 'habits',  minW: 1, minH: 1 },
-    { id: 'kpi-streak',      kind: 'kpi', stat: 'streak',      icon: 'goals',    label: 'Streak',        category: 'KPIs', route: 'diary',   minW: 1, minH: 1 },
-    { id: 'kpi-yearProgress',kind: 'kpi', stat: 'yearProgress',icon: 'calendar', label: 'Year Progress', category: 'KPIs', route: 'lifeCalendar', minW: 1, minH: 1 },
-    { id: 'kpi-netWorth',    kind: 'kpi', stat: 'netWorth',    icon: 'insights', label: 'Net Worth',     category: 'KPIs', route: 'finance', minW: 1, minH: 1 },
-    // Daily tools (in-app routes/actions) — 1×1 fine
-    { id: 'tool-focus',      kind: 'route', route: 'pomodoro',     icon: 'focus',   label: 'Focus',    category: 'Daily Tools', minW: 1, minH: 1 },
-    { id: 'tool-gym',        kind: 'route', route: 'gym',          icon: 'goals',   label: 'Gym',      category: 'Daily Tools', minW: 1, minH: 1 },
-    { id: 'tool-chimes',     kind: 'route', route: 'chimes',       icon: 'bell',    label: 'Chimes',   category: 'Daily Tools', minW: 1, minH: 1 },
-    { id: 'tool-tutor',      kind: 'route', route: 'tutor',        icon: 'chat',    label: 'Tutor',    category: 'Daily Tools', minW: 1, minH: 1 },
-    { id: 'tool-meditate',   kind: 'route', route: 'meditation',   icon: 'goals',   label: 'Meditate', category: 'Daily Tools', minW: 1, minH: 1 },
-    // Widgets — minimum sizes below which we render a compact tile instead.
-    { id: 'widget-greeting',     kind: 'widget', widget: 'morning',      icon: 'sunrise',  label: 'Greeting',       category: 'Widgets', minW: 3, minH: 2 },
-    { id: 'widget-aiBriefing',   kind: 'widget', widget: 'aiBriefing',   icon: 'sparkle',  label: 'Daily Briefing', category: 'Widgets', minW: 3, minH: 2 },
-    { id: 'widget-yearProgress', kind: 'widget', widget: 'yearProgress', icon: 'calendar', label: 'Year Progress',  category: 'Widgets', minW: 2, minH: 2, route: 'lifeCalendar' },
-    { id: 'widget-habitsGrid',   kind: 'widget', widget: 'habitsGrid',   icon: 'streak',   label: 'Habits Grid',    category: 'Widgets', minW: 4, minH: 3, route: 'habits' },
-    { id: 'widget-tasksList',    kind: 'widget', widget: 'tasksList',    icon: 'priority', label: 'Tasks List',     category: 'Widgets', minW: 3, minH: 3, route: 'tasks' },
-    { id: 'widget-dailyTools',   kind: 'widget', widget: 'dailyTools',   icon: 'sparkle',  label: 'Daily Tools',    category: 'Widgets', minW: 3, minH: 2 },
-    { id: 'widget-vision',       kind: 'widget', widget: 'vision',       icon: 'goals',    label: 'Vision Banner',  category: 'Widgets', minW: 3, minH: 2, route: 'vision' },
-    { id: 'widget-cashflow',     kind: 'widget', widget: 'cashflow',     icon: 'insights', label: 'Cashflow',       category: 'Widgets', minW: 3, minH: 2, route: 'finance' },
+    // Quick Actions (routes) — every entry uses a UNIQUE icon
+    { id: 'route-tasks',     kind: 'route', route: 'tasks',     icon: 'check-square', label: 'Tasks',     category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-habits',    kind: 'route', route: 'habits',    icon: 'sprout',       label: 'Habits',    category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-finance',   kind: 'route', route: 'finance',   icon: 'wallet',       label: 'Finance',   category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-diary',     kind: 'route', route: 'diary',     icon: 'entries',      label: 'Diary',     category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-calendar',  kind: 'route', route: 'calendar',  icon: 'calendar',     label: 'Planner',   category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-vision',    kind: 'route', route: 'vision',    icon: 'eye',          label: 'Vision',    category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-notes',     kind: 'route', route: 'notes',     icon: 'sticky-note',  label: 'Notes',     category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-people',    kind: 'route', route: 'people',    icon: 'heart',        label: 'People',    category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-books',     kind: 'route', route: 'books',     icon: 'book',         label: 'Books',     category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-mural',     kind: 'route', route: 'mural',     icon: 'mural',        label: 'Mural',     category: 'Quick Actions', minW: 1, minH: 1 },
+    { id: 'route-lifeCal',   kind: 'route', route: 'lifeCalendar', icon: 'map',       label: 'Life',      category: 'Quick Actions', minW: 1, minH: 1 },
+    // KPI live tiles — minimum 1×1, distinct icons per stat
+    { id: 'kpi-tasksDone',   kind: 'kpi', stat: 'tasksDone',   icon: 'check-circle', label: 'Tasks Done',    category: 'KPIs', route: 'tasks',   minW: 1, minH: 1 },
+    { id: 'kpi-monthSpend',  kind: 'kpi', stat: 'monthSpend',  icon: 'wallet',       label: 'Month Spend',   category: 'KPIs', route: 'finance', minW: 1, minH: 1 },
+    { id: 'kpi-weeklySpend', kind: 'kpi', stat: 'weeklySpend', icon: 'piggy',        label: 'This Week',     category: 'KPIs', route: 'finance', minW: 1, minH: 1 },
+    { id: 'kpi-habits',      kind: 'kpi', stat: 'habits',      icon: 'sprout',       label: 'Habits Today',  category: 'KPIs', route: 'habits',  minW: 1, minH: 1 },
+    { id: 'kpi-habitScore',  kind: 'kpi', stat: 'habitScore',  icon: 'gauge',        label: 'Habit Score',   category: 'KPIs', route: 'habits',  minW: 1, minH: 1 },
+    { id: 'kpi-streak',      kind: 'kpi', stat: 'streak',      icon: 'streak',       label: 'Streak',        category: 'KPIs', route: 'diary',   minW: 1, minH: 1 },
+    { id: 'kpi-yearProgress',kind: 'kpi', stat: 'yearProgress',icon: 'clock',        label: 'Year Progress', category: 'KPIs', route: 'lifeCalendar', minW: 1, minH: 1 },
+    { id: 'kpi-netWorth',    kind: 'kpi', stat: 'netWorth',    icon: 'landmark',     label: 'Net Worth',     category: 'KPIs', route: 'finance', minW: 1, minH: 1 },
+    // Daily tools — distinct icons per tool
+    { id: 'tool-focus',      kind: 'route', route: 'pomodoro',     icon: 'focus',       label: 'Focus',    category: 'Daily Tools', minW: 1, minH: 1 },
+    { id: 'tool-gym',        kind: 'route', route: 'gym',          icon: 'dumbbell',    label: 'Gym',      category: 'Daily Tools', minW: 1, minH: 1 },
+    { id: 'tool-chimes',     kind: 'route', route: 'chimes',       icon: 'bell',        label: 'Chimes',   category: 'Daily Tools', minW: 1, minH: 1 },
+    { id: 'tool-tutor',      kind: 'route', route: 'tutor',        icon: 'globe',       label: 'Tutor',    category: 'Daily Tools', minW: 1, minH: 1 },
+    { id: 'tool-meditate',   kind: 'route', route: 'meditation',   icon: 'yoga',        label: 'Meditate', category: 'Daily Tools', minW: 1, minH: 1 },
+    // Widget tiles — distinct icons that aren't reused elsewhere
+    { id: 'widget-greeting',     kind: 'widget', widget: 'morning',      icon: 'sunrise',    label: 'Greeting',       category: 'Widgets', minW: 3, minH: 2 },
+    { id: 'widget-aiBriefing',   kind: 'widget', widget: 'aiBriefing',   icon: 'coffee',     label: 'Daily Briefing', category: 'Widgets', minW: 3, minH: 2 },
+    { id: 'widget-yearProgress', kind: 'widget', widget: 'yearProgress', icon: 'calendar',   label: 'Year Progress',  category: 'Widgets', minW: 2, minH: 2, route: 'lifeCalendar' },
+    { id: 'widget-habitsGrid',   kind: 'widget', widget: 'habitsGrid',   icon: 'grid',       label: 'Habits Grid',    category: 'Widgets', minW: 4, minH: 3, route: 'habits' },
+    { id: 'widget-tasksList',    kind: 'widget', widget: 'tasksList',    icon: 'list',       label: 'Tasks List',     category: 'Widgets', minW: 3, minH: 3, route: 'tasks' },
+    { id: 'widget-dailyTools',   kind: 'widget', widget: 'dailyTools',   icon: 'layers',     label: 'Daily Tools',    category: 'Widgets', minW: 3, minH: 2 },
+    { id: 'widget-vision',       kind: 'widget', widget: 'vision',       icon: 'goals',      label: 'Vision Banner',  category: 'Widgets', minW: 3, minH: 2, route: 'vision' },
+    { id: 'widget-cashflow',     kind: 'widget', widget: 'cashflow',     icon: 'insights',   label: 'Cashflow',       category: 'Widgets', minW: 3, minH: 2, route: 'finance' },
 
     // ─────────────────────────────────────────────────────────────────
     // QUICK ADD — tap the tile to open the existing form modal
