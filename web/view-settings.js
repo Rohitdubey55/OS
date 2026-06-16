@@ -977,7 +977,10 @@ window.setModel = function (modelId) {
 // --- HELPER: Update Tab Visibility (Instant) ---
 window.updateTabVisibility = function () {
   const settings = state.data.settings?.[0];
-  if (!settings) return;
+  if (!settings) {
+    console.warn('[Tab Visibility] no settings in state — sidebar will show all tabs');
+    return;
+  }
 
   const layoutStr = settings.nav_layout || '';
   let orderList = [];
@@ -985,14 +988,20 @@ window.updateTabVisibility = function () {
 
   if (layoutStr) {
     try {
-      const layoutData = JSON.parse(layoutStr);
-      orderList = layoutData.map(item => item.id);
-      hiddenList = layoutData.filter(item => !item.visible).map(item => item.id);
-    } catch (e) { console.error("Error parsing Nav_Layout in UI:", e); }
+      const layoutData = typeof layoutStr === 'string' ? JSON.parse(layoutStr) : layoutStr;
+      if (Array.isArray(layoutData)) {
+        orderList = layoutData.map(item => item.id);
+        hiddenList = layoutData.filter(item => !item.visible).map(item => item.id);
+      } else {
+        console.warn('[Tab Visibility] nav_layout is not an array', layoutData);
+      }
+    } catch (e) {
+      console.error("[Tab Visibility] Error parsing nav_layout:", e, layoutStr);
+    }
   } else {
-    // Fallback to old keys
+    console.log('[Tab Visibility] no nav_layout in settings — falling back to hidden_tabs');
     const hiddenStr = settings.hidden_tabs || '';
-    hiddenList = hiddenStr.split(',').map(s => s.trim());
+    hiddenList = hiddenStr.split(',').map(s => s.trim()).filter(Boolean);
   }
 
   // Helper function to reorder DOM nodes inside their parent container

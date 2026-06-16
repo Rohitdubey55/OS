@@ -390,6 +390,12 @@ async function routeTo(viewName) {
     }
 
 
+    // Re-apply tab visibility on every navigation — defensive against any code
+    // path that re-renders the sidebar without re-applying the hidden list.
+    if (typeof window.updateTabVisibility === 'function') {
+        try { window.updateTabVisibility(); } catch (e) { console.warn('updateTabVisibility failed:', e); }
+    }
+
     // Update Nav Active States
     document.querySelectorAll('.nav-item, .mob-item, .tab').forEach(el => {
 
