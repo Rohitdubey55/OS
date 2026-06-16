@@ -1,0 +1,544 @@
+<!doctype html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8" />
+
+    <meta name="viewport"
+        content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+
+    <title>PersonalOS</title>
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#4F46E5" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PersonalOS" />
+
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="apple-touch-icon" href="favicon.svg" />
+
+    <!-- Preconnect to Google Fonts so the actual font request resolves DNS in parallel -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!--
+      Icon-pack CDN stylesheets (Remix, Tabler, FontAwesome, Feather, Material Icons)
+      have been moved to lazy-load on demand in components/icon-packs.js — they are
+      only fetched when the user selects that pack in Settings. The default Lucide
+      pack uses inline SVGs and needs no CSS. This saves 4 render-blocking remote
+      requests on every cold start.
+    -->
+
+    <link rel="stylesheet" href="styles/design-system.css" />
+
+    <link rel="stylesheet" href="styles/components.css" />
+
+    <link rel="stylesheet" href="loader.css" />
+
+    <link rel="stylesheet" href="style.css" />
+
+    <link rel="stylesheet" href="settings-styles.css" />
+
+    <link rel="stylesheet" href="settings-data-styles.css" />
+
+    <link rel="stylesheet" href="settings-fab.css" />
+
+    <link rel="stylesheet" href="fab-menu-styles.css" />
+
+    <link rel="stylesheet" href="diary-views.css" />
+
+    <link rel="stylesheet" href="tools-views.css" />
+    <link rel="stylesheet" href="tutor-views.css" />
+    <link rel="stylesheet" href="mural.css" />
+
+    <link rel="stylesheet" href="finance-transactions.css" />
+
+    <link rel="stylesheet" href="ui-polish.css" />
+
+    <link rel="stylesheet" href="vision-views.css" />
+    <link rel="stylesheet" href="meditation-views.css" />
+    <link rel="stylesheet" href="view-people.css" />
+
+    <link rel="stylesheet" href="saas-polish.css" />
+    <link rel="stylesheet" href="styles/books-reader.css" />
+    <link rel="stylesheet" href="command-palette.css" />
+    <link rel="stylesheet" href="styles/icon-styles.css" />
+
+    <!-- Last in order so it overrides any earlier padding rules on
+         .main-content, .main-header-bar, FAB, toast, etc. -->
+    <link rel="stylesheet" href="native-chrome.css" />
+
+    <!-- SaaS UI redesign layer — loads LAST so its tokens and overrides win. -->
+    <link rel="stylesheet" href="styles/saas.css" />
+
+    <!-- capacitor-bundle must run before main.js so window.Capacitor is available -->
+    <script src="capacitor-bundle.js"></script>
+
+    <!-- Non-critical third-party scripts: defer so they don't block render.
+         Chart.js is only needed once the user opens a chart-bearing view. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js" defer></script>
+    <script src="https://unpkg.com/lucide@latest" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.1/dist/feather.min.js" defer></script>
+
+    <!-- Supabase backend (replaces Google Apps Script when enabled).
+         Order: SDK → config → client → auth → api-replacement.
+         All are no-ops until web/supabase-config.js sets `enabled: true`. -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js"></script>
+    <script src="supabase-client.js"></script>
+    <script src="supabase-auth.js"></script>
+
+    <script src="components/empty-state.js" defer></script>
+    <script src="components/icon-packs.js" defer></script>
+    <script src="fab-menu.js" defer></script>
+    <script src="ai-service.js" defer></script>
+
+    <!-- Inline: restore sidebar-collapsed state BEFORE first paint to avoid flicker -->
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('sidebarCollapsed') === '1') {
+                    document.documentElement.classList.add('sidebar-collapsed-preboot');
+                    document.addEventListener('DOMContentLoaded', function () {
+                        document.body.classList.add('sidebar-collapsed');
+                    });
+                }
+            } catch (e) {}
+        })();
+    </script>
+
+</head>
+
+<body>
+
+    <!-- Loading Screen -->
+    <div id="appLoader" class="app-loader">
+        <div class="loader-content">
+            <div class="loader-logo">
+                <span class="logo-icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" class="lucide lucide-target">
+                        <circle cx="12" cy="12" r="10" />
+                        <circle cx="12" cy="12" r="6" />
+                        <circle cx="12" cy="12" r="2" />
+                    </svg></span>
+                PersonalOS
+            </div>
+
+            <div class="loader-progress-container">
+                <div class="loader-progress-bar"></div>
+            </div>
+
+            <div class="loader-status">Loading your data...</div>
+        </div>
+    </div>
+
+
+
+    <div class="app">
+
+
+        <aside class="sidebar">
+
+            <div class="brand">
+                <div class="brand-logo" style="width:28px;height:28px;border-radius:8px;"></div>
+                <span class="brand-name">PersonalOS</span>
+                <button id="sidebarToggle" onclick="toggleSaasSidebar()" title="Toggle sidebar" aria-label="Toggle sidebar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"/>
+                    </svg>
+                </button>
+            </div>
+
+            <nav>
+
+                <div class="nav-item active" onclick="routeTo('dashboard')" data-target="dashboard">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>
+                    <span class="nav-label">Dashboard</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('calendar')" data-target="calendar">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                    <span class="nav-label">Planner</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('tasks')" data-target="tasks">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+                    <span class="nav-label">Tasks</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('finance')" data-target="finance">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></span>
+                    <span class="nav-label">Finance</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('habits')" data-target="habits">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span>
+                    <span class="nav-label">Habits</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('diary')" data-target="diary">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+                    <span class="nav-label">Diary</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('vision')" data-target="vision">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+                    <span class="nav-label">Vision</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('people')" data-target="people">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                    <span class="nav-label">People</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('books')" data-target="books">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg></span>
+                    <span class="nav-label">Books</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('mural')" data-target="mural">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125 0-.948.742-1.688 1.668-1.688h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span>
+                    <span class="nav-label">Mural</span>
+                </div>
+
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="nav-item" onclick="routeTo('settings')" data-target="settings">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+                    <span class="nav-label">Settings</span>
+                </div>
+            </div>
+
+        </aside>
+
+
+
+        <main class="main-content">
+
+
+            <div class="main-header-bar">
+
+                <button class="menu-toggle-btn" onclick="toggleSidebar()" title="Toggle Menu">
+
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+
+                    </svg>
+
+                </button>
+
+                <div class="page-actions" id="pageActions"></div>
+
+            </div>
+
+            <div id="main"></div>
+
+
+        </main>
+
+        <nav class="mobile-nav">
+
+            <div class="mob-item active" onclick="routeTo('dashboard')" data-target="dashboard">
+                <i data-icon="home"></i>
+                Home
+            </div>
+
+            <div class="mob-item" onclick="routeTo('calendar')" data-target="calendar">
+                <i data-icon="calendar"></i>
+                Plan
+            </div>
+
+            <div class="mob-item" onclick="routeTo('tasks')" data-target="tasks">
+                <i data-icon="list"></i>
+                Tasks
+            </div>
+
+            <div class="mob-item" onclick="routeTo('finance')" data-target="finance">
+                <i data-icon="money"></i>
+                Money
+            </div>
+
+            <div class="mob-item" onclick="routeTo('habits')" data-target="habits">
+                <i data-icon="habits"></i>
+                Habits
+            </div>
+
+            <div class="mob-item" onclick="routeTo('diary')" data-target="diary">
+                <i data-icon="diary"></i>
+                Diary
+            </div>
+
+            <div class="mob-item" onclick="routeTo('vision')" data-target="vision">
+                <i data-icon="vision"></i>
+                Vision
+            </div>
+
+            <div class="mob-item" onclick="routeTo('people')" data-target="people">
+                <i data-icon="people"></i>
+                People
+            </div>
+            <div class="mob-item" onclick="routeTo('books')" data-target="books">
+                <i data-icon="book-open"></i>
+                Books
+            </div>
+            <div class="mob-item" onclick="routeTo('mural')" data-target="mural">
+                <i data-icon="layout"></i>
+                Mural
+            </div>
+
+        </nav>
+
+
+
+        <div id="toast">
+            Action Saved</div>
+
+
+        <!-- FAB Menu Overlay -->
+        <div id="fabOverlay" class="fab-overlay" onclick="closeFABMenu()"></div>
+
+        <!-- FAB Speed Dial Menu -->
+        <div id="fabMenu" class="fab-menu">
+
+            <!-- Stage 1: Main Actions -->
+            <div id="fabStage1" class="fab-stage">
+                <div class="fab-menu-item" onclick="routeTo('settings'); closeFABMenu()">
+                    <span class="fab-menu-label">Settings</span>
+                    <button class="fab-menu-button settings"><i data-icon="settings"
+                            style="width:20px;height:20px;"></i></button>
+                </div>
+                <div class="fab-menu-item" onclick="refreshAll(); closeFABMenu()">
+                    <span class="fab-menu-label">Refresh</span>
+                    <button class="fab-menu-button refresh"><i data-icon="refresh"
+                            style="width:20px;height:20px;"></i></button>
+                </div>
+                <div class="fab-menu-item" onclick="showFabToolsStage()">
+                    <span class="fab-menu-label">Tools</span>
+                    <button class="fab-menu-button tools"><i data-icon="wrench"
+                            style="width:20px;height:20px;"></i></button>
+                </div>
+                <div class="fab-menu-item" onclick="showFabStage2()">
+                    <span class="fab-menu-label">Add New</span>
+                    <button class="fab-menu-button add"><i data-icon="add" style="width:20px;height:20px;"></i></button>
+                </div>
+            </div>
+
+            <!-- Stage 2: Create Items (Initially Hidden) -->
+            <div id="fabStage2" class="fab-stage hidden">
+                <div class="fab-menu-item" onclick="window.openEventModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Event</span>
+                    <button class="fab-menu-button plan">
+                        <i data-icon="calendar" style="color:var(--primary)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openTaskModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Task</span>
+                    <button class="fab-menu-button task">
+                        <i data-icon="check-circle" style="color:var(--success)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openFinanceAction(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Transaction</span>
+                    <button class="fab-menu-button money">
+                        <i data-icon="wallet" style="color:var(--warning)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openHabitModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Habit</span>
+                    <button class="fab-menu-button habit">
+                        <i data-icon="habits" style="color:var(--danger)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openDiaryModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Diary</span>
+                    <button class="fab-menu-button diary">
+                        <i data-icon="diary" style="color:var(--accent)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="window.openVisionModal(); closeFABMenu()">
+                    <span class="fab-menu-label">Add Vision</span>
+                    <button class="fab-menu-button vision">
+                        <i data-icon="vision" style="color:#ec4899"></i>
+                    </button>
+                </div>
+                <!-- Back Button -->
+                <div class="fab-menu-item" onclick="showFabStage1()">
+                    <span class="fab-menu-label">Back</span>
+                    <button class="fab-menu-button back">
+                        <i data-icon="back" style="color:var(--text-1)"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stage 3: Tools Sub-Menu (Initially Hidden) -->
+            <div id="fabStage3" class="fab-stage hidden">
+                <div class="fab-menu-item" onclick="routeTo('gym'); closeFABMenu()">
+                    <span class="fab-menu-label">Gym Page</span>
+                    <button class="fab-menu-button gym">
+                        <i data-icon="dumbbell" style="color:var(--primary)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="routeTo('pomodoro'); closeFABMenu()">
+                    <span class="fab-menu-label">Pomodoro</span>
+                    <button class="fab-menu-button pomodoro">
+                        <i data-icon="timer" style="color:var(--primary)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="routeTo('notes'); closeFABMenu()">
+                    <span class="fab-menu-label">Note Taking</span>
+                    <button class="fab-menu-button notes">
+                        <i data-icon="notebook" style="color:var(--success)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="routeTo('mural'); closeFABMenu()">
+                    <span class="fab-menu-label">Mural</span>
+                    <button class="fab-menu-button mural" style="background:var(--surface-sunken)">
+                        <i data-icon="layout" style="color:var(--primary)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="routeTo('chimes'); closeFABMenu()">
+                    <span class="fab-menu-label">Chimes</span>
+                    <button class="fab-menu-button" style="background:var(--surface-sunken)">
+                        <i data-icon="bell" style="color:var(--warning)"></i>
+                    </button>
+                </div>
+                <div class="fab-menu-item" onclick="routeTo('tutor'); closeFABMenu()">
+                    <span class="fab-menu-label">English Tutor</span>
+                    <button class="fab-menu-button" style="background:var(--surface-sunken)">
+                        <i data-icon="languages" style="color:var(--info)"></i>
+                    </button>
+                </div>
+                <!-- Back Button -->
+                <div class="fab-menu-item" onclick="showFabStage1()">
+                    <span class="fab-menu-label">Back</span>
+                    <button class="fab-menu-button back">
+                        <i data-icon="back" style="color:var(--text-1)"></i>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Main FAB Button.
+             The grid icon is hardcoded as a static SVG instead of
+             <i data-icon="grid"> so lucide.createIcons() (which runs on
+             every view render) never re-processes it. Without this, every
+             view navigation rebuilt the SVG and briefly stripped the
+             stroke-width / size, leaving the icon visibly displaced inside
+             the FAB. -->
+        <div class="fab" onclick="toggleFABMenu()">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+                <rect width="7" height="7" x="3"  y="3"  rx="1"></rect>
+                <rect width="7" height="7" x="14" y="3"  rx="1"></rect>
+                <rect width="7" height="7" x="14" y="14" rx="1"></rect>
+                <rect width="7" height="7" x="3"  y="14" rx="1"></rect>
+            </svg>
+        </div>
+
+
+
+        <div id="universalModal" class="modal-overlay hidden"
+            onclick="if(event.target === this) this.classList.add('hidden')">
+
+            <div class="modal-box">
+                <!-- Content injected dynamically -->
+            </div>
+
+        </div>
+
+
+
+    </div>
+
+
+
+    <!-- Floating AI Button -->
+    <div class="ai-fab" onclick="openAIModal()">
+        <i data-icon="sparkles"></i>
+    </div>
+
+
+    <!-- AI Insight Modal -->
+    <div id="aiModal" class="ai-modal-overlay" onclick="if(event.target === this) closeAIModal()">
+        <div class="ai-modal-card">
+            <div class="ai-header">
+                <div class="ai-title">
+                    <i data-icon="sparkles" style="width:24px; margin-right:8px; display:inline-block"></i>
+                    AI Insight
+                </div>
+                <button class="btn icon" onclick="closeAIModal()"><i data-icon="x"></i></button>
+            </div>
+
+            <div id="aiModalContent">
+                <!-- Content injected via JS -->
+                <div style="text-align:center; padding:40px; color:var(--text-muted)">
+                    <i data-icon="loading" class="spin" style="width:32px; height:32px; margin-bottom:16px"></i>
+                    <div>Analyzing your data...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reactive store (Phase 7). Loaded before main.js so it can publish
+         state changes through window.personalStore from the moment the
+         app boots. Views opt in via personalStore.subscribe(...) on demand. -->
+    <script src="store.js"></script>
+
+    <!-- Biometric lock runs as early as possible so the lock screen paints
+         over the loader before any data is touched. No-op unless the user
+         has set localStorage.biometricLock = '1'. -->
+    <script src="biometric-lock.js"></script>
+
+    <script src="main.js?v=20260313a"></script>
+
+    <!-- supabase-api MUST load AFTER main.js because it replaces window.apiCall.
+         If SUPABASE_CONFIG.enabled is false, this script no-ops. -->
+    <script src="supabase-api.js"></script>
+
+    <!-- View modules are loaded lazily by routeTo() in main.js (VIEW_MAP).
+         This drops the cold-start JS payload from ~2.7 MB to ~200 KB. -->
+
+    <script src="notification-service.js?v=3" defer></script>
+    <script src="command-palette.js" defer></script>
+    <script src="widget-bridge.js" defer></script>
+
+    <div id="commandPalette" class="hidden" onclick="if(event.target === this) closeCommandPalette()">
+        <div class="cmd-modal">
+            <div class="cmd-header">
+                <i data-icon="search" style="width:20px; color:var(--text-muted); margin-right:8px"></i>
+                <input id="cmdInput" placeholder="Type a command or search..." autocomplete="off">
+                <span
+                    style="font-size:10px; background:var(--surface-base); padding:2px 6px; border-radius:4px; color:var(--text-muted)">ESC</span>
+            </div>
+            <div id="cmdResults">
+                <!-- Results -->
+            </div>
+        </div>
+    </div>
+
+    <script>window.addEventListener('load', async function () {
+            await initApp();
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+        });</script>
+
+    <audio id="alarmSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+        preload="none"></audio>
+</body>
+
+</html>

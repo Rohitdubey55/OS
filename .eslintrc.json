@@ -1,0 +1,67 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "node": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "script"
+  },
+  "globals": {
+    "Capacitor": "readonly",
+    "Chart": "readonly",
+    "Sortable": "readonly",
+    "lucide": "readonly",
+    "feather": "readonly",
+    "state": "writable",
+    "showToast": "readonly",
+    "routeTo": "readonly",
+    "renderIcon": "readonly",
+    "renderAllIcons": "readonly",
+    "getCurrentIconPack": "readonly",
+    "loadAllData": "readonly",
+    "addLongPressListener": "readonly",
+    "triggerHapticBuzz": "readonly",
+    "updateWidgetData": "readonly",
+    "biometricLock": "readonly",
+    "personalStore": "readonly",
+    "API_BASE": "readonly",
+    "SCRIPT_URL": "readonly"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "args": "none", "varsIgnorePattern": "^_" }],
+    "no-undef": "error",
+    "no-implicit-globals": "off",
+    "no-empty": ["warn", { "allowEmptyCatch": true }],
+    "no-constant-condition": ["warn", { "checkLoops": false }],
+    "no-prototype-builtins": "off",
+    "no-async-promise-executor": "warn",
+    "no-self-assign": "warn",
+    "no-useless-escape": "warn",
+    "no-redeclare": "warn"
+  },
+  "ignorePatterns": [
+    "www/**",
+    "node_modules/**",
+    "android/**",
+    "ios/**",
+    "*.min.js",
+    "package-lock.json"
+  ],
+  "overrides": [
+    {
+      "files": ["sw.js"],
+      "env": {
+        "serviceworker": true,
+        "worker": true,
+        "browser": false
+      }
+    },
+    {
+      "files": ["capacitor-init.js"],
+      "parserOptions": { "sourceType": "module" }
+    }
+  ]
+}

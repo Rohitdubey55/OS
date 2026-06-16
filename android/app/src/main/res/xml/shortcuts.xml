@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Static App Shortcuts. Surfaced when the user long-presses the launcher icon.
+
+  Each shortcut sends an ACTION_VIEW intent with a personalos:// URI.
+  The deep-link intent-filter on MainActivity catches it, and the
+  appUrlOpen handler in main.js parses the URL and routes accordingly,
+  using the ?action=add query string to open the right modal on arrival.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="add_task"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_task"
+        android:shortcutShortLabel="@string/shortcut_task_short"
+        android:shortcutLongLabel="@string/shortcut_task_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.personal.os"
+            android:targetClass="com.personal.os.MainActivity"
+            android:data="personalos://tasks?action=add" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="new_diary"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_diary"
+        android:shortcutShortLabel="@string/shortcut_diary_short"
+        android:shortcutLongLabel="@string/shortcut_diary_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.personal.os"
+            android:targetClass="com.personal.os.MainActivity"
+            android:data="personalos://diary?action=add" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="start_pomodoro"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_pomodoro"
+        android:shortcutShortLabel="@string/shortcut_pomodoro_short"
+        android:shortcutLongLabel="@string/shortcut_pomodoro_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.personal.os"
+            android:targetClass="com.personal.os.MainActivity"
+            android:data="personalos://pomodoro?action=start" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="check_habits"
+        android:enabled="true"
+        android:icon="@drawable/shortcut_habits"
+        android:shortcutShortLabel="@string/shortcut_habits_short"
+        android:shortcutLongLabel="@string/shortcut_habits_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.personal.os"
+            android:targetClass="com.personal.os.MainActivity"
+            android:data="personalos://habits" />
+    </shortcut>
+
+</shortcuts>

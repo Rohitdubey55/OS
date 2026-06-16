@@ -41,6 +41,25 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>PersonalOS needs microphone access for the English Tutor voice conversations.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>PersonalOS needs camera access to capture photos for vision goals.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>personalos</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.personal.os</string>
+		</dict>
+	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

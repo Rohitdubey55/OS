@@ -1,0 +1,18 @@
+<!-- Tomato/clock glyph on red rounded square — Start Pomodoro shortcut -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+  <path
+      android:fillColor="#DC2626"
+      android:pathData="M8,4 L40,4 Q44,4 44,8 L44,40 Q44,44 40,44 L8,44 Q4,44 4,40 L4,8 Q4,4 8,4 Z"/>
+  <!-- Clock circle -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M24,12 a12,12 0 1,0 0.001,0 Z M24,16 a8,8 0 1,1 0,16 a8,8 0 1,1 0,-16 Z"/>
+  <!-- Clock hands at 12 and 3 -->
+  <path
+      android:fillColor="#DC2626"
+      android:pathData="M23.2,18 L24.8,18 L24.8,24 L23.2,24 Z M24,23.2 L30,23.2 L30,24.8 L24,24.8 Z"/>
+</vector>

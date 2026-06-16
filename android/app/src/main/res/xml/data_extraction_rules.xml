@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Data extraction rules for Android 12+ (replaces the legacy backup_rules.xml).
+
+  cloud-backup: what gets uploaded to the user's Google Drive backup.
+  device-transfer: what gets copied when the user moves to a new phone.
+
+  We block everything sensitive from cloud-backup. Device transfer is
+  allowed for shared prefs only, since that's a phone-to-phone copy the
+  user explicitly initiates.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" />
+        <exclude domain="database" />
+        <exclude domain="file" path="app_webview/" />
+        <exclude domain="file" path="webview/" />
+        <exclude domain="external" />
+    </cloud-backup>
+
+    <device-transfer>
+        <include domain="sharedpref" />
+        <exclude domain="file" path="app_webview/" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,92 @@
+/* ============================================================================
+   Native chrome polish — minimal version.
+
+   Only contains rules that are clearly needed:
+     - Safe-area padding for top header / scroll container / sidebar
+     - Toast / floating-button bottom inset
+     - Touch-device :hover sticky-transform reset
+
+   Removed (caused regressions or are no longer needed):
+     - html/body bg override (broke light-theme background)
+     - FAB icon size/stroke-width locks (FAB now uses a static <svg> in
+       index.html, so Lucide can't strip its styles)
+     - .fab > svg display/margin overrides (same — static SVG keeps itself)
+   ============================================================================ */
+
+/* Status bar is opaque via windowOptOutEdgeToEdgeEnforcement in styles.xml,
+   so the WebView doesn't draw under it and we don't need safe-area padding
+   on the header. Only the BOTTOM inset matters (Android gesture bar). */
+.main-content {
+    padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
+}
+
+.sidebar {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* style.css applies safe-area-inset padding to .app on all 4 sides for iOS
+   notch support. On Android (no notch / cutout in portrait) those env()
+   values can resolve to non-zero in some launchers due to display cutout
+   detection, producing visible gaps on left/right and a status-bar overlap
+   when combined with edge-to-edge. We zero out left/right unconditionally
+   (Android phones don't have side cutouts in portrait) and keep top/bottom
+   so content still clears the status bar + gesture bar. */
+.app {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* Floating action button — keep it above the gesture bar on Android. */
+.fab-main,
+.fab-container,
+.command-fab {
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* Toasts shouldn't overlap the gesture bar either. */
+#toast,
+.toast {
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* When the WebView is in landscape on a device with a side notch /
+   curved display, content needs left/right insets too. */
+@media (orientation: landscape) {
+    .main-header-bar {
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+    }
+}
+
+/* ---- Touch-device :hover sticky-transform reset --------------------------
+   Mobile WebViews fire :hover on tap but never fire mouseleave, so transforms
+   like scale(1.08) get stuck after every tap. We reset them only when the
+   element is not also :active or in an .open state so legitimate interactions
+   still feel responsive. */
+@media (hover: none) {
+    .fab:hover:not(.open):not(:active),
+    .fab-menu-button:hover:not(:active),
+    .settings-fab:hover:not(:active),
+    .nav-item:hover,
+    .mob-item:hover,
+    .dash-card:hover,
+    .list-item:hover,
+    .kpi-card:hover,
+    .stat-card:hover,
+    .entry-card:hover,
+    .habit-row:hover,
+    .person-card:hover,
+    .task-row:hover,
+    .bento-task-row:hover,
+    .note-card:hover,
+    .goal-card:hover,
+    .btn:hover,
+    .btn.primary:hover,
+    .filter-chip:hover,
+    .tab:hover,
+    .quick-action:hover,
+    .widget-action:hover,
+    .qa-btn:hover {
+        transform: none !important;
+    }
+}

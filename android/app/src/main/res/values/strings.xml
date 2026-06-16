@@ -4,4 +4,27 @@
     <string name="title_activity_main">PersonalOS</string>
     <string name="package_name">com.personal.os</string>
     <string name="custom_url_scheme">com.personal.os</string>
+
+    <!-- App Shortcuts (long-press launcher icon) -->
+    <string name="shortcut_task_short">Add Task</string>
+    <string name="shortcut_task_long">Quick add a new task</string>
+    <string name="shortcut_diary_short">New Entry</string>
+    <string name="shortcut_diary_long">Write a diary entry</string>
+    <string name="shortcut_pomodoro_short">Pomodoro</string>
+    <string name="shortcut_pomodoro_long">Start a focus session</string>
+    <string name="shortcut_habits_short">Habits</string>
+    <string name="shortcut_habits_long">Check off today\'s habits</string>
+
+    <!-- Home-screen widgets -->
+    <string name="widget_todays_tasks_label">Today\'s Tasks</string>
+    <string name="widget_todays_tasks_desc">Top tasks for today, tap to open in PersonalOS</string>
+
+    <string name="widget_habit_checklist_label">Habit Checklist</string>
+    <string name="widget_habit_checklist_desc">Today\'s habits with done indicators</string>
+
+    <string name="widget_weekly_budget_label">Weekly Budget</string>
+    <string name="widget_weekly_budget_desc">Spent vs budget for the current week</string>
+
+    <string name="widget_life_progress_label">Life Progress</string>
+    <string name="widget_life_progress_desc">Percentage of life lived (based on your DOB)</string>
 </resources>

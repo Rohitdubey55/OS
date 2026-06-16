@@ -1,0 +1,18 @@
+<!-- Checklist glyph on green rounded square — Check Habits shortcut -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+  <path
+      android:fillColor="#16A34A"
+      android:pathData="M8,4 L40,4 Q44,4 44,8 L44,40 Q44,44 40,44 L8,44 Q4,44 4,40 L4,8 Q4,4 8,4 Z"/>
+  <!-- Three horizontal lines -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M20,14 L36,14 L36,17 L20,17 Z M20,22 L36,22 L36,25 L20,25 Z M20,30 L36,30 L36,33 L20,33 Z"/>
+  <!-- Three checkmark bullets on the left -->
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M12,13 L16,13 L16,17 L12,17 Z M12,21 L16,21 L16,25 L12,25 Z M12,29 L16,29 L16,33 L12,33 Z"/>
+</vector>

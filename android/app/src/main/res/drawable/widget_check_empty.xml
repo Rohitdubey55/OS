@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Empty habit check: dark filled circle with a clear ring stroke. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#161A2C" />
+    <stroke android:width="2dp" android:color="#3A4055" />
+    <size android:width="18dp" android:height="18dp" />
+</shape>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup rules for Android 11 and below.
+
+  PersonalOS stores diary, finance, habits, notes, etc. - we do NOT want
+  this data uploaded to the user's Google Drive backup in cleartext.
+
+  We exclude:
+  - All shared preferences (Capacitor's @capacitor/preferences plugin writes here)
+  - The Capacitor WebView cache and localStorage (databases/, app_webview/)
+  - The notification scheduling DB
+
+  We allow only the app_textures default cache to be backed up (nothing sensitive there).
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" />
+    <exclude domain="database" />
+    <exclude domain="file" path="app_webview/" />
+    <exclude domain="file" path="webview/" />
+    <exclude domain="external" />
+    <exclude domain="root" path="capacitor.plugin.preferences.xml" />
+</full-backup-content>

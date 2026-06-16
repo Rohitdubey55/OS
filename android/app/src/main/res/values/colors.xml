@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary brand color (indigo) — matches app theme-color #4F46E5 -->
+    <color name="colorPrimary">#4F46E5</color>
+    <color name="colorPrimaryDark">#3730A3</color>
+    <color name="colorAccent">#818CF8</color>
+
+    <!-- Splash / status bar background.
+         Matches capacitor.config.json -> android.backgroundColor and the
+         body bg in native-chrome.css so there is no white flash at launch. -->
+    <color name="colorBackground">#0B0E14</color>
+    <color name="colorSplashBackground">#0B0E14</color>
+</resources>

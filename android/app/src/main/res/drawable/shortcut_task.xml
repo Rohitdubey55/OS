@@ -1,0 +1,13 @@
+<!-- Plus icon on indigo rounded square — Add Task shortcut -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+  <path
+      android:fillColor="#4F46E5"
+      android:pathData="M8,4 L40,4 Q44,4 44,8 L44,40 Q44,44 40,44 L8,44 Q4,44 4,40 L4,8 Q4,4 8,4 Z"/>
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M22,14 L26,14 L26,22 L34,22 L34,26 L26,26 L26,34 L22,34 L22,26 L14,26 L14,22 L22,22 Z"/>
+</vector>

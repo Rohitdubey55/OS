@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Done habit check: gradient green orb with a brighter inner ring for depth. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:type="linear"
+                android:angle="135"
+                android:startColor="#22C55E"
+                android:endColor="#16A34A" />
+            <size android:width="18dp" android:height="18dp" />
+        </shape>
+    </item>
+    <item android:left="6dp" android:top="6dp" android:right="6dp" android:bottom="6dp">
+        <shape android:shape="oval">
+            <solid android:color="#86EFAC" />
+        </shape>
+    </item>
+</layer-list>

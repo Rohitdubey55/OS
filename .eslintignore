@@ -1,0 +1,9 @@
+www/
+node_modules/
+android/
+ios/
+*.min.js
+package-lock.json
+.git/
+.claude/
+Code.gs

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Provider info for Today's Tasks widget.
+
+  Sizing:
+    - 4x2 default (~250dp x 110dp on a typical 4x5 launcher grid)
+    - resizable horizontally and vertically so users can pick what works
+    - minResize keeps it functional at 3x2
+
+  Update period: 30 min minimum. In practice we trigger immediate updates
+  via WidgetBridgePlugin.triggerWidgetUpdate() whenever JS pushes new data.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/widget_todays_tasks"
+    android:previewLayout="@layout/widget_todays_tasks"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_todays_tasks_desc" />

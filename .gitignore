@@ -7,3 +7,21 @@ ios/App/App.xcworkspace/xcuserdata/
 android/.gradle
 android/app/build/
 android/app/src/main/assets/public/
+
+# Build output
+www/
+
+# Capacitor / native
+android/.idea/
+android/local.properties
+android/app/release/
+ios/App/Pods/
+ios/App/build/
+
+# Env / secrets
+.env
+.env.local
+
+# Editor
+.vscode/
+.idea/

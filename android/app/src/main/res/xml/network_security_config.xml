@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTPS-only network policy. Pairs with allowMixedContent=false in
+  capacitor.config.json. If you ever need to hit an http:// dev server,
+  add a debug-overrides block here rather than relaxing the default.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Capacitor uses a local http://localhost server in debug builds; allow only that. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

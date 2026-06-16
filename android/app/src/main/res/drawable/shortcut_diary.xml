@@ -1,0 +1,13 @@
+<!-- Pencil glyph on rose rounded square — New Diary Entry shortcut -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+  <path
+      android:fillColor="#E11D48"
+      android:pathData="M8,4 L40,4 Q44,4 44,8 L44,40 Q44,44 40,44 L8,44 Q4,44 4,40 L4,8 Q4,4 8,4 Z"/>
+  <path
+      android:fillColor="#FFFFFF"
+      android:pathData="M30.5,12 L36,17.5 L18,35.5 L12,36 L12.5,30 Z M32.5,10 L34.5,8 Q36,6.5 37.5,8 L40,10.5 Q41.5,12 40,13.5 L38,15.5 Z"/>
+</vector>

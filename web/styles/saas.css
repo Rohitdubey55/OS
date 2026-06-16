@@ -1,0 +1,3582 @@
+/* ============================================================================
+   PersonalOS — SaaS UI Layer
+   Loads LAST in index.html so it wins cascade for visual treatment.
+
+   Strategy:
+   - Tokens via CSS variables (light + dark)
+   - Responsive shell: surface the hidden sidebar on >=1024px, hide mobile nav
+   - Override existing classes (.dash-card, .kpi-card, etc.) — no HTML changes required
+   - New helper classes layered on top
+   - Page transitions, hover states, scrollbar polish
+   ============================================================================ */
+
+/* ============================================================================
+   1. DESIGN TOKENS
+   ============================================================================ */
+:root {
+    /* Spacing — 4px base */
+    --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px; --sp-5: 20px;
+    --sp-6: 24px; --sp-8: 32px; --sp-10: 40px; --sp-12: 48px; --sp-16: 64px;
+
+    /* Radius */
+    --r-xs: 4px;  --r-sm: 8px;  --r-md: 12px; --r-lg: 16px;
+    --r-xl: 20px; --r-2xl: 24px; --r-full: 999px;
+
+    /* Typography */
+    --t-xs: 11px; --t-sm: 12px; --t-base: 14px; --t-md: 16px;
+    --t-lg: 18px; --t-xl: 24px; --t-2xl: 32px; --t-3xl: 40px;
+
+    /* Editorial / minimal palette — yellow accent on black + light gray */
+    --saas-bg: #F2F3F5;
+    --saas-surface: #FFFFFF;
+    --saas-elevated: #FFFFFF;
+    --saas-sunken: #ECEDEF;
+    --saas-border: rgba(15, 23, 42, 0.07);
+    --saas-border-strong: rgba(15, 23, 42, 0.14);
+    --saas-text: #0F172A;
+    --saas-text-muted: #5B6470;
+    --saas-text-dim: #9097A1;
+    --saas-ink: #0B0F17;          /* near-black for icon tiles + sidebar active */
+    /* Accent linked to user's theme color from Settings (--primary) */
+    --saas-accent: var(--primary, #4F46E5);
+    --saas-accent-hover: var(--primary-dark, var(--primary, #4338CA));
+    --saas-accent-soft: color-mix(in srgb, var(--primary, #4F46E5) 16%, transparent);
+    --saas-accent-ink: #FFFFFF;    /* white text reads well on user's saturated primary */
+    --saas-success: #10B981;
+    --saas-success-soft: rgba(16, 185, 129, 0.10);
+    --saas-warn: #F59E0B;
+    --saas-warn-soft: rgba(245, 158, 11, 0.10);
+    --saas-danger: #EF4444;
+    --saas-danger-soft: rgba(239, 68, 68, 0.10);
+    --saas-info: #0EA5E9;
+    --saas-info-soft: rgba(14, 165, 233, 0.10);
+
+    /* Shadows (light) */
+    --sh-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+    --sh-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --sh-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+    --sh-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.06);
+    --sh-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.10), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
+    --sh-focus: 0 0 0 3px var(--saas-accent-soft);
+
+    /* Motion */
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --dur-fast: 120ms;
+    --dur-base: 200ms;
+    --dur-slow: 320ms;
+}
+
+/* Dark family — applies to any of the theme palettes */
+[data-theme="dark"],
+[data-theme="midnight"],
+[data-theme="forest"],
+[data-theme="sunset"],
+[data-theme="ocean"],
+[data-theme="lavender"],
+[data-theme="rose"] {
+    --saas-bg: #0B0E14;
+    --saas-surface: #161B23;
+    --saas-elevated: #1E242E;
+    --saas-sunken: #0F1219;
+    --saas-border: rgba(255, 255, 255, 0.06);
+    --saas-border-strong: rgba(255, 255, 255, 0.14);
+    --saas-text: #F1F5F9;
+    --saas-text-muted: #94A3B8;
+    --saas-text-dim: #64748B;
+    --saas-ink: #FFFFFF;
+    /* Accent linked to user's theme color from Settings (--primary) */
+    --saas-accent: var(--primary, #818CF8);
+    --saas-accent-hover: var(--primary-light, var(--primary, #A5B4FC));
+    --saas-accent-soft: color-mix(in srgb, var(--primary, #818CF8) 18%, transparent);
+    --saas-accent-ink: #FFFFFF;
+    --saas-success: #34D399;
+    --saas-success-soft: rgba(52, 211, 153, 0.14);
+    --saas-warn: #FBBF24;
+    --saas-warn-soft: rgba(251, 191, 36, 0.14);
+    --saas-danger: #F87171;
+    --saas-danger-soft: rgba(248, 113, 113, 0.14);
+    --saas-info: #38BDF8;
+    --saas-info-soft: rgba(56, 189, 248, 0.14);
+
+    --sh-xs: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --sh-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --sh-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+    --sh-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+    --sh-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================================================
+   2. GLOBAL BASE
+   ============================================================================ */
+html, body {
+    background: var(--saas-bg) !important;
+    color: var(--saas-text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--saas-border-strong) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--saas-border-strong); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--saas-text-dim); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ============================================================================
+   3. RESPONSIVE SHELL — desktop sidebar surfaces above 1024px
+   ============================================================================ */
+@media (min-width: 1024px) {
+    /* Mobile bottom nav and floating FABs hide on desktop */
+    .mobile-nav,
+    .fab,
+    .ai-fab { display: none !important; }
+
+    /* App container becomes flex row */
+    .app {
+        display: flex !important;
+        align-items: stretch;
+        min-height: 100vh;
+        background: var(--saas-bg);
+        padding: 0 !important;
+    }
+
+    /* Show + style sidebar */
+    .sidebar {
+        display: flex !important;
+        flex-direction: column;
+        flex-shrink: 0;
+        width: 248px;
+        background: var(--saas-surface) !important;
+        border-right: 1px solid var(--saas-border) !important;
+        padding: var(--sp-4) var(--sp-3);
+        height: 100vh;
+        position: sticky;
+        top: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        z-index: 10;
+        transition: width var(--dur-base) var(--ease);
+        box-sizing: border-box;
+    }
+
+    /* Brand block at top */
+    .sidebar .brand {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-3);
+        padding: var(--sp-3);
+        margin-bottom: var(--sp-3);
+        font-size: var(--t-md);
+        font-weight: 700;
+        color: var(--saas-text) !important;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    .sidebar .brand > div:first-child {
+        flex-shrink: 0;
+        background: linear-gradient(135deg, var(--saas-accent) 0%, #A78BFA 100%) !important;
+        box-shadow: var(--sh-sm);
+    }
+
+    /* Section labels in sidebar */
+    .sidebar .nav-section-label {
+        font-size: var(--t-xs);
+        font-weight: 700;
+        color: var(--saas-text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: var(--sp-3) var(--sp-3) var(--sp-1);
+    }
+
+    /* Nav container */
+    .sidebar nav {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex: 1;
+    }
+
+    /* Sidebar nav items */
+    .sidebar .nav-item {
+        display: flex !important;
+        align-items: center;
+        gap: var(--sp-3);
+        padding: 9px var(--sp-3);
+        border-radius: var(--r-md);
+        color: var(--saas-text-muted) !important;
+        font-size: var(--t-base);
+        font-weight: 500;
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        background: transparent !important;
+    }
+
+    .sidebar .nav-item .nav-icon {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: currentColor;
+    }
+    .sidebar .nav-item .nav-icon svg {
+        width: 18px;
+        height: 18px;
+        stroke-width: 1.75;
+    }
+
+    .sidebar .nav-item:hover {
+        background: var(--saas-sunken) !important;
+        color: var(--saas-text) !important;
+    }
+
+    .sidebar .nav-item.active {
+        background: var(--saas-ink) !important;
+        color: #FFFFFF !important;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(11, 15, 23, 0.25);
+    }
+
+    .sidebar .nav-item.active .nav-icon { color: #FFFFFF; }
+
+    /* Brand logo block — yellow */
+    .sidebar .brand .brand-logo {
+        background: var(--saas-accent) !important;
+        box-shadow: 0 2px 8px rgba(245, 203, 27, 0.4);
+    }
+
+    /* Sidebar footer (toggle + settings) */
+    .sidebar-footer {
+        margin-top: auto;
+        padding-top: var(--sp-3);
+        border-top: 1px solid var(--saas-border);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    /* Collapsed sidebar */
+    body.sidebar-collapsed .sidebar { width: 68px; padding-left: var(--sp-2); padding-right: var(--sp-2); }
+    body.sidebar-collapsed .sidebar .brand { padding: var(--sp-3) 0; justify-content: center; }
+    body.sidebar-collapsed .sidebar .brand > *:not(:first-child) { display: none; }
+    body.sidebar-collapsed .sidebar .nav-section-label { display: none; }
+    body.sidebar-collapsed .sidebar .nav-item { justify-content: center; padding: 11px 0; }
+    body.sidebar-collapsed .sidebar .nav-item .nav-label,
+    body.sidebar-collapsed .sidebar .nav-item > span:not(.nav-icon) { display: none; }
+
+    /* Main content takes remaining width */
+    .main-content {
+        flex: 1;
+        background: var(--saas-bg) !important;
+        padding: var(--sp-6) var(--sp-10) 120px !important;
+        overflow-x: hidden;
+        position: relative;
+    }
+
+    /* Inner content wrapper for max-width */
+    #main {
+        max-width: 1280px;
+        margin: 0 auto;
+        width: 100%;
+    }
+}
+
+/* ============================================================================
+   4. PAGE HEADER (the title strip above content on each page)
+   ============================================================================ */
+.main-header-bar {
+    display: flex !important;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-2) 0 var(--sp-3) !important;
+    margin-bottom: var(--sp-5) !important;
+    border-bottom: 1px solid var(--saas-border);
+}
+
+@media (min-width: 1024px) {
+    .main-header-bar .menu-toggle-btn { display: none !important; }
+    .main-header-bar {
+        max-width: 1280px;
+        margin: 0 auto var(--sp-6) !important;
+        padding-bottom: var(--sp-4) !important;
+    }
+}
+
+/* Page title: BIG and bold, like the reference's "Dashboard" header.
+   Inject the current view name via a CSS attribute selector. */
+.main-header-bar::before {
+    content: attr(data-page-title);
+    font-size: clamp(24px, 2.8vw, 34px);
+    font-weight: 700;
+    color: var(--saas-text);
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+}
+
+/* Right-aligned gear actions inside the page header */
+.main-header-bar .page-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+.main-header-bar .page-action-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--saas-border);
+    background: var(--saas-surface);
+    color: var(--saas-text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+    padding: 0;
+}
+.main-header-bar .page-action-btn:hover {
+    color: var(--saas-text);
+    border-color: var(--saas-ink);
+    box-shadow: var(--sh-sm);
+    transform: translateY(-1px);
+}
+.main-header-bar .page-action-btn:active { transform: translateY(0); }
+.main-header-bar .page-action-btn svg { display: block; }
+
+/* Generic page header helper */
+.page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--sp-4);
+    padding: var(--sp-2) 0 var(--sp-5);
+    margin-bottom: var(--sp-6);
+    border-bottom: 1px solid var(--saas-border);
+}
+.page-header h1,
+.page-header .page-title {
+    font-size: var(--t-xl);
+    font-weight: 700;
+    color: var(--saas-text);
+    letter-spacing: -0.02em;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    line-height: 1.2;
+}
+.page-header .page-subtitle {
+    font-size: var(--t-sm);
+    color: var(--saas-text-muted);
+    margin-top: 4px;
+}
+.page-header .page-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+/* Style the view-render titles consistently (most views start with h1 or a div.page-title) */
+#main > h1:first-child,
+#main > div > h1:first-child,
+#main h1.page-title,
+#main h1[class*="title"],
+#main h1[class*="header"] {
+    font-size: var(--t-xl);
+    font-weight: 700;
+    color: var(--saas-text);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+/* ============================================================================
+   5. CARDS — unified surface for all card-like elements
+   ============================================================================ */
+.dash-card,
+.list-item,
+.kpi-card,
+.entry-card,
+.stat-card,
+.person-card,
+.task-row,
+.note-card,
+.goal-card,
+.book-card,
+.mural-card,
+.bento-task-row,
+.habit-card,
+.vision-card,
+.card {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    box-shadow: var(--sh-sm) !important;
+    transition: box-shadow var(--dur-fast) var(--ease),
+                border-color var(--dur-fast) var(--ease),
+                transform var(--dur-fast) var(--ease) !important;
+    color: var(--saas-text);
+}
+
+/* Hover lift for cards on devices with a real pointer only */
+@media (hover: hover) {
+    .dash-card:hover,
+    .list-item:hover,
+    .kpi-card:hover,
+    .entry-card:hover,
+    .stat-card:hover,
+    .person-card:hover,
+    .task-row:hover,
+    .note-card:hover,
+    .goal-card:hover,
+    .book-card:hover,
+    .mural-card:hover,
+    .habit-card:hover,
+    .vision-card:hover {
+        border-color: var(--saas-border-strong) !important;
+        box-shadow: var(--sh-md) !important;
+        transform: translateY(-1px);
+    }
+}
+
+/* ============================================================================
+   6. KPI / STAT CARDS — distinctive treatment
+   ============================================================================ */
+.kpi-card {
+    padding: var(--sp-4) !important;
+    border-radius: var(--r-lg) !important;
+    display: flex !important;
+    flex-direction: column;
+    gap: var(--sp-2);
+    overflow: hidden;
+    position: relative;
+}
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--saas-accent) 0%, transparent 100%);
+    opacity: 0.6;
+}
+
+/* ============================================================================
+   7. BUTTONS
+   ============================================================================ */
+.btn,
+button.btn {
+    border-radius: var(--r-md) !important;
+    font-weight: 600 !important;
+    font-size: var(--t-base) !important;
+    padding: 9px 16px !important;
+    transition: all var(--dur-fast) var(--ease) !important;
+    letter-spacing: -0.005em !important;
+    border: 1px solid transparent !important;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    line-height: 1.2;
+}
+
+.btn.primary,
+.btn-primary {
+    background: var(--saas-ink) !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 2px 6px rgba(11, 15, 23, 0.20) !important;
+}
+@media (hover: hover) {
+    .btn.primary:hover,
+    .btn-primary:hover {
+        background: #1A2030 !important;
+        box-shadow: 0 4px 12px rgba(11, 15, 23, 0.30) !important;
+        transform: translateY(-1px);
+    }
+}
+
+/* Yellow accent button variant */
+.btn.accent,
+.btn-accent {
+    background: var(--saas-accent) !important;
+    color: var(--saas-accent-ink) !important;
+    box-shadow: 0 2px 8px rgba(245, 203, 27, 0.4) !important;
+}
+@media (hover: hover) {
+    .btn.accent:hover {
+        background: var(--saas-accent-hover) !important;
+        transform: translateY(-1px);
+    }
+}
+
+.btn.secondary,
+.btn-secondary {
+    background: var(--saas-sunken) !important;
+    color: var(--saas-text) !important;
+    border: 1px solid var(--saas-border) !important;
+}
+@media (hover: hover) {
+    .btn.secondary:hover {
+        background: var(--saas-elevated) !important;
+        border-color: var(--saas-border-strong) !important;
+    }
+}
+
+.btn-danger {
+    background: var(--saas-danger-soft) !important;
+    color: var(--saas-danger) !important;
+    border: 1px solid transparent !important;
+}
+
+.btn.icon,
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    border-radius: var(--r-md) !important;
+    background: var(--saas-sunken) !important;
+    color: var(--saas-text-muted) !important;
+    border: 1px solid var(--saas-border) !important;
+}
+
+/* ============================================================================
+   8. INPUTS
+   ============================================================================ */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="search"],
+input[type="time"],
+input[type="date"],
+input[type="password"],
+textarea,
+select,
+.input {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-md) !important;
+    padding: 10px var(--sp-3) !important;
+    font-size: var(--t-base) !important;
+    color: var(--saas-text) !important;
+    font-family: inherit !important;
+    transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+    box-sizing: border-box;
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+.input:focus {
+    outline: none !important;
+    border-color: var(--saas-accent) !important;
+    box-shadow: var(--sh-focus) !important;
+}
+
+input::placeholder, textarea::placeholder { color: var(--saas-text-dim) !important; }
+
+/* ============================================================================
+   9. PILLS / CHIPS / TAGS / FILTERS
+   ============================================================================ */
+.filter-chip,
+.pill,
+.tag,
+.badge {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px !important;
+    background: var(--saas-sunken) !important;
+    color: var(--saas-text-muted) !important;
+    border-radius: var(--r-full) !important;
+    font-size: var(--t-sm) !important;
+    font-weight: 600 !important;
+    border: 1px solid var(--saas-border) !important;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.filter-chip.active,
+.pill.active,
+.filter-chip[aria-selected="true"],
+.tab.active {
+    background: var(--saas-accent-soft) !important;
+    color: var(--saas-accent) !important;
+    border-color: transparent !important;
+}
+
+/* Tabs / segmented control */
+.tab, .nav-tab {
+    padding: 8px 14px !important;
+    border-radius: var(--r-md) !important;
+    background: transparent !important;
+    color: var(--saas-text-muted) !important;
+    border: 1px solid transparent !important;
+    font-weight: 600 !important;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+}
+.tab.active, .nav-tab.active {
+    background: var(--saas-surface) !important;
+    color: var(--saas-text) !important;
+    box-shadow: var(--sh-sm) !important;
+}
+
+/* ============================================================================
+   10. EMPTY STATES
+   ============================================================================ */
+.empty-state,
+.empty-illustration,
+.no-data-state,
+[class*="empty"] {
+    color: var(--saas-text-muted);
+}
+
+/* When an empty state container has the empty-illustration class, beautify it */
+.empty-illustration,
+.dashed-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    padding: var(--sp-12) var(--sp-6);
+    text-align: center;
+    border-radius: var(--r-xl);
+    background: var(--saas-surface);
+    border: 1px dashed var(--saas-border-strong);
+    min-height: 240px;
+}
+
+/* ============================================================================
+   11. MOBILE NAV (≤1023px refresh)
+   ============================================================================ */
+@media (max-width: 1023px) {
+    .mobile-nav {
+        background: var(--saas-surface) !important;
+        border-top: 1px solid var(--saas-border) !important;
+        box-shadow: var(--sh-lg) !important;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+    }
+    .mob-item {
+        color: var(--saas-text-muted) !important;
+        transition: color var(--dur-fast) var(--ease);
+    }
+    .mob-item.active {
+        color: var(--saas-accent) !important;
+    }
+}
+
+/* ============================================================================
+   12. PAGE TRANSITIONS
+   ============================================================================ */
+#main {
+    animation: pageEnter var(--dur-slow) var(--ease-out) both;
+}
+@keyframes pageEnter {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================================
+   13. SKELETON LOADER refresh
+   ============================================================================ */
+.skeleton-line,
+.skeleton-card,
+.skeleton-circle,
+.skeleton-row,
+.skeleton-container > * {
+    background: linear-gradient(90deg,
+        var(--saas-sunken) 0%,
+        var(--saas-elevated) 50%,
+        var(--saas-sunken) 100%) !important;
+    background-size: 200% 100% !important;
+    animation: skeletonShimmer 1.4s ease-in-out infinite;
+    border-radius: var(--r-md) !important;
+}
+@keyframes skeletonShimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ============================================================================
+   14. MODALS / DRAWERS
+   ============================================================================ */
+.modal,
+.modal-box,
+.modal-content,
+.cmd-modal,
+.bottom-sheet {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-xl) !important;
+    box-shadow: var(--sh-xl) !important;
+}
+
+.modal-overlay,
+.fab-overlay,
+.ai-modal-overlay {
+    background: rgba(15, 23, 42, 0.4) !important;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+[data-theme="dark"] .modal-overlay,
+[data-theme="midnight"] .modal-overlay,
+[data-theme="forest"] .modal-overlay,
+[data-theme="sunset"] .modal-overlay,
+[data-theme="ocean"] .modal-overlay {
+    background: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ============================================================================
+   15. PAGE-SPECIFIC TWEAKS
+   ============================================================================ */
+
+/* ---- Dashboard quick action top row ---- */
+.quick-action,
+.qa-btn {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-3) !important;
+    transition: all var(--dur-fast) var(--ease);
+    box-shadow: var(--sh-xs) !important;
+}
+@media (hover: hover) {
+    .quick-action:hover,
+    .qa-btn:hover {
+        border-color: var(--saas-accent) !important;
+        box-shadow: var(--sh-sm), 0 0 0 3px var(--saas-accent-soft) !important;
+        transform: translateY(-1px);
+    }
+}
+
+/* ---- Dashboard greeting card ---- */
+.dashboard-header,
+.greeting-card,
+[class*="greeting"] {
+    border-radius: var(--r-xl) !important;
+}
+
+/* ---- Habits: soften red "Don't break the chain" warning ---- */
+.habit-row .chain-warning,
+.habit-card .chain-warning,
+[class*="chain-warning"],
+[class*="chain-break"] {
+    background: var(--saas-warn-soft) !important;
+    color: var(--saas-warn) !important;
+    border: 1px solid transparent !important;
+    border-radius: var(--r-md) !important;
+    padding: 6px 10px !important;
+    font-size: var(--t-sm) !important;
+    font-weight: 500 !important;
+}
+
+/* Force-soften the .danger inline-styled warnings inside habit rows */
+.habit-card [style*="color:#EF4444"],
+.habit-card [style*="color:red"],
+.habit-row [style*="color:#EF4444"],
+.habit-row [style*="color:red"] {
+    color: var(--saas-warn) !important;
+}
+
+/* ---- Habits: day percentage circles ---- */
+.habits-week-circle,
+[class*="day-circle"] {
+    border: 2px solid var(--saas-border) !important;
+    background: var(--saas-surface) !important;
+}
+
+/* ---- Tasks: priority dot tighter style ---- */
+.task-row,
+.bento-task-row {
+    padding: var(--sp-3) var(--sp-4) !important;
+}
+
+/* ---- Money: empty transactions container ---- */
+.transactions-list:empty::after,
+.no-transactions {
+    color: var(--saas-text-muted);
+}
+
+/* ---- Vision board cards ---- */
+.vision-card,
+.vision-banner {
+    border-radius: var(--r-xl) !important;
+    overflow: hidden;
+}
+
+/* ---- Vision card category labels ---- */
+.vision-card [class*="category"],
+.vision-banner [class*="category"] {
+    background: rgba(0, 0, 0, 0.5) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: var(--r-full) !important;
+    padding: 4px 10px !important;
+    font-size: var(--t-xs) !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em;
+    color: white !important;
+}
+
+/* ---- People stats row ---- */
+.people-stats,
+.people-summary {
+    gap: var(--sp-3) !important;
+}
+
+/* ---- Books wishlist: hide progress bar on wishlist items ---- */
+.book-card[data-status="wishlist"] .book-progress,
+.book-card.wishlist .book-progress,
+.book-card.wishlist progress {
+    display: none !important;
+}
+
+/* ---- Library / book cards ---- */
+.book-card {
+    padding: var(--sp-3) !important;
+}
+.book-card img,
+.book-card .book-cover {
+    border-radius: var(--r-md) !important;
+    box-shadow: var(--sh-md);
+}
+
+/* ---- Calendar / Plan timeline ---- */
+.calendar-timeline,
+.time-grid {
+    border-radius: var(--r-lg);
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border);
+}
+.time-slot,
+.timeline-hour {
+    border-color: var(--saas-border) !important;
+}
+
+/* Plan event blocks */
+.timeline-event,
+.calendar-event {
+    border-radius: var(--r-md) !important;
+    box-shadow: var(--sh-sm);
+}
+
+/* ---- Diary entry list ---- */
+.entry-card,
+.diary-entry-card {
+    padding: var(--sp-4) !important;
+    border-left: 3px solid transparent !important;
+}
+.entry-card[data-mood-high="true"],
+.entry-card.mood-good {
+    border-left-color: var(--saas-success) !important;
+}
+
+/* ---- Diary stats row ---- */
+.diary-stats-row,
+[class*="stats-row"] {
+    gap: var(--sp-3) !important;
+}
+
+/* ============================================================================
+   16. UTILITIES
+   ============================================================================ */
+
+/* Visually hidden but accessible */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Focus ring for keyboard nav */
+:focus-visible {
+    outline: 2px solid var(--saas-accent) !important;
+    outline-offset: 2px;
+    border-radius: var(--r-sm);
+}
+
+/* Smooth scroll */
+html { scroll-behavior: smooth; }
+
+/* ============================================================================
+   17. SIDEBAR TOGGLE (lives INSIDE the sidebar brand row)
+   ============================================================================ */
+#sidebarToggle {
+    display: none;
+}
+@media (min-width: 1024px) {
+    /* Brand row becomes a flex row with toggle on the right */
+    .sidebar .brand {
+        position: relative;
+    }
+    .sidebar .brand .brand-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    #sidebarToggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: var(--r-sm);
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--saas-text-dim);
+        cursor: pointer;
+        flex-shrink: 0;
+        margin-left: auto;
+        transition: all var(--dur-fast) var(--ease);
+    }
+    #sidebarToggle:hover {
+        background: var(--saas-sunken);
+        color: var(--saas-text);
+        border-color: var(--saas-border);
+    }
+    #sidebarToggle svg {
+        width: 16px;
+        height: 16px;
+        stroke-width: 2;
+        transition: transform var(--dur-base) var(--ease);
+    }
+    /* Chevron flips when collapsed */
+    body.sidebar-collapsed #sidebarToggle svg { transform: rotate(180deg); }
+    /* When collapsed, toggle still visible — center it in the narrow sidebar */
+    body.sidebar-collapsed .sidebar .brand {
+        justify-content: center;
+        padding: var(--sp-3) 0;
+    }
+    body.sidebar-collapsed #sidebarToggle {
+        margin-left: 0;
+    }
+}
+
+/* ============================================================================
+   18. FAB-MENU (when triggered on desktop, position in main area)
+   ============================================================================ */
+@media (min-width: 1024px) {
+    .fab-menu {
+        right: var(--sp-8) !important;
+        bottom: var(--sp-8) !important;
+    }
+}
+
+/* ============================================================================
+   19. SCROLL-BASED HEADER SHADOW (subtle)
+   ============================================================================ */
+.main-header-bar.scrolled {
+    box-shadow: var(--sh-sm);
+    background: var(--saas-bg);
+}
+
+/* ============================================================================
+   20. DASHBOARD — Option C bento + horizontal KPI strip
+   ============================================================================ */
+
+/* ---- 20.1 Greeting hero (compact, single line look) ---- */
+.morning-hero {
+    background: linear-gradient(135deg,
+        var(--saas-surface) 0%,
+        var(--saas-sunken) 100%) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-xl) !important;
+    box-shadow: var(--sh-sm) !important;
+    padding: var(--sp-5) var(--sp-6) !important;
+    min-height: 72px !important;
+    margin-bottom: var(--sp-4) !important;
+    position: relative;
+    overflow: hidden;
+}
+.morning-hero::before {
+    content: '';
+    position: absolute;
+    top: -40%; right: -10%;
+    width: 260px; height: 260px;
+    background: radial-gradient(circle, var(--saas-accent) 0%, transparent 60%);
+    opacity: 0.08;
+    pointer-events: none;
+    border-radius: 50%;
+}
+.morning-hero h1 {
+    font-size: clamp(18px, 1.8vw, 22px) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.025em !important;
+    color: var(--saas-text) !important;
+    -webkit-text-fill-color: var(--saas-text) !important;
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    line-height: 1.2 !important;
+}
+.morning-hero p {
+    font-size: var(--t-sm) !important;
+    color: var(--saas-text-muted) !important;
+    margin-top: 2px !important;
+    opacity: 1 !important;
+}
+.morning-hero button {
+    padding: 8px 14px !important;
+    border-radius: var(--r-md) !important;
+    background: var(--saas-accent) !important;
+    box-shadow: 0 4px 12px var(--saas-accent-soft) !important;
+}
+
+/* ---- 20.2 Quick-action row (compact) ---- */
+.quick-actions {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: var(--sp-2) !important;
+    margin: 0 0 var(--sp-4) 0 !important;
+    padding: 0 !important;
+}
+.qa-btn,
+.qa-btn.round-icon {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-md) !important;
+    padding: var(--sp-2) !important;
+    height: 56px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 2px !important;
+    box-shadow: var(--sh-xs) !important;
+    transition: all var(--dur-fast) var(--ease) !important;
+}
+.qa-btn i,
+.qa-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+    color: var(--saas-accent) !important;
+}
+.qa-btn span,
+.qa-btn > div:not(.qa-icon) {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: var(--saas-text-muted) !important;
+}
+@media (hover: hover) {
+    .qa-btn:hover {
+        border-color: var(--saas-accent) !important;
+        box-shadow: var(--sh-sm), 0 0 0 2px var(--saas-accent-soft) !important;
+        transform: translateY(-1px);
+    }
+}
+
+/* ---- 20.3 BENTO MAIN GRID ---- */
+/* The dashboard's `.dash-grid` becomes a 12-col bento on desktop. */
+@media (min-width: 1024px) {
+    .dash-grid {
+        display: grid !important;
+        grid-template-columns: repeat(12, 1fr) !important;
+        gap: var(--sp-4) !important;
+        align-items: start;
+    }
+
+    /* Default: every widget spans full row unless given a span class below */
+    .dash-grid > * { grid-column: 1 / -1; min-width: 0; }
+
+    /* Greeting hero: full width */
+    .dash-grid > .morning-hero,
+    .dash-grid > [data-widget-id="greeting"] { grid-column: 1 / -1; }
+
+    /* Daily Briefing: full width (becomes a strip) */
+    .dash-grid > [data-widget-id="dailyBriefing"] { grid-column: 1 / -1; }
+
+    /* Year Progress: right rail next to greeting (we'll handle when paired) */
+    .dash-grid > [data-widget-id="yearProgress"],
+    .dash-grid > .year-progress-widget { grid-column: span 4; }
+
+    /* Vision banner: full width */
+    .dash-grid > .vision-banner,
+    .dash-grid > [data-widget-id="vision"] { grid-column: 1 / -1; }
+
+    /* Daily Tools widget: left half */
+    .dash-grid > [data-widget-id="dailyTools"],
+    .dash-grid > .daily-tools-widget { grid-column: span 7; }
+
+    /* Monthly Budget: right side */
+    .dash-grid > [data-widget-id="monthlyBudget"],
+    .dash-grid > .monthly-budget-widget,
+    .dash-grid > .budget-widget { grid-column: span 5; }
+
+    /* If Year Progress appears AFTER Monthly Budget, sit under it (span 5) */
+    .dash-grid > [data-widget-id="monthlyBudget"] + [data-widget-id="yearProgress"],
+    .dash-grid > .monthly-budget-widget + .year-progress-widget { grid-column: span 5; }
+
+    /* KPI section is ALWAYS full-width */
+    .dash-grid > [data-widget-id="kpis"],
+    .dash-grid > .kpi-grid,
+    .dash-grid > .kpi-scroll { grid-column: 1 / -1; }
+
+    /* Cashflow / mini charts: full width */
+    .dash-grid > [data-widget-id="cashflow"] { grid-column: 1 / -1; }
+}
+
+/* ---- 20.4 Daily Briefing card (compact strip) ---- */
+[data-widget-id="dailyBriefing"],
+.daily-briefing {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-left: 4px solid var(--saas-accent) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-4) var(--sp-5) !important;
+    box-shadow: var(--sh-sm) !important;
+    margin-bottom: 0 !important;
+    transition: all var(--dur-fast) var(--ease);
+}
+@media (hover: hover) {
+    [data-widget-id="dailyBriefing"]:hover {
+        box-shadow: var(--sh-md) !important;
+        border-color: var(--saas-border-strong) !important;
+        border-left-color: var(--saas-accent) !important;
+    }
+}
+
+/* ---- 20.5 Widget cards (Daily Tools, Monthly Budget, Year Progress) ---- */
+.widget-card,
+.daily-tools-widget,
+.year-progress-widget,
+.budget-widget,
+[data-widget-id="dailyTools"],
+[data-widget-id="monthlyBudget"],
+[data-widget-id="yearProgress"] {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-5) !important;
+    box-shadow: var(--sh-sm) !important;
+    margin: 0 !important;
+    transition: all var(--dur-fast) var(--ease);
+    background-image: none !important;
+}
+@media (hover: hover) {
+    .widget-card:hover { box-shadow: var(--sh-md) !important; }
+}
+
+.widget-header,
+.widget-card .widget-header {
+    font-size: var(--t-md) !important;
+    font-weight: 700 !important;
+    color: var(--saas-text) !important;
+    margin-bottom: var(--sp-3) !important;
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+.widget-title {
+    font-size: var(--t-md) !important;
+    font-weight: 700 !important;
+    color: var(--saas-text) !important;
+    letter-spacing: -0.01em;
+}
+
+/* Daily Tools tile grid (compact) */
+.tools-grid,
+[class*="tools-grid"] {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)) !important;
+    gap: var(--sp-2) !important;
+}
+.tool-tile,
+.tool-card,
+[class*="tool-tile"] {
+    border-radius: var(--r-md) !important;
+    padding: var(--sp-3) var(--sp-1) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: var(--sp-1) !important;
+    transition: all var(--dur-fast) var(--ease);
+    cursor: pointer;
+}
+@media (hover: hover) {
+    .tool-tile:hover, .tool-card:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.06);
+    }
+}
+
+/* ---- 20.6 KPI CARDS — compact, scroll-snap, fixed width ---- */
+/* Container becomes horizontal flex with scroll */
+.kpi-grid,
+.kpi-scroll,
+[class*="kpi-row"] {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    grid-template-columns: none !important;
+    gap: var(--sp-3) !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    padding: var(--sp-2) var(--sp-1) var(--sp-3) var(--sp-1) !important;
+    margin: 0 calc(var(--sp-1) * -1) !important;
+    scroll-snap-type: x mandatory;
+    scroll-padding: var(--sp-1);
+    scrollbar-width: thin;
+    scrollbar-color: var(--saas-border-strong) transparent;
+    -webkit-overflow-scrolling: touch;
+}
+.kpi-grid::-webkit-scrollbar,
+.kpi-scroll::-webkit-scrollbar { height: 6px; }
+.kpi-grid::-webkit-scrollbar-thumb,
+.kpi-scroll::-webkit-scrollbar-thumb { background: var(--saas-border-strong); border-radius: 3px; }
+.kpi-grid::-webkit-scrollbar-track,
+.kpi-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Each KPI card: fixed compact width, ~130px tall */
+.kpi-card {
+    flex: 0 0 220px !important;
+    scroll-snap-align: start;
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    box-shadow: var(--sh-xs) !important;
+    padding: var(--sp-3) var(--sp-4) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    position: relative !important;
+    overflow: hidden !important;
+    min-height: 130px !important;
+    height: 130px !important;
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease),
+                box-shadow var(--dur-fast) var(--ease),
+                transform var(--dur-fast) var(--ease) !important;
+    background-image: none !important;
+}
+
+/* NO top accent stripe — icon color is enough */
+.kpi-card::before { display: none !important; content: none !important; }
+
+@media (hover: hover) {
+    .kpi-card:hover {
+        border-color: var(--saas-border-strong) !important;
+        box-shadow: var(--sh-md) !important;
+        transform: translateY(-1px);
+    }
+}
+
+/* Card header: icon-pill + trend pill */
+.kpi-card__header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: var(--sp-2);
+    margin: 0 !important;
+    padding: 0 !important;
+    flex-shrink: 0;
+}
+
+/* Black filled icon tile with white glyph — editorial look */
+.kpi-card .kpi-icon {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: var(--r-sm) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: var(--saas-ink) !important;
+    color: #FFFFFF !important;
+    flex-shrink: 0;
+    box-shadow: 0 2px 4px rgba(11, 15, 23, 0.15);
+}
+.kpi-card .kpi-icon svg,
+.kpi-card .kpi-icon i {
+    width: 20px !important;
+    height: 20px !important;
+    stroke-width: 2 !important;
+    color: #FFFFFF !important;
+}
+
+/* Yellow-accent variant when card has --kpi-accent set to the yellow accent */
+.kpi-card[data-accent="yellow"] .kpi-icon,
+.kpi-card.kpi-card--accent .kpi-icon {
+    background: var(--saas-accent) !important;
+    color: var(--saas-accent-ink) !important;
+    box-shadow: 0 2px 6px rgba(245, 203, 27, 0.5);
+}
+.kpi-card[data-accent="yellow"] .kpi-icon svg,
+.kpi-card.kpi-card--accent .kpi-icon svg { color: var(--saas-accent-ink) !important; }
+
+.kpi-card .kpi-trend {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 7px !important;
+    border-radius: var(--r-full) !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em;
+    line-height: 1.3;
+}
+.kpi-card .kpi-trend__icon { font-size: 10px; }
+
+/* Body: label + big value */
+.kpi-card__body {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1px !important;
+    flex: 1;
+    justify-content: center;
+    min-height: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+.kpi-card .kpi-label {
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    color: var(--saas-text-muted) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.06em !important;
+    line-height: 1.3;
+}
+.kpi-card .kpi-value {
+    font-size: 22px !important;
+    font-weight: 700 !important;
+    color: var(--saas-text) !important;
+    letter-spacing: -0.025em !important;
+    line-height: 1.15 !important;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.kpi-card .kpi-sub {
+    font-size: 10px !important;
+    color: var(--saas-text-dim) !important;
+    margin-top: 1px;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+/* Progress / sparkline at the bottom (visible but minimal) */
+.kpi-card .kpi-progress {
+    height: 3px !important;
+    background: var(--saas-sunken) !important;
+    border-radius: var(--r-full) !important;
+    overflow: hidden;
+    margin-top: 4px;
+    flex-shrink: 0;
+}
+.kpi-card .kpi-progress__bar {
+    height: 100%;
+    border-radius: var(--r-full);
+    transition: width var(--dur-slow) var(--ease);
+}
+.kpi-card .kpi-spark {
+    height: 28px;
+    margin-top: 2px;
+    opacity: 0.85;
+    flex-shrink: 0;
+}
+
+/* Hide redundant category badge (was overlapping value text) */
+.kpi-card .kpi-card__cat { display: none !important; }
+
+/* KPI accent palettes (from inline `kpi-card--${color}` class) */
+.kpi-card--violet { --kpi-accent: #8B5CF6; --kpi-accent-soft: rgba(139,92,246,0.10); }
+.kpi-card--purple { --kpi-accent: #8B5CF6; --kpi-accent-soft: rgba(139,92,246,0.10); }
+.kpi-card--indigo { --kpi-accent: #6366F1; --kpi-accent-soft: rgba(99,102,241,0.10); }
+.kpi-card--blue   { --kpi-accent: #3B82F6; --kpi-accent-soft: rgba(59,130,246,0.10); }
+.kpi-card--green  { --kpi-accent: #10B981; --kpi-accent-soft: rgba(16,185,129,0.10); }
+.kpi-card--orange { --kpi-accent: #F59E0B; --kpi-accent-soft: rgba(245,158,11,0.10); }
+.kpi-card--red    { --kpi-accent: #EF4444; --kpi-accent-soft: rgba(239,68,68,0.10); }
+.kpi-card--pink   { --kpi-accent: #EC4899; --kpi-accent-soft: rgba(236,72,153,0.10); }
+.kpi-card--cyan   { --kpi-accent: #06B6D4; --kpi-accent-soft: rgba(6,182,212,0.10); }
+
+/* ---- 20.7 Vision banner — preserve existing visual ---- */
+.vision-banner {
+    border-radius: var(--r-xl) !important;
+    overflow: hidden !important;
+    box-shadow: var(--sh-md) !important;
+    border: 1px solid var(--saas-border) !important;
+    margin: 0 !important;
+    transition: all var(--dur-fast) var(--ease);
+}
+@media (hover: hover) {
+    .vision-banner:hover {
+        box-shadow: var(--sh-lg) !important;
+        transform: translateY(-1px);
+    }
+}
+
+/* ---- 20.8 Dashboard Layout button at the bottom ---- */
+.dash-wrapper > div:has(> button[onclick*="openDashCustomize"]),
+.dash-wrapper > div:last-child {
+    margin-top: var(--sp-4) !important;
+}
+
+/* ============================================================================
+   21. BENTO LAYOUT (desktop ≥1024px) — Option C
+   Inserted by applyBentoLayout() in view-dashboard.js after render.
+   ============================================================================ */
+@media (min-width: 1024px) {
+    /* Make all bento cells stretch to the tallest cell in their row
+       so left/right pairs always match height. */
+    .dash-grid--bento {
+        align-items: stretch !important;
+    }
+    /* Every direct child wrapper becomes a flex column so the inner
+       widget card can grow to fill the stretched cell.
+       Skip the hero-stats row — it has its own grid layout. */
+    .dash-grid--bento > *:not(.bento-hero-stats) {
+        align-self: stretch !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    .dash-grid--bento > *:not(.bento-hero-stats) > * {
+        flex: 1 1 auto;
+    }
+
+    /* Row 1: Greeting (cols 1-8) + Year Progress (cols 9-12) */
+    .dash-grid--bento > .morning-hero,
+    .dash-grid--bento > [data-widget-id="greeting"],
+    .dash-grid--bento > [data-widget-id="morning"] {
+        grid-column: span 8 !important;
+    }
+    .dash-grid--bento > .year-progress-widget,
+    .dash-grid--bento > [data-widget-id="yearProgress"] {
+        grid-column: span 4 !important;
+    }
+
+    /* Row 2: Hero stat strip — full width, 4 equal cards */
+    .bento-hero-stats {
+        grid-column: 1 / -1 !important;
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        gap: var(--sp-4) !important;
+        margin: 0 !important;
+    }
+    .bento-hero-stats > * { display: flex; }
+    .bento-hero-stats > .hero-stat { flex: 1; }
+
+    /* Row 3: Daily Briefing (cols 1-6) + Daily Tools (cols 7-12) */
+    .dash-grid--bento > [data-widget-id="aiBriefing"],
+    .dash-grid--bento > [data-widget-id="dailyBriefing"],
+    .dash-grid--bento > .daily-briefing {
+        grid-column: span 6 !important;
+    }
+    .dash-grid--bento > [data-widget-id="dailyTools"],
+    .dash-grid--bento > .daily-tools-widget {
+        grid-column: span 6 !important;
+    }
+
+    /* Other widgets that don't have a bento slot — full width below */
+    .dash-grid--bento > [data-widget-id="vision"],
+    .dash-grid--bento > .vision-banner,
+    .dash-grid--bento > [data-widget-id="monthlyBudget"],
+    .dash-grid--bento > .monthly-budget-widget,
+    .dash-grid--bento > .budget-widget,
+    .dash-grid--bento > [data-widget-id="cashflow"],
+    .dash-grid--bento > [data-widget-id="weeklyHabits"],
+    .dash-grid--bento > [data-widget-id="weeklyTasks"],
+    .dash-grid--bento > [data-widget-id="budget"],
+    .dash-grid--bento > [data-widget-id="tasks"],
+    .dash-grid--bento > [data-widget-id="habits"] {
+        grid-column: 1 / -1 !important;
+    }
+
+    /* KPI collapsible — full width strip */
+    .kpi-collapsible {
+        grid-column: 1 / -1 !important;
+        background: var(--saas-surface);
+        border: 1px solid var(--saas-border);
+        border-radius: var(--r-lg);
+        padding: 0;
+        box-shadow: var(--sh-xs);
+        overflow: hidden;
+        transition: all var(--dur-base) var(--ease);
+    }
+    .kpi-collapsible .kpi-grid,
+    .kpi-collapsible .kpi-scroll {
+        padding: var(--sp-2) var(--sp-4) var(--sp-4) !important;
+        margin: 0 !important;
+    }
+    .kpi-collapsible.collapsed .kpi-grid,
+    .kpi-collapsible.collapsed .kpi-scroll {
+        display: none !important;
+    }
+    .kpi-show-more {
+        background: transparent;
+        border: none;
+        color: var(--saas-text-muted);
+        font-weight: 600;
+        font-size: var(--t-base);
+        cursor: pointer;
+        padding: var(--sp-4) var(--sp-5);
+        width: 100%;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: all var(--dur-fast) var(--ease);
+    }
+    .kpi-show-more::after {
+        content: '→';
+        opacity: 0.5;
+        transition: transform var(--dur-fast) var(--ease);
+    }
+    .kpi-show-more:hover {
+        color: var(--saas-text);
+        background: var(--saas-sunken);
+    }
+    .kpi-show-more:hover::after { transform: translateX(2px); opacity: 1; }
+}
+
+/* ---- 21.1 Hero stats — bold editorial look ---- */
+.hero-stat {
+    background: var(--saas-surface);
+    border: 1px solid var(--saas-border);
+    border-radius: var(--r-lg);
+    padding: var(--sp-5);
+    box-shadow: var(--sh-xs);
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+    position: relative;
+    overflow: hidden;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+@media (hover: hover) {
+    .hero-stat:hover {
+        border-color: var(--saas-ink);
+        transform: translateY(-2px);
+        box-shadow: var(--sh-md);
+    }
+}
+
+.hero-stat--accent {
+    background: var(--saas-accent) !important;
+    border-color: var(--saas-accent) !important;
+}
+.hero-stat--accent::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.25) 0%, transparent 60%);
+    pointer-events: none;
+}
+@media (hover: hover) {
+    .hero-stat--accent:hover {
+        background: var(--saas-accent-hover) !important;
+        border-color: var(--saas-accent-hover) !important;
+    }
+}
+
+.hero-stat__label {
+    font-size: var(--t-xs);
+    font-weight: 700;
+    color: var(--saas-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: var(--sp-2);
+    position: relative;
+    z-index: 1;
+}
+.hero-stat--accent .hero-stat__label {
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.hero-stat__value {
+    font-size: clamp(28px, 3vw, 38px);
+    font-weight: 700;
+    color: var(--saas-text);
+    letter-spacing: -0.03em;
+    line-height: 1;
+    position: relative;
+    z-index: 1;
+}
+.hero-stat--accent .hero-stat__value {
+    color: var(--saas-accent-ink);
+}
+
+.hero-stat__sub {
+    font-size: var(--t-xs);
+    color: var(--saas-text-dim);
+    margin-top: var(--sp-2);
+    font-weight: 500;
+    position: relative;
+    z-index: 1;
+}
+.hero-stat--accent .hero-stat__sub {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* ============================================================================
+   22. BENTO CUSTOMIZE — trigger button + modal styles
+   ============================================================================ */
+
+/* Trigger button (top-right of dashboard) */
+.bento-customize-trigger-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--sp-3);
+}
+.bento-customize-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
+    background: var(--saas-surface);
+    border: 1px solid var(--saas-border);
+    border-radius: var(--r-md);
+    padding: 6px 12px;
+    font-size: var(--t-sm);
+    font-weight: 600;
+    color: var(--saas-text-muted);
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+    box-shadow: var(--sh-xs);
+}
+.bento-customize-trigger:hover {
+    border-color: var(--saas-ink);
+    color: var(--saas-text);
+    box-shadow: var(--sh-sm);
+    transform: translateY(-1px);
+}
+.bento-customize-trigger svg {
+    color: var(--saas-text-dim);
+}
+
+/* Hide trigger on mobile (bento is desktop-only) */
+@media (max-width: 1023px) {
+    .bento-customize-trigger-row { display: none; }
+}
+
+/* ---- Customize modal ---- */
+.bento-customize-overlay {
+    background: rgba(15, 23, 42, 0.5) !important;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+.bento-customize-modal {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-xl) !important;
+    box-shadow: var(--sh-xl) !important;
+    padding: var(--sp-6) !important;
+    color: var(--saas-text);
+}
+.bento-cust-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-5);
+}
+.bento-cust-header h2 {
+    font-size: var(--t-xl);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--saas-text);
+    margin: 0;
+}
+.bento-cust-close {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--r-sm);
+    background: transparent;
+    border: none;
+    color: var(--saas-text-muted);
+    font-size: 18px;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+}
+.bento-cust-close:hover {
+    background: var(--saas-sunken);
+    color: var(--saas-text);
+}
+
+.bento-cust-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--saas-sunken);
+    border-radius: var(--r-md);
+    margin-bottom: var(--sp-5);
+    font-weight: 600;
+    color: var(--saas-text);
+    cursor: pointer;
+}
+.bento-cust-toggle input { accent-color: var(--saas-ink); }
+
+.bento-cust-section {
+    margin-bottom: var(--sp-5);
+}
+.bento-cust-label {
+    font-size: var(--t-xs);
+    font-weight: 700;
+    color: var(--saas-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: var(--sp-2);
+}
+.bento-cust-mini {
+    font-size: 10px;
+    color: var(--saas-text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.bento-cust-row2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-3);
+}
+.bento-cust-row2 select { width: 100%; }
+
+.bento-cust-hero {
+    background: var(--saas-sunken);
+    border-radius: var(--r-md);
+    padding: var(--sp-3);
+    margin-bottom: var(--sp-2);
+}
+.bento-cust-hero-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1.5fr 1fr auto;
+    gap: var(--sp-2);
+    align-items: center;
+}
+.bento-cust-hero-grid select,
+.bento-cust-hero-grid input { width: 100%; }
+.bento-cust-accent-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--t-xs);
+    color: var(--saas-text-muted);
+    font-weight: 600;
+    white-space: nowrap;
+    padding: 0 8px;
+}
+.bento-cust-accent-toggle input { accent-color: var(--saas-accent); }
+
+.bento-cust-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    margin-top: var(--sp-6);
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--saas-border);
+}
+
+/* ============================================================================
+   21. TASKS PAGE — page-specific polish
+   ============================================================================ */
+.task-row,
+.bento-task-row {
+    padding: var(--sp-4) !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--sp-3) !important;
+    border-radius: var(--r-md) !important;
+}
+.task-row .task-checkbox,
+.task-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--saas-border-strong);
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+}
+.task-row .task-title {
+    font-size: var(--t-base) !important;
+    font-weight: 600 !important;
+    color: var(--saas-text) !important;
+}
+
+/* Section headers (Work, Personal, etc.) */
+.task-category-header,
+.category-header {
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--sp-2) !important;
+    font-size: var(--t-xs) !important;
+    font-weight: 700 !important;
+    color: var(--saas-text-muted) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    padding: var(--sp-3) 0 !important;
+}
+
+/* Overdue badge */
+.late-badge,
+[class*="overdue"],
+[class*="late"] {
+    color: var(--saas-danger) !important;
+    background: var(--saas-danger-soft) !important;
+    padding: 2px 8px !important;
+    border-radius: var(--r-full) !important;
+    font-size: var(--t-xs) !important;
+    font-weight: 600 !important;
+}
+
+/* ============================================================================
+   22. HABITS PAGE
+   ============================================================================ */
+.habit-card,
+.habit-row {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-4) !important;
+    box-shadow: var(--sh-sm) !important;
+    transition: all var(--dur-fast) var(--ease);
+    margin-bottom: var(--sp-2);
+}
+@media (hover: hover) {
+    .habit-card:hover {
+        box-shadow: var(--sh-md) !important;
+        border-color: var(--saas-border-strong) !important;
+    }
+}
+
+/* Soften the "Don't break the chain" alert */
+.chain-broken-alert,
+.chain-warning,
+.habit-row > div[style*="background:var(--danger-soft)"],
+.habit-card > div[style*="background:var(--danger-soft)"] {
+    background: var(--saas-warn-soft) !important;
+    color: var(--saas-warn) !important;
+    border-radius: var(--r-md) !important;
+    padding: 6px var(--sp-3) !important;
+    font-size: var(--t-sm) !important;
+    font-weight: 500 !important;
+    margin-top: var(--sp-2) !important;
+    border: 1px solid rgba(245,158,11,0.20) !important;
+}
+
+/* Week progress circles at top */
+.week-strip,
+.habits-week-circles {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-4) !important;
+    box-shadow: var(--sh-sm) !important;
+    margin-bottom: var(--sp-5) !important;
+}
+
+/* Day section labels (MORNING, NIGHT) */
+.habit-section-label,
+.habit-day-section > div:first-child {
+    font-size: var(--t-xs) !important;
+    font-weight: 700 !important;
+    color: var(--saas-accent) !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    padding: var(--sp-3) 0 var(--sp-2) !important;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+/* ============================================================================
+   23. DIARY PAGE
+   ============================================================================ */
+.diary-stats-row,
+.journal-stats {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: var(--sp-4) !important;
+    margin-bottom: var(--sp-5) !important;
+}
+.diary-stats-row > *,
+.journal-stats > * {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-4) !important;
+    text-align: center;
+}
+
+/* Diary entry cards with mood-color stripe */
+.entry-card {
+    padding: var(--sp-4) !important;
+    border-left: 4px solid var(--saas-accent) !important;
+}
+
+/* ============================================================================
+   24. MONEY PAGE — better empty state + summary
+   ============================================================================ */
+.transactions-list:empty,
+.no-transactions {
+    padding: var(--sp-12) !important;
+    border: 1px dashed var(--saas-border-strong) !important;
+    border-radius: var(--r-xl) !important;
+    text-align: center !important;
+    color: var(--saas-text-muted) !important;
+    background: var(--saas-surface) !important;
+    min-height: 280px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-3);
+}
+
+.budget-card,
+.weekly-budget-card {
+    background: linear-gradient(135deg,
+        var(--saas-surface) 0%,
+        var(--saas-accent-soft) 100%) !important;
+    border: 1px solid var(--saas-accent-soft) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-5) !important;
+    box-shadow: var(--sh-sm) !important;
+    margin-bottom: var(--sp-5) !important;
+}
+
+/* ============================================================================
+   25. PEOPLE PAGE
+   ============================================================================ */
+.person-card {
+    padding: var(--sp-3) !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--sp-3) !important;
+}
+.person-card .avatar,
+.person-card > div:first-child {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-md);
+    font-weight: 700;
+    box-shadow: var(--sh-sm);
+}
+
+/* People summary stats */
+.people-stats-row > div {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-4) !important;
+    box-shadow: var(--sh-sm) !important;
+}
+
+/* ============================================================================
+   26. BOOKS / MURAL — minor polish
+   ============================================================================ */
+.book-card,
+.mural-card {
+    padding: var(--sp-3) !important;
+    border-radius: var(--r-lg) !important;
+}
+
+/* ============================================================================
+   27. PLAN / CALENDAR
+   ============================================================================ */
+.calendar-grid,
+.month-view,
+.week-view {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    overflow: hidden;
+    box-shadow: var(--sh-sm) !important;
+}
+.calendar-day,
+.day-cell {
+    border-color: var(--saas-border) !important;
+}
+.calendar-day.today,
+.day-cell.today {
+    background: var(--saas-accent-soft) !important;
+    color: var(--saas-accent) !important;
+    font-weight: 700;
+}
+
+/* ============================================================================
+   28. UNIVERSAL: defeat bare/unstyled inline patterns
+   ============================================================================ */
+
+/* Any element styled as a card via inline (`background: var(--surface-1)` etc.)
+   gets the SaaS treatment. */
+#main [style*="background: var(--surface-1)"],
+#main [style*="background:var(--surface-1)"],
+#main [style*="background: var(--surface-2)"],
+#main [style*="background:var(--surface-2)"] {
+    background: var(--saas-surface) !important;
+    border-radius: var(--r-lg) !important;
+    box-shadow: var(--sh-sm) !important;
+}
+
+/* Defeat hard-coded box-shadow from inline styles */
+#main [style*="box-shadow"] {
+    box-shadow: var(--sh-sm) !important;
+}
+
+/* Big section spacing */
+#main > * + * {
+    margin-top: var(--sp-4);
+}
+
+/* ============================================================================
+   23. HABITS GRID WIDGET — Notion-style day x habit grid (light theme)
+   ============================================================================ */
+.habits-grid-widget {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-4) var(--sp-4) var(--sp-3) !important;
+    box-shadow: var(--sh-sm) !important;
+    overflow: hidden;
+}
+.habits-grid-widget .hg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--sp-1) var(--sp-3);
+    border-bottom: 1px solid var(--saas-border);
+    margin-bottom: var(--sp-2);
+}
+.habits-grid-widget .hg-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--saas-text);
+    letter-spacing: -0.01em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.habits-grid-widget .hg-title::before {
+    content: '';
+    width: 18px; height: 18px;
+    border-radius: 6px;
+    background: var(--saas-accent-soft);
+    display: inline-block;
+}
+.habits-grid-widget .hg-newbtn {
+    background: var(--saas-sunken);
+    border: 1px solid var(--saas-border);
+    color: var(--saas-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+}
+.habits-grid-widget .hg-newbtn:hover {
+    background: var(--saas-surface);
+    border-color: var(--saas-ink);
+    color: var(--saas-text);
+}
+.habits-grid-widget .hg-empty {
+    color: var(--saas-text-muted);
+    text-align: center;
+    padding: var(--sp-6) var(--sp-4);
+    font-size: 13px;
+}
+.habits-grid-widget .hg-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin: 0 calc(-1 * var(--sp-2));
+    padding: 0 var(--sp-2);
+}
+.habits-grid-widget .hg-grid {
+    min-width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.habits-grid-widget .hg-row {
+    display: grid;
+    grid-template-columns: 80px repeat(var(--hg-cols, 5), 32px) 1fr;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--saas-border);
+    min-height: 38px;
+}
+.habits-grid-widget .hg-row:last-child { border-bottom: none; }
+.habits-grid-widget .hg-row--head {
+    border-bottom: 1px solid var(--saas-border-strong);
+    padding-bottom: 6px;
+    min-height: 32px;
+}
+.habits-grid-widget .hg-row--today {
+    background: var(--saas-accent-soft);
+    border-radius: 8px;
+    border-bottom: 1px solid var(--saas-border);
+    padding-left: 8px;
+}
+.habits-grid-widget .hg-day-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--saas-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.habits-grid-widget .hg-row--today .hg-day-label {
+    color: var(--saas-text);
+    font-weight: 700;
+}
+.habits-grid-widget .hg-day-label--head {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--saas-text-dim);
+}
+.habits-grid-widget .hg-col-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--saas-text-muted);
+}
+.habits-grid-widget .hg-col-icon {
+    font-size: 14px;
+    line-height: 1;
+    filter: grayscale(0.2);
+}
+.habits-grid-widget .hg-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.habits-grid-widget .hg-cell--today {
+    cursor: pointer;
+}
+.habits-grid-widget .hg-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 1.5px solid var(--saas-border-strong);
+    background: var(--saas-surface);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--dur-fast) var(--ease);
+    color: #FFFFFF;
+}
+.habits-grid-widget .hg-cell--today .hg-check:hover {
+    border-color: var(--saas-accent);
+    box-shadow: 0 0 0 3px var(--saas-accent-soft);
+}
+.habits-grid-widget .hg-check.is-done {
+    background: var(--saas-accent);
+    border-color: var(--saas-accent);
+}
+.habits-grid-widget .hg-score {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 12px;
+    min-width: 0;
+}
+.habits-grid-widget .hg-score--head {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--saas-text-dim);
+}
+.habits-grid-widget .hg-score-pct {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--saas-text);
+    min-width: 36px;
+}
+.habits-grid-widget .hg-score-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--saas-sunken);
+    border-radius: 2px;
+    overflow: hidden;
+    min-width: 40px;
+}
+.habits-grid-widget .hg-score-fill {
+    height: 100%;
+    background: var(--saas-accent);
+    border-radius: 2px;
+    transition: width var(--dur-base) var(--ease);
+}
+
+/* ============================================================================
+   24. TASKS LIST WIDGET — Notion-style compact list (light theme)
+   ============================================================================ */
+.tasks-list-widget {
+    background: var(--saas-surface) !important;
+    border: 1px solid var(--saas-border) !important;
+    border-radius: var(--r-lg) !important;
+    padding: var(--sp-4) var(--sp-4) var(--sp-3) !important;
+    box-shadow: var(--sh-sm) !important;
+}
+.tasks-list-widget .tl-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--sp-1) var(--sp-3);
+    border-bottom: 1px solid var(--saas-border);
+    margin-bottom: var(--sp-1);
+}
+.tasks-list-widget .tl-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--saas-text);
+    letter-spacing: -0.01em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.tasks-list-widget .tl-title::before {
+    content: '';
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--saas-accent-soft);
+    border: 2px solid var(--saas-accent);
+    display: inline-block;
+    box-sizing: border-box;
+}
+.tasks-list-widget .tl-newbtn {
+    background: var(--saas-sunken);
+    border: 1px solid var(--saas-border);
+    color: var(--saas-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+}
+.tasks-list-widget .tl-newbtn:hover {
+    background: var(--saas-surface);
+    border-color: var(--saas-ink);
+    color: var(--saas-text);
+}
+.tasks-list-widget .tl-col-heads {
+    display: grid;
+    grid-template-columns: 24px 1fr 110px 110px;
+    gap: 12px;
+    padding: 8px var(--sp-2);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--saas-text-dim);
+    border-bottom: 1px solid var(--saas-border);
+}
+.tasks-list-widget .tl-col-heads > :first-child { grid-column: 2; }
+.tasks-list-widget .tl-body { display: flex; flex-direction: column; }
+.tasks-list-widget .tl-empty {
+    color: var(--saas-text-muted);
+    text-align: center;
+    padding: var(--sp-6) var(--sp-4);
+    font-size: 13px;
+}
+.tasks-list-widget .tl-row {
+    display: grid;
+    grid-template-columns: 24px 1fr 110px 110px;
+    gap: 12px;
+    align-items: center;
+    padding: 12px var(--sp-2);
+    border-bottom: 1px solid var(--saas-border);
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease);
+}
+.tasks-list-widget .tl-row:last-child { border-bottom: none; }
+.tasks-list-widget .tl-row:hover { background: var(--saas-sunken); }
+.tasks-list-widget .tl-check {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 1.5px solid var(--saas-border-strong);
+    background: var(--saas-surface);
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+    display: inline-flex;
+    flex-shrink: 0;
+}
+.tasks-list-widget .tl-check:hover {
+    border-color: var(--saas-accent);
+    box-shadow: 0 0 0 3px var(--saas-accent-soft);
+}
+.tasks-list-widget .tl-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--saas-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tasks-list-widget .tl-prio {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    width: fit-content;
+}
+.tasks-list-widget .tl-prio-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+}
+.tasks-list-widget .tl-prio--urgent {
+    background: rgba(239, 68, 68, 0.10);
+    color: #B91C1C;
+}
+.tasks-list-widget .tl-prio--urgent .tl-prio-dot { background: #EF4444; }
+.tasks-list-widget .tl-prio--medium {
+    background: rgba(245, 158, 11, 0.12);
+    color: #92400E;
+}
+.tasks-list-widget .tl-prio--medium .tl-prio-dot { background: #F59E0B; }
+.tasks-list-widget .tl-prio--low {
+    background: rgba(16, 185, 129, 0.12);
+    color: #065F46;
+}
+.tasks-list-widget .tl-prio--low .tl-prio-dot { background: #10B981; }
+.tasks-list-widget .tl-due {
+    font-size: 13px;
+    color: var(--saas-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tasks-list-widget .tl-footer {
+    padding: var(--sp-3) var(--sp-2) 0;
+    border-top: 1px solid var(--saas-border);
+    margin-top: var(--sp-2);
+}
+.tasks-list-widget .tl-allbtn {
+    background: transparent;
+    border: none;
+    color: var(--saas-text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all var(--dur-fast) var(--ease);
+}
+.tasks-list-widget .tl-allbtn:hover {
+    color: var(--saas-accent);
+    background: var(--saas-accent-soft);
+}
+
+/* Dark family — slight surface adjustments so widgets read well */
+[data-theme="dark"] .habits-grid-widget,
+[data-theme="midnight"] .habits-grid-widget,
+[data-theme="dark"] .tasks-list-widget,
+[data-theme="midnight"] .tasks-list-widget {
+    background: var(--saas-elevated) !important;
+}
+[data-theme="dark"] .tasks-list-widget .tl-prio--urgent,
+[data-theme="midnight"] .tasks-list-widget .tl-prio--urgent {
+    background: rgba(239, 68, 68, 0.16);
+    color: #FCA5A5;
+}
+[data-theme="dark"] .tasks-list-widget .tl-prio--medium,
+[data-theme="midnight"] .tasks-list-widget .tl-prio--medium {
+    background: rgba(245, 158, 11, 0.16);
+    color: #FCD34D;
+}
+[data-theme="dark"] .tasks-list-widget .tl-prio--low,
+[data-theme="midnight"] .tasks-list-widget .tl-prio--low {
+    background: rgba(16, 185, 129, 0.16);
+    color: #6EE7B7;
+}
+
+/* Mobile: tighten habit grid */
+@media (max-width: 720px) {
+    .habits-grid-widget .hg-row {
+        grid-template-columns: 64px repeat(var(--hg-cols, 5), 28px) 80px;
+    }
+    .tasks-list-widget .tl-col-heads,
+    .tasks-list-widget .tl-row {
+        grid-template-columns: 24px 1fr 90px;
+        gap: 8px;
+    }
+    .tasks-list-widget .tl-col-due,
+    .tasks-list-widget .tl-due { display: none; }
+}
+
+/* ============================================================================
+   25. LUMIA TILE DASHBOARD — replaces bento
+   Grid: 4 cols mobile, 6 cols desktop. Tile sizes: 1x1 / 2x2 / 4x2 / 4x4.
+   Edit mode is opt-in via the header pencil icon; tiles wiggle, handles show.
+   ============================================================================ */
+:root {
+    --lumia-cell-mobile: 80px;
+    --lumia-cell-desktop: 120px;
+    --lumia-row-mobile: 80px;
+    --lumia-row-desktop: 100px;
+    --lumia-gap: 10px;
+    --lumia-cols-mobile: 4;
+    --lumia-cols-desktop: 6;
+}
+
+.lumia-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--lumia-cols-mobile), 1fr);
+    grid-auto-rows: var(--lumia-row-mobile);
+    grid-auto-flow: row dense;
+    gap: var(--lumia-gap);
+    padding: var(--sp-3) 0 calc(var(--sp-8) + 80px);
+    position: relative;
+}
+@media (min-width: 768px) {
+    .lumia-grid {
+        grid-template-columns: repeat(var(--lumia-cols-desktop), 1fr);
+        grid-auto-rows: var(--lumia-row-desktop);
+        max-width: 1280px;
+        margin: 0 auto;
+    }
+}
+@media (min-width: 1280px) {
+    :root { --lumia-cols-desktop: 8; }
+}
+
+/* ----- Tile base ----- */
+.lumia-tile {
+    position: relative;
+    background: transparent;          /* default = let the inner widget show its own card */
+    border: none;
+    cursor: pointer;
+    overflow: hidden;
+    text-align: left;
+    transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+    user-select: none;
+    border-radius: var(--r-lg, 12px);
+    /* Inline style sets grid-column / grid-row spans + custom color (if any) */
+}
+.lumia-tile:hover {
+    transform: translateY(-2px);
+    z-index: 2;
+}
+.lumia-tile:active { transform: translateY(0); }
+
+/* Body fills the whole tile so the widget card inside can grow */
+.lumia-tile__body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+/* When the inner widget is the body, kill its outer margin so it fits the tile */
+.lumia-tile__body > .widget-card,
+.lumia-tile__body > .kpi-card,
+.lumia-tile__body > .tool-tile,
+.lumia-tile__body > .habits-grid-widget,
+.lumia-tile__body > .tasks-list-widget {
+    margin: 0 !important;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+}
+/* Full-mode widget tiles: original card rendered, scrolls if too tall */
+.lumia-tile--mode-full .lumia-tile__body {
+    overflow: auto;
+}
+.lumia-tile--mode-full .lumia-tile__body > .widget-card,
+.lumia-tile--mode-full .lumia-tile__body > .habits-grid-widget,
+.lumia-tile--mode-full .lumia-tile__body > .tasks-list-widget {
+    overflow: auto;
+}
+/* Strip the inner-most card's outer shadow/transform — it sits inside the tile */
+.lumia-tile__body .widget-card {
+    transform: none !important;
+}
+
+/* ----- Click shield: catches all clicks while in edit mode ----- */
+.lumia-tile__shield {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: none;
+    cursor: grab;
+    background: transparent;
+}
+body.tiles-editing .lumia-tile__shield { display: block; }
+body.tiles-editing .lumia-tile:active .lumia-tile__shield { cursor: grabbing; }
+
+/* ----- COMPACT tile content (for KPIs, tools, routes, undersized widgets) ----- */
+.lumia-compact {
+    width: 100%;
+    height: 100%;
+    background: var(--saas-surface, #FFFFFF);
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.06));
+    border-radius: var(--r-lg, 12px);
+    padding: 12px;
+    box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06));
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    color: var(--saas-text, #0F172A);
+    box-sizing: border-box;
+}
+.lumia-compact__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+}
+.lumia-compact__bottom { margin-top: auto; }
+.lumia-compact__icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--saas-accent-soft, rgba(79,70,229,0.10));
+    color: var(--saas-accent, var(--primary, #4F46E5));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.lumia-compact__icon svg { stroke: currentColor; }
+.lumia-compact__label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--saas-text-muted, #5B6470);
+}
+.lumia-compact__value {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--saas-text, #0F172A);
+    line-height: 1;
+    text-align: right;
+}
+.lumia-compact__sub {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--saas-text-dim, #9097A1);
+    margin-top: 2px;
+}
+/* XS (1×1) compact */
+.lumia-compact--xs {
+    padding: 8px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.lumia-compact--xs .lumia-compact__icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+}
+.lumia-compact--xs .lumia-compact__label {
+    font-size: 10px;
+    text-align: center;
+}
+/* Colored variant — white text on the tile background */
+.lumia-tile--colored .lumia-compact {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #FFFFFF;
+}
+.lumia-tile--colored .lumia-compact__icon {
+    background: rgba(255,255,255,0.18);
+    color: #FFFFFF;
+}
+.lumia-tile--colored .lumia-compact__label {
+    color: rgba(255,255,255,0.85);
+}
+.lumia-tile--colored .lumia-compact__value {
+    color: #FFFFFF;
+}
+.lumia-tile--colored .lumia-compact__sub {
+    color: rgba(255,255,255,0.75);
+}
+
+/* ----- Widget tiles in plain full mode — make their internal content adapt ----- */
+.lumia-tile--mode-full .widget-card,
+.lumia-tile--mode-full .habits-grid-widget,
+.lumia-tile--mode-full .tasks-list-widget {
+    border-radius: var(--r-lg, 12px) !important;
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.06)) !important;
+    box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06)) !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+/* Stretch the widget body inside */
+.lumia-tile--mode-full .widget-card > .widget-body {
+    flex: 1;
+    overflow: auto;
+}
+/* Habits Grid & Tasks List: let them shrink/scroll */
+.lumia-tile--mode-full .habits-grid-widget .hg-scroll {
+    flex: 1;
+    overflow: auto;
+}
+.lumia-tile--mode-full .tasks-list-widget .tl-body {
+    flex: 1;
+    overflow: auto;
+}
+
+/* ----- Plain mode = original widget look, no recolor ----- */
+.lumia-tile--plain {
+    background: transparent;
+    color: inherit;
+}
+
+/* ----- Colored mode = flat Lumia tile (icon + label + value) ----- */
+.lumia-tile--colored {
+    color: #FFFFFF;
+    padding: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+.lumia-tile--colored .lumia-tile__body {
+    flex-direction: column;
+    justify-content: space-between;
+}
+.lumia-tile--colored.lumia-tile--w1.lumia-tile--h1 { padding: 8px; }
+.lumia-tile--colored .lumia-tile__icon,
+.lumia-tile--colored .lumia-tile__icon svg {
+    color: #FFFFFF;
+    stroke: currentColor;
+}
+.lumia-tile--colored .lumia-tile__label {
+    font-size: 14px;
+    font-weight: 700;
+    color: #FFFFFF;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+.lumia-tile--colored .lumia-tile__label--xs {
+    font-size: 11px;
+    font-weight: 600;
+    text-align: center;
+    margin-top: 4px;
+}
+.lumia-tile--colored .lumia-tile__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    flex: 1;
+}
+.lumia-tile--colored .lumia-tile__bottom { margin-top: auto; }
+.lumia-tile--colored .lumia-tile__value {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: #FFFFFF;
+    text-align: right;
+}
+.lumia-tile--colored .lumia-tile__sub {
+    font-size: 11px;
+    font-weight: 500;
+    opacity: 0.78;
+    text-align: right;
+    margin-top: 4px;
+    color: #FFFFFF;
+}
+.lumia-tile--colored.lumia-tile--w1.lumia-tile--h1 .lumia-tile__icon {
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+}
+
+/* On mobile, cap any tile at the available column count */
+@media (max-width: 767px) {
+    .lumia-tile { max-width: 100%; }
+}
+
+/* Tool tile (single daily-tool card, original style) */
+.tool-tile {
+    background: var(--saas-surface, #FFFFFF);
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.06));
+    border-radius: var(--r-lg, 12px);
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06));
+}
+.tool-tile__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+}
+.tool-tile__icon svg { color: #FFFFFF; stroke: currentColor; }
+.tool-tile__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--saas-text, #0F172A);
+    text-align: center;
+}
+.kpi-tile {
+    height: 100%;
+    width: 100%;
+}
+
+/* ----- Add-tile button ----- */
+.lumia-tile--add {
+    background: transparent;
+    border: 2px dashed rgba(15,23,42,0.18);
+    color: var(--saas-text-muted, #5B6470);
+    grid-column: span 2 !important;
+    grid-row: span 2 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px;
+    transition: all 180ms var(--ease);
+    border-radius: 12px;
+    padding: 12px;
+}
+.lumia-tile--add .lumia-tile__icon,
+.lumia-tile--add .lumia-tile__icon svg { color: var(--saas-text-muted, #5B6470) !important; stroke: currentColor !important; }
+.lumia-tile--add .lumia-tile__label { color: var(--saas-text-muted, #5B6470); }
+.lumia-tile--add:hover {
+    border-color: var(--saas-accent, var(--primary));
+    color: var(--saas-accent, var(--primary));
+    transform: none;
+    box-shadow: none;
+    background: var(--saas-accent-soft, transparent);
+}
+.lumia-tile--add:hover .lumia-tile__icon,
+.lumia-tile--add:hover .lumia-tile__icon svg,
+.lumia-tile--add:hover .lumia-tile__label { color: var(--saas-accent, var(--primary)) !important; }
+body:not(.tiles-editing) .lumia-tile--add { display: none; }
+
+/* ----- Edit handles (hidden unless editing) ----- */
+.lumia-tile__edit-handle,
+.lumia-tile__remove-handle {
+    position: absolute;
+    top: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid #FFFFFF;
+    color: #FFFFFF;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 20;            /* well above the shield (z=4) */
+    padding: 0;
+    pointer-events: auto;   /* always clickable */
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+.lumia-tile__edit-handle  { right: 38px; background: rgba(15,23,42,0.85); }
+.lumia-tile__remove-handle { right: 6px; background: #DC2626; }
+.lumia-tile__edit-handle:hover  { background: rgba(15,23,42,1); transform: scale(1.1); }
+.lumia-tile__remove-handle:hover { background: #B91C1C; transform: scale(1.1); }
+body.tiles-editing .lumia-tile__edit-handle,
+body.tiles-editing .lumia-tile__remove-handle { display: flex; }
+/* Pulse the red X so it's noticed first time */
+body.tiles-editing .lumia-tile__remove-handle::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid #DC2626;
+    opacity: 0;
+    animation: lumia-remove-pulse 1.4s ease-out infinite;
+    pointer-events: none;
+}
+@keyframes lumia-remove-pulse {
+    0%   { opacity: 0.8; transform: scale(0.7); }
+    100% { opacity: 0;   transform: scale(1.6); }
+}
+
+/* ----- Edit-mode wiggle animation ----- */
+@keyframes lumia-wiggle {
+    0%, 100% { transform: rotate(-0.6deg); }
+    50% { transform: rotate(0.6deg); }
+}
+body.tiles-editing .lumia-tile:not(.lumia-tile--add) {
+    animation: lumia-wiggle 220ms ease-in-out infinite;
+    cursor: grab;
+}
+body.tiles-editing .lumia-tile:nth-child(2n):not(.lumia-tile--add) {
+    animation-delay: 110ms;
+    animation-direction: reverse;
+}
+body.tiles-editing .lumia-tile:active { cursor: grabbing; }
+body.tiles-editing .lumia-tile:hover {
+    transform: none;
+    animation-play-state: paused;
+}
+
+/* ----- Sortable ghost ----- */
+.lumia-tile--ghost {
+    opacity: 0.35;
+    outline: 2px dashed rgba(255,255,255,0.7);
+}
+
+/* ----- Editing-mode floating bar (mobile) ----- */
+.lumia-editing-bar {
+    display: none;
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(80px + env(safe-area-inset-bottom, 0));
+    background: var(--saas-ink, #0B0F17);
+    color: #FFFFFF;
+    padding: 8px 8px 8px 16px;
+    border-radius: 28px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    gap: 8px;
+    align-items: center;
+    z-index: 100;
+    max-width: 90vw;
+}
+body.tiles-editing .lumia-editing-bar { display: flex; }
+.lumia-editing-bar__hint {
+    font-size: 12px;
+    color: rgba(255,255,255,0.7);
+    margin-right: 8px;
+    white-space: nowrap;
+}
+.lumia-editing-bar__btn {
+    background: rgba(255,255,255,0.12);
+    color: #FFFFFF;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 120ms var(--ease);
+}
+.lumia-editing-bar__btn:hover { background: rgba(255,255,255,0.2); }
+.lumia-editing-bar__btn--done {
+    background: var(--saas-accent, var(--primary));
+    color: var(--saas-accent-ink, #FFFFFF);
+    font-weight: 700;
+}
+@media (max-width: 500px) {
+    .lumia-editing-bar__hint { display: none; }
+}
+
+/* ----- Tile editor: W×H visual size picker ----- */
+.lumia-sz-picker {
+    display: grid;
+    gap: 3px;
+    width: 100%;
+    max-width: 320px;
+    aspect-ratio: 1;
+    background: var(--saas-sunken, rgba(0,0,0,0.04));
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.08));
+}
+.lumia-sz-cell {
+    background: var(--saas-surface, #FFFFFF);
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.08));
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 80ms ease, border-color 80ms ease;
+    padding: 0;
+}
+.lumia-sz-cell.is-hover {
+    background: color-mix(in srgb, var(--saas-accent, #4F46E5) 35%, transparent);
+    border-color: var(--saas-accent, var(--primary));
+}
+.lumia-sz-cell.is-selected {
+    background: var(--saas-accent, var(--primary));
+    border-color: var(--saas-accent, var(--primary));
+}
+
+/* ----- Tile editor: color picker (HTML5 input + swatches) ----- */
+.lumia-color-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 110px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.08));
+    overflow: hidden;
+}
+.lumia-color-input-wrap input[type="color"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+}
+.lumia-color-picker {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 6px;
+}
+.lumia-color-opt {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 120ms var(--ease);
+    padding: 0;
+}
+.lumia-color-opt:hover { transform: scale(1.12); }
+.lumia-color-opt.is-selected {
+    border-color: var(--saas-ink, #0B0F17);
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2px var(--saas-surface, #FFF);
+}
+@media (max-width: 500px) {
+    .lumia-color-picker { grid-template-columns: repeat(8, 1fr); }
+}
+
+/* ----- Picker (add-tile) modal ----- */
+.lumia-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+}
+.lumia-picker-opt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--saas-surface, #FFF);
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.08));
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 120ms var(--ease);
+}
+.lumia-picker-opt:hover:not([disabled]) {
+    border-color: var(--saas-accent, var(--primary));
+    background: var(--saas-accent-soft, rgba(0,0,0,0.04));
+    transform: translateY(-1px);
+}
+.lumia-picker-opt[disabled] { opacity: 0.4; cursor: not-allowed; }
+.lumia-picker-opt__icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--saas-accent-soft, rgba(0,0,0,0.06));
+    color: var(--saas-accent, var(--primary));
+    flex-shrink: 0;
+}
+.lumia-picker-opt__icon svg { stroke: currentColor; }
+.lumia-picker-opt__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--saas-text, #0F172A);
+    flex: 1;
+}
+.lumia-picker-opt__used {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--saas-text-muted, #5B6470);
+}
+/* Already-added picker row — shows a Remove button instead of acting as an Add */
+.lumia-picker-opt--used {
+    cursor: default;
+    background: var(--saas-sunken, rgba(0,0,0,0.04));
+    border-color: var(--saas-border, rgba(0,0,0,0.08));
+}
+.lumia-picker-opt--used:hover { transform: none; background: var(--saas-sunken, rgba(0,0,0,0.04)); border-color: var(--saas-border, rgba(0,0,0,0.08)); }
+.lumia-picker-opt__remove {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid #FCA5A5;
+    background: #FEE2E2;
+    color: #B91C1C;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 120ms var(--ease);
+    flex-shrink: 0;
+}
+.lumia-picker-opt__remove svg { stroke: currentColor; }
+.lumia-picker-opt__remove:hover {
+    background: #DC2626;
+    color: #FFFFFF;
+    border-color: #DC2626;
+    transform: scale(1.04);
+}
+.lumia-picker-opt__add-hint {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--saas-accent, var(--primary));
+    background: var(--saas-accent-soft, rgba(0,0,0,0.06));
+    padding: 4px 10px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+/* Kill the old bento overrides on dashboard since Lumia replaces it */
+.dash-wrapper > .quick-actions,
+.dash-wrapper > .bento-customize-trigger-row { display: none; }
+
+/* Edit button active state when tiles-editing is on */
+body.tiles-editing .main-header-bar .page-action-btn#lumiaEditBtn {
+    background: var(--saas-accent, var(--primary));
+    color: var(--saas-accent-ink, #FFFFFF);
+    border-color: var(--saas-accent, var(--primary));
+}
+body.tiles-editing .main-header-bar .page-action-btn#lumiaEditBtn:hover {
+    background: var(--saas-accent-hover, var(--primary));
+    border-color: var(--saas-accent-hover, var(--primary));
+}
+
+/* ============================================================================
+   26. COLORED TILE OVERRIDES
+   When tile.color is set, the tile background is colored — content stays the
+   same, but inner card chrome (backgrounds, borders, text) flips to be
+   readable on the colored background.
+   ============================================================================ */
+.lumia-tile--colored .lumia-tile__body { color: #FFFFFF; }
+
+/* Strip the inner card's own background / border / shadow so the tile color
+   shows through, regardless of which kind of widget is rendered inside. */
+.lumia-tile--colored .lumia-tile__body .widget-card,
+.lumia-tile--colored .lumia-tile__body .kpi-card,
+.lumia-tile--colored .lumia-tile__body .tool-tile,
+.lumia-tile--colored .lumia-tile__body .habits-grid-widget,
+.lumia-tile--colored .lumia-tile__body .tasks-list-widget,
+.lumia-tile--colored .lumia-tile__body .year-progress-widget,
+.lumia-tile--colored .lumia-tile__body .daily-tools-widget,
+.lumia-tile--colored .lumia-tile__body .affirmation-widget-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #FFFFFF !important;
+}
+
+/* All text → white (with translucent variants for secondary copy) */
+.lumia-tile--colored .lumia-tile__body,
+.lumia-tile--colored .lumia-tile__body *:not(.tl-prio):not(.tl-prio-dot):not(.tl-prio--urgent):not(.tl-prio--medium):not(.tl-prio--low) {
+    color: #FFFFFF;
+}
+.lumia-tile--colored .lumia-tile__body .text-muted,
+.lumia-tile--colored .lumia-tile__body [style*="color: var(--text-muted)"],
+.lumia-tile--colored .lumia-tile__body [style*="color:var(--text-muted)"] {
+    color: rgba(255, 255, 255, 0.78) !important;
+}
+
+/* Borders / dividers → semi-transparent white */
+.lumia-tile--colored .lumia-tile__body .widget-header,
+.lumia-tile--colored .lumia-tile__body .hg-row,
+.lumia-tile--colored .lumia-tile__body .tl-row,
+.lumia-tile--colored .lumia-tile__body .tl-col-heads,
+.lumia-tile--colored .lumia-tile__body .tl-footer,
+.lumia-tile--colored .lumia-tile__body .hg-header,
+.lumia-tile--colored .lumia-tile__body .tl-header {
+    border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Habits Grid on colored tile */
+.lumia-tile--colored .lumia-tile__body .hg-title { color: #FFFFFF; }
+.lumia-tile--colored .lumia-tile__body .hg-title::before { background: rgba(255,255,255,0.25); }
+.lumia-tile--colored .lumia-tile__body .hg-newbtn {
+    background: rgba(255,255,255,0.18) !important;
+    border-color: rgba(255,255,255,0.25) !important;
+    color: #FFFFFF !important;
+}
+.lumia-tile--colored .lumia-tile__body .hg-day-label,
+.lumia-tile--colored .lumia-tile__body .hg-day-label--head,
+.lumia-tile--colored .lumia-tile__body .hg-score--head,
+.lumia-tile--colored .lumia-tile__body .hg-col-head { color: rgba(255,255,255,0.82) !important; }
+.lumia-tile--colored .lumia-tile__body .hg-row--today {
+    background: rgba(255,255,255,0.18) !important;
+}
+.lumia-tile--colored .lumia-tile__body .hg-row--today .hg-day-label { color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .hg-check {
+    background: rgba(255,255,255,0.12) !important;
+    border-color: rgba(255,255,255,0.55) !important;
+    color: var(--saas-text, #0F172A);
+}
+.lumia-tile--colored .lumia-tile__body .hg-check.is-done {
+    background: #FFFFFF !important;
+    border-color: #FFFFFF !important;
+    color: var(--saas-ink, #0B0F17) !important;
+}
+.lumia-tile--colored .lumia-tile__body .hg-score-pct { color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .hg-score-bar { background: rgba(255,255,255,0.22) !important; }
+.lumia-tile--colored .lumia-tile__body .hg-score-fill { background: #FFFFFF !important; }
+
+/* Tasks List on colored tile */
+.lumia-tile--colored .lumia-tile__body .tl-title { color: #FFFFFF; }
+.lumia-tile--colored .lumia-tile__body .tl-title::before {
+    background: rgba(255,255,255,0.2);
+    border-color: #FFFFFF;
+}
+.lumia-tile--colored .lumia-tile__body .tl-newbtn {
+    background: rgba(255,255,255,0.18) !important;
+    border-color: rgba(255,255,255,0.25) !important;
+    color: #FFFFFF !important;
+}
+.lumia-tile--colored .lumia-tile__body .tl-col-heads,
+.lumia-tile--colored .lumia-tile__body .tl-col-heads * { color: rgba(255,255,255,0.78) !important; }
+.lumia-tile--colored .lumia-tile__body .tl-name,
+.lumia-tile--colored .lumia-tile__body .tl-due { color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .tl-row:hover { background: rgba(255,255,255,0.08) !important; }
+.lumia-tile--colored .lumia-tile__body .tl-check {
+    background: rgba(255,255,255,0.12) !important;
+    border-color: rgba(255,255,255,0.55) !important;
+    color: var(--saas-text, #0F172A);
+}
+.lumia-tile--colored .lumia-tile__body .tl-check.is-done {
+    background: #FFFFFF !important;
+    border-color: #FFFFFF !important;
+    color: var(--saas-ink, #0B0F17) !important;
+}
+.lumia-tile--colored .lumia-tile__body .tl-allbtn { color: rgba(255,255,255,0.85) !important; }
+.lumia-tile--colored .lumia-tile__body .tl-allbtn:hover {
+    color: #FFFFFF !important;
+    background: rgba(255,255,255,0.12) !important;
+}
+/* Priority pills keep their color background but increase contrast on tinted tile */
+.lumia-tile--colored .lumia-tile__body .tl-prio {
+    background: rgba(255,255,255,0.92) !important;
+}
+
+/* KPI card on colored tile */
+.lumia-tile--colored .lumia-tile__body .kpi-icon {
+    background: rgba(255,255,255,0.2) !important;
+    color: #FFFFFF !important;
+}
+.lumia-tile--colored .lumia-tile__body .kpi-icon svg { color: #FFFFFF !important; stroke: currentColor; }
+.lumia-tile--colored .lumia-tile__body .kpi-label { color: rgba(255,255,255,0.85) !important; }
+.lumia-tile--colored .lumia-tile__body .kpi-value { color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .kpi-sub { color: rgba(255,255,255,0.7) !important; }
+.lumia-tile--colored .lumia-tile__body .kpi-progress { background: rgba(255,255,255,0.22) !important; }
+.lumia-tile--colored .lumia-tile__body .kpi-progress__bar { background: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .kpi-card__cat {
+    background: rgba(255,255,255,0.2) !important;
+    color: #FFFFFF !important;
+}
+.lumia-tile--colored .lumia-tile__body .kpi-trend {
+    background: rgba(255,255,255,0.2) !important;
+    color: #FFFFFF !important;
+}
+
+/* Tool tile (gradient icon) on colored tile — keep the gradient icon, label white */
+.lumia-tile--colored .lumia-tile__body .tool-tile__label { color: #FFFFFF; }
+
+/* Generic widget body / header in colored mode */
+.lumia-tile--colored .lumia-tile__body .widget-title,
+.lumia-tile--colored .lumia-tile__body .widget-title * { color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .widget-body { color: #FFFFFF; }
+.lumia-tile--colored .lumia-tile__body .btn {
+    background: rgba(255,255,255,0.18) !important;
+    border-color: rgba(255,255,255,0.25) !important;
+    color: #FFFFFF !important;
+}
+.lumia-tile--colored .lumia-tile__body .btn.primary {
+    background: rgba(255,255,255,0.92) !important;
+    color: var(--saas-ink, #0B0F17) !important;
+    border-color: rgba(255,255,255,0.92) !important;
+}
+
+/* Year Progress widget on colored tile */
+.lumia-tile--colored .lumia-tile__body .year-progress-widget div[style*="background: var(--surface-3)"],
+.lumia-tile--colored .lumia-tile__body .year-progress-widget div[style*="background:var(--surface-3)"] {
+    background: rgba(255,255,255,0.22) !important;
+}
+.lumia-tile--colored .lumia-tile__body .year-progress-widget div[style*="background: var(--primary-soft)"],
+.lumia-tile--colored .lumia-tile__body .year-progress-widget div[style*="background:var(--primary-soft)"] {
+    background: rgba(255,255,255,0.22) !important;
+}
+.lumia-tile--colored .lumia-tile__body .year-progress-widget span[style*="color:var(--primary)"],
+.lumia-tile--colored .lumia-tile__body .year-progress-widget span[style*="color: var(--primary)"] {
+    color: #FFFFFF !important;
+}
+
+/* Daily Tools widget on colored tile — keep gradient icons */
+.lumia-tile--colored .lumia-tile__body .dt-tool { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.18); }
+.lumia-tile--colored .lumia-tile__body .dt-label { color: #FFFFFF; }
+
+/* ============================================================================
+   27. NEW WIDGET FAMILIES — Quick-Add, List, Status, Visual
+   ============================================================================ */
+
+/* ---- Quick-Add tile ---- */
+.lw-addtile {
+    width: 100%;
+    height: 100%;
+    background: var(--saas-surface, #FFFFFF);
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.06));
+    border-radius: var(--r-lg, 12px);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06));
+    transition: all var(--dur-fast) var(--ease);
+    position: relative;
+    overflow: hidden;
+}
+.lw-addtile:hover {
+    border-color: var(--saas-accent, var(--primary));
+    box-shadow: var(--sh-md, 0 4px 6px -1px rgba(0,0,0,0.08));
+}
+.lw-addtile__icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--saas-accent-soft, rgba(79,70,229,0.10));
+    color: var(--saas-accent, var(--primary, #4F46E5));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.lw-addtile__icon svg { stroke: currentColor; }
+.lw-addtile__plus {
+    position: absolute;
+    top: 10px; right: 14px;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--saas-accent, var(--primary));
+    line-height: 1;
+}
+.lw-addtile__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--saas-text, #0F172A);
+    margin-top: auto;
+}
+.lw-addtile__hint {
+    font-size: 12px;
+    color: var(--saas-text-muted, #5B6470);
+    margin-top: 2px;
+}
+/* Small (1x1) add-tile compresses */
+.lumia-tile--w1.lumia-tile--h1 .lw-addtile {
+    padding: 8px;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+.lumia-tile--w1.lumia-tile--h1 .lw-addtile__plus { display: none; }
+.lumia-tile--w1.lumia-tile--h1 .lw-addtile__hint { display: none; }
+.lumia-tile--w1.lumia-tile--h1 .lw-addtile__title { font-size: 11px; margin-top: 4px; }
+.lumia-tile--w1.lumia-tile--h1 .lw-addtile__icon { width: 30px; height: 30px; border-radius: 8px; }
+
+/* ---- List/Status/Visual shared "card" wrapper ---- */
+.lw-card {
+    width: 100%;
+    height: 100%;
+    background: var(--saas-surface, #FFFFFF);
+    border: 1px solid var(--saas-border, rgba(0,0,0,0.06));
+    border-radius: var(--r-lg, 12px);
+    padding: 12px 14px;
+    box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06));
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.lw-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+}
+.lw-card__label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--saas-text-muted, #5B6470);
+}
+.lw-card__title {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--saas-text, #0F172A);
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin-top: 2px;
+}
+.lw-card__title-sub {
+    font-size: 13px;
+    color: var(--saas-text-muted, #5B6470);
+    font-weight: 500;
+}
+.lw-card__count {
+    font-size: 12px;
+    color: var(--saas-text-muted, #5B6470);
+    margin-top: 2px;
+}
+.lw-card__icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--saas-accent-soft, rgba(79,70,229,0.10));
+    color: var(--saas-accent, var(--primary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.lw-card__icon svg { stroke: currentColor; }
+.lw-card__big-stat {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--saas-text, #0F172A);
+    letter-spacing: -0.02em;
+}
+.lw-card__big-stat.is-danger { color: #DC2626; }
+.lw-card__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+}
+.lw-card__foot {
+    flex-shrink: 0;
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 1px solid var(--saas-border, rgba(0,0,0,0.06));
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--saas-text-muted, #5B6470);
+}
+
+/* ---- Empty state ---- */
+.lw-empty {
+    color: var(--saas-text-muted, #5B6470);
+    text-align: center;
+    padding: 16px 8px;
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* ---- List row ---- */
+.lw-row {
+    width: 100%;
+    background: transparent;
+    border: none;
+    text-align: left;
+    padding: 9px 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background var(--dur-fast) var(--ease);
+}
+.lw-row:hover { background: var(--saas-sunken, rgba(0,0,0,0.03)); }
+.lw-row--static { cursor: default; }
+.lw-row--static:hover { background: transparent; }
+.lw-row__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.lw-row__emoji {
+    font-size: 16px;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.lw-row__time {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--saas-text-muted, #5B6470);
+    width: 44px;
+    flex-shrink: 0;
+}
+.lw-row__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.lw-row__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--saas-text, #0F172A);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.lw-row__sub {
+    font-size: 11px;
+    color: var(--saas-text-muted, #5B6470);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.lw-row__amt {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--saas-text, #0F172A);
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+.lw-row__amt--pos { color: #059669; }
+
+/* ---- Mini progress bar (inside rows) ---- */
+.lw-progress {
+    height: 4px;
+    background: var(--saas-sunken, rgba(0,0,0,0.06));
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 4px;
+}
+.lw-progress--lg { height: 8px; margin-top: 12px; }
+.lw-progress__bar {
+    height: 100%;
+    background: var(--saas-accent, var(--primary));
+    border-radius: 999px;
+    transition: width var(--dur-base) var(--ease);
+}
+.lw-progress__bar.is-danger { background: #DC2626; }
+
+/* ---- Streak pill ---- */
+.lw-streak-pill {
+    display: inline-block;
+    padding: 3px 8px;
+    background: linear-gradient(135deg, #F59E0B, #EA580C);
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+}
+
+/* ---- Mood chart (7-bar) ---- */
+.lw-moodchart {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    flex: 1;
+    margin-top: 8px;
+}
+.lw-moodbar {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+}
+.lw-moodbar__col {
+    width: 100%;
+    flex: 1;
+    background: var(--saas-sunken, rgba(0,0,0,0.05));
+    border-radius: 4px;
+    position: relative;
+    min-height: 24px;
+    display: flex;
+    align-items: flex-end;
+}
+.lw-moodbar__fill {
+    width: 100%;
+    background: linear-gradient(180deg, var(--saas-accent, var(--primary)) 0%, color-mix(in srgb, var(--saas-accent, var(--primary)) 60%, transparent) 100%);
+    border-radius: 4px;
+    transition: height var(--dur-base) var(--ease);
+}
+.lw-moodbar__emoji {
+    font-size: 14px;
+    line-height: 1;
+}
+.lw-moodbar__day {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--saas-text-muted, #5B6470);
+}
+
+/* Tile-content-fit for new widgets — when colored, drop their card chrome */
+.lumia-tile--colored .lumia-tile__body .lw-card,
+.lumia-tile--colored .lumia-tile__body .lw-addtile {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #FFFFFF;
+}
+.lumia-tile--colored .lumia-tile__body .lw-card__label,
+.lumia-tile--colored .lumia-tile__body .lw-card__title,
+.lumia-tile--colored .lumia-tile__body .lw-card__title-sub,
+.lumia-tile--colored .lumia-tile__body .lw-card__count,
+.lumia-tile--colored .lumia-tile__body .lw-card__big-stat,
+.lumia-tile--colored .lumia-tile__body .lw-card__foot,
+.lumia-tile--colored .lumia-tile__body .lw-row__title,
+.lumia-tile--colored .lumia-tile__body .lw-row__sub,
+.lumia-tile--colored .lumia-tile__body .lw-row__time,
+.lumia-tile--colored .lumia-tile__body .lw-row__amt,
+.lumia-tile--colored .lumia-tile__body .lw-empty,
+.lumia-tile--colored .lumia-tile__body .lw-addtile__title,
+.lumia-tile--colored .lumia-tile__body .lw-addtile__hint,
+.lumia-tile--colored .lumia-tile__body .lw-addtile__plus,
+.lumia-tile--colored .lumia-tile__body .lw-moodbar__day { color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .lw-card__label,
+.lumia-tile--colored .lumia-tile__body .lw-row__sub,
+.lumia-tile--colored .lumia-tile__body .lw-row__time,
+.lumia-tile--colored .lumia-tile__body .lw-empty,
+.lumia-tile--colored .lumia-tile__body .lw-addtile__hint,
+.lumia-tile--colored .lumia-tile__body .lw-card__title-sub,
+.lumia-tile--colored .lumia-tile__body .lw-card__count,
+.lumia-tile--colored .lumia-tile__body .lw-card__foot,
+.lumia-tile--colored .lumia-tile__body .lw-moodbar__day { color: rgba(255,255,255,0.78) !important; }
+.lumia-tile--colored .lumia-tile__body .lw-card__icon,
+.lumia-tile--colored .lumia-tile__body .lw-addtile__icon {
+    background: rgba(255,255,255,0.2) !important;
+    color: #FFFFFF !important;
+}
+.lumia-tile--colored .lumia-tile__body .lw-row:hover { background: rgba(255,255,255,0.10) !important; }
+.lumia-tile--colored .lumia-tile__body .lw-progress { background: rgba(255,255,255,0.20) !important; }
+.lumia-tile--colored .lumia-tile__body .lw-progress__bar { background: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .lw-card__foot { border-top-color: rgba(255,255,255,0.18) !important; }
+.lumia-tile--colored .lumia-tile__body .lw-moodbar__col { background: rgba(255,255,255,0.20) !important; }
+.lumia-tile--colored .lumia-tile__body .lw-moodbar__fill { background: #FFFFFF !important; }
