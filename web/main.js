@@ -2320,17 +2320,29 @@ async function loadAllData(force = false) {
     state.loading = true;
     updateLoader(5, 'Connecting...');
 
-    await fetchFreshData(force);
+    try {
+        await fetchFreshData(force);
+    } catch (e) {
+        console.error('loadAllData: fetchFreshData threw:', e);
+    }
 
     state.loading = false;
     updateLoader(95, 'Processing & Rendering...');
     console.log("Data Loaded:", state.data);
-    applyPostLoadSettings();
+    try {
+        applyPostLoadSettings();
+    } catch (e) {
+        console.error('loadAllData: applyPostLoadSettings threw:', e);
+    }
 
     updateLoader(100, 'Ready!');
+    // ALWAYS hide the loader, even on error
     setTimeout(() => {
         const loader = document.getElementById('appLoader');
-        if (loader) loader.classList.add('hidden');
+        if (loader) {
+            loader.classList.add('hidden');
+            loader.style.display = 'none';   // belt-and-suspenders for cases where the class isn't enough
+        }
     }, 500);
 }
 
@@ -2340,7 +2352,44 @@ async function loadAllData(force = false) {
 async function fetchFreshData(force = false) {
     const startTime = performance.now();
 
-    // Try bulk fetch first
+    // ─── Supabase path: use apiCall('init') which does a parallel SELECT * on
+    // every table. Skips the slow Google Apps Script bulk endpoint entirely.
+    const useSupabase = window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.enabled;
+    if (useSupabase) {
+        // If not signed in yet, bail immediately — the auth gate will take over.
+        // Avoids the loader covering the auth gate on mobile.
+        try {
+            const { data: { session } } = await window.supabase.auth.getSession();
+            if (!session?.user) {
+                console.log('loadAllData: not signed in — skipping data fetch, auth gate handles it');
+                return;
+            }
+        } catch (e) { /* session lookup failed; still try the init below */ }
+
+        updateLoader(10, 'Loading your data…');
+        try {
+            const result = await Promise.race([
+                apiCall('init', null, {}),
+                // 10-second safety timeout so the loader can't hang forever
+                new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout')), 10000))
+            ]);
+            if (result && result.success && result.data) {
+                updateLoader(80, 'Processing data…');
+                applyBulkDataToState(result.data);
+                console.log(`loadAllData: ✅ Supabase init in ${Math.round(performance.now() - startTime)}ms`);
+                if (typeof updateWidgetData === 'function') updateWidgetData();
+                if (window.personalStore && state.data) {
+                    for (const k of Object.keys(state.data)) window.personalStore.notify(k);
+                }
+                return;
+            }
+        } catch (e) {
+            console.warn('loadAllData: Supabase init failed:', e.message);
+        }
+        return;
+    }
+
+    // ─── Legacy path: Google Apps Script bulk fetch
     try {
         updateLoader(10, 'Fetching all data...');
         const forceParam = force ? '&force=true' : '';
