@@ -1395,8 +1395,12 @@ window.resetLumiaTiles = async function () {
 // These helpers flip the DOM synchronously for instant feedback, then hand
 // off to the original optimistic toggle for data + sheet sync.
 
-window._tileHabitToggle = async function (cellEl, habitId) {
-    console.log('[HabitToggle] click', { habitId, cellEl });
+window._tileHabitToggle = async function (cellEl, habitId, iso) {
+    // iso defaults to today for backward compatibility with callers that
+    // don't pass a date. The Habits Grid widget passes the specific row's
+    // date so we can back-date marks too.
+    iso = iso || new Date().toISOString().slice(0, 10);
+    console.log('[HabitToggle] click', { habitId, iso, cellEl });
     if (!cellEl) { console.warn('[HabitToggle] no cellEl'); return; }
     const check = cellEl.querySelector('.hg-check');
     if (!check) { console.warn('[HabitToggle] no .hg-check inside cell'); return; }
@@ -1407,7 +1411,7 @@ window._tileHabitToggle = async function (cellEl, habitId) {
         ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
         : '';
     console.log('[HabitToggle] visual flipped, goingDone=', goingDone);
-    // Update day-score % for today's row
+    // Update day-score % for whichever row this cell belongs to
     const row = cellEl.closest('.hg-row');
     if (row) {
         const cells = row.querySelectorAll('.hg-cell .hg-check');
@@ -1426,19 +1430,18 @@ window._tileHabitToggle = async function (cellEl, habitId) {
             return;
         }
         if (!state.data.habit_logs) state.data.habit_logs = [];
-        const today = new Date().toISOString().slice(0, 10);
         const existingIdx = state.data.habit_logs.findIndex(
-            l => String(l.habit_id) === String(habitId) && (l.date || '').startsWith(today)
+            l => String(l.habit_id) === String(habitId) && (l.date || '').startsWith(iso)
         );
         if (existingIdx !== -1) {
             const toDelete = state.data.habit_logs[existingIdx];
-            console.log('[HabitToggle] DELETING habit_log id=', toDelete.id);
+            console.log('[HabitToggle] DELETING habit_log id=', toDelete.id, 'date=', iso);
             state.data.habit_logs.splice(existingIdx, 1);
             const r = await window.apiCall('delete', 'habit_logs', {}, toDelete.id);
             console.log('[HabitToggle] delete result:', r);
         } else {
             const tempId = 'temp-' + Date.now() + Math.floor(Math.random() * 1000);
-            const payload = { habit_id: habitId, date: today, status: 'completed' };
+            const payload = { habit_id: habitId, date: iso, status: 'completed' };
             console.log('[HabitToggle] CREATING habit_log', payload);
             state.data.habit_logs.push({ id: tempId, ...payload });
             const result = await window.apiCall('create', 'habit_logs', payload);
@@ -2784,11 +2787,17 @@ function renderDashboard() {
       // Cap visible habits to 8 so grid doesn't overflow
       const habits = allHabits.slice(0, 8);
 
-      const headerCells = habits.map(h => `
-        <div class="hg-col-head" title="${escapeHtml(h.habit_name || h.name)}">
-          <span class="hg-col-icon">${h.icon || '✦'}</span>
+      const headerCells = habits.map(h => {
+        const fullName = h.habit_name || h.name || '';
+        // Show emoji (habits store .emoji, not .icon) and a short name label.
+        const iconChar = h.emoji || h.icon || '✦';
+        return `
+        <div class="hg-col-head" title="${escapeHtml(fullName)}">
+          <span class="hg-col-icon">${iconChar}</span>
+          <span class="hg-col-name">${escapeHtml(fullName)}</span>
         </div>
-      `).join('');
+      `;
+      }).join('');
 
       const bodyRows = dayRows.map((day, dayIdx) => {
         const doneCount = habits.filter(h => isDone(h.id, day.iso)).length;
@@ -2796,11 +2805,11 @@ function renderDashboard() {
         const cells = habits.map(h => {
           const done = isDone(h.id, day.iso);
           const isToday = dayIdx === 0;
-          const onclick = isToday
-            ? `onclick="event.stopPropagation(); _tileHabitToggle(this, '${h.id}');"`
-            : '';
+          // ALL past days are clickable — pass iso so the toggle targets the
+          // correct date. Today still gets the highlight class for styling.
           return `
-            <div class="hg-cell ${isToday ? 'hg-cell--today' : ''}" ${onclick}>
+            <div class="hg-cell hg-cell--clickable ${isToday ? 'hg-cell--today' : ''}"
+                 onclick="event.stopPropagation(); _tileHabitToggle(this, '${h.id}', '${day.iso}');">
               <span class="hg-check ${done ? 'is-done' : ''}">
                 ${done ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
               </span>

@@ -2109,7 +2109,9 @@ html { scroll-behavior: smooth; }
 }
 .habits-grid-widget .hg-row {
     display: grid;
-    grid-template-columns: 80px repeat(var(--hg-cols, 5), 32px) 1fr;
+    /* Widened habit columns from 32px → 56px so the name label fits below
+       the icon in the header row. */
+    grid-template-columns: 80px repeat(var(--hg-cols, 5), 56px) 1fr;
     align-items: center;
     gap: 6px;
     padding: 8px 4px;
@@ -2119,8 +2121,10 @@ html { scroll-behavior: smooth; }
 .habits-grid-widget .hg-row:last-child { border-bottom: none; }
 .habits-grid-widget .hg-row--head {
     border-bottom: 1px solid var(--saas-border-strong);
-    padding-bottom: 6px;
-    min-height: 32px;
+    padding-bottom: 8px;
+    /* Tall enough to fit icon-on-top + name-below */
+    min-height: 58px;
+    align-items: end;
 }
 .habits-grid-widget .hg-row--today {
     background: var(--saas-accent-soft);
@@ -2149,21 +2153,48 @@ html { scroll-behavior: smooth; }
 }
 .habits-grid-widget .hg-col-head {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
+    gap: 4px;
     color: var(--saas-text-muted);
+    min-width: 0;
+    overflow: hidden;
 }
 .habits-grid-widget .hg-col-icon {
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1;
     filter: grayscale(0.2);
+}
+.habits-grid-widget .hg-col-name {
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.15;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--saas-text-muted);
+    text-align: center;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
 }
 .habits-grid-widget .hg-cell {
     display: flex;
     align-items: center;
     justify-content: center;
 }
+/* Any clickable cell (today or past) gets pointer + hover state */
+.habits-grid-widget .hg-cell--clickable {
+    cursor: pointer;
+}
+.habits-grid-widget .hg-cell--clickable .hg-check:hover {
+    border-color: var(--saas-accent);
+    box-shadow: 0 0 0 3px var(--saas-accent-soft);
+}
 .habits-grid-widget .hg-cell--today {
+    /* Today still gets a stronger accent ring so it stands out */
     cursor: pointer;
 }
 .habits-grid-widget .hg-check {
