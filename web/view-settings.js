@@ -853,7 +853,7 @@ function renderTabToggle(label, key, isVisible) {
          </div>
          <div style="display: flex; align-items: center; gap: 16px;">
             <div class="toggle-label" style="margin: 0;">
-                <input type="checkbox" class="tab-checkbox" value="${key}" ${isVisible !== false ? 'checked' : ''}>
+                <input type="checkbox" class="tab-checkbox" value="${key}" ${isVisible !== false ? 'checked' : ''} onchange="_instantSaveTabs()">
             </div>
             <div style="display: flex; flex-direction: column; gap: 4px;">
                <button type="button" class="btn icon small" onclick="moveTab(event, this, -1)" style="padding: 2px; height: auto;" title="Move Up">
@@ -868,9 +868,77 @@ function renderTabToggle(label, key, isVisible) {
     `;
 }
 
-// Logic for Up/Down buttons
+// Instant save: applies sidebar visibility immediately AND debounce-saves to backend.
+// Called on every checkbox toggle and every up/down arrow click.
+let _tabSaveDebounce = null;
+window._instantSaveTabs = function () {
+    // 1. Read current DOM state of toggles
+    const tabItemsDOM = Array.from(document.querySelectorAll('.tab-toggle-item'));
+    if (tabItemsDOM.length === 0) return;
+    const navLayout = tabItemsDOM.map(el => ({
+        id: el.dataset.id,
+        visible: el.querySelector('.tab-checkbox').checked
+    }));
+    const navLayoutJSON = JSON.stringify(navLayout);
+
+    // 2. Update state in-memory + apply to sidebar instantly
+    if (state.data.settings?.[0]) {
+        state.data.settings[0].nav_layout = navLayoutJSON;
+    } else {
+        state.data.settings = [{ id: null, nav_layout: navLayoutJSON }];
+    }
+    if (typeof updateTabVisibility === 'function') updateTabVisibility();
+
+    // 3. Debounce-save to backend (avoids spamming Supabase on rapid arrow clicks)
+    if (_tabSaveDebounce) clearTimeout(_tabSaveDebounce);
+    _tabSaveDebounce = setTimeout(async () => {
+        try {
+            // Prefer Supabase direct path: match by user_id (always reliable),
+            // not by id (which can be null/stale in state). Falls back to apiCall
+            // if Supabase isn't enabled.
+            if (window.supabase && window.SUPABASE_CONFIG?.enabled) {
+                const { data: { user }, error: userErr } = await window.supabase.auth.getUser();
+                if (userErr || !user) throw new Error('Not signed in');
+
+                // Try UPDATE first (no INSERT needed since auth trigger creates the row on signup)
+                const { data: updated, error: updErr } = await window.supabase
+                    .from('settings')
+                    .update({ nav_layout: navLayoutJSON })
+                    .eq('user_id', user.id)
+                    .select('id');
+                if (updErr) throw updErr;
+                if (!updated || updated.length === 0) {
+                    // No row existed yet (rare — auth trigger should have created one).
+                    // Upsert with user_id conflict resolution.
+                    const { error: upsertErr } = await window.supabase
+                        .from('settings')
+                        .upsert({
+                            id: String(Date.now()) + Math.floor(Math.random() * 1000),
+                            user_id: user.id,
+                            nav_layout: navLayoutJSON
+                        }, { onConflict: 'user_id' });
+                    if (upsertErr) throw upsertErr;
+                }
+                console.log('[Tabs] saved to Supabase, nav_layout=', navLayoutJSON.slice(0, 80));
+            } else {
+                // Legacy: Google Apps Script path
+                const existingId = state.data.settings?.[0]?.id;
+                if (existingId) {
+                    await apiCall('update', 'settings', { nav_layout: navLayoutJSON }, existingId);
+                } else {
+                    await apiCall('create', 'settings', { nav_layout: navLayoutJSON });
+                }
+            }
+            if (typeof showToast === 'function') showToast('Tabs saved', 'success');
+        } catch (e) {
+            console.error('[Tabs] save failed:', e);
+            if (typeof showToast === 'function') showToast('Could not save tabs: ' + (e.message || e), 'error');
+        }
+    }, 600);
+};
+
+// Up/Down buttons — instantly reorder DOM, then trigger instant save
 window.moveTab = function (event, btnElement, direction) {
-  // Prevent checkbox click
   event.preventDefault();
   event.stopPropagation();
 
@@ -878,18 +946,20 @@ window.moveTab = function (event, btnElement, direction) {
   const list = row.parentElement;
 
   if (direction === -1) {
-    // Move Up
     const prev = row.previousElementSibling;
-    if (prev) {
-      list.insertBefore(row, prev);
-    }
+    if (prev) list.insertBefore(row, prev);
   } else if (direction === 1) {
-    // Move Down
     const next = row.nextElementSibling;
     if (next) {
-      list.insertBefore(next, row); // This swaps places but visually doesn't work if next is the last element
-      list.insertBefore(row, next.nextSibling); // Properly moves after the next sibling
+      list.insertBefore(next, row);
+      list.insertBefore(row, next.nextSibling);
     }
+  }
+
+  // For tab toggles, save instantly. For dashboard/routine items, the existing
+  // Save buttons in those sections handle persistence.
+  if (row && row.classList.contains('tab-toggle-item')) {
+    window._instantSaveTabs();
   }
 };
 
