@@ -1327,7 +1327,7 @@ window.resetLumiaTiles = async function () {
 // These helpers flip the DOM synchronously for instant feedback, then hand
 // off to the original optimistic toggle for data + sheet sync.
 
-window._tileHabitToggle = function (cellEl, habitId) {
+window._tileHabitToggle = async function (cellEl, habitId) {
     if (!cellEl) return;
     const check = cellEl.querySelector('.hg-check');
     if (!check) return;
@@ -1349,9 +1349,33 @@ window._tileHabitToggle = function (cellEl, habitId) {
         const fillEl = row.querySelector('.hg-score-fill');
         if (fillEl) fillEl.style.width = pct + '%';
     }
-    // Hand off to the existing optimistic toggle (state + sheet sync)
-    if (typeof window.toggleHabitOptimistic === 'function') {
-        try { window.toggleHabitOptimistic(habitId); } catch (e) { console.warn('habit toggle failed', e); }
+    // Do the data write DIRECTLY (not via view-habits.js's toggleHabitOptimistic
+    // because that calls renderHabits() which would replace the dashboard page).
+    try {
+        if (!state.data.habit_logs) state.data.habit_logs = [];
+        const today = new Date().toISOString().slice(0, 10);
+        const existingIdx = state.data.habit_logs.findIndex(
+            l => String(l.habit_id) === String(habitId) && (l.date || '').startsWith(today)
+        );
+        if (existingIdx !== -1) {
+            // Unmark — remove the log entry
+            const toDelete = state.data.habit_logs[existingIdx];
+            state.data.habit_logs.splice(existingIdx, 1);
+            await apiCall('delete', 'habit_logs', {}, toDelete.id);
+        } else {
+            // Mark done — add a log entry
+            const tempId = 'temp-' + Date.now() + Math.floor(Math.random() * 1000);
+            state.data.habit_logs.push({ id: tempId, habit_id: habitId, date: today, status: 'completed' });
+            const result = await apiCall('create', 'habit_logs', {
+                habit_id: habitId, date: today, status: 'completed'
+            });
+            // Replace temp id with the real id returned by the server
+            const log = state.data.habit_logs.find(l => l.id === tempId);
+            if (log && result && result.data && result.data.id) log.id = result.data.id;
+        }
+        if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
+    } catch (e) {
+        console.warn('[Dashboard] habit write failed', e);
     }
 };
 
@@ -1374,7 +1398,7 @@ window._dashOpenModal = async function (viewName, modalFn, ...args) {
     }
 };
 
-window._tileTaskToggle = function (checkEl, taskId) {
+window._tileTaskToggle = async function (checkEl, taskId) {
     if (!checkEl) return;
     const goingDone = !checkEl.classList.contains('is-done');
     checkEl.classList.toggle('is-done', goingDone);
@@ -1385,8 +1409,25 @@ window._tileTaskToggle = function (checkEl, taskId) {
     // Fade the row so it reads as completed
     const row = checkEl.closest('.tl-row');
     if (row) row.style.opacity = goingDone ? '0.45' : '1';
-    if (typeof window.toggleTaskOptimistic === 'function') {
-        try { window.toggleTaskOptimistic(taskId); } catch (e) { console.warn('task toggle failed', e); }
+    // Direct data write — bypass view-tasks.js completely so we never touch
+    // the dashboard DOM tree from a sibling view's render function.
+    try {
+        const t = (state.data.tasks || []).find(x => String(x.id) === String(taskId));
+        if (!t) return;
+        const newStatus = goingDone ? 'completed' : 'pending';
+        t.status = newStatus;
+        const result = await apiCall('update', 'tasks', { status: newStatus }, taskId);
+        if (typeof window.triggerHapticBuzz === 'function') window.triggerHapticBuzz();
+        if (!result || result.success === false) {
+            // Revert on failure
+            t.status = goingDone ? 'pending' : 'completed';
+            checkEl.classList.toggle('is-done', !goingDone);
+            checkEl.innerHTML = '';
+            if (row) row.style.opacity = '1';
+            if (typeof showToast === 'function') showToast('Error updating task');
+        }
+    } catch (e) {
+        console.warn('[Dashboard] task write failed', e);
     }
 };
 
