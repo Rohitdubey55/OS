@@ -3,18 +3,60 @@
 let finState = 'expenses'; // 'expenses', 'income', 'funds', 'assets'
 let finRange = 'week';    // 'week', 'month', 'year'
 
+/* Finance desktop refinement — scoped to .fin-pro (no double heading; Add New
+   lives in the app header bar; KPI overview + two-pane with an insights rail). */
+const FINANCE_REFINE_CSS = `<style>
+.fin-pro { max-width:1340px; margin:0 auto; }
+.fin-pro .fin-nav { background:var(--surface-2); border:1px solid var(--border-color); border-radius:10px; padding:4px; display:inline-flex; gap:2px; width:fit-content; margin-bottom:18px; }
+.fin-pro .fin-tab { border:none; background:transparent; padding:8px 16px; border-radius:7px; font-size:13px; font-weight:600; color:var(--text-3); cursor:pointer; display:inline-flex; align-items:center; }
+.fin-pro .fin-tab.active { background:var(--surface-1); color:var(--text-1); box-shadow:var(--shadow-xs); }
+.fin-pro .fin-range { background:var(--surface-2); border:1px solid var(--border-color); border-radius:9px; padding:3px; display:inline-flex; gap:2px; }
+.fin-pro .fin-range .range-btn { border:none; background:transparent; padding:6px 14px; border-radius:7px; font-size:12.5px; font-weight:550; color:var(--text-3); cursor:pointer; }
+.fin-pro .fin-range .range-btn.active { background:var(--surface-1); color:var(--text-1); box-shadow:var(--shadow-xs); }
+.fin-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+.fin-kpi { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:14px 16px; }
+.fin-kpi .k-l { font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); font-weight:600; }
+.fin-kpi .k-v { font-size:22px; font-weight:700; letter-spacing:-.02em; color:var(--text-1); font-variant-numeric:tabular-nums; margin-top:4px; }
+.fin-workspace { display:flex; gap:20px; align-items:flex-start; }
+.fin-main { flex:1; min-width:0; }
+.fin-rail { flex:0 0 320px; position:sticky; top:12px; display:flex; flex-direction:column; gap:13px; }
+.fin-pro .dash-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:16px; }
+.fin-sec-h { font-size:13px; font-weight:700; color:var(--text-1); margin:0 0 12px; }
+.fin-pro .transaction-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:11px; box-shadow:var(--shadow-xs); padding:12px 14px; margin-bottom:8px; display:flex; align-items:center; gap:14px; cursor:pointer; transition:box-shadow .14s ease, border-color .14s ease; }
+.fin-pro .transaction-card:hover { box-shadow:var(--shadow-sm); border-color:var(--border-strong); }
+.fin-pro .transaction-date { font-size:12px; color:var(--text-3); font-variant-numeric:tabular-nums; min-width:52px; }
+.fin-pro .transaction-details { flex:1; min-width:0; }
+.fin-pro .transaction-amount { font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.fin-pro .empty-state { text-align:center; color:var(--text-3); font-size:13.5px; padding:30px 0; }
+.finr-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:15px; }
+.finr-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:700; margin:0 0 12px; }
+.finr-cat { margin-bottom:11px; }
+.finr-cat:last-child { margin-bottom:0; }
+.finr-cat-top { display:flex; justify-content:space-between; gap:8px; font-size:12.5px; color:var(--text-2); margin-bottom:5px; }
+.finr-cat-top span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.finr-cat-top b { color:var(--text-1); font-variant-numeric:tabular-nums; flex-shrink:0; }
+.finr-bar { height:6px; background:var(--surface-3); border-radius:999px; overflow:hidden; }
+.finr-bar i { display:block; height:100%; background:var(--primary); border-radius:999px; }
+.finr-empty { font-size:12.5px; color:var(--text-3); }
+/* Unified "Add to Finance" type selector (in the modal — global, not scoped to .fin-pro) */
+.fin-add-segs { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:4px 0 16px; }
+.fin-add-seg { border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-2); padding:9px 6px; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer; transition:background .14s ease, color .14s ease, border-color .14s ease; }
+.fin-add-seg:hover { border-color:var(--border-strong); color:var(--text-1); }
+.fin-add-seg.active { background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:var(--shadow-sm); }
+@media (max-width:1099px){
+  .fin-pro { max-width:none; }
+  .fin-kpis { grid-template-columns:repeat(2,1fr); }
+  .fin-workspace { display:block; }
+  .fin-rail { display:none; }
+}
+</style>`;
+
 function renderFinance() {
   const main = document.getElementById('main');
 
   main.innerHTML = `
-    <div class="finance-wrapper">
-      <div class="header-row">
-        <h2 class="page-title">Finance</h2>
-        <div style="display:flex;gap:8px;">
-          <button class="btn primary" onclick="openFinanceAction()">${renderIcon('add', null, 'style="width:14px; margin-right:4px;"')} Add New</button>
-        </div>
-      </div>
-
+    <div class="finance-wrapper fin-pro">
+      ${FINANCE_REFINE_CSS}
       <div class="fin-nav">
         <button class="fin-tab ${finState === 'expenses' ? 'active' : ''}" onclick="switchFinTab('expenses')">${renderIcon('wallet', null, 'style="width:16px; margin-right:6px"')} Expenses</button>
         <button class="fin-tab ${finState === 'income' ? 'active' : ''}" onclick="switchFinTab('income')">${renderIcon('chart', null, 'style="width:16px; margin-right:6px"')} Income</button>
@@ -51,86 +93,80 @@ function renderFinanceContent() {
   else if (finState === 'assets') renderFinAssets(container);
 }
 
-/* --- DYNAMIC MODAL LOGIC (Hierarchical Budget Update) --- */
-window.openFinanceAction = function () {
+/* --- UNIFIED "ADD TO FINANCE" MODAL ---
+   One Add button, four things you can add. A type selector at the top switches
+   between Expense / Income / Fund / Asset so you're never limited by the tab
+   you happen to be on. Defaults to the current tab's type. */
+window.openFinanceAction = function (preferredType) {
+  const map = { expenses: 'expense', income: 'income', funds: 'fund', assets: 'asset' };
+  const valid = ['expense', 'income', 'fund', 'asset'];
+  window._finAddType = valid.includes(preferredType) ? preferredType : (map[finState] || 'expense');
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
+  box.innerHTML = _finAddModalHTML(window._finAddType);
+  modal.classList.remove('hidden');
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+};
 
-  if (finState === 'expenses' || finState === 'income') {
-    // 1. TRANSACTION FORM
-    const defaultType = finState === 'expenses' ? 'expense' : 'income';
+// Switch the form when the user picks a different type in the selector.
+window._finSetAddType = function (type) {
+  window._finAddType = type;
+  const box = document.querySelector('#universalModal .modal-box');
+  if (box) box.innerHTML = _finAddModalHTML(type);
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+};
 
-    // Get categories from settings (single source)
+function _finAddModalHTML(type) {
+  const labels = { expense: 'Expense', income: 'Income', fund: 'Fund', asset: 'Asset' };
+  const segs = ['expense', 'income', 'fund', 'asset'].map(t =>
+    `<button type="button" class="fin-add-seg ${type === t ? 'active' : ''}" onclick="_finSetAddType('${t}')">${labels[t]}</button>`
+  ).join('');
+
+  let body = '', save = '';
+  if (type === 'expense' || type === 'income') {
     const categories = getAllFinanceCategories();
-
-    box.innerHTML = `
-      <h3>New Transaction</h3>
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:10px">
-         <select class="input" id="mTxType" style="margin:0">
-             <option value="expense" ${defaultType === 'expense' ? 'selected' : ''}>Expense</option>
-             <option value="income" ${defaultType === 'income' ? 'selected' : ''}>Income</option>
-         </select>
-         <input type="date" class="input" id="mTxDate" value="${new Date().toISOString().slice(0, 10)}" style="margin:0">
-      </div>
-      
-      <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)">
-      
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+    body = `
+      <input type="hidden" id="mTxType" value="${type}">
+      <input type="date" class="input" id="mTxDate" value="${new Date().toISOString().slice(0, 10)}">
+      <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)" style="margin-top:10px">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px">
           <select class="input" id="mTxCategory" style="margin:0">
               <option value="">Select Category</option>
               ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
           </select>
-
-          <input class="input" id="mTxPaymentMode" placeholder="Payment Mode" list="paymentModeOptions">
+          <input class="input" id="mTxPaymentMode" placeholder="Payment Mode" list="paymentModeOptions" style="margin:0">
           <datalist id="paymentModeOptions">
-            <option value="Cash">
-            <option value="UPI">
-            <option value="Card">
-            <option value="Bank Transfer">
-            <option value="Other">
+            <option value="Cash"><option value="UPI"><option value="Card"><option value="Bank Transfer"><option value="Other">
           </datalist>
       </div>
-
-      <input class="input" id="mTxNote" placeholder="Note (optional — e.g. 'Birthday dinner')" style="margin-top:10px">
-
-      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
-        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <button class="btn primary" data-action="save-tx-modal">Save Transaction</button>
-      </div>
-    `;
-  }
-  else if (finState === 'funds') {
-    // 2. FUND FORM
-    box.innerHTML = `
-      <h3>New Fund Goal</h3>
+      <input class="input" id="mTxNote" placeholder="Note (optional — e.g. 'Birthday dinner')" style="margin-top:10px">`;
+    save = `<button class="btn primary" data-action="save-tx-modal">Save ${labels[type]}</button>`;
+  } else if (type === 'fund') {
+    body = `
       <input class="input" id="mFundName" placeholder="Fund Name (e.g. New Laptop)">
-      <input type="number" class="input" id="mFundTarget" placeholder="Target Amount (₹)">
-      <input type="number" class="input" id="mFundCurrent" placeholder="Current Savings (₹)">
-      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
-        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <button class="btn primary" data-action="save-fund-modal">Save Goal</button>
-      </div>
-    `;
-  }
-  else if (finState === 'assets') {
-    // 3. ASSET FORM
-    box.innerHTML = `
-      <h3>New Asset</h3>
+      <input type="number" class="input" id="mFundTarget" placeholder="Target Amount (₹)" style="margin-top:10px">
+      <input type="number" class="input" id="mFundCurrent" placeholder="Current Savings (₹)" style="margin-top:10px">`;
+    save = `<button class="btn primary" data-action="save-fund-modal">Save Goal</button>`;
+  } else { // asset
+    body = `
       <input class="input" id="mAssetName" placeholder="Asset Name (e.g. Gold, Stocks)">
-      <select class="input" id="mAssetType">
+      <select class="input" id="mAssetType" style="margin-top:10px">
          <option value="Cash">Cash</option>
          <option value="Investment">Investment</option>
          <option value="Property">Property</option>
       </select>
-      <input type="number" class="input" id="mAssetValue" placeholder="Current Value (₹)">
-      <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
-        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <button class="btn primary" data-action="save-asset-modal">Save Asset</button>
-      </div>
-    `;
+      <input type="number" class="input" id="mAssetValue" placeholder="Current Value (₹)" style="margin-top:10px">`;
+    save = `<button class="btn primary" data-action="save-asset-modal">Save Asset</button>`;
   }
 
-  modal.classList.remove('hidden');
+  return `
+    <h3 style="margin-bottom:4px">Add to Finance</h3>
+    <div class="fin-add-segs">${segs}</div>
+    ${body}
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+      ${save}
+    </div>`;
 }
 
 /* --- TAB 1: EXPENSES (Hierarchical View) --- */
@@ -204,27 +240,44 @@ function renderFinExpenses(container) {
   const catSpent = {};
   expenseItems.forEach(e => { catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount); });
 
+  const net = totalInc - totalExp;
+  const funds = state.data.funds || [];
+  const fundsTotal = funds.reduce((s, f) => s + Number(f.current_amount || f.balance || 0), 0);
+  const catEntries = Object.entries(catSpent).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const catMax = catEntries.length ? catEntries[0][1] : 1;
+  const catBars = catEntries.map(([c, v]) => `<div class="finr-cat"><div class="finr-cat-top"><span>${escapeHtml(c || 'Uncategorized')}</span><b>₹${Number(v).toLocaleString()}</b></div><div class="finr-bar"><i style="width:${Math.round(v / catMax * 100)}%"></i></div></div>`).join('');
+  const fundsRail = funds.slice(0, 5).map(f => { const cur = Number(f.current_amount || f.balance || 0); const tgt = Number(f.target_amount || 0); const pct = tgt > 0 ? Math.min(100, Math.round(cur / tgt * 100)) : 0; return `<div class="finr-cat"><div class="finr-cat-top"><span>${escapeHtml(f.fund_name || f.name || 'Fund')}</span><b>₹${cur.toLocaleString()}</b></div>${tgt > 0 ? `<div class="finr-bar"><i style="width:${pct}%"></i></div>` : ''}</div>`; }).join('');
+
   // Render
   container.innerHTML = `
-    <div style="display:flex; justify-content:center; margin-bottom:24px;">
-      <div style="background:var(--surface-3); padding:4px; border-radius:10px; display:flex; gap:2px;">
-        <button class="range-btn ${finRange === 'week' ? 'active' : ''}" onclick="switchFinRange('week')">Weekly View</button>
-        <button class="range-btn ${finRange === 'month' ? 'active' : ''}" onclick="switchFinRange('month')">Monthly View</button>
-        <button class="range-btn ${finRange === 'year' ? 'active' : ''}" onclick="switchFinRange('year')">Yearly View</button>
+    <div style="display:flex; justify-content:center; margin-bottom:18px;">
+      <div class="fin-range">
+        <button class="range-btn ${finRange === 'week' ? 'active' : ''}" onclick="switchFinRange('week')">Weekly</button>
+        <button class="range-btn ${finRange === 'month' ? 'active' : ''}" onclick="switchFinRange('month')">Monthly</button>
+        <button class="range-btn ${finRange === 'year' ? 'active' : ''}" onclick="switchFinRange('year')">Yearly</button>
       </div>
     </div>
 
-    <!-- HIERARCHICAL BUDGET CARDS -->
-    <div class="grid" style="grid-template-columns: 1fr; gap: 16px; margin-bottom: var(--space-6);">
-        ${finRange === 'month' ? renderMonthlyOverview(totalExp, monthlyBudget, catSpent, categoryBudgets) : ''}
-        ${finRange === 'week' ? renderWeeklyOverview(totalExp, weeklyBudget) : ''}
+    <div class="fin-kpis">
+      <div class="fin-kpi"><div class="k-l">Spent</div><div class="k-v" style="color:#B42318">₹${totalExp.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Income</div><div class="k-v" style="color:var(--success,#10B981)">₹${totalInc.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Net</div><div class="k-v" style="color:${net >= 0 ? 'var(--success,#10B981)' : '#B42318'}">${net < 0 ? '-' : ''}₹${Math.abs(net).toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Savings</div><div class="k-v">₹${fundsTotal.toLocaleString()}</div></div>
     </div>
 
-    <!-- Transactions List -->
-    <div class="transactions-list">
-      <h3 style="margin-bottom: var(--space-4); color:var(--text-main);">Recent Transactions</h3>
-      ${expenseItems.length === 0 ? '<div class="empty-state">No transactions found</div>' : ''}
-      ${expenseItems.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 15).map(renderTransactionCard).join('')}
+    <div class="fin-workspace">
+      <div class="fin-main">
+        ${(finRange === 'month' || finRange === 'week') ? `<div style="margin-bottom:18px;">${finRange === 'month' ? renderMonthlyOverview(totalExp, monthlyBudget, catSpent, categoryBudgets) : renderWeeklyOverview(totalExp, weeklyBudget, catSpent, categoryBudgets)}</div>` : ''}
+        <div class="transactions-list">
+          <h3 class="fin-sec-h">Recent transactions</h3>
+          ${expenseItems.length === 0 ? '<div class="empty-state">No transactions in this period.</div>' : ''}
+          ${expenseItems.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 15).map(renderTransactionCard).join('')}
+        </div>
+      </div>
+      <aside class="fin-rail">
+        <div class="finr-card"><div class="finr-h">Top categories</div>${catBars || '<div class="finr-empty">No spending in this period.</div>'}</div>
+        <div class="finr-card"><div class="finr-h">Savings</div>${fundsRail || '<div class="finr-empty">No funds yet.</div>'}</div>
+      </aside>
     </div>
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
@@ -287,7 +340,7 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
     </div>`;
 }
 
-function renderWeeklyOverview(totalExp, limit) {
+function renderWeeklyOverview(totalExp, limit, catSpent = {}, catLimits = {}) {
   const now = new Date();
   const weekBounds = getWeekBounds(now);
   const mondayStr = weekBounds.start.toLocaleDateString('default', { month: 'short', day: 'numeric' });
@@ -295,18 +348,35 @@ function renderWeeklyOverview(totalExp, limit) {
   const pct = limit > 0 ? Math.min(100, (totalExp / limit) * 100) : 0;
   const color = pct > 100 ? 'var(--danger)' : (pct > 80 ? 'var(--warning)' : 'var(--success)');
 
+  // Per-category breakdown for WEEKLY-source categories — so the limits & frequency set
+  // in Budget Settings are visibly applied here.
+  const keys = [...new Set([...Object.keys(catLimits || {}), ...Object.keys(catSpent || {})])].filter(c => {
+    const cd = (catLimits || {})[c];
+    const src = (cd && typeof cd === 'object') ? (cd.source || 'weekly') : 'weekly';
+    return src === 'weekly';
+  });
+  const catHtml = keys.map(c => {
+    const spent = Number(catSpent?.[c] || 0);
+    const cd = (catLimits || {})[c];
+    const cl = (cd && typeof cd === 'object') ? Number(cd.budget) || 0 : Number(cd) || 0;
+    if (spent === 0 && cl === 0) return '';
+    const cpct = cl > 0 ? Math.min(100, (spent / cl) * 100) : (spent > 0 ? 100 : 0);
+    const ccolor = (cl > 0 && spent > cl) ? 'var(--danger)' : 'var(--primary)';
+    return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="font-weight:600">${escapeHtml(c)}</span><span>₹${spent.toLocaleString()}${cl ? ' / ₹' + cl.toLocaleString() : ''}</span></div><div class="progress-bg" style="height:6px"><div class="progress-fill" style="width:${cpct}%;background:${ccolor}"></div></div></div>`;
+  }).join('');
+
   return `
      <div class="dash-card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
              <div class="stat-label">${renderIcon('priority', null, 'style="width:14px; margin-right:6px; display:inline-block"')} Weekly Budget (${mondayStr} - ${sundayStr})</div>
-             <div class="stat-val" style="font-size:1.2em">₹${totalExp} <span style="font-size:0.6em; color:var(--text-muted)">/ ${limit}</span></div>
+             <div class="stat-val" style="font-size:1.2em">₹${totalExp.toLocaleString()} <span style="font-size:0.6em; color:var(--text-muted)">/ ${Number(limit).toLocaleString()}</span></div>
         </div>
-        
-        <div class="progress-bg" style="height:8px; mb-4">
+        <div class="progress-bg" style="height:8px;">
              <div class="progress-fill" style="width:${pct}%; background:${color}"></div>
         </div>
+        ${catHtml ? `<div style="margin-top:14px; border-top:1px solid var(--border-color); padding-top:12px;">${catHtml}</div>` : ''}
         <div style="font-size:12px; margin-top:8px; color:var(--text-muted)">
-            Includes only expenses marked as "Weekly Budget". Fixed monthly bills are excluded.
+            Weekly-budget categories only; fixed monthly bills are excluded.
         </div>
     </div>`;
 }
@@ -419,24 +489,40 @@ function renderFinFunds(container) {
 
 /* --- TAB 3: ASSETS --- */
 function renderFinAssets(container) {
-  const assets = state.data.assets || [];
-  const total = assets.reduce((s, a) => s + Number(a.value), 0);
+  const assets = (state.data.assets || []).slice();
+  const total = assets.reduce((s, a) => s + Number(a.value || 0), 0);
+  const count = assets.length;
+  const sorted = assets.sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
+  const top = sorted[0];
+  const topName = top ? String(top.name || 'Untitled') : '—';
+  const topShort = topName.length > 16 ? topName.slice(0, 15) + '…' : topName;
+  const avg = count ? Math.round(total / count) : 0;
+
   container.innerHTML = `
-    <div class="dash-card net-worth-card" style="margin-bottom:20px">
-      <div class="stat-label" style="color:var(--text-inverse); opacity:0.7">Total Net Worth</div>
-      <div class="stat-val" style="color:var(--text-inverse)">₹${total.toLocaleString()}</div>
+    <div class="fin-kpis">
+      <div class="fin-kpi"><div class="k-l">Net worth</div><div class="k-v">₹${total.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Holdings</div><div class="k-v">${count}</div></div>
+      <div class="fin-kpi"><div class="k-l">Largest · ${topShort}</div><div class="k-v">₹${Number(top ? top.value || 0 : 0).toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Avg / holding</div><div class="k-v">₹${avg.toLocaleString()}</div></div>
     </div>
     <div class="card" style="padding:0; overflow:hidden">
-      ${assets.map(a => `
+      ${count === 0
+        ? '<div class="empty-state" style="padding:36px 20px; text-align:center; color:var(--text-2)">No assets yet. Tap “Add new” to add one.</div>'
+        : sorted.map(a => {
+            const share = total > 0 ? Math.round((Number(a.value || 0) / total) * 100) : 0;
+            return `
         <div class="asset-item">
-          <div><div style="font-weight:600">${a.name || 'Untitled'}</div><div class="asset-type">${a.type || a.notes || ''}</div></div>
+          <div style="min-width:0">
+            <div style="font-weight:600">${a.name || 'Untitled'}</div>
+            <div class="asset-type">${a.type || a.notes || ''}${a.type || a.notes ? ' · ' : ''}${share}% of net worth</div>
+          </div>
           <div style="display:flex; align-items:center; gap:10px">
-             <div style="font-weight:600">₹${Number(a.value).toLocaleString()}</div>
+             <div style="font-weight:700; font-variant-numeric:tabular-nums">₹${Number(a.value || 0).toLocaleString()}</div>
              <button class="btn icon" onclick="openEditAsset('${a.id}')" title="Edit">${renderIcon('edit', null, 'style="width:14px"')}</button>
              <button class="btn icon" data-action="delete" data-sheet="assets" data-id="${a.id}">${renderIcon('delete', null, 'style="width:14px"')}</button>
           </div>
-        </div>
-      `).join('')}
+        </div>`;
+          }).join('')}
     </div>
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
@@ -476,7 +562,7 @@ window.openEditTransaction = function (id) {
           <option value="Other">
         </datalist>
     </div>
-    <input class="input" id="mTxNote" placeholder="Note (optional)" value="${(tx.notes || '').replace(/"/g, '&quot;')}" style="margin-top:10px">
+    <input class="input" id="mTxNote" placeholder="Note (optional)" value="${(tx.description || tx.notes || '').replace(/"/g, '&quot;')}" style="margin-top:10px">
 
     <div style="display:flex; justify-content:space-between; gap:10px; margin-top:16px;">
       <button class="btn danger" onclick="deleteTransaction('${tx.id}')">Delete</button>
@@ -614,17 +700,19 @@ async function saveFinanceCategoriesToSettings(categories) {
   state.data.settings[0] = newSettings;
 }
 
-// Get all categories from settings (single source: category_budgets)
+// Get all finance categories — merge budget categories, categories used in real
+// transactions, and any explicit finance_categories, so the picker is never empty.
 function getAllFinanceCategories() {
-  // Get categories from budget settings (single source of truth)
   const settings = state.data.settings?.[0] || {};
-  let budgetCats = {};
+  const set = new Set();
   try {
-    if (settings.category_budgets) budgetCats = JSON.parse(settings.category_budgets);
+    if (settings.category_budgets) Object.keys(JSON.parse(settings.category_budgets)).forEach(c => { if (c && c.trim()) set.add(c.trim()); });
   } catch (e) { }
-  const budgetCatKeys = Object.keys(budgetCats).filter(c => c && c.trim() !== '');
-
-  return budgetCatKeys.sort();
+  (state.data.expenses || []).forEach(e => { if (e.category && String(e.category).trim()) set.add(String(e.category).trim()); });
+  try {
+    if (settings.finance_categories) { const fc = JSON.parse(settings.finance_categories); [...(fc.expense || []), ...(fc.income || [])].forEach(c => { if (c && String(c).trim()) set.add(String(c).trim()); }); }
+  } catch (e) { }
+  return [...set].sort((a, b) => a.localeCompare(b));
 }
 
 // Add a new category

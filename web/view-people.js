@@ -202,6 +202,155 @@ function getContactFreqDots(person) {
    MAIN RENDER
    ============================================================ */
 
+/* ══════════════════════════════════════════════════════════════════════
+   PEOPLE DESKTOP COMMAND CENTER — scoped to .pp-pro. Two-pane on desktop:
+   contact grid (left) + insight/detail pane (right). Mobile (<1100px) keeps
+   the single-column grid and the existing bottom sheet.
+   ══════════════════════════════════════════════════════════════════════ */
+const PEOPLE_REFINE_CSS = `<style>
+.pp-pro { max-width:1340px; margin:0 auto; }
+.pp-pro .pp-stats-strip { box-shadow:var(--shadow-card); }
+.pp-workspace { display:flex; gap:20px; align-items:flex-start; }
+.pp-board { flex:1; min-width:0; }
+.pp-pane { flex:0 0 360px; position:sticky; top:12px; max-height:calc(100vh - 90px); overflow-y:auto; display:flex; flex-direction:column; gap:13px; padding-bottom:8px; }
+
+@media (min-width:1100px){
+  .pp-pro .pp-card-grid { grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:14px; }
+  .pp-pro .pp-card { border-radius:var(--radius-lg); box-shadow:var(--shadow-card); transition:box-shadow .16s ease, transform .16s ease, border-color .16s ease; border:1px solid var(--border-color); }
+  .pp-pro .pp-card:hover { box-shadow:var(--shadow-md); transform:translateY(-1px); }
+  .pp-pro .pp-card.pp-sel { box-shadow:0 0 0 2px var(--primary), var(--shadow-md); }
+  /* Names fully visible: smaller name font + quick-actions reveal on hover (frees width) */
+  .pp-pro .pp-card-name { font-size:13.5px; }
+  .pp-pro .pp-card-name-text { white-space:normal; overflow:visible; }
+  .pp-pro .pp-card-quick-actions { display:none; }
+  .pp-pro .pp-card:hover .pp-card-quick-actions { display:flex; }
+}
+
+/* Pane */
+.ppp-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:15px; }
+.ppp-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:700; margin:0 0 10px; }
+.ppp-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer; }
+.ppp-row:last-child { border-bottom:none; }
+.ppp-av { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:700; flex-shrink:0; }
+.ppp-row .nm { flex:1; font-size:13px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ppp-row:hover .nm { color:var(--text-1); }
+.ppp-row .mt { font-size:11.5px; font-weight:600; color:var(--text-3); }
+.ppp-row .mt.urgent { color:#B42318; }
+.ppp-empty { font-size:12.5px; color:var(--text-3); }
+.ppp-bal { display:flex; gap:10px; }
+.ppp-bal > div { flex:1; border:1px solid var(--border-color); border-radius:10px; padding:11px 12px; }
+.ppp-bal .bn { font-size:18px; font-weight:700; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.ppp-bal .bl { font-size:11px; color:var(--text-3); margin-top:2px; }
+
+/* Pane detail */
+.ppp-head { display:flex; align-items:center; gap:12px; }
+.ppp-head .pp-avatar-wrap { position:relative; width:54px; height:54px; flex-shrink:0; }
+.ppp-id { flex:1; min-width:0; }
+.ppp-name { font-size:16px; font-weight:700; color:var(--text-1); }
+.ppp-rel { font-size:12px; color:var(--text-3); margin-top:2px; }
+.ppp-x { width:28px; height:28px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:8px; color:var(--text-3); cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.ppp-x:hover { background:var(--surface-2); color:var(--text-1); }
+.ppp-fav-row { display:flex; gap:7px; margin:12px 0; }
+.ppp-mini { flex:1; font:inherit; font-size:12px; font-weight:600; padding:7px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:8px; color:var(--text-3); cursor:pointer; }
+.ppp-mini.on { color:#B8860B; border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.08); }
+.ppp-mini.on.pri { color:#7C3AED; border-color:rgba(168,85,247,.4); background:rgba(168,85,247,.08); }
+.ppp-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:6px; }
+.ppp-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:9px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:9px; font:inherit; font-size:13px; font-weight:600; color:var(--text-2); cursor:pointer; }
+.ppp-btn:hover { background:var(--surface-2); color:var(--text-1); }
+.ppp-btn.primary { grid-column:1/-1; background:var(--primary); color:#fff; border-color:transparent; }
+.ppp-btn.primary:hover { filter:brightness(.96); color:#fff; }
+.ppp-sec { margin-top:14px; }
+.ppp-sech { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:8px; }
+.ppp-del { width:100%; margin-top:14px; display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:9px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:9px; font:inherit; font-size:13px; font-weight:600; color:#B42318; cursor:pointer; }
+.ppp-del:hover { background:rgba(220,38,38,.06); border-color:rgba(220,38,38,.2); }
+
+@media (max-width:1099px){
+  .pp-pro { max-width:none; }
+  .pp-workspace { display:block; }
+  .pp-pane { display:none; }
+}
+</style>`;
+
+let _ppSelId = null;
+function _ppDesktop() { try { return window.matchMedia('(min-width:1100px)').matches; } catch (e) { return (window.innerWidth || 1280) >= 1100; } }
+window.ppCardOpen = function (id) { if (_ppDesktop()) ppSelect(id); else openPersonSheet(id); };
+window.ppSelect = function (id) {
+  _ppSelId = (String(id) === String(_ppSelId)) ? null : String(id);
+  ppRenderPane();
+  document.querySelectorAll('.pp-card.pp-sel').forEach(c => c.classList.remove('pp-sel'));
+  if (_ppSelId) { const c = document.getElementById('pp-card-' + _ppSelId); if (c) c.classList.add('pp-sel'); }
+};
+window.ppCloseDetail = function () { _ppSelId = null; ppRenderPane(); document.querySelectorAll('.pp-card.pp-sel').forEach(c => c.classList.remove('pp-sel')); };
+function ppPaneHTML() {
+  const p = _ppSelId ? (state.data.people || []).find(x => String(x.id) === String(_ppSelId)) : null;
+  return p ? ppPaneDetailHTML(p) : ppInsightHTML();
+}
+function ppRenderPane() {
+  const el = document.querySelector('.pp-pane');
+  if (!el) return;
+  el.innerHTML = ppPaneHTML();
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+function ppInsightHTML() {
+  const people = state.data.people || [];
+  const attn = (typeof getNeedsAttention === 'function' ? getNeedsAttention(people) : []).slice(0, 6);
+  let owed = 0, owe = 0;
+  people.forEach(p => { const b = getPersonBalance(p.id); if (b > 0) owed += b; else if (b < 0) owe += Math.abs(b); });
+  const today = new Date();
+  const bdays = people.filter(p => p.birthday).map(p => {
+    const md = String(p.birthday).slice(5, 10); const yr = today.getFullYear();
+    let nd = new Date(yr + '-' + md); if (isNaN(nd)) return null;
+    if (nd < today) nd = new Date((yr + 1) + '-' + md);
+    return { p, days: Math.ceil((nd - today) / 86400000) };
+  }).filter(Boolean).filter(x => x.days <= 30).sort((a, b) => a.days - b.days).slice(0, 5);
+  const av = p => `<span class="ppp-av" style="background:${getAvatarGradient(p.name)}">${(p.name || '?').charAt(0).toUpperCase()}</span>`;
+  const attnRows = attn.length ? attn.map(n => { const p = n.person || n; const lbl = n.type === 'birthday' ? (n.days === 0 ? '🎂 today' : '🎂 ' + n.days + 'd') : getRelativeTime(p.last_contact); return `<div class="ppp-row" onclick="ppSelect('${p.id}')">${av(p)}<span class="nm">${escapeHtml(p.name || '')}</span><span class="mt urgent">${lbl}</span></div>`; }).join('') : `<div class="ppp-empty">Everyone's been contacted recently. 🎉</div>`;
+  const bdayRows = bdays.length ? bdays.map(({ p, days }) => `<div class="ppp-row" onclick="ppSelect('${p.id}')">${av(p)}<span class="nm">${escapeHtml(p.name || '')}</span><span class="mt">${days === 0 ? 'Today 🎂' : days + 'd'}</span></div>`).join('') : `<div class="ppp-empty">No birthdays in the next 30 days.</div>`;
+  return `
+  <div class="ppp-card"><div class="ppp-h">Reconnect</div>${attnRows}</div>
+  <div class="ppp-card"><div class="ppp-h">Upcoming birthdays</div>${bdayRows}</div>
+  <div class="ppp-card"><div class="ppp-h">Balance</div><div class="ppp-bal"><div><div class="bn" style="color:var(--success,#10B981)">₹${Math.round(owed)}</div><div class="bl">owed to you</div></div><div><div class="bn" style="color:#B42318">₹${Math.round(owe)}</div><div class="bl">you owe</div></div></div></div>`;
+}
+
+function ppPaneDetailHTML(p) {
+  const decay = getDecayInfo(p); const balance = getPersonBalance(p.id);
+  const grad = getAvatarGradient(p.name); const initial = (p.name || '?').charAt(0).toUpperCase();
+  const streak = getContactStreak(p); const history = parseInteractionHistory(p.notes); const freqDots = getContactFreqDots(p);
+  const debts = (state.data.people_debts || []).filter(d => String(d.person_id) === String(p.id)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const isFav = p.is_favorite === true || p.is_favorite === 'true';
+  const isPri = p.is_priority === true || p.is_priority === 'true';
+  let chips = '';
+  if (p.phone) chips += `<a class="pp-contact-chip" href="tel:${p.phone}"><i data-lucide="phone" style="width:14px;height:14px"></i> ${escapeHtml(p.phone)}</a>`;
+  if (p.email) chips += `<a class="pp-contact-chip" href="mailto:${p.email}"><i data-lucide="mail" style="width:14px;height:14px"></i> ${escapeHtml(p.email)}</a>`;
+  if (p.birthday) chips += `<span class="pp-contact-chip"><i data-lucide="cake" style="width:14px;height:14px"></i> ${new Date(p.birthday).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>`;
+  if (p.next_interaction) chips += `<span class="pp-contact-chip"><i data-lucide="calendar" style="width:14px;height:14px"></i> Next: ${new Date(p.next_interaction).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>`;
+  return `
+  <div class="ppp-card">
+    <div class="ppp-head">
+      <div class="pp-avatar-wrap">${renderDecayRingSVG(decay.pct, decay.color, 54)}<div class="pp-avatar" style="background:${grad}">${initial}</div></div>
+      <div class="ppp-id"><div class="ppp-name">${escapeHtml(p.name || '')}${streak >= 2 ? ` <span class="pp-streak">🔥 ${streak}</span>` : ''}</div><div class="ppp-rel">${escapeHtml(p.relationship || 'Contact')} · ${getRelativeTime(p.last_contact)}</div></div>
+      <button class="ppp-x" onclick="ppCloseDetail()"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+    </div>
+    ${chips ? `<div class="pp-sheet-chips" style="margin:12px 0">${chips}</div>` : ''}
+    <div class="ppp-fav-row">
+      <button class="ppp-mini ${isFav ? 'on' : ''}" onclick="toggleFavoritePerson('${p.id}', ${!isFav}); setTimeout(ppRenderPane,150)">★ Favorite</button>
+      <button class="ppp-mini ${isPri ? 'on pri' : ''}" onclick="togglePriorityPerson('${p.id}', ${!isPri}); setTimeout(ppRenderPane,150)">⚡ Priority</button>
+    </div>
+    <div class="ppp-actions">
+      <button class="ppp-btn primary" onclick="logContact('${p.id}')"><i data-lucide="message-circle" style="width:14px;height:14px"></i> Log contact</button>
+      <button class="ppp-btn" onclick="openContactOptions('${p.id}')">Contact</button>
+      <button class="ppp-btn" onclick="openDebtModal('${p.id}')">Money</button>
+      <button class="ppp-btn" onclick="openEditPerson('${p.id}')" style="grid-column:1/-1">Edit details</button>
+    </div>
+    ${(balance !== 0 || debts.length) ? `<div class="ppp-sec"><div class="ppp-sech">Money</div><div class="pp-debt-summary"><div class="pp-debt-amount ${balance > 0 ? 'positive' : (balance < 0 ? 'negative' : 'zero')}">${balance > 0 ? '+' : ''}₹${Math.abs(Math.round(balance))}</div><div class="pp-debt-label">${balance > 0 ? 'They owe you' : (balance < 0 ? 'You owe them' : 'Settled')}</div></div>${debts.slice(0, 5).map(d => `<div class="pp-debt-item"><span>${d.date ? new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}${d.notes ? ' · ' + escapeHtml(d.notes) : ''}</span><span class="pp-debt-item-amount ${parseFloat(d.amount) > 0 ? 'positive' : 'negative'}">${parseFloat(d.amount) > 0 ? '+' : ''}₹${Math.abs(parseFloat(d.amount))}</span></div>`).join('')}</div>` : ''}
+    <div class="ppp-sec"><div class="ppp-sech">Contact frequency · 13 weeks</div><div class="pp-freq-dots">${freqDots.map(a => `<div class="pp-freq-dot ${a ? 'active' : ''}"></div>`).join('')}</div></div>
+    ${history.length ? `<div class="ppp-sec"><div class="ppp-sech">History</div>${history.slice(0, 8).map(h => `<div class="pp-history-item"><div class="pp-history-dot"></div><div><div class="pp-history-date">${escapeHtml(h.date)}</div><div class="pp-history-note">${escapeHtml(h.note)}</div></div></div>`).join('')}</div>` : ''}
+    ${(p.notes && !String(p.notes).startsWith('[')) ? `<div class="ppp-sec"><div class="ppp-sech">Notes</div><div style="font-size:13px;color:var(--text-2);line-height:1.5;white-space:pre-wrap">${escapeHtml(p.notes)}</div></div>` : ''}
+    <button class="ppp-del" onclick="deletePerson('${p.id}')"><i data-lucide="trash-2" style="width:13px;height:13px"></i> Delete contact</button>
+  </div>`;
+}
+
 function renderPeople() {
     let people = (state.data.people || []).map(p => ({
         ...p,
@@ -263,7 +412,8 @@ function renderPeople() {
     const bdays = allPeople.filter(p => p.birthday && p.birthday.slice(5, 10) === todayMMDD);
 
     document.getElementById('main').innerHTML = `
-    <div class="people-wrapper">
+    <div class="people-wrapper pp-pro">
+        ${PEOPLE_REFINE_CSS}
 
         <!-- Stats Strip -->
         <div class="pp-stats-strip">
@@ -324,10 +474,6 @@ function renderPeople() {
                         <i data-lucide="calendar" style="width:18px;height:18px"></i>
                     </button>
                 </div>
-                <button class="pp-add-btn" onclick="window.openPersonModal()">
-                    <i data-lucide="plus" style="width:18px;height:18px"></i>
-                    <span>Add</span>
-                </button>
             </div>
         </div>
 
@@ -344,7 +490,9 @@ function renderPeople() {
         <!-- Content -->
         ${people.length === 0
             ? renderPeopleEmpty()
-            : (peopleState.view === 'grid' ? renderPeopleGrid(people) : renderPeopleTimeline(people))
+            : (peopleState.view === 'grid'
+                ? `<div class="pp-workspace"><div class="pp-board">${renderPeopleGrid(people)}</div><aside class="pp-pane">${ppPaneHTML()}</aside></div>`
+                : renderPeopleTimeline(people))
         }
 
         <!-- Bottom Sheet -->
@@ -515,7 +663,7 @@ function renderPersonCard(p, index) {
     const initial = (p.name || '?').charAt(0).toUpperCase();
 
     return `
-    <div class="pp-card" onclick="window.openPersonSheet('${p.id}')" style="animation-delay:${Math.min(index * 0.04, 0.3)}s">
+    <div class="pp-card ${String(p.id) === String(_ppSelId) ? 'pp-sel' : ''}" id="pp-card-${p.id}" onclick="window.ppCardOpen('${p.id}')" style="animation-delay:${Math.min(index * 0.04, 0.3)}s">
         <div class="pp-card-top">
             <div class="pp-avatar-wrap">
                 ${renderDecayRingSVG(decay.pct, decay.color, 46)}

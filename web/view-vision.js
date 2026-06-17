@@ -1272,9 +1272,262 @@ let visionState = {
   filter: 'focus', // default = Focus This Month
   search: '',
   sort: 'newest',
+  listSort: { col: 'target', dir: 'asc' }, // desktop table column sort
 };
 
 const VISION_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine'];
+
+/* ══════════════════════════════════════════════════════════════════════
+   VISION DESKTOP COMMAND CENTER — scoped to .vz-pro. Two-pane on desktop:
+   board (left) + insight/detail pane (right). Mobile (<1100px) keeps the
+   single-column layout and the existing full-screen detail modal.
+   ══════════════════════════════════════════════════════════════════════ */
+const VISION_REFINE_CSS = `<style>
+.vz-pro { max-width:1340px; margin:0 auto; }
+
+/* Overview bar */
+.vz-ov { display:flex; align-items:center; gap:22px; flex-wrap:wrap; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; box-shadow:var(--shadow-card); padding:14px 18px; margin-bottom:14px; }
+.vz-ov-ring { display:flex; align-items:center; gap:12px; }
+.vz-ov-ring .rw { position:relative; width:54px; height:54px; flex-shrink:0; }
+.vz-ov-ring .rw b { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:var(--text-1); font-variant-numeric:tabular-nums; }
+.vz-ov-ring .rl { font-size:12px; color:var(--text-3); line-height:1.3; }
+.vz-ov-ring .rl b { color:var(--text-1); font-size:13px; }
+.vz-ov-div { width:1px; height:30px; background:var(--border-color); }
+.vz-ov-item { display:flex; flex-direction:column; gap:2px; cursor:default; }
+.vz-ov-item b { font-size:19px; font-weight:700; color:var(--text-1); letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.vz-ov-item span { font-size:11.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+.vz-ov-next { margin-left:auto; text-align:right; }
+.vz-ov-next .t { font-size:13px; color:var(--text-2); font-weight:600; max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vz-ov-next .d { font-size:12px; color:var(--text-3); }
+.vz-ov-next .d.urgent { color:#B42318; font-weight:600; }
+
+/* Toolbar / filters / view tabs */
+.vz-pro .vision-toolbar { margin-bottom:12px; }
+.vz-pro .vision-filter-chip { border-width:1px; }
+.vz-pro .vision-view-tabs { width:fit-content; }
+
+/* Two-pane workspace (grid view) */
+.vz-workspace { display:flex; gap:20px; align-items:flex-start; }
+.vz-board { flex:1; min-width:0; }
+.vz-pane { flex:0 0 360px; position:sticky; top:12px; max-height:calc(100vh - 90px); overflow-y:auto; display:flex; flex-direction:column; gap:13px; padding-bottom:8px; }
+
+/* Denser, refined grid + cards — desktop only (mobile card shape untouched) */
+@media (min-width:1100px){
+  .vz-pro .vz-board .vision-grid { grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px; }
+  .vz-pro .vision-card { border-radius:var(--radius-lg); aspect-ratio:5/4; box-shadow:var(--shadow-card); transition:box-shadow .18s ease, transform .18s ease; }
+  .vz-pro .vision-card:hover { box-shadow:var(--shadow-lg); transform:translateY(-2px); }
+  .vz-pro .vision-card.vz-sel { box-shadow:0 0 0 2px var(--primary), var(--shadow-lg); }
+  .vz-pro .vision-card-title { font-size:15px; }
+}
+
+/* Pane cards */
+.vzp-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:15px; }
+.vzp-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:700; margin:0 0 10px; }
+.vzp-ritual { display:flex; align-items:center; justify-content:space-between; gap:10px; cursor:pointer; background:linear-gradient(135deg, color-mix(in srgb,var(--primary) 12%,var(--surface-1)), var(--surface-1)); }
+.vzp-ritual:hover { box-shadow:var(--shadow-md); }
+.vzp-ritual .rx { font-size:14px; font-weight:700; color:var(--text-1); }
+.vzp-ritual .rs { font-size:12px; color:var(--text-3); margin-top:2px; }
+.vzp-ritual .rgo { width:38px; height:38px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.vzp-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer; }
+.vzp-row:last-child { border-bottom:none; }
+.vzp-row .nm { flex:1; font-size:13px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vzp-row:hover .nm { color:var(--text-1); }
+.vzp-row .dd { font-size:11px; font-weight:600; color:var(--text-3); }
+.vzp-row .dd.urgent { color:#B42318; }
+.vzp-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.vzp-cat { margin-bottom:11px; }
+.vzp-cat:last-child { margin-bottom:0; }
+.vzp-cat-top { display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-2); margin-bottom:5px; }
+.vzp-cat-top b { color:var(--text-1); font-variant-numeric:tabular-nums; }
+.vzp-bar { height:6px; background:var(--surface-3); border-radius:999px; overflow:hidden; }
+.vzp-bar i { display:block; height:100%; background:var(--primary); border-radius:999px; }
+.vzp-empty { font-size:12.5px; color:var(--text-3); }
+
+/* Goal detail pane */
+.vzp-hero { height:140px; border-radius:12px; background-size:cover; background-position:center; position:relative; overflow:hidden; margin-bottom:12px; }
+.vzp-hero::after { content:""; position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,.5), transparent 60%); }
+.vzp-hero .cat { position:absolute; top:10px; left:10px; z-index:1; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#fff; background:rgba(0,0,0,.35); backdrop-filter:blur(4px); padding:3px 9px; border-radius:999px; }
+.vzp-hero .x { position:absolute; top:10px; right:10px; z-index:1; width:28px; height:28px; border:none; border-radius:8px; background:rgba(0,0,0,.4); backdrop-filter:blur(4px); color:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.vzp-dtitle { font-size:17px; font-weight:700; color:var(--text-1); letter-spacing:-.01em; margin-bottom:10px; }
+.vzp-prog-top { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:6px; }
+.vzp-prog-top b { font-size:22px; font-weight:700; color:var(--text-1); font-variant-numeric:tabular-nums; }
+.vzp-prog-top span { font-size:12px; color:var(--text-3); }
+.vzp-range { width:100%; accent-color:var(--primary); margin:2px 0 4px; }
+.vzp-meta { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+.vzp-chip { font-size:12px; padding:4px 10px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border-color); color:var(--text-2); }
+.vzp-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin:14px 0 8px; }
+.vzp-hab { display:inline-flex; align-items:center; gap:5px; font-size:12px; padding:4px 10px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border-color); color:var(--text-2); margin:0 5px 5px 0; }
+.vzp-gallery { display:flex; gap:6px; flex-wrap:wrap; }
+.vzp-gallery i { width:52px; height:52px; border-radius:8px; background-size:cover; background-position:center; border:1px solid var(--border-color); display:block; }
+.vzp-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+.vzp-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:9px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:9px; font:inherit; font-size:13px; font-weight:600; color:var(--text-2); cursor:pointer; }
+.vzp-btn:hover { background:var(--surface-2); color:var(--text-1); }
+.vzp-btn.primary { grid-column:1/-1; background:var(--primary); color:#fff; border-color:transparent; }
+.vzp-btn.primary:hover { filter:brightness(.96); color:#fff; }
+.vzp-btn.ok { color:var(--success,#10B981); }
+.vzp-btn.danger:hover { color:#B42318; background:rgba(220,38,38,.06); border-color:rgba(220,38,38,.2); }
+
+/* List → table */
+.vz-pro .vz-table-wrap { background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; box-shadow:var(--shadow-card); overflow:hidden; }
+.vz-pro .vz-table { width:100%; border-collapse:separate; border-spacing:0; }
+.vz-pro .vz-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); font-weight:600; padding:12px 16px; border-bottom:1px solid var(--border-color); background:var(--surface-2); cursor:pointer; user-select:none; white-space:nowrap; }
+.vz-pro .vz-table th:hover { color:var(--text-1); }
+.vz-pro .vz-table td { padding:13px 16px; border-bottom:1px solid var(--border-color); font-size:13.5px; color:var(--text-2); }
+.vz-pro .vz-table tbody tr:last-child td { border-bottom:none; }
+.vz-pro .vz-table tbody tr { cursor:pointer; transition:background .12s; }
+.vz-pro .vz-table tbody tr:hover td { background:var(--surface-2); }
+.vz-pro .vz-td-title { font-weight:600; color:var(--text-1); }
+.vz-pro .vz-tcat { font-size:12px; padding:3px 9px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border-color); color:var(--text-2); }
+.vz-pro .vz-tprog { display:flex; align-items:center; gap:8px; min-width:130px; }
+.vz-pro .vz-tprog-bar { flex:1; height:6px; background:var(--surface-3); border-radius:999px; overflow:hidden; }
+.vz-pro .vz-tprog-bar i { display:block; height:100%; background:var(--primary); border-radius:999px; }
+.vz-pro .vz-tprog span { font-size:12px; font-variant-numeric:tabular-nums; color:var(--text-2); min-width:34px; text-align:right; }
+.vz-pro .vz-tdate { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.vz-pro .vz-tdate.over { color:#B42318; }
+.vz-pro .vz-tbadge { font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; background:var(--surface-2); color:var(--text-3); }
+.vz-pro .vz-tbadge.ok { background:rgba(16,185,129,.12); color:#067647; }
+.vz-pro .vz-tbadge.late { background:rgba(220,38,38,.09); color:#B42318; }
+
+/* Timeline → roadmap */
+.vz-pro .vz-roadmap { display:flex; flex-direction:column; gap:16px; }
+.vz-pro .vz-rd-lane { background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; box-shadow:var(--shadow-card); padding:14px 16px; }
+.vz-pro .vz-rd-lane.over { border-color:rgba(220,38,38,.25); }
+.vz-pro .vz-rd-head { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:12px; }
+.vz-pro .vz-rd-lane.over .vz-rd-head { color:#B42318; }
+.vz-pro .vz-rd-head span { background:var(--surface-2); border-radius:999px; padding:1px 8px; font-size:11px; color:var(--text-2); }
+.vz-pro .vz-rd-items { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:10px; }
+.vz-pro .vz-rd-item { display:flex; align-items:center; gap:11px; padding:10px 12px; border:1px solid var(--border-color); border-radius:11px; cursor:pointer; transition:all .14s; }
+.vz-pro .vz-rd-item:hover { border-color:var(--border-strong); box-shadow:var(--shadow-xs); }
+.vz-pro .vz-rd-cat { width:34px; height:34px; border-radius:9px; background:var(--surface-2); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+.vz-pro .vz-rd-main { flex:1; min-width:0; }
+.vz-pro .vz-rd-title { font-size:13.5px; font-weight:600; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vz-pro .vz-rd-meta { font-size:11.5px; color:var(--text-3); margin:2px 0 5px; }
+.vz-pro .vz-rd-bar { height:5px; background:var(--surface-3); border-radius:999px; overflow:hidden; }
+.vz-pro .vz-rd-bar i { display:block; height:100%; background:var(--primary); border-radius:999px; }
+.vz-pro .vz-rd-pct { font-size:12px; font-weight:700; color:var(--text-2); font-variant-numeric:tabular-nums; flex-shrink:0; }
+
+@media (max-width:1099px){
+  .vz-pro { max-width:none; }
+  .vz-workspace { display:block; }
+  .vz-pane { display:none; }
+}
+</style>`;
+
+let _vzSelId = null;
+function _vzDesktop() { try { return window.matchMedia('(min-width:1100px)').matches; } catch (e) { return (window.innerWidth || 1280) >= 1100; } }
+function _vzDays(d) { return d ? Math.ceil((new Date(d) - new Date()) / 86400000) : null; }
+function _vzIsFocus(g) { return g.month_focus === true || String(g.month_focus).toLowerCase() === 'true'; }
+function _vzRitualStreak() {
+  const days = new Set((state.data.ritual_logs || []).filter(r => r.completed !== false && r.date).map(r => String(r.date).slice(0, 10)));
+  if (!days.size) return 0;
+  const iso = x => x.toISOString().slice(0, 10);
+  let streak = 0; const d = new Date();
+  if (!days.has(iso(d))) d.setDate(d.getDate() - 1);
+  while (days.has(iso(d))) { streak++; d.setDate(d.getDate() - 1); }
+  return streak;
+}
+function _vzKey(e) {
+  if (!document.querySelector('.vz-pane')) return;            // only on Vision grid (desktop)
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
+  if (e.key === 'Escape') { if (_vzSelId) { vzCloseDetail(); e.preventDefault(); } return; }
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const order = window._vzOrder || [];
+  if (!order.length) return;
+  let i = _vzSelId ? order.indexOf(String(_vzSelId)) : -1;
+  i = e.key === 'ArrowDown' ? Math.min(order.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1);
+  const id = order[i];
+  if (id) { _vzSelId = null; vzSelect(id); const c = document.getElementById('vision-card-' + id); if (c) c.scrollIntoView({ block: 'nearest' }); e.preventDefault(); }
+}
+function _vzLinkedHabitNames(g) {
+  let arr = [];
+  try { if (g.linked_habits) { const s = String(g.linked_habits).trim(); arr = s.startsWith('[') ? JSON.parse(s) : s.split(',').map(x => ({ id: x.trim() })); } } catch (e) {}
+  const habits = state.data.habits || [];
+  return arr.map(h => { const id = (h && h.id != null) ? h.id : h; const hb = habits.find(x => String(x.id) === String(id)); return hb ? hb.habit_name : null; }).filter(Boolean);
+}
+
+window.vzCardOpen = function (id) { if (_vzDesktop()) vzSelect(id); else openVisionDetail(id); };
+window.vzSelect = function (id) {
+  _vzSelId = (String(id) === String(_vzSelId)) ? null : String(id);
+  vzRenderPane();
+  document.querySelectorAll('.vision-card.vz-sel').forEach(c => c.classList.remove('vz-sel'));
+  if (_vzSelId) { const c = document.getElementById('vision-card-' + _vzSelId); if (c) c.classList.add('vz-sel'); }
+};
+window.vzCloseDetail = function () { _vzSelId = null; vzRenderPane(); document.querySelectorAll('.vision-card.vz-sel').forEach(c => c.classList.remove('vz-sel')); };
+function vzPaneHTML() {
+  const g = _vzSelId ? (state.data.vision || []).find(v => String(v.id) === String(_vzSelId)) : null;
+  return g ? vzGoalDetailHTML(g) : vzInsightHTML();
+}
+function vzRenderPane() {
+  const p = document.querySelector('.vz-pane');
+  if (!p) return;
+  p.innerHTML = vzPaneHTML();
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+window.vzSetProgress = async function (id, val) {
+  const g = (state.data.vision || []).find(v => String(v.id) === String(id));
+  if (!g) return;
+  g.progress = parseInt(val, 10) || 0;
+  const lbl = document.getElementById('vzProgVal'); if (lbl) lbl.textContent = g.progress + '%';
+  const card = document.getElementById('vision-card-' + id);
+  if (card) { const fill = card.querySelector('.vision-progress-fill'); if (fill) { fill.style.width = g.progress + '%'; fill.style.setProperty('--progress-width', g.progress + '%'); } }
+  try { await apiCall('update', 'vision_board', { progress: g.progress }, id); } catch (e) {}
+};
+
+function vzInsightHTML() {
+  const goals = (state.data.vision || []).filter(g => g.status !== 'achieved');
+  const focus = goals.filter(_vzIsFocus);
+  const due = goals.filter(g => g.target_date).sort((a, b) => new Date(a.target_date) - new Date(b.target_date)).slice(0, 4);
+  const cats = {};
+  goals.forEach(g => { const c = g.category || 'Personal'; (cats[c] = cats[c] || { n: 0, sum: 0 }); cats[c].n++; cats[c].sum += (parseInt(g.progress, 10) || 0); });
+  const catRows = Object.keys(cats).sort().map(c => { const a = Math.round(cats[c].sum / cats[c].n); return `<div class="vzp-cat"><div class="vzp-cat-top"><span>${escapeHtml(c)}</span><b>${a}%</b></div><div class="vzp-bar"><i style="width:${a}%"></i></div></div>`; }).join('');
+  const focusRows = focus.length ? focus.map(g => `<div class="vzp-row" onclick="vzSelect('${g.id}')"><span class="vzp-dot" style="background:var(--primary)"></span><span class="nm">${escapeHtml(g.title || '')}</span><span class="dd">${(parseInt(g.progress, 10) || 0)}%</span></div>`).join('') : `<div class="vzp-empty">Star goals to focus on this month.</div>`;
+  const dueRows = due.length ? due.map(g => { const d = _vzDays(g.target_date); const u = d != null && d <= 30; return `<div class="vzp-row" onclick="vzSelect('${g.id}')"><span class="vzp-dot" style="background:${u ? '#DC2626' : 'var(--text-3)'}"></span><span class="nm">${escapeHtml(g.title || '')}</span><span class="dd ${u ? 'urgent' : ''}">${d < 0 ? Math.abs(d) + 'd ago' : d + 'd'}</span></div>`; }).join('') : `<div class="vzp-empty">No upcoming target dates.</div>`;
+  const rstreak = _vzRitualStreak();
+  return `
+  <div class="vzp-card vzp-ritual" onclick="startManifestationRitual()">
+    <div><div class="rx">Daily Ritual</div><div class="rs">${rstreak > 0 ? `🔥 ${rstreak}-day streak` : 'Manifest your vision'}</div></div>
+    <span class="rgo"><i data-lucide="play" style="width:14px;height:14px"></i></span>
+  </div>
+  <div class="vzp-card"><div class="vzp-h">Focus this month</div>${focusRows}</div>
+  <div class="vzp-card"><div class="vzp-h">Due soon</div>${dueRows}</div>
+  ${catRows ? `<div class="vzp-card"><div class="vzp-h">Progress by category</div>${catRows}</div>` : ''}`;
+}
+
+function vzGoalDetailHTML(g) {
+  const prog = parseInt(g.progress, 10) || 0;
+  const d = _vzDays(g.target_date);
+  const hero = g.image_url ? (resolveMediaUrl(g.image_url) || sanitizeUrl(g.image_url)) : getDefaultImage(g);
+  const habits = _vzLinkedHabitNames(g);
+  const affs = (state.data.vision_affirmations || []).filter(a => String(a.vision_id) === String(g.id));
+  const imgs = (state.data.vision_images || []).filter(im => String(im.vision_id) === String(g.id)).slice(0, 6);
+  const isFocus = _vzIsFocus(g);
+  return `
+  <div class="vzp-card">
+    <div class="vzp-hero" style="background-image:url('${hero}')">
+      <span class="cat">${escapeHtml(g.category || 'Personal')}</span>
+      <button class="x" onclick="vzCloseDetail()"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+    </div>
+    <div class="vzp-dtitle">${escapeHtml(g.title || '')}</div>
+    <div class="vzp-prog-top"><b id="vzProgVal">${prog}%</b><span>progress</span></div>
+    <input class="vzp-range" type="range" min="0" max="100" step="5" value="${prog}" oninput="vzSetProgress('${g.id}', this.value)">
+    <div class="vzp-meta">
+      ${g.target_date ? `<span class="vzp-chip">🎯 ${formatDate(g.target_date)}${d != null ? ` · ${d < 0 ? Math.abs(d) + 'd ago' : d + 'd left'}` : ''}</span>` : `<span class="vzp-chip">No deadline</span>`}
+      ${isFocus ? `<span class="vzp-chip" style="color:var(--primary)">★ Focus</span>` : ''}
+    </div>
+    ${g.description ? `<div style="font-size:13px;color:var(--text-2);line-height:1.55">${escapeHtml(g.description)}</div>` : ''}
+    ${habits.length ? `<div class="vzp-lbl">Linked habits</div>${habits.map(h => `<span class="vzp-hab"><i data-lucide="flame" style="width:12px;height:12px"></i>${escapeHtml(h)}</span>`).join('')}` : ''}
+    ${imgs.length ? `<div class="vzp-lbl">Gallery</div><div class="vzp-gallery">${imgs.map(im => `<i style="background-image:url('${resolveMediaUrl(im.url) || sanitizeUrl(im.url)}')"></i>`).join('')}</div>` : ''}
+    <div class="vzp-actions">
+      <button class="vzp-btn primary" onclick="startManifestationRitual('${g.id}')"><i data-lucide="sparkles" style="width:14px;height:14px"></i> Start ritual${affs.length ? ` · ${affs.length}` : ''}</button>
+      <button class="vzp-btn" onclick="openVisionDetail('${g.id}')">Open full</button>
+      <button class="vzp-btn" onclick="openEditVision('${g.id}')">Edit</button>
+      <button class="vzp-btn ${isFocus ? 'ok' : ''}" onclick="toggleVisionFocus('${g.id}');setTimeout(vzRenderPane,150)">★ Focus</button>
+      <button class="vzp-btn ok" onclick="markVisionAchieved('${g.id}')">Achieve</button>
+      <button class="vzp-btn danger" onclick="deleteVision('${g.id}')">Delete</button>
+    </div>
+  </div>`;
+}
 
 async function renderVision() {
   await checkAndAutoRenewTDP();
@@ -1283,6 +1536,11 @@ async function renderVision() {
   let filtered = filterVisions(goals);
   filtered = sortVisions(filtered);
   const stats = calculateVisionStats(goals);
+  const _vzActive = goals.filter(g => g.status !== 'achieved');
+  const _vzAvg = _vzActive.length ? Math.round(_vzActive.reduce((s, g) => s + (parseInt(g.progress, 10) || 0), 0) / _vzActive.length) : 0;
+  const _vzNext = _vzActive.filter(g => g.target_date).sort((a, b) => new Date(a.target_date) - new Date(b.target_date))[0];
+  const _vzNextD = _vzNext ? _vzDays(_vzNext.target_date) : null;
+  const _vzC = 2 * Math.PI * 22;
 
   const activeTDP = await getActiveTDP();
   const tdpInfo = getTDPDayInfo(activeTDP);
@@ -1307,25 +1565,22 @@ async function renderVision() {
   `;
 
   document.getElementById('main').innerHTML = `
-    <div class="vision-wrapper">
+    <div class="vision-wrapper vz-pro">
+      ${VISION_REFINE_CSS}
 
-      <!-- ── Compact Header ── -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap">
-        <div>
-          <h2 class="page-title" style="margin:0; display:flex; align-items:center; gap:8px;">${renderIcon('target', null, 'style="width:28px;"')} Vision Board</h2>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${stats.total} goals · ${stats.active} active · ${stats.achieved} achieved</div>
+      <!-- Overview bar -->
+      <div class="vz-ov">
+        <div class="vz-ov-ring">
+          <div class="rw">
+            <svg width="54" height="54"><circle cx="27" cy="27" r="22" fill="none" stroke="var(--surface-3)" stroke-width="6"/><circle cx="27" cy="27" r="22" fill="none" stroke="var(--primary)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${_vzC}" stroke-dashoffset="${_vzC * (1 - _vzAvg / 100)}" transform="rotate(-90 27 27)"/></svg>
+            <b>${_vzAvg}%</b>
+          </div>
+          <div class="rl">avg<br><b>progress</b></div>
         </div>
-        <div style="display:flex; gap:6px; align-items:center;">
-          <button class="btn icon" onclick="openAffirmationManager()" title="Manage Affirmations" style="width:38px; height:38px; border-radius:12px; background:var(--surface-2);">
-            ${renderIcon('list', null, 'style="width:18px; color:var(--text-2)"')}
-          </button>
-          <button class="btn icon" onclick="startManifestationRitual()" title="Manifest Ritual" style="width:38px; height:38px; border-radius:12px; background:var(--surface-2);">
-            ${renderIcon('sparkles', null, 'style="width:18px; color:var(--warning)"')}
-          </button>
-          <button class="btn icon" onclick="openVisionModal()" title="Add New Goal" style="width:38px; height:38px; border-radius:12px; background:var(--primary); color:white;">
-            ${renderIcon('plus', null, 'style="width:18px;"')}
-          </button>
-        </div>
+        <div class="vz-ov-div"></div>
+        <div class="vz-ov-item"><b>${stats.active}</b><span>Active</span></div>
+        <div class="vz-ov-item"><b>${stats.achieved}</b><span>Achieved</span></div>
+        ${_vzNext ? `<div class="vz-ov-next"><div class="t">⏳ ${escapeHtml(_vzNext.title || '')}</div><div class="d ${_vzNextD != null && _vzNextD <= 30 ? 'urgent' : ''}">${_vzNextD < 0 ? Math.abs(_vzNextD) + 'd overdue' : 'in ' + _vzNextD + 'd'}</div></div>` : ''}
       </div>
 
       ${tdpHtml}
@@ -1350,13 +1605,19 @@ async function renderVision() {
         </button>
       </div>
 
-      ${visionState.view === 'grid' ? renderVisionGrid(filtered) : ''}
+      ${visionState.view === 'grid' ? `<div class="vz-workspace"><div class="vz-board">${renderVisionGrid(filtered)}</div><aside class="vz-pane">${vzPaneHTML()}</aside></div>` : ''}
       ${visionState.view === 'list' ? renderVisionList(filtered) : ''}
       ${visionState.view === 'timeline' ? renderVisionTimeline(filtered) : ''}
     </div>
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   initVisionMediaElements(document.getElementById('main'));
+
+  // Keyboard nav for the desktop detail pane (Esc to close, ↑/↓ between goals)
+  window._vzOrder = visionState.view === 'grid'
+    ? [...filtered.filter(g => g.status !== 'achieved'), ...filtered.filter(g => g.status === 'achieved')].map(g => String(g.id))
+    : [];
+  if (!window._vzKeyBound) { document.addEventListener('keydown', _vzKey); window._vzKeyBound = true; }
 
   // Check if cloud audio needs syncing — show button if so, don't auto-download
   setTimeout(() => _checkCloudAudioAvailable(), 2000);
@@ -1444,7 +1705,7 @@ function renderVisionCard(g, isAchieved = false) {
   }
 
   return `
-    <div class="vision-card animate-enter" id="${cardId}" onclick="openVisionDetail('${g.id}')">
+    <div class="vision-card animate-enter ${String(g.id) === String(_vzSelId) ? 'vz-sel' : ''}" id="${cardId}" onclick="vzCardOpen('${g.id}')">
       <div class="vision-card-bg" id="${mediaId}" style="${mediaStyle}">
         ${hasVideo ? `<video id="video-${g.id}" style="width:100%;height:100%;object-fit:cover" muted loop autoplay playsinline webkit-playsinline preload="auto" poster="${g.image_url ? resolveMediaUrl(g.image_url) : ''}" data-vision-local="${firstVideo}">
         </video>` : ''}
@@ -1473,7 +1734,62 @@ function renderVisionCard(g, isAchieved = false) {
 /* ─── LIST VIEW ─────────────────────────────────────────────────── */
 function renderVisionList(goals) {
   if (goals.length === 0) return emptyState();
+  if (_vzDesktop()) return vzListTable(goals);
   return `<div class="vision-list">${goals.map(g => renderVisionListItem(g)).join('')}</div>`;
+}
+
+/* Desktop: sortable table for power management of many goals */
+function vzSortGoalsForList(goals, ls) {
+  const dir = ls.dir === 'asc' ? 1 : -1;
+  const val = g => {
+    switch (ls.col) {
+      case 'title': return (g.title || '').toLowerCase();
+      case 'category': return (g.category || '').toLowerCase();
+      case 'progress': return parseInt(g.progress, 10) || 0;
+      case 'status': return g.status === 'achieved' ? 1 : 0;
+      case 'target': return g.target_date ? new Date(g.target_date).getTime() : (dir === 1 ? 8.64e15 : -8.64e15);
+      default: return 0;
+    }
+  };
+  return [...goals].sort((a, b) => { const va = val(a), vb = val(b); return va < vb ? -1 * dir : va > vb ? 1 * dir : 0; });
+}
+window.vzSortList = function (col) {
+  const ls = visionState.listSort;
+  if (ls.col === col) ls.dir = ls.dir === 'asc' ? 'desc' : 'asc';
+  else { ls.col = col; ls.dir = col === 'progress' ? 'desc' : 'asc'; }
+  renderVision();
+};
+function vzTableRow(g) {
+  const d = _vzDays(g.target_date);
+  const prog = parseInt(g.progress, 10) || 0;
+  const isA = g.status === 'achieved';
+  const over = d != null && d < 0 && !isA;
+  return `
+    <tr onclick="openVisionDetail('${g.id}')">
+      <td class="vz-td-title">${_vzIsFocus(g) ? '<span style="color:var(--primary)">★</span> ' : ''}${escapeHtml(g.title || '')}</td>
+      <td><span class="vz-tcat">${escapeHtml(g.category || 'Personal')}</span></td>
+      <td><div class="vz-tprog"><div class="vz-tprog-bar"><i style="width:${prog}%"></i></div><span>${prog}%</span></div></td>
+      <td class="vz-tdate ${over ? 'over' : ''}">${g.target_date ? formatDate(g.target_date) : '—'}</td>
+      <td>${isA ? '<span class="vz-tbadge ok">Achieved</span>' : over ? '<span class="vz-tbadge late">Overdue</span>' : '<span class="vz-tbadge">Active</span>'}</td>
+    </tr>`;
+}
+function vzListTable(goals) {
+  const ls = visionState.listSort || { col: 'target', dir: 'asc' };
+  const rows = vzSortGoalsForList(goals, ls).map(vzTableRow).join('');
+  const arr = c => ls.col === c ? (ls.dir === 'asc' ? ' ↑' : ' ↓') : '';
+  return `
+    <div class="vz-table-wrap">
+      <table class="vz-table">
+        <thead><tr>
+          <th onclick="vzSortList('title')">Goal${arr('title')}</th>
+          <th onclick="vzSortList('category')">Category${arr('category')}</th>
+          <th onclick="vzSortList('progress')">Progress${arr('progress')}</th>
+          <th onclick="vzSortList('target')">Target${arr('target')}</th>
+          <th onclick="vzSortList('status')">Status${arr('status')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
 function renderVisionListItem(g) {
@@ -1510,6 +1826,7 @@ function renderVisionListItem(g) {
 /* ─── TIMELINE VIEW ─────────────────────────────────────────────── */
 function renderVisionTimeline(goals) {
   if (goals.length === 0) return emptyState();
+  if (_vzDesktop()) return vzRoadmap(goals);
   const grouped = groupByYear(goals);
   return `
     <div class="vision-timeline">
@@ -1544,6 +1861,41 @@ function renderTimelineItem(g) {
       </div>
     </div>
   `;
+}
+
+/* Desktop: a real roadmap — overdue lane, upcoming by year·quarter, someday, achieved */
+function vzRoadItem(g) {
+  const d = _vzDays(g.target_date);
+  const prog = parseInt(g.progress, 10) || 0;
+  const isA = g.status === 'achieved';
+  return `
+    <div class="vz-rd-item" onclick="openVisionDetail('${g.id}')">
+      <div class="vz-rd-cat">${getCategoryEmoji(g.category)}</div>
+      <div class="vz-rd-main">
+        <div class="vz-rd-title">${escapeHtml(g.title || '')}</div>
+        <div class="vz-rd-meta">${g.target_date ? formatDate(g.target_date) : 'No target date'}${(d != null && !isA) ? ' · ' + (d < 0 ? Math.abs(d) + 'd ago' : d + 'd left') : ''}</div>
+        <div class="vz-rd-bar"><i style="width:${prog}%"></i></div>
+      </div>
+      <div class="vz-rd-pct">${prog}%</div>
+    </div>`;
+}
+function vzRoadmap(goals) {
+  const today = new Date();
+  const dated = goals.filter(g => g.target_date && g.status !== 'achieved');
+  const overdue = dated.filter(g => new Date(g.target_date) < today);
+  const upcoming = dated.filter(g => new Date(g.target_date) >= today).sort((a, b) => new Date(a.target_date) - new Date(b.target_date));
+  const someday = goals.filter(g => !g.target_date && g.status !== 'achieved');
+  const achieved = goals.filter(g => g.status === 'achieved');
+  const groups = {};
+  upcoming.forEach(g => { const dt = new Date(g.target_date); const key = dt.getFullYear() + ' · Q' + (Math.floor(dt.getMonth() / 3) + 1); (groups[key] = groups[key] || []).push(g); });
+  const lane = (label, items, cls = '') => items.length ? `<div class="vz-rd-lane ${cls}"><div class="vz-rd-head">${label}<span>${items.length}</span></div><div class="vz-rd-items">${items.map(vzRoadItem).join('')}</div></div>` : '';
+  return `
+    <div class="vz-roadmap">
+      ${lane('⚠ Overdue', overdue, 'over')}
+      ${Object.keys(groups).sort().map(k => lane(k, groups[k])).join('')}
+      ${lane('Someday', someday, 'someday')}
+      ${lane('✓ Achieved', achieved, 'done')}
+    </div>`;
 }
 
 /* ─── DETAIL MODAL ──────────────────────────────────────────────── */

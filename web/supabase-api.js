@@ -59,20 +59,34 @@
                 // ─────────────────────────────────────────────────────
                 case 'create': {
                     if (!user) throw new Error('Not authenticated');
-                    const row = _normalizeForInsert(sheet, payload, user.id);
-                    const { data, error } = await sb.from(sheet).insert(row).select().single();
-                    if (error) throw error;
-                    return { success: true, data, id: data?.id };
+                    let row = _normalizeForInsert(sheet, payload, user.id);
+                    let res, tries = 0;
+                    do {
+                        res = await sb.from(sheet).insert(row).select().single();
+                        if (!res.error) break;
+                        const stripped = _stripMissingCol(res.error, row);
+                        if (!stripped) break;
+                        row = stripped;
+                    } while (++tries < 5);
+                    if (res.error) throw res.error;
+                    return { success: true, data: res.data, id: res.data?.id };
                 }
 
                 // ─────────────────────────────────────────────────────
                 case 'update': {
                     if (!user) throw new Error('Not authenticated');
                     if (!id) throw new Error('Missing id for update');
-                    const updates = _normalizeForUpdate(sheet, payload);
-                    const { data, error } = await sb.from(sheet).update(updates).eq('id', String(id)).select().single();
-                    if (error) throw error;
-                    return { success: true, data };
+                    let updates = _normalizeForUpdate(sheet, payload);
+                    let res, tries = 0;
+                    do {
+                        res = await sb.from(sheet).update(updates).eq('id', String(id)).select().single();
+                        if (!res.error) break;
+                        const stripped = _stripMissingCol(res.error, updates);
+                        if (!stripped) break;
+                        updates = stripped;
+                    } while (++tries < 5);
+                    if (res.error) throw res.error;
+                    return { success: true, data: res.data };
                 }
 
                 // ─────────────────────────────────────────────────────
@@ -104,7 +118,7 @@
         tasks: new Set(['id','user_id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','duration','subtasks','pomodoro_estimate','pomodoro_length']),
         habits: new Set(['id','user_id','habit_name','frequency','streak','reminder_time','emoji','pomodoro_sessions','pomodoro_length','alarm_enabled','routine']),
         habit_logs: new Set(['id','user_id','habit_id','date','status','pomodoro_completed']),
-        expenses: new Set(['id','user_id','date','amount','category','description','type']),
+        expenses: new Set(['id','user_id','date','amount','category','description','type','payment_mode']),
         diary: new Set(['id','user_id','date','content','mood','tags']),
         planner_events: new Set(['id','user_id','title','start_datetime','end_datetime','category']),
         vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus']),
@@ -133,6 +147,22 @@
         english_sessions: new Set(['id','user_id','date','duration_seconds','topic','level','score','weak_areas','strong_areas','summary','message_count']),
         english_messages: new Set(['id','user_id','session_id','role','content','correction','feedback','timestamp'])
     };
+
+    // If a write fails because a column doesn't exist yet (e.g. a column added in a
+    // not-yet-run migration like payment_mode), drop that column so the write can retry.
+    // Keeps saves working on a schema gap; the field simply isn't persisted until migrated.
+    function _stripMissingCol(error, row) {
+        if (!error || !row) return null;
+        const msg = String(error.message || '') + ' ' + String(error.details || '') + ' ' + String(error.hint || '');
+        const m = msg.match(/'([^']+)' column/) || msg.match(/column "([^"]+)"/) || msg.match(/Could not find the '([^']+)'/) || msg.match(/\bcolumn ([a-z0-9_]+)\b/i);
+        const col = m && m[1];
+        if (col && Object.prototype.hasOwnProperty.call(row, col)) {
+            const copy = { ...row };
+            delete copy[col];
+            return copy;
+        }
+        return null;
+    }
 
     // Drop any keys in payload that aren't in the table's allowlist.
     function _filterToAllowed(sheet, row) {

@@ -12,17 +12,26 @@ let startY = 0;
 let startTop = 0;
 
 
+const CAL_REFINE_CSS = `<style>
+.cal-pro.cal-wrapper { max-width:1280px; margin:0 auto; border:1px solid var(--border-color); border-radius:14px; box-shadow:var(--shadow-card); }
+.cal-pro .cal-title { font-weight:700; letter-spacing:-.01em; }
+/* Calmer "today" header — subtle accent instead of a full cyan slab */
+.cal-pro .day-col-header.today { background:var(--primary-soft) !important; color:var(--primary) !important; box-shadow:inset 0 -2px 0 var(--primary); }
+.cal-pro .day-col-header { font-size:12.5px; color:var(--text-2); font-weight:600; }
+.cal-pro .event-block { border-radius:8px; box-shadow:var(--shadow-xs); }
+</style>`;
+
 function renderCalendar() {
   const main = document.getElementById('main');
   const monthName = calState.cursor.toLocaleString('default', { month: 'long', year: 'numeric' });
 
   // 1. RENDER SCAFFOLD
   main.innerHTML = `
-      <div class="cal-wrapper">
+      <div class="cal-wrapper cal-pro">
+        ${CAL_REFINE_CSS}
         <div class="cal-header">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <div class="cal-title" style="margin-bottom:0; font-size: 24px;">${monthName}</div>
-            <button class="btn primary" onclick="openEventModal()" style="padding: 8px 16px; margin-left: auto;">${renderIcon('add', null, 'style="width:14px; margin-right:4px"')} Add Event</button>
           </div>
           
           <div class="cal-actions-row" style="display:flex; justify-content:space-between; align-items:center;">
@@ -347,11 +356,8 @@ function renderTimeGrid() {
       // Must have a time to show on the grid
       if (!h.reminder_time) return;
 
-      // Check if scheduled for this day
-      let isScheduled = true;
-      if (h.frequency === 'weekly' && h.days) {
-        isScheduled = h.days.split(',').map(s => s.trim()).includes(dayName);
-      }
+      // Check if scheduled for this specific day (weekly days encoded in frequency)
+      const isScheduled = (typeof window.habitScheduledOn === 'function') ? window.habitScheduledOn(h, d) : true;
 
       if (isScheduled) {
         let timeStr = '';

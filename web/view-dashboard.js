@@ -234,6 +234,68 @@ const LUMIA_COLORS = [
 const LUMIA_MAX_W = 8;
 const LUMIA_MAX_H = 8;
 
+// Desktop uses a FIXED column count so tiles can have stable (x,y) coordinates.
+// Mobile keeps its 4-col auto-flow layout (do NOT apply coordinate placement there).
+const LUMIA_DESKTOP_COLS = 8;
+function _lumiaCols(isMobile) { return isMobile ? 4 : LUMIA_DESKTOP_COLS; }
+
+// ── Free-placement helpers (pure → unit-testable) ────────────────────────────
+// Tiles carry {x,y,w,h} (1-based col/row). Gaps are preserved: a tile only moves
+// when the user drags it; removing a tile leaves its cells empty.
+function _lumiaRectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+// Is `rect` inside the grid and clear of every tile except `ignoreUid`?
+function _lumiaAreaFree(tiles, rect, ignoreUid, cols) {
+    if (rect.x < 1 || rect.y < 1 || rect.x + rect.w - 1 > cols) return false;
+    return !tiles.some(t => t.uid !== ignoreUid && t.x >= 1 && t.y >= 1 && _lumiaRectsOverlap(rect, t));
+}
+// First free top-left cell that fits a w×h rect, scanning row by row.
+function _lumiaFirstFree(tiles, w, h, cols) {
+    for (let y = 1; y < 1000; y++) {
+        for (let x = 1; x + w - 1 <= cols; x++) {
+            if (_lumiaAreaFree(tiles, { x, y, w, h }, null, cols)) return { x, y };
+        }
+    }
+    return { x: 1, y: 1 };
+}
+// Assign (x,y) to any tile missing/conflicting coords, preserving valid ones.
+// Returns true if anything changed (so the caller can persist once).
+function _lumiaEnsurePositions(tiles, cols) {
+    const placed = [];
+    let changed = false;
+    // Pass 1: keep tiles whose existing coords are valid + non-overlapping.
+    tiles.forEach(t => {
+        if (t.x >= 1 && t.y >= 1 && t.x + t.w - 1 <= cols &&
+            _lumiaAreaFree(placed, { x: t.x, y: t.y, w: t.w, h: t.h }, t.uid, cols)) {
+            placed.push(t);
+        }
+    });
+    // Pass 2: first-fit everything else (in array order) into the gaps.
+    tiles.forEach(t => {
+        if (placed.indexOf(t) === -1) {
+            const pos = _lumiaFirstFree(placed, t.w, t.h, cols);
+            if (t.x !== pos.x || t.y !== pos.y) changed = true;
+            t.x = pos.x; t.y = pos.y;
+            placed.push(t);
+        }
+    });
+    return changed;
+}
+// Largest width a tile can grow to (from its x) without leaving the grid or
+// overlapping a neighbour. Honours minW.
+function _lumiaFitW(tiles, tile, desiredW, cols) {
+    let w = Math.max(tile.minW || 1, Math.min(desiredW, cols - tile.x + 1));
+    while (w > (tile.minW || 1) && !_lumiaAreaFree(tiles, { x: tile.x, y: tile.y, w, h: tile.h }, tile.uid, cols)) w--;
+    return w;
+}
+// Largest height a tile can grow to (rows are unbounded downward).
+function _lumiaFitH(tiles, tile, desiredH, cols) {
+    let h = Math.max(tile.minH || 1, Math.min(desiredH, LUMIA_MAX_H * 4));
+    while (h > (tile.minH || 1) && !_lumiaAreaFree(tiles, { x: tile.x, y: tile.y, w: tile.w, h }, tile.uid, cols)) h--;
+    return h;
+}
+
 // Maps legacy preset sizes (from earlier builds) → {w,h} so old saved configs migrate.
 const LUMIA_LEGACY_SIZE_MAP = {
     small:  { w: 1, h: 1 },
@@ -525,7 +587,7 @@ const WIDGET_RENDERERS = {
         if (tasks.length === 0) return _listShell(c, 0, _emptyState('No pending tasks.'));
         const prioColor = { P1: '#EF4444', P2: '#F59E0B', P3: '#10B981' };
         const rows = tasks.map(x => `
-            <button class="lw-row" onclick="event.stopPropagation();_dashOpenModal('tasks','openTaskModal','${x.id}')">
+            <button class="lw-row" onclick="event.stopPropagation();_dashOpenModal('tasks','openEditTask','${x.id}')">
                 <span class="lw-row__dot" style="background:${prioColor[x.priority] || '#9CA3AF'}"></span>
                 <span class="lw-row__main">
                     <span class="lw-row__title">${escapeHtml(x.title || 'Untitled')}</span>
@@ -798,23 +860,24 @@ function _currentLayoutKey() {
     return _isMobile() ? 'mobile' : 'desktop';
 }
 
+// Curated default — a focused, high-signal first screen. Removed tiles (year-progress
+// widget, nav-shortcut routes, extra tool launchers) remain available in the customizer.
 const DEFAULT_LUMIA_TILES = [
-    { uid: 't1',  catalogId: 'widget-greeting',      w: 4, h: 2 },
-    { uid: 't2',  catalogId: 'widget-yearProgress',  w: 2, h: 2 },
-    { uid: 't3',  catalogId: 'kpi-tasksDone',        w: 2, h: 2 },
-    { uid: 't4',  catalogId: 'kpi-monthSpend',       w: 2, h: 2 },
-    { uid: 't5',  catalogId: 'kpi-habits',           w: 2, h: 2 },
-    { uid: 't6',  catalogId: 'kpi-streak',           w: 2, h: 2 },
-    { uid: 't7',  catalogId: 'widget-aiBriefing',    w: 4, h: 2 },
-    { uid: 't8',  catalogId: 'widget-habitsGrid',    w: 4, h: 4 },
-    { uid: 't9',  catalogId: 'widget-tasksList',     w: 4, h: 3 },
-    { uid: 't10', catalogId: 'tool-focus',           w: 1, h: 1 },
-    { uid: 't11', catalogId: 'tool-gym',             w: 1, h: 1 },
-    { uid: 't12', catalogId: 'tool-chimes',          w: 1, h: 1 },
-    { uid: 't13', catalogId: 'tool-meditate',        w: 1, h: 1 },
-    { uid: 't14', catalogId: 'route-diary',          w: 1, h: 1 },
-    { uid: 't15', catalogId: 'route-notes',          w: 1, h: 1 },
-    { uid: 't16', catalogId: 'route-vision',         w: 1, h: 1 }
+    { uid: 't1',  catalogId: 'widget-greeting',           w: 4, h: 2 },
+    { uid: 't2',  catalogId: 'kpi-tasksDone',             w: 2, h: 2 },
+    { uid: 't3',  catalogId: 'kpi-habits',                w: 2, h: 2 },
+    { uid: 't4',  catalogId: 'kpi-streak',                w: 2, h: 2 },
+    { uid: 't5',  catalogId: 'kpi-monthSpend',            w: 2, h: 2 },
+    { uid: 't6',  catalogId: 'widget-aiBriefing',         w: 4, h: 2 },
+    { uid: 't7',  catalogId: 'widget-tasksList',          w: 4, h: 3 },
+    { uid: 't8',  catalogId: 'widget-habitsGrid',         w: 4, h: 4 },
+    { uid: 't9',  catalogId: 'list-upcomingEvents',       w: 2, h: 2 },
+    { uid: 't10', catalogId: 'list-recentTransactions',   w: 2, h: 2 },
+    { uid: 't11', catalogId: 'add-task',                  w: 1, h: 1 },
+    { uid: 't12', catalogId: 'add-expense',               w: 1, h: 1 },
+    { uid: 't13', catalogId: 'add-journal',               w: 1, h: 1 },
+    { uid: 't14', catalogId: 'add-habit',                 w: 1, h: 1 },
+    { uid: 't15', catalogId: 'tool-focus',                w: 1, h: 1 }
 ];
 
 // Mobile defaults — phone has only 4 cols, so tiles capped at width 4.
@@ -849,6 +912,11 @@ function _normalizeTile(t) {
     w = Math.max(1, Math.min(LUMIA_MAX_W, w));
     h = Math.max(1, Math.min(LUMIA_MAX_H, h));
     const out = { uid: t.uid || ('t' + Date.now() + Math.floor(Math.random() * 1000)), catalogId: t.catalogId, w, h };
+    // Preserve explicit grid coordinates (desktop free-placement). Mobile tiles
+    // simply won't have these and keep flowing.
+    const tx = Number(t.x), ty = Number(t.y);
+    if (tx >= 1) out.x = Math.max(1, Math.min(LUMIA_MAX_W, Math.round(tx)));
+    if (ty >= 1) out.y = Math.max(1, Math.round(ty));
     if (t.color && /^#[0-9A-Fa-f]{6}$/.test(t.color)) out.color = t.color.toUpperCase();
     if (t.customLabel) out.customLabel = String(t.customLabel).slice(0, 60);
     return out;
@@ -1020,7 +1088,7 @@ function _renderCompactTileInner(cat, tile, opts) {
 }
 
 // Outer tile = transparent wrapper with W×H grid spans + edit handles + click routing
-function renderLumiaTile(tile, sectionRenderers) {
+function renderLumiaTile(tile, sectionRenderers, isMobile) {
     const cat = getCatalogEntry(tile.catalogId);
     if (!cat) return '';
     const w = tile.w || 2, h = tile.h || 2;
@@ -1070,8 +1138,16 @@ function renderLumiaTile(tile, sectionRenderers) {
         ? `onclick="if(document.body.classList.contains('tiles-editing'))openLumiaTileEditor('${tile.uid}');else { ${routeJS}; }"`
         : '';
 
-    const inlineStyle = `grid-column: span ${w}; grid-row: span ${h};` +
+    // Desktop = explicit coordinate placement (gaps stay empty). Mobile = flow.
+    const placement = (!isMobile && tile.x >= 1 && tile.y >= 1)
+        ? `grid-column: ${tile.x} / span ${w}; grid-row: ${tile.y} / span ${h};`
+        : `grid-column: span ${w}; grid-row: span ${h};`;
+    const inlineStyle = placement +
         (colored ? ` background:${tile.color}; --lumia-tile-bg:${tile.color};` : '');
+
+    // Corner resize handle — desktop only (mobile keeps the modal size picker).
+    const resizeHandle = isMobile ? '' :
+        `<div class="lumia-tile__resize" title="Drag to resize" aria-label="Resize tile"></div>`;
 
     return `
         <div class="lumia-tile ${colored ? 'lumia-tile--colored' : 'lumia-tile--plain'} ${(isWidget && fitsFull && !colored) ? 'lumia-tile--mode-full' : 'lumia-tile--mode-compact'} lumia-tile--kind-${cat.kind}"
@@ -1079,6 +1155,7 @@ function renderLumiaTile(tile, sectionRenderers) {
              data-tile-kind="${cat.kind}"
              data-tile-catalog="${cat.id}"
              data-tile-w="${w}" data-tile-h="${h}"
+             data-tile-minw="${minW}" data-tile-minh="${minH}"
              style="${inlineStyle}"
              ${onclickAttr}>
             <button class="lumia-tile__edit-handle" title="Edit tile"
@@ -1091,35 +1168,82 @@ function renderLumiaTile(tile, sectionRenderers) {
             </button>
             <div class="lumia-tile__shield" onclick="event.stopPropagation();openLumiaTileEditor('${tile.uid}')"></div>
             <div class="lumia-tile__body">${innerHTML}</div>
+            ${resizeHandle}
         </div>`;
 }
 
 function renderLumiaGrid(sectionRenderers) {
+    const isMobile = _currentLayoutKey() === 'mobile';
     const tiles = getLumiaConfig();
-    const tilesHtml = tiles.map(t => renderLumiaTile(t, sectionRenderers)).join('');
-    return `
-        <div class="lumia-grid" id="lumiaGrid">
-            ${tilesHtml}
-            <button class="lumia-tile lumia-tile--add" onclick="openLumiaTilePicker()" title="Add a tile">
-                <div class="lumia-tile__icon">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </div>
-                <div class="lumia-tile__label lumia-tile__label--xs">Add tile</div>
-            </button>
-        </div>`;
+    const editing = typeof document !== 'undefined' && document.body.classList.contains('tiles-editing');
+
+    // ── MOBILE: unchanged flow layout (auto-flow, Sortable reorder) ──
+    if (isMobile) {
+        const tilesHtml = tiles.map(t => renderLumiaTile(t, sectionRenderers, true)).join('');
+        return `
+            <div class="lumia-grid" id="lumiaGrid">
+                ${tilesHtml}
+                <button class="lumia-tile lumia-tile--add" onclick="openLumiaTilePicker()" title="Add a tile">
+                    <div class="lumia-tile__icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </div>
+                    <div class="lumia-tile__label lumia-tile__label--xs">Add tile</div>
+                </button>
+            </div>`;
+    }
+
+    // ── DESKTOP: coordinate (free-placement) grid; gaps stay empty ──
+    const cols = _lumiaCols(false);
+    const changed = _lumiaEnsurePositions(tiles, cols);
+    if (changed) { try { saveLumiaConfig(tiles); } catch (e) {} }  // persist coords once
+
+    const maxRow = tiles.reduce((m, t) => Math.max(m, (t.y || 1) + (t.h || 1) - 1), 0);
+    const rows = Math.max(maxRow + (editing ? 4 : 0), 1);  // spare rows for dropping while editing
+
+    const tilesHtml = tiles.map(t => renderLumiaTile(t, sectionRenderers, false)).join('');
+
+    // Empty-cell "+" buttons so users can drop a new tile into leftover space.
+    let cellsHtml = '';
+    if (editing) {
+        const occupied = new Set();
+        tiles.forEach(t => {
+            for (let yy = t.y; yy < t.y + t.h; yy++)
+                for (let xx = t.x; xx < t.x + t.w; xx++) occupied.add(xx + ':' + yy);
+        });
+        for (let yy = 1; yy <= rows; yy++) {
+            for (let xx = 1; xx <= cols; xx++) {
+                if (!occupied.has(xx + ':' + yy)) {
+                    cellsHtml += `<button class="lumia-cell-add" style="grid-column:${xx} / span 1;grid-row:${yy} / span 1" title="Add a tile here" onclick="openLumiaTilePickerAt(${xx},${yy})"><span>+</span></button>`;
+                }
+            }
+        }
+    }
+
+    const gridStyle = `grid-template-columns:repeat(${cols},minmax(0,1fr));grid-auto-flow:row;grid-template-rows:repeat(${rows}, var(--lumia-row-desktop));`;
+    return `<div class="lumia-grid lumia-grid--fixed" id="lumiaGrid" style="${gridStyle}">${tilesHtml}${cellsHtml}</div>`;
 }
 
 // Toggle edit mode
 window.toggleLumiaEditMode = function () {
-    document.body.classList.toggle('tiles-editing');
-    // Re-init Sortable when toggled on
-    if (document.body.classList.contains('tiles-editing')) {
-        _initLumiaSortable();
-    } else if (window._lumiaSortable) {
+    const willEdit = !document.body.classList.contains('tiles-editing');
+    document.body.classList.toggle('tiles-editing', willEdit);
+    if (!willEdit && window._lumiaSortable) {
         try { window._lumiaSortable.destroy(); } catch (e) {}
         window._lumiaSortable = null;
     }
+    // Re-render so the empty-cell "+" overlay, spare rows, and handles show/hide.
+    if (typeof renderDashboard === 'function') renderDashboard();
 };
+
+// Bind the right drag interaction for the current layout after each render.
+function _initLumiaEditing() {
+    if (!document.body.classList.contains('tiles-editing')) return;
+    if (_currentLayoutKey() === 'mobile') {
+        _initLumiaSortable();            // mobile keeps flow-reorder (unchanged)
+    } else {
+        _bindLumiaGridInteractions();    // desktop free-placement drag + resize
+    }
+}
 
 function _initLumiaSortable() {
     const grid = document.getElementById('lumiaGrid');
@@ -1150,6 +1274,108 @@ function _initLumiaSortable() {
             await saveLumiaConfig(reordered);
         }
     });
+}
+
+// ── Desktop free-placement: drag to move, drag corner to resize ──────────────
+// Tiles snap to grid cells; gaps are preserved (other tiles never auto-reflow).
+function _bindLumiaGridInteractions() {
+    const grid = document.getElementById('lumiaGrid');
+    if (!grid || grid.dataset.dragBound === '1') return;
+    grid.dataset.dragBound = '1';
+    grid.addEventListener('pointerdown', _lumiaPointerDown);
+}
+
+function _lumiaGridMetrics(grid) {
+    const rect = grid.getBoundingClientRect();
+    const cols = _lumiaCols(false);
+    const cs = getComputedStyle(grid);
+    const gap = parseFloat(cs.columnGap || cs.gap || '10') || 10;
+    const rowH = parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue('--lumia-row-desktop')) || 100;
+    const cellW = (rect.width - gap * (cols - 1)) / cols;
+    return { rect, cols, gap, rowH, cellW, pitchX: cellW + gap, pitchY: rowH + gap };
+}
+
+function _lumiaPointerDown(e) {
+    if (!document.body.classList.contains('tiles-editing')) return;
+    if (_currentLayoutKey() === 'mobile') return;
+    if (e.button != null && e.button !== 0) return;             // left/touch only
+    // Let the edit/remove buttons handle their own clicks.
+    if (e.target.closest('.lumia-tile__edit-handle, .lumia-tile__remove-handle, .lumia-cell-add')) return;
+
+    const grid = document.getElementById('lumiaGrid');
+    const tileEl = e.target.closest('.lumia-tile[data-tile-uid]');
+    if (!grid || !tileEl) return;
+
+    const uid = tileEl.dataset.tileUid;
+    const tiles = getLumiaConfig();
+    const tile = tiles.find(t => t.uid === uid);
+    if (!tile) return;
+
+    const isResize = !!e.target.closest('.lumia-tile__resize');
+    const m = _lumiaGridMetrics(grid);
+    const minW = Number(tileEl.dataset.tileMinw) || 1;
+    const minH = Number(tileEl.dataset.tileMinh) || 1;
+    const start = { px: e.clientX, py: e.clientY, x: tile.x, y: tile.y, w: tile.w, h: tile.h };
+
+    try { tileEl.setPointerCapture(e.pointerId); } catch (_) {}
+
+    let activated = false;                 // becomes true once the pointer actually moves
+    let cand = { x: tile.x, y: tile.y, w: tile.w, h: tile.h, ok: true };
+
+    const onMove = (ev) => {
+        const dx = ev.clientX - start.px, dy = ev.clientY - start.py;
+        if (!activated) {
+            if (!isResize && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;  // tap, not a drag
+            activated = true;
+            document.body.classList.add('is-dragging-tile');
+            tileEl.classList.add('is-dragging');
+        }
+        ev.preventDefault();
+        const dC = Math.round(dx / m.pitchX);
+        const dR = Math.round(dy / m.pitchY);
+        if (isResize) {
+            const tCtx = { uid, x: start.x, y: start.y, w: start.w, h: start.h, minW, minH };
+            const nw = _lumiaFitW(tiles, tCtx, start.w + dC, m.cols);
+            const nh = _lumiaFitH(tiles, { ...tCtx, w: nw }, start.h + dR, m.cols);
+            cand = { x: start.x, y: start.y, w: nw, h: nh, ok: true };
+            tileEl.style.gridColumn = `${start.x} / span ${nw}`;
+            tileEl.style.gridRow = `${start.y} / span ${nh}`;
+        } else {
+            const nx = Math.max(1, Math.min(m.cols - start.w + 1, start.x + dC));
+            const ny = Math.max(1, start.y + dR);
+            const ok = _lumiaAreaFree(tiles, { x: nx, y: ny, w: start.w, h: start.h }, uid, m.cols);
+            cand = { x: nx, y: ny, w: start.w, h: start.h, ok };
+            tileEl.style.gridColumn = `${nx} / span ${start.w}`;
+            tileEl.style.gridRow = `${ny} / span ${start.h}`;
+            tileEl.classList.toggle('is-invalid', !ok);
+        }
+    };
+
+    const onUp = async () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+        if (!activated) return;            // it was a click → let the shield open the editor
+        // Swallow the synthetic click that follows the drag so it doesn't open
+        // the editor or trigger an empty-cell add.
+        const swallow = (cev) => { cev.stopPropagation(); cev.preventDefault(); };
+        window.addEventListener('click', swallow, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener('click', swallow, true), 350);
+
+        document.body.classList.remove('is-dragging-tile');
+        tileEl.classList.remove('is-dragging', 'is-invalid');
+        const moved = cand.x !== start.x || cand.y !== start.y || cand.w !== start.w || cand.h !== start.h;
+        if ((isResize || cand.ok) && moved) {
+            tile.x = cand.x; tile.y = cand.y; tile.w = cand.w; tile.h = cand.h;
+            await saveLumiaConfig(tiles);
+        }
+        if (typeof renderDashboard === 'function') renderDashboard();   // redraw (reverts an invalid move)
+    };
+
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
 }
 
 // Open editor for a tile
@@ -1302,6 +1528,7 @@ window.removeLumiaTile = async function (uid, fromModal) {
 };
 
 window.openLumiaTilePicker = function () {
+    window._lumiaAddAt = null;   // default: place new tile in first free spot
     const tiles = getLumiaConfig();
     // Map catalogId → uid of the FIRST instance on the dashboard
     const usedMap = new Map();
@@ -1365,6 +1592,13 @@ window._lumiaRemoveFromPicker = async function (uid) {
     setTimeout(() => window.openLumiaTilePicker(), 0);
 };
 
+// Open the tile picker targeting a specific empty cell (desktop free-placement).
+// openLumiaTilePicker() resets the target first, so we set it afterwards.
+window.openLumiaTilePickerAt = function (x, y) {
+    window.openLumiaTilePicker();
+    window._lumiaAddAt = { x: Number(x), y: Number(y) };
+};
+
 window._lumiaAddTile = async function (catalogId) {
     const cat = getCatalogEntry(catalogId);
     if (!cat) return;
@@ -1375,7 +1609,27 @@ window._lumiaAddTile = async function (catalogId) {
     if (cat.kind === 'widget') { w = 4; h = 2; }
     else if (cat.kind === 'kpi') { w = 2; h = 2; }
     else { w = 1; h = 1; }
-    tiles.push({ uid, catalogId, w, h });
+    const newTile = { uid, catalogId, w, h };
+    // Desktop: give the tile explicit coordinates so it lands in the chosen gap
+    // (or the first free spot) instead of reflowing the whole grid.
+    if (_currentLayoutKey() !== 'mobile') {
+        const cols = _lumiaCols(false);
+        const at = window._lumiaAddAt;
+        if (at && _lumiaAreaFree(tiles, { x: at.x, y: at.y, w, h }, null, cols)) {
+            newTile.x = at.x; newTile.y = at.y;
+        } else if (at) {
+            // Clicked cell can't fit this size → shrink to 1×1 there if possible.
+            if (_lumiaAreaFree(tiles, { x: at.x, y: at.y, w: 1, h: 1 }, null, cols)) {
+                newTile.x = at.x; newTile.y = at.y; newTile.w = 1; newTile.h = 1;
+            } else {
+                const pos = _lumiaFirstFree(tiles, w, h, cols); newTile.x = pos.x; newTile.y = pos.y;
+            }
+        } else {
+            const pos = _lumiaFirstFree(tiles, w, h, cols); newTile.x = pos.x; newTile.y = pos.y;
+        }
+    }
+    window._lumiaAddAt = null;
+    tiles.push(newTile);
     await saveLumiaConfig(tiles);
     document.getElementById('universalModal').classList.add('hidden');
     if (typeof renderDashboard === 'function') renderDashboard();
@@ -2088,12 +2342,20 @@ function renderDashboard() {
         message = settings.evening_message || "Great work today!";
       }
 
+      const _td = new Date().toISOString().slice(0, 10);
+      const _openTasks = (state.data.tasks || []).filter(t => t.status !== 'completed').length;
+      const _schedH = (state.data.habits || []).filter(h => (typeof window.habitScheduledToday === 'function') ? window.habitScheduledToday(h) : true);
+      const _doneH = _schedH.filter(h => (state.data.habit_logs || []).some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(_td))).length;
+      const _evToday = (state.data.planner_events || []).filter(e => e.start_datetime && String(e.start_datetime).slice(0, 10) === _td).length;
+      const _todaySummary = `${_openTasks} open task${_openTasks === 1 ? '' : 's'} · ${_doneH}/${_schedH.length} habits · ${_evToday} event${_evToday === 1 ? '' : 's'}`;
+
       return `
         <div class="morning-hero" style="min-height:0; display:flex; flex-direction:column; justify-content:center; padding:14px 20px; background: linear-gradient(135deg, var(--surface-1), var(--surface-2)); border-radius:20px; margin-bottom:16px; border:1px solid rgba(255,255,255,0.08); position:relative; overflow:hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.06);">
             <div style="position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center; gap:12px;">
                 <div style="flex:1; min-width:0;">
                   <h1 class="fade-in" style="font-size:clamp(18px, 3vw, 24px); margin:0; letter-spacing:-0.5px; background: linear-gradient(90deg, var(--text-1), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${greeting}, ${name}.</h1>
                   <p class="fade-in stagger-1" style="font-size:12px; color:var(--text-3); margin:3px 0 0 0; opacity: 0.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${message}</p>
+                  <div class="fade-in stagger-1" style="font-size:12.5px; font-weight:600; color:var(--text-2); margin-top:6px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${_todaySummary}</div>
                 </div>
                  <!-- Compact Focus Button -->
                 <button class="glass-panel fade-in stagger-2" style="padding:8px 14px; border-radius:12px; background:var(--primary); border:1px solid rgba(255,255,255,0.2); display:inline-flex; align-items:center; gap:8px; cursor:pointer; box-shadow: 0 4px 12px var(--primary-glow); color:white; flex-shrink:0; position:relative; z-index:3; touch-action:manipulation; -webkit-tap-highlight-color:transparent;" onclick="openFocusMode()">
@@ -2875,7 +3137,7 @@ function renderDashboard() {
         const meta = PRIO_META[t.priority] || PRIO_META.P3;
         const safeTitle = escapeHtml(t.title || 'Untitled');
         return `
-          <div class="tl-row" onclick="_dashOpenModal('tasks','openTaskModal','${t.id}')">
+          <div class="tl-row" onclick="_dashOpenModal('tasks','openEditTask','${t.id}')">
             <span class="tl-check" onclick="event.stopPropagation(); _tileTaskToggle(this, '${t.id}');"></span>
             <span class="tl-name">${safeTitle}</span>
             <span class="tl-prio ${meta.cls}"><span class="tl-prio-dot"></span>${meta.label}</span>
@@ -2967,9 +3229,9 @@ function renderDashboard() {
     if (document.querySelector('.lumia-tile--large [data-widget-id="aiBriefing"]') && typeof checkAndShowInsight === 'function') {
       checkAndShowInsight();
     }
-    // Initialize Sortable if we re-rendered while in edit mode
+    // Re-bind tile editing (desktop = drag/resize, mobile = Sortable) if editing.
     if (document.body.classList.contains('tiles-editing')) {
-      _initLumiaSortable();
+      _initLumiaEditing();
     }
   }, 50);
 }

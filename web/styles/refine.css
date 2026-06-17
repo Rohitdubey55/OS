@@ -1,0 +1,257 @@
+/* ============================================================================
+   REFINE.CSS  —  Unified "Stripe / Mercury" design foundation
+   ----------------------------------------------------------------------------
+   Single source of truth that elevates the whole app to a calm, precise,
+   light-first SaaS aesthetic. Loaded LAST in index.html so it harmonises the
+   two pre-existing token systems (style.css `--surface/-text/-border` used by
+   the views, and saas.css `--saas-*` used by the shell) onto one palette, then
+   refines the shared component classes (buttons, inputs, cards, modals, tables).
+
+   Design language:
+     • Cool off-white canvas, pure-white surfaces, hairline slate borders
+     • Soft, layered, low-opacity shadows with a 1px ring (Stripe signature)
+     • Inter with tabular numerals for data; tight, quiet typographic hierarchy
+     • One restrained accent; semantic colour reserved for status only
+   Nothing here is theme-specific except the token block, which is scoped to the
+   light/default `:root`. Dark themes keep their own surfaces and inherit the
+   component + shadow refinements automatically (everything is token-driven).
+   ========================================================================== */
+
+/* ───────────────────────────── 1. TOKENS (light/default) ───────────────── */
+:root {
+  /* Canvas & surfaces — subtle cool layering */
+  --surface-base: #F6F8FB;   /* app background            */
+  --surface-1:    #FFFFFF;   /* cards / modals / popovers  */
+  --surface-2:    #F4F6FA;   /* inputs / hover fills       */
+  --surface-3:    #E9EDF3;   /* active / selected fills    */
+
+  /* Ink — Stripe-style slate ramp */
+  --text-1: #1A1F36;         /* headings / primary         */
+  --text-2: #3C4257;         /* body                       */
+  --text-3: #6B7280;         /* muted / meta               */
+
+  /* Hairline borders */
+  --border-color: #E4E8EE;
+  --border-strong: #D4DAE3;
+  --inner-border: transparent;
+
+  /* Accent halo (kept in sync with the user-selectable --primary) */
+  --primary-soft: color-mix(in srgb, var(--primary) 9%, transparent);
+  --primary-glow: color-mix(in srgb, var(--primary) 26%, transparent);
+  --ring: 0 0 0 3px var(--primary-soft);
+
+  /* Refined, cool, layered shadows (the Stripe "ring + soft drop") */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
+  --shadow-card: 0 0 0 1px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06), 0 6px 16px -6px rgba(16, 24, 40, 0.08);
+  --shadow-md: 0 0 0 1px rgba(16, 24, 40, 0.04), 0 4px 10px -2px rgba(16, 24, 40, 0.10);
+  --shadow-lg: 0 0 0 1px rgba(16, 24, 40, 0.04), 0 12px 28px -8px rgba(16, 24, 40, 0.14), 0 4px 8px -4px rgba(16, 24, 40, 0.08);
+  --shadow-pop: 0 0 0 1px rgba(16, 24, 40, 0.05), 0 16px 40px -12px rgba(16, 24, 40, 0.22);
+
+  /* Radii — restrained, consistent */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+}
+
+/* Keep the app-shell (saas.css) palette in lock-step with the views above */
+:root {
+  --saas-bg: var(--surface-base);
+  --saas-surface: var(--surface-1);
+  --saas-elevated: var(--surface-1);
+  --saas-sunken: var(--surface-2);
+  --saas-border: var(--border-color);
+  --saas-border-strong: var(--border-strong);
+  --saas-text: var(--text-1);
+  --saas-text-muted: var(--text-2);
+  --saas-text-dim: var(--text-3);
+  --saas-accent: var(--primary);
+  --saas-accent-soft: var(--primary-soft);
+
+  --sh-xs: var(--shadow-xs);
+  --sh-sm: var(--shadow-sm);
+  --sh-md: var(--shadow-md);
+  --sh-lg: var(--shadow-lg);
+  --sh-xl: var(--shadow-pop);
+  --sh-focus: var(--ring);
+
+  --r-sm: var(--radius-sm);
+  --r-md: var(--radius-md);
+  --r-lg: var(--radius-lg);
+  --r-xl: var(--radius-xl);
+}
+
+/* Slightly deeper shadows on dark themes so elevation still reads */
+[data-theme="dark"], [data-theme="midnight"], [data-theme="forest"],
+[data-theme="ocean"], [data-theme="sunset"] {
+  --shadow-card: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.30), 0 10px 24px -8px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 6px 14px -4px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.40), 0 16px 36px -10px rgba(0, 0, 0, 0.55);
+  --shadow-pop: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 20px 48px -14px rgba(0, 0, 0, 0.60);
+}
+
+/* ───────────────────────────── 2. TYPOGRAPHY ───────────────────────────── */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv02' 1, 'cv03' 1, 'cv04' 1, 'cv11' 1, 'ss01' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  color: var(--text-2);
+  background: var(--surface-base);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-1);
+  letter-spacing: -0.014em;
+  font-weight: 650;
+}
+
+/* Tabular, lining numerals everywhere numbers carry meaning */
+.stat, .stat-value, .kpi-value, .kpi-card, .metric, .amount, .balance,
+.tl-count, .lw-row, table td, table th, [class*="-amount"], [class*="-value"],
+[class*="-total"], [class*="-count"] {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+
+/* ───────────────────────────── 3. BUTTONS ──────────────────────────────── */
+.btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-weight: 550;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  box-shadow: var(--shadow-xs);
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.btn:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  color: var(--text-1);
+  transform: none;
+  box-shadow: var(--shadow-sm);
+}
+.btn:active { transform: translateY(0.5px); box-shadow: var(--shadow-xs); }
+
+.btn.primary {
+  background: var(--primary);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: var(--shadow-xs), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.btn.primary:hover {
+  background: var(--primary);
+  filter: brightness(0.96);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.btn.primary:active { transform: translateY(0); filter: brightness(0.93); }
+
+.btn.icon {
+  height: 34px; width: 34px; padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+}
+.btn.icon:hover { background: var(--surface-2); color: var(--text-1); border-color: var(--border-color); transform: none; }
+
+/* ───────────────────────────── 4. FORM CONTROLS ────────────────────────── */
+input[type="text"], input[type="search"], input[type="number"], input[type="email"],
+input[type="password"], input[type="date"], input[type="time"], input[type="tel"],
+input[type="url"], select, textarea, .tk-input, .tk-select, .tk-textarea {
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-1);
+  box-shadow: var(--shadow-xs);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+input:focus, select:focus, textarea:focus,
+.tk-input:focus, .tk-select:focus, .tk-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--ring);
+}
+input::placeholder, textarea::placeholder { color: var(--text-3); }
+
+/* ───────────────────────────── 5. CARDS & SURFACES ─────────────────────── */
+.widget-card, .kpi-card, .stat-card, .entry-card, .note-card, .goal-card,
+.person-card, .saas-card, .card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+.widget-card { transition: box-shadow .18s ease, border-color .18s ease, transform .18s ease; }
+.widget-card:hover { box-shadow: var(--shadow-md); border-color: var(--border-strong); }
+
+/* ───────────────────────────── 6. MODALS ───────────────────────────────── */
+.modal-overlay { background: rgba(16, 24, 40, 0.40); backdrop-filter: blur(3px) saturate(1.05); }
+.modal-box {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-pop);
+}
+/* Replace the rainbow top-bar with a clean, restrained surface (Stripe-style) */
+.modal-box::before { display: none !important; }
+.modal-box > :first-child { padding-top: 22px; }
+
+/* ───────────────────────────── 7. SEGMENTED / PILLS / BADGES ───────────── */
+.segmented-control { background: var(--surface-2); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 3px; }
+.range-btn { border-radius: var(--radius-xs); }
+.range-btn.active { background: var(--surface-1); box-shadow: var(--shadow-xs); color: var(--text-1); }
+
+.filter-chip, .badge, .pill, .tag {
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-weight: 550;
+  letter-spacing: -0.005em;
+}
+
+/* ───────────────────────────── 8. TABLES ───────────────────────────────── */
+table { border-collapse: separate; border-spacing: 0; width: 100%; }
+table thead th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-2);
+}
+table tbody td { padding: 12px 14px; border-bottom: 1px solid var(--border-color); color: var(--text-2); }
+table tbody tr:last-child td { border-bottom: none; }
+table tbody tr { transition: background .12s ease; }
+table tbody tr:hover td { background: var(--surface-2); }
+
+/* ───────────────────────────── 9. GLOBAL POLISH ───────────────────────── */
+::selection { background: var(--primary-soft); color: var(--text-1); }
+
+a:focus-visible, button:focus-visible, [role="button"]:focus-visible,
+[tabindex]:focus-visible, .btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-xs);
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--surface-3) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--border-strong); border: 2px solid transparent; background-clip: padding-box; }
+
+hr { border: none; border-top: 1px solid var(--border-color); }

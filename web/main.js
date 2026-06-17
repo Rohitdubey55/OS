@@ -147,6 +147,48 @@ window.addLongPressAction = function (el, callback) {
 
 // --- API HANDLING ---
 
+/* Habit scheduling helpers — the DB has no `days` column, so a weekly habit's
+   scheduled days are persisted inside the `frequency` field as "weekly:Mon,Sat".
+   These read that (with fallbacks for legacy data) so weekly habits only appear
+   on their scheduled days. Defined here (always loaded) and reused by view-habits.js. */
+window.habitDayList = function (h) {
+    if (!h) return [];
+    let raw = (h.days != null && h.days !== '') ? String(h.days) : '';
+    if (!raw) {
+        const f = String(h.frequency || '');
+        const ci = f.indexOf(':');
+        if (ci >= 0) raw = f.slice(ci + 1);
+        else if (/^(mon|tue|wed|thu|fri|sat|sun)/i.test(f.trim())) raw = f; // legacy day-list
+    }
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+};
+window.habitIsWeekly = function (h) {
+    const f = String((h && h.frequency) || '').toLowerCase().trim();
+    return f.startsWith('weekly') || window.habitDayList(h).length > 0;
+};
+window.habitScheduledOn = function (h, date) {
+    const f = String((h && h.frequency) || '').toLowerCase().trim();
+    if (!f || f === 'daily') return true;
+    const days = window.habitDayList(h);
+    if (!days.length) return true;
+    const D = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const wd = (date instanceof Date ? date : new Date()).getDay();
+    const dn = D[wd === 0 ? 6 : wd - 1];
+    return days.map(s => s.slice(0, 3).toLowerCase()).includes(dn.slice(0, 3).toLowerCase());
+};
+window.habitScheduledToday = function (h) { return window.habitScheduledOn(h, new Date()); };
+
+/* Chronological rank for habit routine names so groups order Morning → Night
+   (not alphabetically). Unknown names sort in the middle; "General" sorts last. */
+window.routineRank = function (name) {
+    const n = String(name || '').toLowerCase().trim();
+    const order = ['dawn', 'early morning', 'morning', 'forenoon', 'noon', 'midday', 'afternoon', 'evening', 'night', 'late night', 'bedtime'];
+    for (let i = 0; i < order.length; i++) if (n === order[i]) return i;
+    for (let i = 0; i < order.length; i++) if (n.includes(order[i])) return i;
+    if (n === 'general' || n === '') return 900;
+    return 500;
+};
+
 async function apiCall(action, sheet, payload = {}, id = null) {
 
     let url = API_BASE;
@@ -382,6 +424,52 @@ async function routeTo(viewName) {
                         <path d="M12 20h9"/>
                         <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                     </svg>
+                </button>
+            `;
+        } else if (viewName === 'diary') {
+            pageActions.innerHTML = `
+                <button onclick="openDiaryModal()" title="New entry" aria-label="New entry"
+                    style="display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                    New Entry
+                </button>
+            `;
+        } else if (viewName === 'vision') {
+            pageActions.innerHTML = `
+                <button class="page-action-btn" onclick="openAffirmationManager()" title="Affirmations" aria-label="Affirmations">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                </button>
+                <button class="page-action-btn" onclick="startManifestationRitual()" title="Daily ritual" aria-label="Daily ritual">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2L12 3z"/></svg>
+                </button>
+                <button onclick="openVisionModal()" title="New goal" aria-label="New goal"
+                    style="display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    New goal
+                </button>
+            `;
+        } else if (viewName === 'people') {
+            pageActions.innerHTML = `
+                <button onclick="openPersonModal()" title="Add person" aria-label="Add person"
+                    style="display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add person
+                </button>
+            `;
+        } else if (viewName === 'calendar') {
+            pageActions.innerHTML = `
+                <button onclick="openEventModal()" title="Add event" aria-label="Add event"
+                    style="display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add event
+                </button>
+            `;
+        } else if (viewName === 'finance') {
+            pageActions.innerHTML = `
+                <button onclick="openFinanceAction()" title="Add" aria-label="Add"
+                    style="display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05);">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add new
                 </button>
             `;
         } else {
@@ -1034,15 +1122,7 @@ function isoDate() { return new Date().toISOString().slice(0, 10); }
 ═══════════════════════════════════════════════ */
 window.openFocusMode = function () {
     const todayStr = isoDate();
-    const habits = (state.data.habits || []).filter(h => {
-        if (!h.frequency || h.frequency === 'daily') return true;
-        if (h.frequency === 'weekly' && h.days) {
-            const d = new Date().getDay();
-            const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d];
-            return h.days.split(',').map(s => s.trim()).includes(day);
-        }
-        return true;
-    });
+    const habits = (state.data.habits || []).filter(h => window.habitScheduledToday(h));
     const logs = state.data.habit_logs || [];
     const tasks = (state.data.tasks || []).filter(t => t.status !== 'completed' && t.due_date <= todayStr && t.due_date);
     const events = (state.data.planner || []).filter(e => {
@@ -1144,7 +1224,7 @@ window.showQuickLog = function (type = 'expense') {
         const amount = document.getElementById('ql-amount')?.value;
         const note = document.getElementById('ql-note')?.value || 'Quick expense';
         if (!amount) { showToast('Enter amount', 'error'); return; }
-        await apiCall('create', 'expenses', { amount: Number(amount), type: 'expense', date: isoDate(), notes: note, category: 'General' });
+        await apiCall('create', 'expenses', { amount: Number(amount), type: 'expense', date: isoDate(), description: note, category: 'General' });
         const newExp = { id: 'tmp-' + Date.now(), amount: Number(amount), type: 'expense', date: isoDate(), notes: note, category: 'General' };
         if (!state.data.expenses) state.data.expenses = [];
         state.data.expenses.push(newExp);
@@ -1254,12 +1334,7 @@ function scheduleMorningBriefing() {
     setTimeout(() => {
         const todayStr = isoDate();
         const pendingTasks = (state.data.tasks || []).filter(t => t.status !== 'completed' && t.due_date === todayStr).slice(0, 3);
-        const pendingHabits = (state.data.habits || []).filter(h => {
-            if (!h.frequency || h.frequency === 'daily') return true;
-            const d = new Date().getDay();
-            const day = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d];
-            return h.frequency === 'weekly' && h.days ? h.days.split(',').map(s => s.trim()).includes(day) : true;
-        });
+        const pendingHabits = (state.data.habits || []).filter(h => window.habitScheduledToday(h));
 
         const taskNames = pendingTasks.map(t => t.title).join(', ') || 'No tasks due today';
         const body = `${pendingHabits.length} habits to do. Tasks: ${taskNames}`;
@@ -1498,7 +1573,7 @@ document.addEventListener('click', async (e) => {
 
         document.getElementById('inputDiary').value = '';
 
-        await apiCall('create', 'diary', { text, date: isoDate() });
+        await apiCall('create', 'diary', { content: text, date: isoDate() });
 
         await refreshData('diary');
 
@@ -1618,6 +1693,7 @@ document.addEventListener('click', async (e) => {
         const date = document.getElementById('mTxDate').value;
         const source = document.getElementById('mTxSource')?.value || '';
         const notes = document.getElementById('mTxNote')?.value || '';
+        const payment_mode = document.getElementById('mTxPaymentMode')?.value || '';
 
         if (!amt) return;
         document.getElementById('universalModal').classList.add('hidden');
@@ -1629,7 +1705,8 @@ document.addEventListener('click', async (e) => {
             type: type,
             date: date,
             source: source,
-            notes: notes
+            description: notes,
+            payment_mode: payment_mode
         });
 
         await refreshData('finance');
@@ -1797,9 +1874,9 @@ document.addEventListener('click', async (e) => {
 
         await apiCall('create', 'diary', {
 
-            text: text,
+            content: text,
 
-            mood_score: mood,
+            mood: mood,
 
             tags: tags,
 
@@ -1856,8 +1933,8 @@ document.addEventListener('click', async (e) => {
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Creating habit...");
         const habitPayload = {
-            habit_name: name, category: cat, frequency: freq,
-            days: freq === 'weekly' ? days : '',
+            habit_name: name, category: cat,
+            frequency: freq === 'weekly' ? ('weekly:' + days) : (freq || 'daily'),
             reminder_time: time,
             duration: duration,
             emoji: emoji,
@@ -2010,7 +2087,7 @@ document.addEventListener('click', async (e) => {
         document.getElementById('universalModal').classList.add('hidden');
         if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating transaction...");
-        await apiCall('update', 'expenses', { amount: amt, category: cat, type: type, date: date, source: source, notes: notes, payment_mode: payment_mode }, editId);
+        await apiCall('update', 'expenses', { amount: amt, category: cat, type: type, date: date, source: source, description: notes, payment_mode: payment_mode }, editId);
         await refreshData('finance');
     }
 
@@ -2065,7 +2142,7 @@ document.addEventListener('click', async (e) => {
         if (!text || !text.trim()) { alert("Please write something!"); return; }
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Updating entry...");
-        await apiCall('update', 'diary', { text, mood_score: mood, tags: tags, date: date }, editId);
+        await apiCall('update', 'diary', { content: text, mood: mood, tags: tags, date: date }, editId);
         await refreshData('diary');
     }
 
@@ -2100,8 +2177,8 @@ document.addEventListener('click', async (e) => {
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Updating habit...");
         const updatePayload = {
-            habit_name: name, category: cat, frequency: freq,
-            days: freq === 'weekly' ? days : '',
+            habit_name: name, category: cat,
+            frequency: freq === 'weekly' ? ('weekly:' + days) : (freq || 'daily'),
             reminder_time: time,
             duration: duration,
             emoji: emoji,
@@ -3155,12 +3232,7 @@ function checkAlarms() {
     habits.forEach(h => {
         if (h.reminder_time === currentTime) {
             // Check if scheduled for today
-            let isScheduled = true; // default daily
-            if (h.frequency === 'weekly' && h.days) {
-                const dayName = now.toLocaleDateString('en-US', { weekday: 'short' });
-                // h.days like "Mon,Tue"
-                isScheduled = h.days.split(',').map(s => s.trim()).includes(dayName);
-            }
+            let isScheduled = window.habitScheduledToday(h);
 
             if (isScheduled) {
                 // Check if already done today

@@ -2465,7 +2465,7 @@ html { scroll-behavior: smooth; }
     --lumia-row-desktop: 100px;
     --lumia-gap: 10px;
     --lumia-cols-mobile: 4;
-    --lumia-cols-desktop: 6;
+    --lumia-cols-desktop: 8;   /* fixed 8-col desktop → stable tile coordinates */
 }
 
 .lumia-grid {
@@ -2872,6 +2872,77 @@ body.tiles-editing .lumia-tile:hover {
     transform: none;
     animation-play-state: paused;
 }
+
+/* ============================================================================
+   FREE-PLACEMENT GRID (desktop): drag to move, drag corner to resize.
+   Gaps stay empty — tiles never auto-reflow. Mobile keeps the flow layout.
+   ============================================================================ */
+.lumia-grid--fixed { grid-auto-flow: row; }
+
+/* The precise desktop grid stays calm — no wiggle (cleaner, and keeps the
+   resize-handle hitbox steady). Edit affordances still show on hover. */
+body.tiles-editing .lumia-grid--fixed .lumia-tile { animation: none !important; cursor: grab; }
+body.tiles-editing .lumia-grid--fixed .lumia-tile__shield { touch-action: none; cursor: grab; }
+
+/* Corner resize handle — bottom-right, shown only while editing (desktop) */
+.lumia-tile__resize {
+    position: absolute;
+    right: 4px; bottom: 4px;
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    display: none;
+    z-index: 22;                 /* above shield(4) + edit/remove(20) */
+    cursor: nwse-resize;
+    touch-action: none;
+    background: var(--saas-accent, var(--primary, #4F46E5));
+    box-shadow: 0 1px 3px rgba(0,0,0,0.28);
+    opacity: 0.55;
+    transition: opacity 140ms var(--ease), transform 140ms var(--ease);
+}
+.lumia-tile__resize::after {
+    content: '';
+    position: absolute;
+    right: 3px; bottom: 3px;
+    width: 7px; height: 7px;
+    border-right: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    border-radius: 0 0 2px 0;
+    opacity: 0.95;
+}
+body.tiles-editing .lumia-grid--fixed .lumia-tile__resize { display: block; }
+.lumia-tile__resize:hover { opacity: 1; transform: scale(1.14); }
+
+/* Active drag / resize state */
+.lumia-tile.is-dragging {
+    z-index: 40 !important;
+    box-shadow: 0 14px 36px rgba(15,23,42,0.22) !important;
+    opacity: 0.96;
+    animation: none !important;
+    transition: none !important;
+    cursor: grabbing;
+}
+.lumia-tile.is-invalid { outline: 2px solid #DC2626; outline-offset: -2px; border-radius: var(--r-lg, 12px); }
+.lumia-tile.is-invalid .lumia-tile__shield { cursor: not-allowed; }
+
+/* Empty-cell "add here" buttons (edit mode only) */
+.lumia-cell-add {
+    border: 1.5px dashed var(--saas-border-strong, rgba(15,23,42,0.18));
+    background: transparent;
+    border-radius: 10px;
+    color: var(--saas-text-muted, #94A3B8);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; line-height: 1; font-weight: 400;
+    cursor: pointer;
+    min-width: 0; min-height: 0;
+    transition: background 140ms var(--ease), border-color 140ms var(--ease), color 140ms var(--ease);
+}
+.lumia-cell-add:hover {
+    background: var(--saas-accent-soft, rgba(79,70,229,0.08));
+    border-color: var(--saas-accent, var(--primary, #4F46E5));
+    color: var(--saas-accent, var(--primary, #4F46E5));
+}
+.lumia-cell-add span { pointer-events: none; opacity: 0.85; }
+body.is-dragging-tile .lumia-cell-add { opacity: 0.3; }
 
 /* ----- Sortable ghost ----- */
 .lumia-tile--ghost {

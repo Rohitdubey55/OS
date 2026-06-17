@@ -76,6 +76,10 @@
     <!-- SaaS UI redesign layer — loads LAST so its tokens and overrides win. -->
     <link rel="stylesheet" href="styles/saas.css" />
 
+    <!-- Stripe/Mercury design foundation — unifies tokens + refines components.
+         Must be the final stylesheet so it harmonises the whole app. -->
+    <link rel="stylesheet" href="styles/refine.css" />
+
     <!-- capacitor-bundle must run before main.js so window.Capacitor is available -->
     <script src="capacitor-bundle.js"></script>
 

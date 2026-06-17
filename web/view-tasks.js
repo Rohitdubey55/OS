@@ -193,7 +193,7 @@ function renderTasks(filter = '') {
   document.getElementById('main').innerHTML = `
   <style>
     /* ══ SHELL ══ */
-    .tk-shell { display:flex; flex-direction:column; height:calc(100vh - env(safe-area-inset-top,44px) - 80px); overflow:hidden; background:var(--surface-base); }
+    .tk-shell { display:flex; flex-direction:column; height:calc(100vh - env(safe-area-inset-top,44px) - 80px); overflow:hidden; background:var(--surface-base); max-width:1060px; }
 
     /* ══ HEADER ══ */
     .tk-header { display:flex; align-items:center; justify-content:space-between; padding:16px 16px 12px; flex-shrink:0; }
@@ -293,63 +293,9 @@ function renderTasks(filter = '') {
     .tk-empty-sub { font-size:13px; color:var(--text-3); line-height:1.5; }
 
     /* ══ TWO-STEP MODAL ══ */
-    .tk-modal-wrap { position:relative; overflow:hidden; }
-    .tk-modal-slider { display:flex; transition:transform .32s cubic-bezier(.4,0,.2,1); width:200%; }
-    .tk-modal-panel { width:50%; min-width:50%; display:flex; flex-direction:column; gap:0; }
-    .tk-modal-header { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
-    .tk-modal-title { flex:1; font-size:18px; font-weight:800; color:var(--text-1); letter-spacing:-.4px; }
-    .tk-modal-close { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border:none; background:var(--surface-2); border-radius:50%; cursor:pointer; color:var(--text-3); font-size:17px; transition:all .15s; }
-    .tk-modal-close:active { background:var(--surface-3); }
-    .tk-back-pill { display:inline-flex; align-items:center; gap:5px; padding:6px 14px; border-radius:22px; border:1.5px solid var(--border-color); background:var(--surface-2); font-size:12.5px; font-weight:600; color:var(--text-2); cursor:pointer; transition:all .15s; }
-    .tk-back-pill:active { background:var(--surface-3); }
-
-    /* Title input */
-    .tk-title-input { width:100%; border:none; outline:none; font-size:19px; font-weight:700; color:var(--text-1); background:transparent; padding:4px 0 14px; border-bottom:2px solid var(--border-color); margin-bottom:20px; letter-spacing:-.3px; transition:border-color .2s; box-sizing:border-box; }
-    .tk-title-input:focus { border-bottom-color:var(--primary); }
-    .tk-title-input::placeholder { color:var(--text-3); font-weight:400; font-size:17px; }
-
-    /* Priority picker */
-    .tk-prio-picker { display:flex; gap:7px; }
-    .tk-prio-pick { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 8px; border-radius:12px; border:1.5px solid var(--border-color); background:var(--surface-2); font-size:12.5px; font-weight:600; color:var(--text-3); cursor:pointer; transition:all .18s; }
-    .tk-prio-pick:active { transform:scale(.97); }
-    .tk-prio-pick.selected { border-color:var(--pick-color,var(--primary)); background:color-mix(in srgb,var(--pick-color,var(--primary)) 10%,transparent); color:var(--pick-color,var(--primary)); font-weight:700; }
-    .tk-prio-pick .pk-dot { width:9px; height:9px; border-radius:50%; background:var(--pick-color); flex-shrink:0; }
-
-    /* Field groups */
-    .tk-field-section { margin-bottom:14px; }
-    .tk-field-label { font-size:10.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.7px; margin-bottom:7px; display:block; }
-    .tk-field-row { display:flex; gap:10px; margin-bottom:14px; }
-    .tk-field-row .tk-field-section { flex:1; margin-bottom:0; }
-    .tk-input { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; transition:border-color .2s,box-shadow .2s; }
-    .tk-input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
-    .tk-select { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; cursor:pointer; transition:border-color .2s; }
-    .tk-select:focus { border-color:var(--primary); }
-    .tk-textarea { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; resize:none; line-height:1.55; transition:border-color .2s,box-shadow .2s; }
-    .tk-textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
-
-    /* Step 2 sections */
-    .tk-modal-section { background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:13px; padding:13px; margin-bottom:12px; }
-    .tk-modal-section-title { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--primary); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
-    .tk-modal-subtask-add { width:100%; padding:8px; border:1.5px dashed var(--border-color); border-radius:9px; background:transparent; font-size:12.5px; color:var(--text-3); cursor:pointer; text-align:center; margin-top:8px; transition:all .15s; }
-    .tk-modal-subtask-add:hover { border-color:var(--primary); color:var(--primary); background:rgba(79,70,229,.04); }
-    .tk-day-picker { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
-    .tk-day-label { font-size:12px; display:flex; align-items:center; gap:4px; background:var(--surface-1); padding:5px 10px; border-radius:9px; cursor:pointer; border:1.5px solid var(--border-color); transition:all .15s; }
-    .tk-day-label input { display:none; }
-    .tk-day-label.checked { background:rgba(79,70,229,.08); border-color:var(--primary); color:var(--primary); font-weight:700; }
-
-    /* Modal Actions */
-    .tk-modal-actions { display:flex; align-items:center; gap:10px; padding-top:16px; margin-top:4px; border-top:1px solid var(--border-color); }
-    .tk-modal-more { display:inline-flex; align-items:center; gap:5px; padding:10px 18px; border-radius:11px; border:1.5px solid var(--border-color); background:transparent; font-size:13px; font-weight:600; color:var(--text-2); cursor:pointer; transition:all .18s; }
-    .tk-modal-more:hover { border-color:var(--primary); color:var(--primary); background:rgba(79,70,229,.04); }
-    .tk-modal-save { flex:1; padding:11px; border-radius:11px; border:none; background:var(--primary); color:#fff; font-size:14px; font-weight:700; cursor:pointer; transition:all .18s; box-shadow:0 2px 8px rgba(79,70,229,.25); letter-spacing:.1px; }
-    .tk-modal-save:active { opacity:.88; transform:scale(.98); box-shadow:none; }
-    .tk-modal-cancel { padding:11px 18px; border-radius:11px; border:1.5px solid var(--border-color); background:transparent; color:var(--text-2); font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
-    .tk-modal-cancel:active { background:var(--surface-2); }
-
-    /* Step dots */
-    .tk-step-dots { display:flex; justify-content:center; gap:5px; margin-bottom:18px; }
-    .tk-step-dot { width:6px; height:6px; border-radius:50%; background:var(--border-color); transition:all .22s; }
-    .tk-step-dot.active { background:var(--primary); width:20px; border-radius:3px; }
+    /* Two-step modal CSS lives in the TK_MODAL_CSS constant and is injected into
+       <head> by ensureTaskModalStyles() so the modal is styled when opened from
+       ANY view (dashboard widgets, command palette, etc.), not just this one. */
 
     /* ══ TASK ROW — active state ══ */
     .task-bento-row.sheet-open { background:var(--primary-soft,rgba(79,70,229,.05)); }
@@ -423,6 +369,133 @@ function renderTasks(filter = '') {
       .tk-header, .tk-capture-wrap, .tk-filter-row, .tk-priority-row { padding-left: 12px; padding-right: 12px; }
       .tk-list { padding-left: 12px; padding-right: 12px; padding-bottom: 80px; }
     }
+
+    /* ════════════════════════════════════════════════════════════════════
+       STRIPE / MERCURY DESKTOP REFINEMENT — scoped to .tk-* (Tasks view only).
+       Appended last so it wins; adds desktop :hover states + quieter chrome.
+       ════════════════════════════════════════════════════════════════════ */
+    .tk-shell { margin:0 auto 0 0; max-width:1340px; }
+
+    /* Header: quiet stat cluster instead of a duplicate page title */
+    .tk-header { padding:4px 16px 14px; align-items:center; }
+    .tk-header-left { gap:16px; }
+    .tk-stat { display:inline-flex; align-items:baseline; gap:6px; }
+    .tk-stat-n { font-size:17px; font-weight:700; color:var(--text-1); letter-spacing:-.02em; font-variant-numeric:tabular-nums lining-nums; line-height:1; }
+    .tk-stat-l { font-size:12.5px; font-weight:500; color:var(--text-3); }
+    .tk-stat-sep { width:1px; height:15px; background:var(--border-color); }
+
+    /* Primary "Add" — refined rounded-rect with a subtle desktop hover lift */
+    .tk-add-btn { border-radius:9px; padding:8px 16px; font-weight:600; box-shadow:var(--shadow-xs); }
+    .tk-add-btn:hover { filter:brightness(.97); transform:translateY(-1px); box-shadow:var(--shadow-md); }
+    .tk-icon-btn { border-radius:8px; }
+
+    /* Capture bar */
+    .tk-capture { border-width:1px; border-radius:12px; box-shadow:var(--shadow-xs); }
+    .tk-capture:focus-within { box-shadow:var(--ring), var(--shadow-xs); }
+
+    /* Category filter pills */
+    .tk-cat-pill { border-width:1px; font-weight:550; }
+    .tk-cat-pill:hover { background:var(--surface-2); border-color:var(--border-strong); color:var(--text-1); }
+    .tk-cat-pill.active { box-shadow:none; }
+    .tk-cat-pill.active:hover { background:var(--primary); color:#fff; filter:brightness(.97); }
+
+    /* Priority + sort row — keep the sort control compact (it was stretching wide) */
+    .tk-prio-group { border-width:1px; border-radius:10px; padding:5px 10px; }
+    .tk-sort-select { flex:0 0 auto !important; width:auto !important; min-width:132px; max-width:184px; }
+    .tk-toggle-done:hover { border-color:var(--border-strong); color:var(--text-1); background:var(--surface-2); }
+
+    /* Section card */
+    .tk-section { border-radius:12px; box-shadow:var(--shadow-card); margin-bottom:14px; }
+    .tk-section-header { padding:13px 16px; }
+    .tk-section-header:hover { background:var(--surface-2); }
+    .tk-section-label { font-size:11.5px; letter-spacing:.06em; color:var(--text-3); }
+    .tk-section-count { font-variant-numeric:tabular-nums; color:var(--text-3); font-weight:600; padding-left:2px; }
+    .tk-section-badge { border-radius:999px; padding:3px 9px; font-weight:600; font-size:10.5px; }
+    .tk-section-badge.urgent { background:rgba(245,158,11,.12); color:#B54708; }
+    .tk-section-badge.overdue { background:rgba(220,38,38,.09); color:#B42318; }
+
+    /* Task rows — desktop hover + refined chips */
+    .task-bento-row { padding:13px 16px; }
+    .task-bento-row:hover { background:var(--surface-2) !important; }
+    .task-bento-row.selected:hover { background:var(--primary-soft) !important; }
+    .tk-date-chip { border-radius:999px; font-weight:600; }
+    .tk-date-chip.overdue { background:rgba(220,38,38,.08); color:#B42318; border-color:rgba(220,38,38,.16); }
+    .task-meta-chip { border-radius:999px; border-color:var(--border-color); background:var(--surface-2); }
+    .task-bento-row:hover .task-meta-chip { background:var(--surface-1); }
+    /* Quieter rows: reveal the chevron on hover */
+    .task-bento-row .lucide-chevron-right { opacity:0 !important; transition:opacity .15s ease; }
+    .task-bento-row:hover .lucide-chevron-right { opacity:.45 !important; }
+
+    /* ════════════════════════════════════════════════════════════════════
+       MASTER-DETAIL WORKSPACE — list (left) + insights/detail pane (right).
+       Desktop only; pane hides < 900px so mobile keeps the bottom sheet.
+       ════════════════════════════════════════════════════════════════════ */
+    .tk-workspace { flex:1; min-height:0; display:flex; gap:20px; align-items:stretch; }
+    .tk-workspace .tk-list { flex:1; }
+    .tk-pane { flex:0 0 372px; overflow-y:auto; overflow-x:hidden; padding:2px 4px 80px 0; display:flex; flex-direction:column; gap:13px; }
+    @media (max-width:899px){ .tk-pane{ display:none; } .tk-workspace{ gap:0; } }
+    .task-bento-row.tk-detail-sel { background:var(--primary-soft) !important; box-shadow:inset 2px 0 0 var(--primary); }
+
+    .tkp-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:16px; }
+    .tkp-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:700; margin:0 0 2px; }
+    .tkp-focus { display:flex; align-items:center; gap:16px; margin-top:12px; }
+    .tkp-ring { position:relative; width:92px; height:92px; flex-shrink:0; }
+    .tkp-pct { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .tkp-pct b { font-size:22px; font-weight:700; color:var(--text-1); letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+    .tkp-pct span { font-size:10px; color:var(--text-3); }
+    .tkp-fmeta div { font-size:13px; color:var(--text-2); margin-bottom:6px; }
+    .tkp-fmeta b { color:var(--text-1); font-variant-numeric:tabular-nums; }
+    .tkp-kpis { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:12px; }
+    .tkp-kpi { border:1px solid var(--border-color); border-radius:10px; padding:11px 12px; transition:all .14s; }
+    .tkp-kpi:hover { border-color:var(--border-strong); box-shadow:var(--shadow-xs); }
+    .tkp-kn { font-size:20px; font-weight:700; letter-spacing:-.02em; color:var(--text-1); font-variant-numeric:tabular-nums; }
+    .tkp-kl { font-size:11.5px; color:var(--text-3); font-weight:550; margin-top:2px; }
+    .tkp-dues { margin-top:4px; }
+    .tkp-due { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border-color); cursor:pointer; }
+    .tkp-due:last-child { border-bottom:none; }
+    .tkp-due:hover .tkp-dt { color:var(--text-1); }
+    .tkp-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .tkp-dt { flex:1; font-size:13px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tkp-dd { font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; }
+    .tkp-bar { display:flex; height:9px; border-radius:6px; overflow:hidden; margin:12px 0 10px; gap:2px; }
+    .tkp-bar i { display:block; border-radius:2px; }
+    .tkp-leg { display:flex; gap:14px; }
+    .tkp-leg span { font-size:12px; color:var(--text-3); display:inline-flex; align-items:center; gap:6px; }
+    .tkp-leg i { width:8px; height:8px; border-radius:50%; }
+    .tkp-leg b { color:var(--text-1); font-variant-numeric:tabular-nums; }
+    .tkp-focuscta { display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+    .tkp-focuscta:hover { border-color:var(--border-strong); box-shadow:var(--shadow-md); }
+    .tkp-go { width:34px; height:34px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+
+    .tkp-dhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .tkp-x { width:30px; height:30px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:8px; color:var(--text-3); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .tkp-x:hover { background:var(--surface-2); color:var(--text-1); }
+    .tkp-title { width:100%; box-sizing:border-box; border:none; border-bottom:2px solid var(--border-color); outline:none; font:inherit; font-size:18px; font-weight:700; color:var(--text-1); padding:2px 0 11px; letter-spacing:-.02em; background:transparent; }
+    .tkp-title:focus { border-color:var(--primary); }
+    .tkp-lbl { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin:15px 0 7px; }
+    .tkp-pseg { display:flex; gap:7px; }
+    .tkp-pseg button { flex:1; font:inherit; font-size:12.5px; font-weight:600; padding:8px 0; border-radius:9px; border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-3); cursor:pointer; transition:all .14s; }
+    .tkp-pseg button:hover { color:var(--text-1); }
+    .tkp-datebox { font-size:13.5px; font-weight:600; }
+    .tkp-resched { display:flex; gap:6px; margin-top:8px; }
+    .tkp-resched button { flex:1; padding:7px 0; border:1px solid var(--border-color); background:var(--surface-1); border-radius:8px; font:inherit; font-size:12px; font-weight:550; color:var(--text-2); cursor:pointer; transition:all .14s; }
+    .tkp-resched button:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-soft); }
+    .tkp-field { width:100%; box-sizing:border-box; border:1px solid var(--border-color); border-radius:9px; padding:9px 11px; font:inherit; font-size:13.5px; color:var(--text-1); background:var(--surface-1); outline:none; resize:none; }
+    .tkp-field:focus { border-color:var(--primary); box-shadow:var(--ring); }
+    .tkp-sub { display:flex; align-items:center; gap:9px; padding:6px 0; }
+    .tkp-sub input { width:16px; height:16px; accent-color:var(--primary); flex-shrink:0; }
+    .tkp-sub span { font-size:13.5px; color:var(--text-2); }
+    .tkp-addsub { display:flex; gap:6px; margin-top:6px; }
+    .tkp-addsub input { flex:1; min-width:0; box-sizing:border-box; border:1px solid var(--border-color); border-radius:8px; padding:8px 10px; font:inherit; font-size:13px; outline:none; background:var(--surface-1); }
+    .tkp-addsub input:focus { border-color:var(--primary); box-shadow:var(--ring); }
+    .tkp-addsub button { padding:0 14px; border:1px solid var(--border-color); background:var(--surface-2); border-radius:8px; font:inherit; font-size:12.5px; font-weight:600; color:var(--text-2); cursor:pointer; flex-shrink:0; }
+    .tkp-addsub button:hover { color:var(--text-1); border-color:var(--border-strong); }
+    .tkp-dfoot { display:flex; gap:8px; margin-top:18px; padding-top:14px; border-top:1px solid var(--border-color); }
+    .tkp-done { flex:1; padding:11px; border:none; border-radius:10px; background:var(--success,#059669); color:#fff; font:inherit; font-weight:600; font-size:13.5px; cursor:pointer; }
+    .tkp-done:hover { filter:brightness(.96); }
+    .tkp-edit, .tkp-del { width:42px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:10px; cursor:pointer; color:var(--text-3); display:flex; align-items:center; justify-content:center; }
+    .tkp-edit:hover { color:var(--text-1); background:var(--surface-2); }
+    .tkp-del:hover { color:#B42318; background:rgba(220,38,38,.06); border-color:rgba(220,38,38,.2); }
   </style>
 
   <div class="tk-shell">
@@ -430,9 +503,8 @@ function renderTasks(filter = '') {
     <!-- Header -->
     <div class="tk-header">
       <div class="tk-header-left">
-        <span class="tk-header-title">Tasks</span>
-        <span class="tk-count-badge">${totalPending}</span>
-        ${pctDone > 0 ? `<span class="tk-pct-badge">${pctDone}%</span>` : ''}
+        <div class="tk-stat"><span class="tk-stat-n">${totalPending}</span><span class="tk-stat-l">open</span></div>
+        ${pctDone > 0 ? `<div class="tk-stat-sep"></div><div class="tk-stat"><span class="tk-stat-n">${pctDone}%</span><span class="tk-stat-l">done</span></div>` : ''}
       </div>
       <div class="tk-header-right">
         <button class="tk-icon-btn ${_itemSelectionMode ? 'active' : ''}" onclick="toggleTaskSelectionMode()" title="Select mode">
@@ -508,7 +580,8 @@ function renderTasks(filter = '') {
       </button>
     </div>
 
-    <!-- Scrollable List -->
+    <!-- Workspace: task list (left) + master-detail pane (right, desktop) -->
+    <div class="tk-workspace">
     <div class="tk-list">
 
       ${recurringToday.length > 0 ? tkSectionHTML('__recurring_today__', 'Recurring Today', recurringToday, true) : ''}
@@ -528,6 +601,8 @@ function renderTasks(filter = '') {
       ${recurringOther.length > 0 ? tkSectionHTML('__recurring_other__', 'Other Recurring', recurringOther, true, false, true) : ''}
 
       <div style="height:80px"></div>
+    </div>
+    <aside class="tk-pane">${tkPaneHTML()}</aside>
     </div>
   </div>`;
 
@@ -608,10 +683,10 @@ function renderBentoTaskRow(t, isRecurring = false) {
   const rowTint = !isDone && t.priority === 'P1' ? 'background:rgba(220,38,38,.025);' : '';
 
   return `
-  <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''} ${isExpanded ? 'sheet-open' : ''}"
+  <div class="task-bento-row ${isDone ? 'done' : ''} ${selected ? 'selected' : ''} ${isExpanded ? 'sheet-open' : ''} ${String(t.id) === String(_detailTaskId) ? 'tk-detail-sel' : ''}"
        id="task-row-${t.id}"
        style="${accentStyle}${rowTint}"
-       onclick="${_itemSelectionMode ? `toggleTaskSelection('${t.id}')` : `toggleTaskDetails('${t.id}')`}">
+       onclick="tkRowOpen('${t.id}')">
 
     <!-- Checkbox -->
     <div class="task-check-ring ${isDone ? 'done' : ''}"
@@ -906,6 +981,186 @@ window.addInlineSubtask = async function (taskId, text) {
   await apiCall('update', 'tasks', { subtasks: t.subtasks }, taskId);
 };
 
+/* ══════════════════════════════════════════════════════
+   MASTER-DETAIL WORKSPACE (desktop) — right pane: insights ⇄ task detail.
+   Mobile (<900px) keeps the existing bottom sheet (toggleTaskDetails).
+══════════════════════════════════════════════════════ */
+let _detailTaskId = null;
+function _tkDesktop() {
+  try { return window.matchMedia('(min-width:900px)').matches; }
+  catch (e) { return (window.innerWidth || 1024) >= 900; }
+}
+
+window.tkRowOpen = function (id) {
+  if (_itemSelectionMode) return toggleTaskSelection(id);
+  if (_tkDesktop()) tkSelectDetail(id);
+  else toggleTaskDetails(id);
+};
+
+window.tkSelectDetail = function (id) {
+  _detailTaskId = (String(id) === String(_detailTaskId)) ? null : String(id);
+  tkRenderPane();
+  document.querySelectorAll('.task-bento-row.tk-detail-sel').forEach(r => r.classList.remove('tk-detail-sel'));
+  if (_detailTaskId) { const row = document.getElementById('task-row-' + _detailTaskId); if (row) row.classList.add('tk-detail-sel'); }
+};
+
+window.tkCloseDetail = function () {
+  _detailTaskId = null;
+  tkRenderPane();
+  document.querySelectorAll('.task-bento-row.tk-detail-sel').forEach(r => r.classList.remove('tk-detail-sel'));
+};
+
+function tkPaneHTML() {
+  const t = _detailTaskId ? state.data.tasks.find(x => String(x.id) === String(_detailTaskId)) : null;
+  return t ? tkDetailPaneHTML(t) : tkInsightsHTML();
+}
+function tkRenderPane() {
+  const pane = document.querySelector('.tk-pane');
+  if (!pane) return;
+  pane.innerHTML = tkPaneHTML();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/* Inline edits — partial + persisted. regroup=true re-renders the list (priority/date/category). */
+window.tkPatch = async function (id, fields, regroup) {
+  const t = state.data.tasks.find(x => String(x.id) === String(id));
+  if (!t) return;
+  Object.assign(t, fields);
+  if (regroup) renderTasks(_getSearchValue());
+  else { _reRenderTaskRow(id); tkRenderPane(); }
+  try { await apiCall('update', 'tasks', fields, id); }
+  catch (e) { if (typeof showToast === 'function') showToast('Error saving'); }
+};
+window.tkDetailPrio  = function (id, p) { tkPatch(id, { priority: p }, true); };
+window.tkDetailCat   = function (id, c) { tkPatch(id, { category: c }, true); };
+window.tkDetailTitle = function (id, v) { v = (v || '').trim(); if (!v) return; tkPatch(id, { title: v }, false); };
+window.tkDetailNotes = function (id, v) { tkPatch(id, { description: v }, false); };
+window.tkReschedule  = function (id, when) {
+  if (when === 'clear') return tkPatch(id, { due_date: '' }, true);
+  const d = new Date();
+  if (when === 'tomorrow') d.setDate(d.getDate() + 1);
+  else if (when === 'week') d.setDate(d.getDate() + 7);
+  tkPatch(id, { due_date: d.toISOString().slice(0, 10) }, true);
+};
+window.tkPaneSubToggle = async function (id, idx, status) { await toggleSubtask(id, idx, status); tkRenderPane(); };
+window.tkPaneAddSub = async function (id) {
+  const inp = document.getElementById('tkPaneSubInput');
+  if (!inp || !inp.value.trim()) return;
+  await addInlineSubtask(id, inp.value.trim());
+  tkRenderPane();
+};
+window.tkPaneComplete = async function (id) {
+  await toggleTaskOptimistic(id);
+  _detailTaskId = null; tkRenderPane();
+  document.querySelectorAll('.task-bento-row.tk-detail-sel').forEach(r => r.classList.remove('tk-detail-sel'));
+};
+window.tkPaneDelete = function (id) { _detailTaskId = null; deleteTask(id); };
+window.tkPaneEditFull = function (id) { openEditTask(id); };
+
+/* ── Insights (default pane) ── */
+function tkInsightsHTML() {
+  const all = (state.data.tasks || []);
+  const pending = all.filter(t => t.status !== 'completed' && (!t.recurrence || t.recurrence === 'none'));
+  const today = new Date().toISOString().slice(0, 10);
+  const doneCount = all.filter(t => t.status === 'completed').length;
+  const totalCount = all.length || 1;
+  const pct = Math.round((doneCount / totalCount) * 100);
+  const overdue = pending.filter(t => t.due_date && t.due_date < today).length;
+  const urgent = pending.filter(t => t.priority === 'P1').length;
+  const dueToday = pending.filter(t => t.due_date === today).length;
+  const p1 = pending.filter(t => t.priority === 'P1').length;
+  const p2 = pending.filter(t => t.priority === 'P2').length;
+  const p3 = pending.filter(t => t.priority === 'P3').length;
+  const dues = pending.filter(t => t.due_date).sort((a, b) => a.due_date < b.due_date ? -1 : 1).slice(0, 5);
+  const C = 2 * Math.PI * 42;
+  const dueRow = t => {
+    const diff = Math.round((new Date(t.due_date) - new Date(today)) / 86400000);
+    const lbl = diff === 0 ? 'Today' : diff < 0 ? `${Math.abs(diff)}d` : `${diff}d`;
+    const col = diff < 0 ? '#B42318' : diff === 0 ? 'var(--primary)' : 'var(--text-3)';
+    const pc = PRIORITY_COLOR[t.priority] || '#94A3B8';
+    return `<div class="tkp-due" onclick="tkRowOpen('${t.id}')"><span class="tkp-dot" style="background:${pc}"></span><span class="tkp-dt">${escapeHtml(t.title || '')}</span><span class="tkp-dd" style="color:${col}">${lbl}</span></div>`;
+  };
+  return `
+  <div class="tkp-card">
+    <div class="tkp-h">Focus</div>
+    <div class="tkp-focus">
+      <div class="tkp-ring">
+        <svg width="92" height="92"><circle cx="46" cy="46" r="42" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
+          <circle cx="46" cy="46" r="42" fill="none" stroke="var(--primary)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}" transform="rotate(-90 46 46)"/></svg>
+        <div class="tkp-pct"><b>${pct}%</b><span>done</span></div>
+      </div>
+      <div class="tkp-fmeta"><div><b>${doneCount}</b> of ${totalCount} complete</div><div><b>${pending.length}</b> still open</div></div>
+    </div>
+  </div>
+  <div class="tkp-card">
+    <div class="tkp-h">Overview</div>
+    <div class="tkp-kpis">
+      <div class="tkp-kpi"><div class="tkp-kn">${pending.length}</div><div class="tkp-kl">Open</div></div>
+      <div class="tkp-kpi"><div class="tkp-kn" style="color:#B42318">${overdue}</div><div class="tkp-kl">Overdue</div></div>
+      <div class="tkp-kpi" onclick="tkSetPrio('P1')" style="cursor:pointer"><div class="tkp-kn" style="color:#DC2626">${urgent}</div><div class="tkp-kl">Urgent ›</div></div>
+      <div class="tkp-kpi"><div class="tkp-kn" style="color:var(--primary)">${dueToday}</div><div class="tkp-kl">Due today</div></div>
+    </div>
+  </div>
+  ${dues.length ? `<div class="tkp-card"><div class="tkp-h">Due soon</div><div class="tkp-dues">${dues.map(dueRow).join('')}</div></div>` : ''}
+  <div class="tkp-card">
+    <div class="tkp-h">By priority</div>
+    <div class="tkp-bar">${p1 ? `<i style="background:#DC2626;flex:${p1}"></i>` : ''}${p2 ? `<i style="background:#D97706;flex:${p2}"></i>` : ''}${p3 ? `<i style="background:#059669;flex:${p3}"></i>` : ''}${(p1 + p2 + p3) === 0 ? `<i style="background:var(--surface-3);flex:1"></i>` : ''}</div>
+    <div class="tkp-leg"><span><i style="background:#DC2626"></i>High <b>${p1}</b></span><span><i style="background:#D97706"></i>Med <b>${p2}</b></span><span><i style="background:#059669"></i>Low <b>${p3}</b></span></div>
+  </div>
+  <div class="tkp-card tkp-focuscta" onclick="if(typeof routeTo==='function')routeTo('pomodoro')">
+    <div><div class="tkp-h" style="margin:0">Focus session</div><div style="font-size:12.5px;color:var(--text-3);margin-top:3px">Start a Pomodoro →</div></div>
+    <span class="tkp-go"><i data-lucide="play" style="width:13px;height:13px"></i></span>
+  </div>`;
+}
+
+/* ── Detail (selected task) ── */
+function tkDetailPaneHTML(t) {
+  const isDone = t.status === 'completed';
+  const subs = parseSubtasks(t);
+  const doneSub = subs.filter(s => s.done).length;
+  const cats = getAllTaskCategories();
+  const today = new Date().toISOString().slice(0, 10);
+  let dateLbl = 'No due date', dCol = 'var(--text-3)';
+  if (t.due_date) {
+    const diff = Math.round((new Date(t.due_date) - new Date(today)) / 86400000);
+    dateLbl = new Date(t.due_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    if (diff < 0) { dateLbl = `${Math.abs(diff)}d overdue · ${dateLbl}`; dCol = '#B42318'; }
+    else if (diff === 0) { dateLbl = `Today · ${dateLbl}`; dCol = 'var(--primary)'; }
+  }
+  return `
+  <div class="tkp-card tkp-detail">
+    <div class="tkp-dhead"><div class="tkp-h" style="margin:0">Task details</div><button class="tkp-x" onclick="tkCloseDetail()"><i data-lucide="x" style="width:14px;height:14px"></i></button></div>
+    <input class="tkp-title" value="${escapeHtml(t.title || '')}" onchange="tkDetailTitle('${t.id}', this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+    <div class="tkp-lbl">Priority</div>
+    <div class="tkp-pseg">
+      ${['P1', 'P2', 'P3'].map(p => `<button class="${t.priority === p ? 'on' : ''}" style="${t.priority === p ? `background:${PRIORITY_COLOR[p]};border-color:${PRIORITY_COLOR[p]};color:#fff` : ''}" onclick="tkDetailPrio('${t.id}','${p}')">${PRIORITY_LABEL[p]}</button>`).join('')}
+    </div>
+    <div class="tkp-lbl">Due date</div>
+    <div class="tkp-datebox" style="color:${dCol}">${dateLbl}</div>
+    <div class="tkp-resched">
+      <button onclick="tkReschedule('${t.id}','today')">Today</button>
+      <button onclick="tkReschedule('${t.id}','tomorrow')">Tomorrow</button>
+      <button onclick="tkReschedule('${t.id}','week')">Next week</button>
+      ${t.due_date ? `<button onclick="tkReschedule('${t.id}','clear')" title="Clear date">✕</button>` : ''}
+    </div>
+    <div class="tkp-lbl">Category</div>
+    <select class="tkp-field" onchange="tkDetailCat('${t.id}', this.value)">
+      <option value="" ${!t.category ? 'selected' : ''}>None</option>
+      ${cats.map(c => `<option ${t.category === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+    </select>
+    <div class="tkp-lbl">Subtasks ${subs.length ? `· ${doneSub}/${subs.length}` : ''}</div>
+    ${subs.map((s, i) => `<label class="tkp-sub"><input type="checkbox" ${s.done ? 'checked' : ''} onchange="tkPaneSubToggle('${t.id}',${i},this.checked)"><span style="${s.done ? 'text-decoration:line-through;color:var(--text-3)' : ''}">${escapeHtml(s.text || '')}</span></label>`).join('')}
+    <div class="tkp-addsub"><input id="tkPaneSubInput" placeholder="Add subtask…" onkeydown="if(event.key==='Enter')tkPaneAddSub('${t.id}')"><button onclick="tkPaneAddSub('${t.id}')">Add</button></div>
+    <div class="tkp-lbl">Notes</div>
+    <textarea class="tkp-field" rows="2" placeholder="Add details…" onchange="tkDetailNotes('${t.id}', this.value)">${escapeHtml(t.description || '')}</textarea>
+    <div class="tkp-dfoot">
+      <button class="tkp-done" onclick="tkPaneComplete('${t.id}')">${isDone ? '✓ Completed' : '✓ Mark complete'}</button>
+      <button class="tkp-edit" onclick="tkPaneEditFull('${t.id}')" title="Full editor"><i data-lucide="settings-2" style="width:15px;height:15px"></i></button>
+      <button class="tkp-del" onclick="tkPaneDelete('${t.id}')" title="Delete"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
+    </div>
+  </div>`;
+}
+
 /* ── Selection & Batch Delete ── */
 window.toggleTaskSelectionMode = function () {
   _itemSelectionMode = !_itemSelectionMode;
@@ -1007,6 +1262,78 @@ window.tkPickPriority = function(p) {
   });
 };
 
+/* ── Task modal styles — single source of truth ──
+   The two-step task modal (openTaskModal / openEditTask) can be opened from views
+   other than Tasks (e.g. the dashboard's Tasks widget). Those views don't render the
+   Tasks <style> block, so the modal would appear unstyled (panels stacked vertically).
+   ensureTaskModalStyles() injects these rules into <head> on demand, idempotently. */
+const TK_MODAL_CSS = `
+    .tk-modal-wrap { position:relative; overflow:hidden; }
+    .tk-modal-slider { display:flex; transition:transform .32s cubic-bezier(.4,0,.2,1); width:200%; }
+    .tk-modal-panel { width:50%; min-width:50%; display:flex; flex-direction:column; gap:0; }
+    .tk-modal-header { display:flex; align-items:center; gap:10px; margin-bottom:20px; }
+    .tk-modal-title { flex:1; font-size:18px; font-weight:800; color:var(--text-1); letter-spacing:-.4px; }
+    .tk-modal-close { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border:none; background:var(--surface-2); border-radius:50%; cursor:pointer; color:var(--text-3); font-size:17px; transition:all .15s; }
+    .tk-modal-close:active { background:var(--surface-3); }
+    .tk-back-pill { display:inline-flex; align-items:center; gap:5px; padding:6px 14px; border-radius:22px; border:1.5px solid var(--border-color); background:var(--surface-2); font-size:12.5px; font-weight:600; color:var(--text-2); cursor:pointer; transition:all .15s; }
+    .tk-back-pill:active { background:var(--surface-3); }
+
+    /* Title input */
+    .tk-title-input { width:100%; border:none; outline:none; font-size:19px; font-weight:700; color:var(--text-1); background:transparent; padding:4px 0 14px; border-bottom:2px solid var(--border-color); margin-bottom:20px; letter-spacing:-.3px; transition:border-color .2s; box-sizing:border-box; }
+    .tk-title-input:focus { border-bottom-color:var(--primary); }
+    .tk-title-input::placeholder { color:var(--text-3); font-weight:400; font-size:17px; }
+
+    /* Priority picker */
+    .tk-prio-picker { display:flex; gap:7px; }
+    .tk-prio-pick { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 8px; border-radius:12px; border:1.5px solid var(--border-color); background:var(--surface-2); font-size:12.5px; font-weight:600; color:var(--text-3); cursor:pointer; transition:all .18s; }
+    .tk-prio-pick:active { transform:scale(.97); }
+    .tk-prio-pick.selected { border-color:var(--pick-color,var(--primary)); background:color-mix(in srgb,var(--pick-color,var(--primary)) 10%,transparent); color:var(--pick-color,var(--primary)); font-weight:700; }
+    .tk-prio-pick .pk-dot { width:9px; height:9px; border-radius:50%; background:var(--pick-color); flex-shrink:0; }
+
+    /* Field groups */
+    .tk-field-section { margin-bottom:14px; }
+    .tk-field-label { font-size:10.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.7px; margin-bottom:7px; display:block; }
+    .tk-field-row { display:flex; gap:10px; margin-bottom:14px; }
+    .tk-field-row .tk-field-section { flex:1; margin-bottom:0; }
+    .tk-input { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; transition:border-color .2s,box-shadow .2s; }
+    .tk-input:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
+    .tk-select { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; cursor:pointer; transition:border-color .2s; }
+    .tk-select:focus { border-color:var(--primary); }
+    .tk-textarea { width:100%; box-sizing:border-box; background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:11px; padding:10px 13px; font-size:13.5px; color:var(--text-1); outline:none; resize:none; line-height:1.55; transition:border-color .2s,box-shadow .2s; }
+    .tk-textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
+
+    /* Step 2 sections */
+    .tk-modal-section { background:var(--surface-2); border:1.5px solid var(--border-color); border-radius:13px; padding:13px; margin-bottom:12px; }
+    .tk-modal-section-title { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--primary); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .tk-modal-subtask-add { width:100%; padding:8px; border:1.5px dashed var(--border-color); border-radius:9px; background:transparent; font-size:12.5px; color:var(--text-3); cursor:pointer; text-align:center; margin-top:8px; transition:all .15s; }
+    .tk-modal-subtask-add:hover { border-color:var(--primary); color:var(--primary); background:rgba(79,70,229,.04); }
+    .tk-day-picker { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+    .tk-day-label { font-size:12px; display:flex; align-items:center; gap:4px; background:var(--surface-1); padding:5px 10px; border-radius:9px; cursor:pointer; border:1.5px solid var(--border-color); transition:all .15s; }
+    .tk-day-label input { display:none; }
+    .tk-day-label.checked { background:rgba(79,70,229,.08); border-color:var(--primary); color:var(--primary); font-weight:700; }
+
+    /* Modal Actions */
+    .tk-modal-actions { display:flex; align-items:center; gap:10px; padding-top:16px; margin-top:4px; border-top:1px solid var(--border-color); }
+    .tk-modal-more { display:inline-flex; align-items:center; gap:5px; padding:10px 18px; border-radius:11px; border:1.5px solid var(--border-color); background:transparent; font-size:13px; font-weight:600; color:var(--text-2); cursor:pointer; transition:all .18s; }
+    .tk-modal-more:hover { border-color:var(--primary); color:var(--primary); background:rgba(79,70,229,.04); }
+    .tk-modal-save { flex:1; padding:11px; border-radius:11px; border:none; background:var(--primary); color:#fff; font-size:14px; font-weight:700; cursor:pointer; transition:all .18s; box-shadow:0 2px 8px rgba(79,70,229,.25); letter-spacing:.1px; }
+    .tk-modal-save:active { opacity:.88; transform:scale(.98); box-shadow:none; }
+    .tk-modal-cancel { padding:11px 18px; border-radius:11px; border:1.5px solid var(--border-color); background:transparent; color:var(--text-2); font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; }
+    .tk-modal-cancel:active { background:var(--surface-2); }
+
+    /* Step dots */
+    .tk-step-dots { display:flex; justify-content:center; gap:5px; margin-bottom:18px; }
+    .tk-step-dot { width:6px; height:6px; border-radius:50%; background:var(--border-color); transition:all .22s; }
+    .tk-step-dot.active { background:var(--primary); width:20px; border-radius:3px; }
+`;
+function ensureTaskModalStyles() {
+  if (document.getElementById('tk-modal-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'tk-modal-styles';
+  s.textContent = TK_MODAL_CSS;
+  (document.head || document.documentElement).appendChild(s);
+}
+
 window.tkModalGoStep2 = function() {
   const slider = document.getElementById('tkModalSlider');
   if (slider) { slider.style.transform = 'translateX(-50%)'; }
@@ -1021,6 +1348,7 @@ window.tkModalGoStep1 = function() {
 };
 
 window.openTaskModal = function () {
+  ensureTaskModalStyles();
   _modalPriority = 'P2';
   const modal = document.getElementById('universalModal');
   modal.classList.remove('bottom-sheet');
@@ -1222,6 +1550,7 @@ window.taskRecurrenceChanged = function () {
    TWO-STEP MODAL — EDIT TASK
 ══════════════════════════════════════════════════════ */
 window.openEditTask = function (id) {
+  ensureTaskModalStyles();
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (!t) return;
   _modalPriority = t.priority || 'P2';

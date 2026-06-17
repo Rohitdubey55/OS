@@ -12,7 +12,7 @@ const COMMANDS = [
 
     { id: 'act-new-task', title: 'Create New Task', icon: 'add', action: () => window.openTaskModal(), keywords: 'new task add' },
     { id: 'act-new-habit', title: 'Create New Habit', icon: 'plus-circle', action: () => window.openHabitModal(), keywords: 'new habit add' },
-    { id: 'act-new-expense', title: 'Log Expense', icon: 'dollar-sign', action: () => window.openFinanceAction(), keywords: 'new expense cost money' },
+    { id: 'act-new-expense', title: 'Log Expense', icon: 'dollar-sign', action: () => window.openFinanceAction('expense'), keywords: 'new expense cost money' },
     { id: 'act-new-diary', title: 'Write in Diary', icon: 'write', action: () => window.openDiaryModal(), keywords: 'new diary entry write' },
 
     { id: 'sys-reload', title: 'Reload App', icon: 'refresh', action: () => window.location.reload(), keywords: 'reload refresh' },

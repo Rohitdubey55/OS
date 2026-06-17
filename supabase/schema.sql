@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS public.expenses (
     category TEXT,
     description TEXT,
     type TEXT,
+    payment_mode TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );

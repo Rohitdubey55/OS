@@ -583,7 +583,13 @@ function renderSettings() {
           <div id="habitRoutineList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">
             ${(() => {
     const raw = settings.habit_routines || 'Morning,Work,Evening';
-    const routines = raw.split(',').map(r => r.trim()).filter(Boolean);
+    const configured = raw.split(',').map(r => r.trim()).filter(Boolean);
+    // Surface routines that habits actually use but aren't in the saved list (e.g. "Noon"),
+    // ordered chronologically so the list reads Morning → Night.
+    const usedExtra = [...new Set((state.data.habits || []).map(h => (h.routine || '').trim()).filter(Boolean))]
+      .filter(r => !configured.some(c => c.toLowerCase() === r.toLowerCase()))
+      .sort((a, b) => (window.routineRank ? window.routineRank(a) - window.routineRank(b) : 0));
+    const routines = [...configured, ...usedExtra];
     return routines.map(r => `
                 <div class="routine-item" data-id="${r}" style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--surface-2); border-radius:8px; border:1px solid var(--border-color);">
                   <span class="routine-name" style="font-weight:500; font-size:13px;">${r}</span>

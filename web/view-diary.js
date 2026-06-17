@@ -33,6 +33,67 @@ function getDailyPrompt() {
   return prompts[new Date().getDate() % prompts.length];
 }
 
+/* Strip markdown + HTML for clean previews (entries are stored as markdown,
+   so raw "###", "**", "-" etc. must not leak into the list). */
+function _drStripMd(s) {
+  return String(s || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s{0,3}[-*+]\s+/gm, '')
+    .replace(/^\s{0,3}\d+\.\s+/gm, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/~~(.*?)~~/g, '$2')
+    .replace(/^\s*[-*_]{3,}\s*$/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/* Read a numeric mood from an entry — the DB column is `mood`; older code/exports
+   used `mood_score`. Returns null when no mood is set (so we never fake a 5/10). */
+function _drMood(e) {
+  const v = (e && e.mood_score != null && e.mood_score !== '') ? e.mood_score : (e ? e.mood : null);
+  const n = Number(v);
+  return (v == null || v === '' || isNaN(n)) ? null : n;
+}
+
+/* Desktop insights rail beside the entry list (mood trend, total written, top tags). */
+function renderDiaryRail(entries) {
+  const all = entries || [];
+  const totalWords = all.reduce((s, e) => s + _drStripMd(e.content).split(/\s+/).filter(Boolean).length, 0);
+  const byDateAsc = [...all].filter(e => e.date).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const recent = byDateAsc.slice(-14);
+  const pairs = recent.map(e => ({ e, m: _drMood(e) }));
+  const moodNums = pairs.map(p => p.m).filter(m => m != null);
+  const avg = moodNums.length ? (moodNums.reduce((a, b) => a + b, 0) / moodNums.length) : null;
+  const mc = m => m >= 8 ? '#10B981' : m >= 6 ? '#84CC16' : m >= 4 ? '#F59E0B' : m >= 2 ? '#F97316' : '#EF4444';
+  const bars = pairs.map(({ e, m }) => `<div class="drr-bar" style="height:${m != null ? (12 + (m / 10) * 42) : 6}px;background:${m != null ? mc(m) : 'var(--surface-3)'}" title="${e.date}: ${m != null ? m : '—'}/10"></div>`).join('');
+  const tagCount = {};
+  all.forEach(e => String(e.tags || '').split(/[,\s]+/).map(t => t.replace(/^#+/, '').trim()).filter(Boolean).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  return `
+  <div class="drr-card">
+    <div class="drr-h">Mood trend</div>
+    ${moodNums.length >= 2
+      ? `<div class="drr-mood">${bars}</div><div class="drr-mavg"><b>${avg.toFixed(1)}</b><span>avg · last ${moodNums.length}</span></div>`
+      : `<div class="drr-empty">Set a mood when you write to see your trend.</div>`}
+  </div>
+  <div class="drr-card">
+    <div class="drr-h">Total written</div>
+    <div class="drr-month"><b>${totalWords.toLocaleString()}</b><span>words · ${all.length} ${all.length === 1 ? 'entry' : 'entries'}</span></div>
+  </div>
+  <div class="drr-card">
+    <div class="drr-h">Top tags</div>
+    ${topTags.length
+      ? `<div class="drr-tags">${topTags.map(([t, n]) => `<span class="drr-tag" onclick="handleDiarySearch('${String(t).replace(/'/g, "\\'")}')">#${t}<b>${n}</b></span>`).join('')}</div>`
+      : `<div class="drr-empty">Add #tags to your entries.</div>`}
+  </div>`;
+}
+
 function renderDiary() {
   const entries = state.data.diary || [];
 
@@ -40,7 +101,7 @@ function renderDiary() {
   const sorted = [...filteredEntries].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   // Calculate Stats
-  const validMoods = sorted.filter(e => e.mood_score).map(e => Number(e.mood_score));
+  const validMoods = sorted.map(_drMood).filter(v => v != null);
   const avgMood = validMoods.length ? (validMoods.reduce((a, b) => a + b, 0) / validMoods.length).toFixed(1) : '-';
   const streak = calculateStreak(entries);
   const totalEntries = entries.length;
@@ -323,22 +384,61 @@ function renderDiary() {
   .dr-templates-grid { grid-template-columns:1fr; }
   .dr-entry-preview { font-size:14px; -webkit-line-clamp:2; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   STRIPE / MERCURY DESKTOP REFINEMENT — scoped to .dr-pro (Diary only).
+   ════════════════════════════════════════════════════════════════════ */
+.dr-pro { max-width:1240px; margin:0 auto; }
+.dr-pro .dr-greeting { display:none; }                 /* "Diary" page title already labels the view */
+.dr-pro .dr-header { justify-content:flex-end; padding:8px 20px 10px; }
+.dr-pro .dr-stats-strip { padding:12px 18px; margin:0 20px 10px; }
+.dr-pro .dr-overview-row { padding:0 20px 10px; }
+.dr-pro .dr-overview-card { padding:10px 14px; }
+.dr-pro .dr-week-dots { margin-bottom:6px; }
+.dr-pro .dr-write-btn { border-radius:9px; box-shadow:var(--shadow-xs); }
+.dr-pro .dr-write-btn:hover { filter:brightness(.97); transform:translateY(-1px); box-shadow:var(--shadow-md); }
+.dr-pro .dr-stats-strip { border-radius:14px; box-shadow:var(--shadow-card); }
+.dr-pro .dr-overview-card { border-radius:14px; box-shadow:var(--shadow-card); }
+.dr-pro .dr-entry-card { border-left-width:3px; border-radius:12px; box-shadow:var(--shadow-card); transition:box-shadow .16s ease, transform .16s ease, border-color .16s ease; }
+.dr-pro .dr-entry-card:hover { box-shadow:var(--shadow-md); transform:translateY(-1px); }
+.dr-pro .dr-entry-card:active { transform:translateY(0); }
+
+/* Two-pane List: entries (left) + insights rail (right) */
+/* Independent scroll: entries scroll on the left, the insights rail scrolls on the
+   right — so the rail's lower cards (e.g. Top Tags) are always reachable. */
+.dr-pro .dr-body-split { display:flex; gap:20px; align-items:stretch; overflow:hidden; }
+.dr-pro .dr-list-main { flex:1; min-width:0; min-height:0; overflow-y:auto; padding-right:6px; padding-bottom:20px; }
+.dr-pro .dr-rail { flex:0 0 300px; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding-bottom:20px; }
+.dr-pro .drr-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:15px; }
+.dr-pro .drr-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:700; margin:0 0 12px; }
+.dr-pro .drr-mood { display:flex; align-items:flex-end; gap:4px; height:54px; }
+.dr-pro .drr-bar { flex:1; border-radius:3px 3px 0 0; min-height:4px; }
+.dr-pro .drr-mavg { display:flex; align-items:baseline; gap:6px; margin-top:10px; }
+.dr-pro .drr-mavg b { font-size:20px; font-weight:700; color:var(--text-1); font-variant-numeric:tabular-nums; }
+.dr-pro .drr-mavg span { font-size:12px; color:var(--text-3); }
+.dr-pro .drr-month { display:flex; align-items:baseline; gap:8px; }
+.dr-pro .drr-month b { font-size:26px; font-weight:700; color:var(--text-1); letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.dr-pro .drr-month span { font-size:12.5px; color:var(--text-3); }
+.dr-pro .drr-tags { display:flex; flex-wrap:wrap; gap:6px; }
+.dr-pro .drr-tag { font-size:12px; padding:4px 10px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border-color); color:var(--text-2); cursor:pointer; }
+.dr-pro .drr-tag:hover { border-color:var(--primary); color:var(--primary); background:var(--primary-soft); }
+.dr-pro .drr-tag b { color:var(--text-3); font-weight:600; margin-left:3px; }
+.dr-pro .drr-empty { font-size:12.5px; color:var(--text-3); }
+
+/* Tablet/phone: single column, no rail (mobile layout untouched) */
+@media (max-width:1023px){
+  .dr-pro { max-width:none; }
+  .dr-pro .dr-body-split { display:block; }
+  .dr-pro .dr-rail { display:none; }
+}
 </style>`;
 
   document.getElementById('main').innerHTML = `
     ${DIARY_CSS}
-    <div class="dr-shell">
+    <div class="dr-shell dr-pro">
 
-      <!-- Header -->
-      <div class="dr-header">
-        <div>
-          <h1 class="dr-greeting">My Journal</h1>
-        </div>
-        <button class="dr-write-btn" onclick="openDiaryModal()">
-          <i data-lucide="pen" style="width:14px;height:14px"></i>
-          New Entry
-        </button>
-      </div>
+      <!-- Header action ("New Entry") lives in the app header bar (#pageActions),
+           inline with the "Diary" page title — see main.js view-switch logic. -->
 
       <!-- Stats Strip -->
       <div class="dr-stats-strip">
@@ -390,8 +490,8 @@ function renderDiary() {
       </div>
 
       <!-- Scrollable Body -->
-      <div class="dr-body">
-        ${currentDiaryView === 'list' ? renderListView(sorted) : ''}
+      <div class="dr-body ${currentDiaryView === 'list' ? 'dr-body-split' : ''}">
+        ${currentDiaryView === 'list' ? `<div class="dr-list-main">${renderListView(sorted)}</div><aside class="dr-rail">${renderDiaryRail(entries)}</aside>` : ''}
         ${currentDiaryView === 'calendar' ? renderCalendarView(entries) : ''}
         ${currentDiaryView === 'yearly' ? renderYearlyView(entries) : ''}
         ${currentDiaryView === 'insights' ? renderInsightsView(entries) : ''}
@@ -491,8 +591,9 @@ function getMoodStats(entries) {
 
 // Render entry card (new dr- classes)
 function renderEntryCard(entry) {
-  const score = Number(entry.mood_score || 5);
-  const wordCount = entry.content ? entry.content.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length : 0;
+  const moodVal = _drMood(entry);
+  const score = moodVal != null ? moodVal : 5;
+  const wordCount = entry.content ? _drStripMd(entry.content).split(/\s+/).filter(Boolean).length : 0;
   const dateStr = getRelativeDate(entry.date);
 
   let moodColor = '#F59E0B';
@@ -506,10 +607,10 @@ function renderEntryCard(entry) {
   const hasTags = tags.length > 0;
 
   return `
-    <div class="dr-entry-card" style="border-left-color:${moodColor}" onclick="openEditDiary('${entry.id}')">
+    <div class="dr-entry-card" style="border-left-color:${moodVal != null ? moodColor : 'var(--border-color)'}" onclick="openEditDiary('${entry.id}')">
       <div class="dr-entry-main">
         <div class="dr-entry-date">${dateStr}</div>
-        <p class="dr-entry-preview">${(entry.content || '').replace(/<[^>]*>/g, '').substring(0, 200)}</p>
+        <p class="dr-entry-preview">${_drStripMd(entry.content).substring(0, 200)}</p>
       </div>
       ${hasTags ? `
         <div class="dr-entry-tags-row">
@@ -519,7 +620,7 @@ function renderEntryCard(entry) {
       ` : ''}
       <div class="dr-entry-foot">
         <div class="dr-entry-foot-left">
-          <span class="dr-mood-pill" style="background:${moodBg};color:${moodColor}">${getMoodEmoji(score)} ${score}/10</span>
+          ${moodVal != null ? `<span class="dr-mood-pill" style="background:${moodBg};color:${moodColor}">${getMoodEmoji(score)} ${score}/10</span>` : ''}
           <span class="dr-entry-wc">${wordCount} words</span>
         </div>
         <div class="dr-entry-actions">
@@ -616,7 +717,7 @@ function renderTimelineView(sorted) {
     const moodBg = getMoodBg(entry.mood_score);
     const score = Number(entry.mood_score || 5);
     const dateStr = entry.date ? new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
-    const preview = (entry.content || '').substring(0, 200);
+    const preview = _drStripMd(entry.content).substring(0, 200);
     const tags = entry.tags ? entry.tags.split(/[,\s]+/).filter(t => t).slice(0, 3) : [];
 
     return `
@@ -1405,7 +1506,7 @@ window.openEditDiary = function (id) {
 
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  const score = Number(e.mood_score || 5);
+  const score = _drMood(e) != null ? _drMood(e) : 5;
 
   box.innerHTML = `
     <div class="dr-modal">
