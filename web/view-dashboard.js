@@ -397,6 +397,7 @@ const LUMIA_TILE_CATALOG = [
     { id: 'visual-budgetBar',         kind: 'visual', icon: 'wallet',   label: 'Budget Bar',        category: 'Visuals', minW: 2, minH: 1 },
     { id: 'visual-categoryBreakdown', kind: 'visual', icon: 'insights', label: 'Spend Breakdown',   category: 'Visuals', minW: 2, minH: 2 },
     { id: 'visual-moodLast7',         kind: 'visual', icon: 'entries',  label: 'Mood Last 7 Days',  category: 'Visuals', minW: 2, minH: 1 },
+    { id: 'visual-diaryStreak',       kind: 'visual', icon: 'streak',   label: 'Diary Streak',      category: 'Visuals', minW: 1, minH: 1, route: 'diary' },
     { id: 'visual-topStreaks',        kind: 'visual', icon: 'streak',   label: 'Top Habit Streaks', category: 'Visuals', minW: 2, minH: 2 }
 ];
 
@@ -456,6 +457,27 @@ const _shortDate = (iso) => {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 const _emptyState = (msg) => `<div class="lw-empty">${msg}</div>`;
+
+// Mood helpers for diary widgets. DB stores a numeric mood 1–10 (older data used mood_score).
+function _dashMoodNum(e) {
+    if (!e) return null;
+    const m = (e.mood_score != null && e.mood_score !== '') ? e.mood_score : e.mood;
+    const n = Number(m);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+function _dashMoodColor(m) {
+    if (m == null) return null;
+    const stops = ['#EF4444','#F65A2E','#F97316','#F59E0B','#EAB308','#C7CB1E','#9CCA22','#6CC42B','#37B34A','#15A34A'];
+    return stops[Math.max(0, Math.min(9, Math.round(m) - 1))];
+}
+function _dashMoodEmoji(m) {
+    if (m == null) return '·';
+    if (m >= 8.5) return '😄';
+    if (m >= 6.5) return '🙂';
+    if (m >= 4.5) return '😐';
+    if (m >= 2.5) return '😟';
+    return '😢';
+}
 
 const WIDGET_RENDERERS = {
     // ─────── QUICK-ADD (kind: 'add') ───────
@@ -738,16 +760,15 @@ const WIDGET_RENDERERS = {
     },
 
     'visual-moodLast7': (t, c) => {
-        const moodValues = { happy: 5, good: 4, neutral: 3, sad: 2, angry: 1, anxious: 2 };
-        const moodEmoji = { happy: '😄', good: '🙂', neutral: '😐', sad: '😞', angry: '😠', anxious: '😟' };
         const days = [];
         for (let i = 6; i >= 0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i);
             const iso = d.toISOString().slice(0, 10);
             const entry = (state.data.diary || []).find(x => (x.date || '').startsWith(iso));
-            days.push({ iso, mood: entry?.mood, val: entry?.mood ? moodValues[entry.mood] : 0, label: d.toLocaleDateString('en-US', { weekday: 'short' }) });
+            const m = _dashMoodNum(entry);
+            days.push({ iso, mood: m, val: m || 0, label: d.toLocaleDateString('en-US', { weekday: 'short' }) });
         }
-        const max = Math.max(...days.map(d => d.val), 5);
+        const max = 10;
         return `
             <div class="lw-card">
                 <div class="lw-card__head">
@@ -758,13 +779,65 @@ const WIDGET_RENDERERS = {
                 </div>
                 <div class="lw-moodchart">
                     ${days.map(d => `
-                        <button class="lw-moodbar" onclick="event.stopPropagation();routeTo('diary')" title="${d.mood || 'No entry'}">
-                            <div class="lw-moodbar__col"><div class="lw-moodbar__fill" style="height:${(d.val / max) * 100}%"></div></div>
-                            <div class="lw-moodbar__emoji">${moodEmoji[d.mood] || '·'}</div>
+                        <button class="lw-moodbar" onclick="event.stopPropagation();routeTo('diary')" title="${d.mood != null ? d.mood + '/10' : 'No entry'}">
+                            <div class="lw-moodbar__col"><div class="lw-moodbar__fill" style="height:${Math.max(6, (d.val / max) * 100)}%;background:${_dashMoodColor(d.mood) || 'var(--saas-border,#e2e8f0)'}"></div></div>
+                            <div class="lw-moodbar__emoji">${_dashMoodEmoji(d.mood)}</div>
                             <div class="lw-moodbar__day">${d.label[0]}</div>
                         </button>
                     `).join('')}
                 </div>
+            </div>`;
+    },
+
+    'visual-diaryStreak': (t, c) => {
+        const diary = state.data.diary || [];
+        const hasEntry = (iso) => diary.some(x => (x.date || '').slice(0, 10) === iso);
+        const entryFor = (iso) => diary.find(x => (x.date || '').slice(0, 10) === iso);
+
+        // last 7 days (oldest → newest)
+        const days = [];
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+            const iso = d.toISOString().slice(0, 10);
+            const e = entryFor(iso);
+            days.push({ iso, written: !!e, mood: _dashMoodNum(e), label: d.toLocaleDateString('en-US', { weekday: 'short' })[0] });
+        }
+
+        // current streak: consecutive days with an entry ending today
+        // (today not-yet-written does not break the streak).
+        let streak = 0; const cur = new Date(); cur.setHours(0, 0, 0, 0);
+        for (let i = 0; i < 366; i++) {
+            const iso = cur.toISOString().slice(0, 10);
+            if (hasEntry(iso)) { streak++; cur.setDate(cur.getDate() - 1); }
+            else if (i === 0) { cur.setDate(cur.getDate() - 1); }
+            else break;
+        }
+
+        const wrote = days.filter(d => d.written).length;
+        const moods = days.filter(d => d.mood != null).map(d => d.mood);
+        const avg = moods.length ? (moods.reduce((a, b) => a + b, 0) / moods.length) : null;
+
+        const cells = days.map(d => {
+            const bg = d.written ? (_dashMoodColor(d.mood) || 'var(--saas-accent, var(--primary))') : 'transparent';
+            return `
+            <button class="ds-cell ${d.written ? 'is-on' : ''}" title="${d.iso}${d.mood != null ? ' · mood ' + d.mood + '/10' : (d.written ? ' · written' : ' · no entry')}"
+                onclick="event.stopPropagation();openDiaryModal('${d.iso}')">
+                <span class="ds-dot" style="background:${bg}">${d.written && d.mood != null ? d.mood : ''}</span>
+                <span class="ds-day">${d.label}</span>
+            </button>`;
+        }).join('');
+
+        return `
+            <div class="lw-card ds-card">
+                <div class="lw-card__head">
+                    <div>
+                        <div class="lw-card__label">${c.label}</div>
+                        <div class="lw-card__title"><span class="ds-flame">🔥</span> ${streak} <span class="lw-card__title-sub">day${streak === 1 ? '' : 's'}</span></div>
+                    </div>
+                    ${avg != null ? `<div class="ds-avg" title="Average mood, last 7 days">${_dashMoodEmoji(avg)} <b>${avg.toFixed(1)}</b></div>` : ''}
+                </div>
+                <div class="ds-strip">${cells}</div>
+                <div class="lw-card__foot ds-foot">${wrote}/7 days written</div>
             </div>`;
     },
 

@@ -3639,6 +3639,65 @@ body.tiles-editing .main-header-bar .page-action-btn#lumiaEditBtn:hover {
     color: var(--saas-text-muted, #5B6470);
 }
 
+/* ─── Diary Streak widget ─── */
+.ds-card .lw-card__head { margin-bottom: 8px; }
+.ds-flame { font-size: 0.9em; }
+.ds-avg { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--saas-text-muted, #5B6470); white-space: nowrap; }
+.ds-avg b { color: var(--saas-text, #0F172A); font-weight: 800; font-variant-numeric: tabular-nums; }
+.ds-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; flex: 1; align-content: center; min-height: 0; }
+.ds-cell { background: transparent; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 0; min-width: 0; }
+.ds-dot {
+    width: 100%; aspect-ratio: 1 / 1; max-width: 36px; border-radius: 8px;
+    border: 1.5px dashed var(--saas-border, #e2e8f0);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; color: #FFFFFF;
+    font-variant-numeric: tabular-nums;
+    transition: transform .12s var(--ease);
+}
+.ds-cell.is-on .ds-dot { border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+.ds-cell:hover .ds-dot { transform: translateY(-2px); }
+.ds-day { font-size: 10px; font-weight: 700; color: var(--saas-text-muted, #5B6470); }
+.ds-foot { margin-top: 8px; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TILE CONTENT FIT (desktop fixed grid only) — scale KPI / compact / streak
+   content to the tile so text is never clipped at 1x1, 1x2, 2x2, 2x3, 2x4.
+   Mobile (.lumia-grid, not --fixed) is untouched.
+   ═══════════════════════════════════════════════════════════════════════ */
+.lumia-grid--fixed .lumia-tile__body { container-type: size; }
+
+/* KPI cards: fill the tile instead of the standalone-row's fixed 130px/220px. */
+.lumia-grid--fixed .lumia-tile__body > .kpi-card,
+.lumia-grid--fixed .lumia-tile__body .kpi-card.kpi-tile {
+    flex: 1 1 auto !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    padding: 10px 13px !important;
+    gap: 4px !important;
+    justify-content: center !important;
+}
+.lumia-grid--fixed .lumia-tile__body .kpi-card .kpi-icon { width: 34px !important; height: 34px !important; }
+.lumia-grid--fixed .lumia-tile__body .kpi-card .kpi-value { font-size: clamp(15px, 18cqh, 30px) !important; }
+.lumia-grid--fixed .lumia-tile__body .kpi-card .kpi-label { font-size: clamp(9px, 4.5cqh, 11px) !important; }
+.lumia-grid--fixed .lumia-tile__body .lumia-compact__value { font-size: clamp(15px, 16cqh, 28px) !important; }
+
+/* Short tiles (≈1 row): drop the icon + sub line so the number fits cleanly. */
+@container (max-height: 118px) {
+    .lumia-grid--fixed .lumia-tile__body .kpi-card .kpi-icon,
+    .lumia-grid--fixed .lumia-tile__body .kpi-card .kpi-sub { display: none !important; }
+    .lumia-grid--fixed .lumia-tile__body .kpi-card { gap: 2px !important; padding: 8px 11px !important; }
+    .lumia-grid--fixed .lumia-tile__body .lumia-compact__icon { display: none !important; }
+    .lumia-grid--fixed .lumia-tile__body .ds-day,
+    .lumia-grid--fixed .lumia-tile__body .ds-foot { display: none !important; }
+}
+/* Narrow tiles (≈1 col): cap value font so wide values (₹21,252) fit the width. */
+@container (max-width: 178px) {
+    .lumia-grid--fixed .lumia-tile__body .kpi-card .kpi-value { font-size: clamp(13px, 13cqw, 19px) !important; }
+    .lumia-grid--fixed .lumia-tile__body .ds-dot { font-size: 0 !important; }
+    .lumia-grid--fixed .lumia-tile__body .ds-foot { display: none !important; }
+}
+
 /* Tile-content-fit for new widgets — when colored, drop their card chrome */
 .lumia-tile--colored .lumia-tile__body .lw-card,
 .lumia-tile--colored .lumia-tile__body .lw-addtile {
