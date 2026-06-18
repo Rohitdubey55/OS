@@ -1820,8 +1820,8 @@ async function _vzStoryRender() {
         </div>
         <div class="vz-story-bar"><i style="width:${prog}%"></i></div>
         <div class="vz-story-prog-ctl">
-          <button onclick="_vzStoryBump('${g.id}',-10)" title="−10%">−</button>
-          <button onclick="_vzStoryBump('${g.id}',10)" title="+10%">+</button>
+          <button onclick="_vzStoryBump('${g.id}',-1)" title="−1%">−</button>
+          <button onclick="_vzStoryBump('${g.id}',1)" title="+1%">+</button>
         </div>
         ${g.description ? `<div class="vz-story-lbl">Vision</div><div class="vz-story-text">${escapeHtml(g.description)}</div>` : ''}
         ${g.notes ? `<div class="vz-story-lbl">Notes</div><div class="vz-story-text">${escapeHtml(g.notes)}</div>` : ''}
@@ -2073,9 +2073,9 @@ function renderVisionCard(g, isAchieved = false) {
         </div>
         ${!isAchieved ? `
         <div class="vz-quick" onclick="event.stopPropagation()">
-          <button class="vz-quick__b" title="Decrease 10%" onclick="event.stopPropagation();vzBump('${g.id}',-10)">−</button>
+          <button class="vz-quick__b" title="Decrease 1%" onclick="event.stopPropagation();vzBump('${g.id}',-1)">−</button>
           <span class="vz-quick__p" id="vzqp-${g.id}">${parseInt(g.progress, 10) || 0}%</span>
-          <button class="vz-quick__b" title="Increase 10%" onclick="event.stopPropagation();vzBump('${g.id}',10)">+</button>
+          <button class="vz-quick__b" title="Increase 1%" onclick="event.stopPropagation();vzBump('${g.id}',1)">+</button>
           <span class="vz-quick__sp"></span>
           <button class="vz-quick__b" title="Edit goal" onclick="event.stopPropagation();openEditVision('${g.id}')">${renderIcon('edit', null, 'style="width:14px"')}</button>
         </div>` : ''}

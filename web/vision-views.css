@@ -1505,8 +1505,8 @@
     justify-content: center;
 }
 
-/* ── Mobile ──────────────────────────────────────────────── */
-@media (max-width: 2000px) {
+/* ── Mobile / small screens ──────────────────────────────── */
+@media (max-width: 999px) {
     .vision-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 14px;
