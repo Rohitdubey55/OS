@@ -1311,13 +1311,27 @@ const VISION_REFINE_CSS = `<style>
 .vz-board { flex:1; min-width:0; }
 .vz-pane { flex:0 0 360px; position:sticky; top:12px; max-height:calc(100vh - 90px); overflow-y:auto; display:flex; flex-direction:column; gap:13px; padding-bottom:8px; }
 
-/* Denser, refined grid + cards — desktop only (mobile card shape untouched) */
-@media (min-width:1100px){
-  .vz-pro .vz-board .vision-grid { grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px; }
-  .vz-pro .vision-card { border-radius:var(--radius-lg); aspect-ratio:5/4; box-shadow:var(--shadow-card); transition:box-shadow .18s ease, transform .18s ease; }
+/* Quick-action bar on cards (inline progress + edit) — desktop only. */
+.vz-quick { display:none; }
+.vz-quick__b { width:26px; height:26px; border-radius:8px; border:1px solid rgba(255,255,255,.38); background:rgba(255,255,255,.18); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); color:#fff; font-size:16px; font-weight:700; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s, transform .12s; flex-shrink:0; }
+.vz-quick__b:hover { background:rgba(255,255,255,.36); transform:translateY(-1px); }
+.vz-quick__b:active { transform:scale(.92); }
+.vz-quick__b svg { width:14px; height:14px; }
+.vz-quick__p { font-size:13px; font-weight:800; color:#fff; min-width:40px; text-align:center; font-variant-numeric:tabular-nums; text-shadow:0 1px 3px rgba(0,0,0,.45); }
+.vz-quick__sp { flex:1; }
+
+/* Denser, refined, compact cards — desktop only (mobile card shape untouched) */
+@media (min-width:1000px){
+  .vz-pro .vz-board .vision-grid { grid-template-columns:repeat(auto-fill, minmax(208px, 1fr)); gap:14px; }
+  .vz-pro .vision-card { border-radius:var(--radius-lg); aspect-ratio:auto !important; min-height:0 !important; height:176px; box-shadow:var(--shadow-card); transition:box-shadow .18s ease, transform .18s ease; }
   .vz-pro .vision-card:hover { box-shadow:var(--shadow-lg); transform:translateY(-2px); }
   .vz-pro .vision-card.vz-sel { box-shadow:0 0 0 2px var(--primary), var(--shadow-lg); }
-  .vz-pro .vision-card-title { font-size:15px; }
+  .vz-pro .vision-card-content { padding:12px 12px 11px; }
+  .vz-pro .vision-card-title { font-size:14.5px; margin-bottom:6px; -webkit-line-clamp:2; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+  .vz-pro .vision-card-cat-tag { top:10px; left:10px; padding:3px 9px; font-size:10px; }
+  .vz-pro .vision-aff-indicator { width:30px; height:30px; top:10px; right:10px; }
+  .vz-pro .vz-quick { display:flex; align-items:center; gap:6px; margin-top:9px; }
+  .vz-pro .vz-pane { flex-basis:340px; }
 }
 
 /* Pane cards */
@@ -1414,7 +1428,7 @@ const VISION_REFINE_CSS = `<style>
 </style>`;
 
 let _vzSelId = null;
-function _vzDesktop() { try { return window.matchMedia('(min-width:1100px)').matches; } catch (e) { return (window.innerWidth || 1280) >= 1100; } }
+function _vzDesktop() { try { return window.matchMedia('(min-width:1000px)').matches; } catch (e) { return (window.innerWidth || 1280) >= 1000; } }
 function _vzDays(d) { return d ? Math.ceil((new Date(d) - new Date()) / 86400000) : null; }
 function _vzIsFocus(g) { return g.month_focus === true || String(g.month_focus).toLowerCase() === 'true'; }
 function _vzRitualStreak() {
@@ -1468,11 +1482,34 @@ window.vzSetProgress = async function (id, val) {
   const g = (state.data.vision || []).find(v => String(v.id) === String(id));
   if (!g) return;
   g.progress = parseInt(val, 10) || 0;
-  const lbl = document.getElementById('vzProgVal'); if (lbl) lbl.textContent = g.progress + '%';
-  const card = document.getElementById('vision-card-' + id);
-  if (card) { const fill = card.querySelector('.vision-progress-fill'); if (fill) { fill.style.width = g.progress + '%'; fill.style.setProperty('--progress-width', g.progress + '%'); } }
+  _vzSyncProgressUI(id, g.progress);
   try { await apiCall('update', 'vision_board', { progress: g.progress }, id); } catch (e) {}
 };
+
+// One-tap progress from a card's −/+ buttons (clamped 0–100).
+window.vzBump = async function (id, delta) {
+  const g = (state.data.vision || []).find(v => String(v.id) === String(id));
+  if (!g) return;
+  const p = Math.max(0, Math.min(100, (parseInt(g.progress, 10) || 0) + delta));
+  if (p === (parseInt(g.progress, 10) || 0)) return;
+  g.progress = p;
+  _vzSyncProgressUI(id, p);
+  try { await apiCall('update', 'vision_board', { progress: p }, id); } catch (e) {}
+};
+
+// Keep every on-screen progress indicator for a goal in sync (card bar, card %, pane slider + label).
+function _vzSyncProgressUI(id, p) {
+  const card = document.getElementById('vision-card-' + id);
+  if (card) {
+    const fill = card.querySelector('.vision-progress-fill');
+    if (fill) { fill.style.width = p + '%'; fill.style.setProperty('--progress-width', p + '%'); }
+  }
+  const qp = document.getElementById('vzqp-' + id); if (qp) qp.textContent = p + '%';
+  if (String(_vzSelId) === String(id)) {
+    const lbl = document.getElementById('vzProgVal'); if (lbl) lbl.textContent = p + '%';
+    const rng = document.querySelector('.vz-pane .vzp-range'); if (rng) rng.value = p;
+  }
+}
 
 function vzInsightHTML() {
   const goals = (state.data.vision || []).filter(g => g.status !== 'achieved');
@@ -1726,6 +1763,14 @@ function renderVisionCard(g, isAchieved = false) {
         <div class="vision-card-progress">
         <div class="vision-progress-fill" style="--progress-width:${g.progress || 0}%; width:${g.progress || 0}%"></div>
         </div>
+        ${!isAchieved ? `
+        <div class="vz-quick" onclick="event.stopPropagation()">
+          <button class="vz-quick__b" title="Decrease 10%" onclick="event.stopPropagation();vzBump('${g.id}',-10)">−</button>
+          <span class="vz-quick__p" id="vzqp-${g.id}">${parseInt(g.progress, 10) || 0}%</span>
+          <button class="vz-quick__b" title="Increase 10%" onclick="event.stopPropagation();vzBump('${g.id}',10)">+</button>
+          <span class="vz-quick__sp"></span>
+          <button class="vz-quick__b" title="Edit goal" onclick="event.stopPropagation();openEditVision('${g.id}')">${renderIcon('edit', null, 'style="width:14px"')}</button>
+        </div>` : ''}
       </div>
     </div>
   `;
