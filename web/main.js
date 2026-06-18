@@ -1620,10 +1620,10 @@ document.addEventListener('click', async (e) => {
 
         showToast("Saving event...");
 
-        // Store as epoch ms (number) — Google Sheets stores numbers as-is, avoiding the
-        // normalizeOutput Date-stripping bug without needing a Code.gs redeploy.
-        const startEpoch = new Date(`${date}T${start}:00`).getTime();
-        const endEpoch = new Date(`${date}T${end}:00`).getTime();
+        // Postgres timestamp columns need an ISO datetime string, NOT epoch ms.
+        // A bare number like 1781773200000 fails with "date/time field value out of range".
+        const startEpoch = `${date}T${start}:00`;
+        const endEpoch = `${date}T${end}:00`;
 
         // Optimistic UI Update
         const tempId = 'temp-' + Date.now();
@@ -2205,9 +2205,9 @@ document.addEventListener('click', async (e) => {
         document.getElementById('eventModal').classList.add('hidden');
         showToast("Updating event...");
 
-        // Store as epoch ms (number) for the same reason as save-event above
-        const startEpoch = new Date(`${date}T${start}:00`).getTime();
-        const endEpoch = new Date(`${date}T${end}:00`).getTime();
+        // ISO datetime string (not epoch ms) — see save-event above.
+        const startEpoch = `${date}T${start}:00`;
+        const endEpoch = `${date}T${end}:00`;
 
         // Optimistic UI Update
         const eventIndex = state.data.planner.findIndex(e => String(e.id) === String(editId));

@@ -770,8 +770,8 @@ async function _endDrag() {
       const eh = Math.floor(totalEndMin / 60) % 24;
       const em = totalEndMin % 60;
       const newEndTime = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
-      eventObj.start_datetime = new Date(`${datePart}T${newTime}:00`).getTime();
-      eventObj.end_datetime = new Date(`${datePart}T${newEndTime}:00`).getTime();
+      eventObj.start_datetime = `${datePart}T${newTime}:00`;
+      eventObj.end_datetime = `${datePart}T${newEndTime}:00`;
       renderCalendar();
 
       const payload = { ...eventObj };
