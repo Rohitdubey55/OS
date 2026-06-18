@@ -1420,6 +1420,29 @@ const VISION_REFINE_CSS = `<style>
 .vz-pro .vz-rd-bar i { display:block; height:100%; background:var(--primary); border-radius:999px; }
 .vz-pro .vz-rd-pct { font-size:12px; font-weight:700; color:var(--text-2); font-variant-numeric:tabular-nums; flex-shrink:0; }
 
+/* ════ VISUAL HIERARCHY (quiet sidebar) — guide the eye top → content → rail ════ */
+@media (min-width:1000px){
+  /* 1 · Calm the top zone so it orients without competing with content */
+  .vz-pro .vz-ov { background:var(--surface-2); box-shadow:none; padding:12px 16px; margin-bottom:12px; }
+  .vz-pro .tdp-header-row { background:transparent; border:1px solid var(--border-color); padding:7px 12px; margin-bottom:18px; }
+  .vz-pro .tdp-btn { background:var(--surface-1); color:var(--text-1); border:1px solid var(--border-color); min-width:0; padding:6px 13px; box-shadow:none; }
+  .vz-pro .tdp-btn:hover { transform:none; box-shadow:none; border-color:var(--border-strong); }
+  .vz-pro .tdp-btn-label { color:var(--text-3); opacity:1; }
+  .vz-pro .tdp-btn-status { font-size:13px; font-weight:700; color:var(--text-1); }
+  .vz-pro .vision-toolbar { margin-bottom:10px; }
+
+  /* 2 · A clear section heading marks the grid as the primary content */
+  .vz-board-head { display:flex; align-items:baseline; gap:9px; margin:0 0 13px; }
+  .vz-board-head h2 { font-size:15px; font-weight:700; color:var(--text-1); margin:0; letter-spacing:-.01em; }
+  .vz-board-head .n { font-size:13px; color:var(--text-3); font-weight:600; }
+
+  /* 3 · Subordinate the rail — narrower, lighter, lower contrast = clearly secondary */
+  .vz-pane { flex-basis:300px; }
+  .vz-pro .vzp-card { background:var(--surface-2); box-shadow:none; border:1px solid var(--border-color); padding:14px; }
+  .vz-pro .vzp-ritual { box-shadow:none; }
+  .vz-pro .vzp-h { color:var(--text-3); }
+}
+
 @media (max-width:999px){
   .vz-pro { max-width:none; }
   .vz-workspace { display:block; }
@@ -1929,7 +1952,13 @@ function renderVisionGrid(goals) {
   const active = goals.filter(g => g.status !== 'achieved');
   const achieved = goals.filter(g => g.status === 'achieved');
 
+  // Section heading anchors the grid as the primary content (desktop only).
+  const f = visionState.filter;
+  const headLabel = f === 'focus' ? 'Focus this month' : (f === 'all' ? 'All goals' : (String(f).charAt(0).toUpperCase() + String(f).slice(1)));
+  const head = _vzDesktop() ? `<div class="vz-board-head"><h2>${escapeHtml(headLabel)}</h2><span class="n">${active.length} active</span></div>` : '';
+
   return `
+    ${head}
     <div class="vision-grid">
       ${active.length === 0
       ? `<div class="vision-empty" style="grid-column:1/-1">
