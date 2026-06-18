@@ -292,26 +292,24 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
   const spentCats = Object.keys(catSpent || {});
   const allCats = [...new Set([...definedCats, ...spentCats])];
 
-  const catHtml = allCats.map(c => {
-    const spent = catSpent?.[c] || 0;
+  const rows = allCats.map(c => {
+    const spent = Number(catSpent?.[c] || 0);
     // Handle both old format (number) and new format (object)
     const catData = catLimits?.[c];
-    let climit = 0;
-    if (typeof catData === 'object' && catData !== null) {
-      climit = Number(catData.budget) || 0;
-    } else {
-      climit = Number(catData) || 0;
-    }
-    if (spent === 0 && climit === 0) return '';
+    const climit = (typeof catData === 'object' && catData !== null) ? Number(catData.budget) || 0 : Number(catData) || 0;
+    return { c, spent, climit };
+  }).filter(r => r.spent > 0 || r.climit > 0);
 
+  // Skip a breakdown that's just one category equal to the total (it duplicates the overall bar).
+  const redundant = rows.length === 1 && Math.round(rows[0].spent) === Math.round(totalExp);
+  const catHtml = redundant ? '' : rows.map(({ c, spent, climit }) => {
     const cpct = climit > 0 ? Math.min(100, (spent / climit) * 100) : (spent > 0 ? 100 : 0);
     const ccolor = (climit > 0 && spent > climit) ? 'var(--danger)' : 'var(--primary)';
-
     return `
         <div style="margin-bottom:12px; cursor:pointer;" onclick="showCategoryExpenses('${c}')" class="fin-cat-item">
             <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px">
-                <span style="font-weight:600">${c}</span>
-                <span>₹${spent} ${climit ? '/ ₹' + climit : ''}</span>
+                <span style="font-weight:600">${escapeHtml(c)}</span>
+                <span>₹${spent.toLocaleString()} ${climit ? '/ ₹' + climit.toLocaleString() : ''}</span>
             </div>
             <div style="height:6px; background:var(--surface-3); border-radius:3px; overflow:hidden">
                 <div style="height:100%; width:${cpct}%; background:${ccolor}; transition: width 0.3s"></div>
@@ -319,15 +317,25 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
         </div>`;
   }).join('');
 
+  // Balance = budget − spend (how much is left this month).
+  const balance = Number(limit) - Number(totalExp);
+  const balColor = balance >= 0 ? 'var(--success)' : 'var(--danger)';
+  const balText = balance >= 0 ? `₹${balance.toLocaleString()} left` : `₹${Math.abs(balance).toLocaleString()} over`;
+
   return `
     <div class="dash-card" style="padding:20px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
              <div class="stat-label">${renderIcon('calendar', null, 'style="width:14px; margin-right:6px; display:inline-block"')} Monthly Overview</div>
-             <div class="stat-val" style="font-size:1.2em">₹${totalExp} <span style="font-size:0.6em; color:var(--text-muted)">/ ₹${limit || 0}</span></div>
+             <div class="stat-val" style="font-size:1.2em">₹${Number(totalExp).toLocaleString()} <span style="font-size:0.6em; color:var(--text-muted)">/ ₹${Number(limit || 0).toLocaleString()}</span></div>
         </div>
-        
-        <div class="progress-bg" style="height:10px; margin-bottom:16px; background:var(--surface-3); border-radius:5px; overflow:hidden">
+
+        <div class="progress-bg" style="height:10px; margin-bottom:10px; background:var(--surface-3); border-radius:5px; overflow:hidden">
              <div class="progress-fill" style="width:${pct}%; background:${color}; transition: width 0.3s"></div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px;">
+             <span style="font-size:12.5px; color:var(--text-muted)">Balance</span>
+             <span style="font-size:17px; font-weight:700; color:${balColor}">${balText}</span>
         </div>
 
         ${catHtml ? `
@@ -355,24 +363,40 @@ function renderWeeklyOverview(totalExp, limit, catSpent = {}, catLimits = {}) {
     const src = (cd && typeof cd === 'object') ? (cd.source || 'weekly') : 'weekly';
     return src === 'weekly';
   });
-  const catHtml = keys.map(c => {
+  // Build per-category rows (drop empties).
+  const rows = keys.map(c => {
     const spent = Number(catSpent?.[c] || 0);
     const cd = (catLimits || {})[c];
     const cl = (cd && typeof cd === 'object') ? Number(cd.budget) || 0 : Number(cd) || 0;
-    if (spent === 0 && cl === 0) return '';
+    return { c, spent, cl };
+  }).filter(r => r.spent > 0 || r.cl > 0);
+
+  // If the only weekly category equals the whole weekly spend, its bar just
+  // repeats the overall bar above — skip it so we don't show a duplicate.
+  const redundant = rows.length === 1 && Math.round(rows[0].spent) === Math.round(totalExp);
+  const catHtml = redundant ? '' : rows.map(({ c, spent, cl }) => {
     const cpct = cl > 0 ? Math.min(100, (spent / cl) * 100) : (spent > 0 ? 100 : 0);
     const ccolor = (cl > 0 && spent > cl) ? 'var(--danger)' : 'var(--primary)';
     return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="font-weight:600">${escapeHtml(c)}</span><span>₹${spent.toLocaleString()}${cl ? ' / ₹' + cl.toLocaleString() : ''}</span></div><div class="progress-bg" style="height:6px"><div class="progress-fill" style="width:${cpct}%;background:${ccolor}"></div></div></div>`;
   }).join('');
 
+  // Balance = budget − spend (how much is left this week).
+  const balance = Number(limit) - Number(totalExp);
+  const balColor = balance >= 0 ? 'var(--success)' : 'var(--danger)';
+  const balText = balance >= 0 ? `₹${balance.toLocaleString()} left` : `₹${Math.abs(balance).toLocaleString()} over`;
+
   return `
      <div class="dash-card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
              <div class="stat-label">${renderIcon('priority', null, 'style="width:14px; margin-right:6px; display:inline-block"')} Weekly Budget (${mondayStr} - ${sundayStr})</div>
-             <div class="stat-val" style="font-size:1.2em">₹${totalExp.toLocaleString()} <span style="font-size:0.6em; color:var(--text-muted)">/ ${Number(limit).toLocaleString()}</span></div>
+             <div class="stat-val" style="font-size:1.2em">₹${totalExp.toLocaleString()} <span style="font-size:0.6em; color:var(--text-muted)">/ ₹${Number(limit).toLocaleString()}</span></div>
         </div>
         <div class="progress-bg" style="height:8px;">
              <div class="progress-fill" style="width:${pct}%; background:${color}"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-top:10px;">
+             <span style="font-size:12.5px; color:var(--text-muted)">Balance</span>
+             <span style="font-size:17px; font-weight:700; color:${balColor}">${balText}</span>
         </div>
         ${catHtml ? `<div style="margin-top:14px; border-top:1px solid var(--border-color); padding-top:12px;">${catHtml}</div>` : ''}
         <div style="font-size:12px; margin-top:8px; color:var(--text-muted)">
