@@ -1624,6 +1624,7 @@ document.addEventListener('click', async (e) => {
         // A bare number like 1781773200000 fails with "date/time field value out of range".
         const startEpoch = `${date}T${start}:00`;
         const endEpoch = `${date}T${end}:00`;
+        const color = document.getElementById('evtColor')?.value || '';
 
         // Optimistic UI Update
         const tempId = 'temp-' + Date.now();
@@ -1632,7 +1633,8 @@ document.addEventListener('click', async (e) => {
             title: title,
             start_datetime: startEpoch,
             end_datetime: endEpoch,
-            category: category
+            category: category,
+            color: color
         };
         state.data.planner = state.data.planner || [];
         state.data.planner.push(newEvent);
@@ -1642,7 +1644,7 @@ document.addEventListener('click', async (e) => {
 
         try {
             await apiCall('create', 'planner_events', {
-                title: title, start_datetime: startEpoch, end_datetime: endEpoch, category: category
+                title: title, start_datetime: startEpoch, end_datetime: endEpoch, category: category, color: color
             });
             await refreshData('planner_events');
         } catch (e) {
@@ -2208,6 +2210,7 @@ document.addEventListener('click', async (e) => {
         // ISO datetime string (not epoch ms) — see save-event above.
         const startEpoch = `${date}T${start}:00`;
         const endEpoch = `${date}T${end}:00`;
+        const color = document.getElementById('evtColor')?.value || '';
 
         // Optimistic UI Update
         const eventIndex = state.data.planner.findIndex(e => String(e.id) === String(editId));
@@ -2219,7 +2222,8 @@ document.addEventListener('click', async (e) => {
                 title: title,
                 start_datetime: startEpoch,
                 end_datetime: endEpoch,
-                category: category
+                category: category,
+                color: color
             };
             if (state.view === 'calendar' && typeof renderCalendar === 'function') {
                 renderCalendar();
@@ -2227,7 +2231,7 @@ document.addEventListener('click', async (e) => {
         }
 
         try {
-            await apiCall('update', 'planner_events', { title, start_datetime: startEpoch, end_datetime: endEpoch, category }, editId);
+            await apiCall('update', 'planner_events', { title, start_datetime: startEpoch, end_datetime: endEpoch, category, color }, editId);
             await refreshData('planner_events');
         } catch (e) {
             console.error("Failed to update event", e);

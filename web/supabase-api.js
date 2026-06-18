@@ -120,7 +120,7 @@
         habit_logs: new Set(['id','user_id','habit_id','date','status','pomodoro_completed']),
         expenses: new Set(['id','user_id','date','amount','category','description','type','payment_mode']),
         diary: new Set(['id','user_id','date','content','mood','tags']),
-        planner_events: new Set(['id','user_id','title','start_datetime','end_datetime','category']),
+        planner_events: new Set(['id','user_id','title','start_datetime','end_datetime','category','color']),
         vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus']),
         funds: new Set(['id','user_id','name','balance','type','currency']),
         assets: new Set(['id','user_id','name','value','purchase_date','notes']),

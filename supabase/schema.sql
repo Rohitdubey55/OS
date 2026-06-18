@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS public.planner_events (
     start_datetime TIMESTAMPTZ,
     end_datetime TIMESTAMPTZ,
     category TEXT,
+    color TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );

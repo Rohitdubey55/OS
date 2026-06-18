@@ -122,6 +122,20 @@ window.openEventModal = function (dateIso = null, startTime = "09:00") {
               <input type="hidden" id="evtCategory" value="Other">
             </div>
 
+            <!-- Color picker -->
+            <div style="margin-bottom:20px;">
+              <label style="font-size:12px; font-weight:600; color:var(--text-2); display:block; margin-bottom:8px;">Color</label>
+              <div id="evtColorSwatches" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                <div class="evt-color-opt" data-color="" onclick="selectEventColor(this)" title="Auto (match category)"
+                     style="cursor:pointer; height:26px; padding:0 12px; display:flex; align-items:center; border-radius:14px; font-size:12px; font-weight:600; color:var(--text-2); border:1px solid var(--border-color); background:var(--surface-base);">Auto</div>
+                ${EVENT_COLORS.map(c => `
+                  <div class="evt-color-opt" data-color="${c}" onclick="selectEventColor(this)" title="${c}"
+                       style="cursor:pointer; width:26px; height:26px; border-radius:50%; background:${c}; border:2px solid transparent; box-shadow:0 1px 2px rgba(0,0,0,0.15);"></div>
+                `).join('')}
+              </div>
+              <input type="hidden" id="evtColor" value="">
+            </div>
+
             <!-- Date & Time Grid -->
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px;">
               <div style="grid-column: 1 / -1;">
@@ -173,6 +187,18 @@ window.openEventModal = function (dateIso = null, startTime = "09:00") {
       el.style.color = color;
       el.style.borderColor = color;
     };
+
+    // Color swatch selection — sets the hidden #evtColor and rings the choice.
+    window.selectEventColor = function (el) {
+      document.querySelectorAll('#evtColorSwatches .evt-color-opt').forEach(o => {
+        if (o.dataset.color === '') { o.style.borderColor = 'var(--border-color)'; o.style.color = 'var(--text-2)'; }
+        else { o.style.borderColor = 'transparent'; o.style.transform = 'none'; }
+      });
+      const val = el.dataset.color || '';
+      document.getElementById('evtColor').value = val;
+      if (val === '') { el.style.borderColor = 'var(--primary)'; el.style.color = 'var(--primary)'; }
+      else { el.style.borderColor = 'var(--text-1)'; el.style.transform = 'scale(1.12)'; }
+    };
   }
 
   const today = new Date().toISOString().slice(0, 10);
@@ -189,6 +215,13 @@ window.openEventModal = function (dateIso = null, startTime = "09:00") {
 
   document.getElementById('evtTitle').value = ''; // Clear title
   document.getElementById('evtCategory').value = 'Other'; // Default category
+  // Reset color to Auto
+  const colorInput = document.getElementById('evtColor');
+  if (colorInput) {
+    colorInput.value = '';
+    const autoSwatch = document.querySelector('#evtColorSwatches .evt-color-opt[data-color=""]');
+    if (autoSwatch && typeof selectEventColor === 'function') selectEventColor(autoSwatch);
+  }
 
   // Reset button to create mode (in case it was in edit mode)
   const saveBtn = document.querySelector('[data-action="update-event-modal"], [data-action="save-event"]');
@@ -250,6 +283,14 @@ const CATEGORY_COLORS = {
   'Other': 'var(--gray-500, #6B7280)'
 };
 
+// Curated palette for the per-event color picker. '' = Auto (fall back to category color).
+const EVENT_COLORS = ['#4F46E5', '#10B981', '#EF4444', '#F59E0B', '#3B82F6', '#8B5CF6', '#EC4899', '#0EA5E9', '#64748B'];
+
+// Resolve an event's display color: explicit color wins, else category color.
+function eventColor(e) {
+  return (e && e.color) ? e.color : (CATEGORY_COLORS[e && e.category] || CATEGORY_COLORS['Other']);
+}
+
 /* --- RENDERERS --- */
 
 function getCalBodyHTML() {
@@ -294,8 +335,8 @@ function renderMonthGrid() {
         <div class="day-cell ${isToday ? 'today' : ''} ${!isCurrMonth ? 'faded' : ''}" onclick="openEventModal('${iso}')">
             <div class="date-num">${curr.getDate()}</div>
             ${dayEvents.slice(0, 4).map(e => `
-              <div class="month-event-chip" onclick="event.stopPropagation(); openEditEvent('${e.id}')" 
-                   style="background:${CATEGORY_COLORS[e.category] || CATEGORY_COLORS['Other']}; color:white; font-size:10px; font-weight:600; padding:2px 4px; border-radius:4px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              <div class="month-event-chip" onclick="event.stopPropagation(); openEditEvent('${e.id}')"
+                   style="background:${eventColor(e)}; color:white; font-size:10px; font-weight:600; padding:2px 4px; border-radius:4px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                 ${e.title}
               </div>
             `).join('')}
@@ -502,7 +543,7 @@ function renderTimeGrid() {
             <span style="text-decoration:${e.is_done ? 'line-through' : 'none'}">${e.title}</span>
           </div>`;
       } else {
-        const bgColor = CATEGORY_COLORS[e.category] || CATEGORY_COLORS['Other'];
+        const bgColor = eventColor(e);
         return `<div class="event-block" data-id="${e.id}"
                      style="${inlineStyle} background:${bgColor}; color:white; font-weight:600; border-radius:4px;"
                      onclick="event.stopPropagation(); openEditEvent('${e.id}')">
@@ -657,6 +698,16 @@ window.openEditEvent = function (id) {
         p.style.borderColor = color;
       }
     });
+  }
+
+  // Pre-select the saved color (or Auto)
+  const colorInput = document.getElementById('evtColor');
+  if (colorInput) {
+    const want = e.color || '';
+    const swatch = document.querySelector(`#evtColorSwatches .evt-color-opt[data-color="${want}"]`)
+      || document.querySelector('#evtColorSwatches .evt-color-opt[data-color=""]');
+    if (swatch && typeof selectEventColor === 'function') selectEventColor(swatch);
+    else colorInput.value = want;
   }
 
   document.getElementById('eventModal').classList.remove('hidden');
