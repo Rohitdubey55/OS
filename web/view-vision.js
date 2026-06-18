@@ -1301,6 +1301,26 @@ const VISION_REFINE_CSS = `<style>
 .vz-ov-next .d { font-size:12px; color:var(--text-3); }
 .vz-ov-next .d.urgent { color:#B42318; font-weight:600; }
 
+/* ════ Integrated control header (desktop overhaul) — stats + view + filters + actions ════ */
+.vz-head { margin-bottom:20px; }
+.vz-head__top { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
+.vz-stats { display:flex; align-items:center; gap:13px; flex-wrap:wrap; }
+.vz-stat { display:inline-flex; align-items:center; gap:7px; font-size:13.5px; color:var(--text-3); font-weight:500; white-space:nowrap; }
+.vz-stat b { color:var(--text-1); font-weight:700; font-variant-numeric:tabular-nums; }
+.vz-stat__ring { display:inline-flex; line-height:0; }
+.vz-stat--warn { color:#B42318; font-weight:600; max-width:280px; overflow:hidden; text-overflow:ellipsis; }
+.vz-stat-sep { width:1px; height:15px; background:var(--border-color); flex-shrink:0; }
+.vz-viewseg { display:inline-flex; background:var(--surface-2); border:1px solid var(--border-color); border-radius:10px; padding:3px; gap:2px; flex-shrink:0; }
+.vz-viewseg button { border:none; background:transparent; color:var(--text-3); font-size:13px; font-weight:600; padding:7px 13px; border-radius:7px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all .14s; white-space:nowrap; }
+.vz-viewseg button:hover { color:var(--text-1); }
+.vz-viewseg button.active { background:var(--surface-1); color:var(--text-1); box-shadow:var(--shadow-xs); }
+.vz-viewseg .vz-viewseg--story { color:var(--primary); }
+.vz-head__bar { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid var(--border-color); }
+.vz-head__secondary { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.vz-mini-btn { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--text-2); background:var(--surface-2); border:1px solid var(--border-color); border-radius:9px; padding:7px 12px; cursor:pointer; transition:all .14s; white-space:nowrap; }
+.vz-mini-btn:hover { border-color:var(--border-strong); color:var(--text-1); }
+.vz-board--full { width:100%; }
+
 /* Toolbar / filters / view tabs */
 .vz-pro .vision-toolbar { margin-bottom:12px; }
 .vz-pro .vision-filter-chip { border-width:1px; }
@@ -1544,7 +1564,7 @@ function _vzLinkedHabitNames(g) {
   return arr.map(h => { const id = (h && h.id != null) ? h.id : h; const hb = habits.find(x => String(x.id) === String(id)); return hb ? hb.habit_name : null; }).filter(Boolean);
 }
 
-window.vzCardOpen = function (id) { if (_vzDesktop()) vzSelect(id); else openVisionDetail(id); };
+window.vzCardOpen = function (id) { openVisionDetail(id); };
 window.vzSelect = function (id) {
   _vzSelId = (String(id) === String(_vzSelId)) ? null : String(id);
   vzRenderPane();
@@ -1861,11 +1881,39 @@ async function renderVision() {
     </div>
   `;
 
-  document.getElementById('main').innerHTML = `
-    <div class="vision-wrapper vz-pro">
-      ${VISION_REFINE_CSS}
+  const _segBtn = (v, label, icon) => `<button class="${visionState.view === v ? 'active' : ''}" onclick="switchVisionView('${v}')">${renderIcon(icon, null, 'style="width:15px"')} ${label}</button>`;
 
-      <!-- Overview bar -->
+  // DESKTOP: one compact, integrated control header — stats, view switch, filters,
+  // and secondary actions in two tidy rows. Replaces the stacked overview card +
+  // TDP band + filter row + view-toggle row so the goals grid is the page.
+  const _vzHeadDesktop = `
+      <div class="vz-head">
+        <div class="vz-head__top">
+          <div class="vz-stats">
+            <span class="vz-stat"><span class="vz-stat__ring"><svg width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="none" stroke="var(--surface-3)" stroke-width="4"/><circle cx="15" cy="15" r="12" fill="none" stroke="var(--primary)" stroke-width="4" stroke-linecap="round" stroke-dasharray="${2 * Math.PI * 12}" stroke-dashoffset="${2 * Math.PI * 12 * (1 - _vzAvg / 100)}" transform="rotate(-90 15 15)"/></svg></span><span><b>${_vzAvg}%</b> avg</span></span>
+            <span class="vz-stat-sep"></span>
+            <span class="vz-stat"><b>${stats.active}</b> active</span>
+            <span class="vz-stat"><b>${stats.achieved}</b> achieved</span>
+            ${_vzNext && _vzNextD != null ? `<span class="vz-stat-sep"></span><span class="vz-stat ${_vzNextD < 0 ? 'vz-stat--warn' : ''}">${_vzNextD < 0 ? '⚠' : '⏳'} ${escapeHtml(_vzNext.title || '')} · ${_vzNextD < 0 ? Math.abs(_vzNextD) + 'd overdue' : 'in ' + _vzNextD + 'd'}</span>` : ''}
+          </div>
+          <div class="vz-viewseg">
+            ${_segBtn('grid', 'Grid', 'grid')}
+            ${_segBtn('list', 'List', 'list')}
+            ${_segBtn('timeline', 'Timeline', 'calendar')}
+            <button class="vz-viewseg--story" onclick="openVisionStories()"><i data-lucide="play" style="width:14px;height:14px;vertical-align:-2px"></i> Story</button>
+          </div>
+        </div>
+        <div class="vz-head__bar">
+          <div class="vision-filters" id="visionFilters">${renderFilterChips()}</div>
+          <div class="vz-head__secondary">
+            <button class="vz-mini-btn" onclick="startManifestationRitual()"><i data-lucide="play" style="width:13px;height:13px;vertical-align:-2px"></i> Daily ritual</button>
+            <button class="vz-mini-btn" onclick="openTDPModal()">${activeTDP ? 'TDP · Day ' + tdpInfo.day : 'Start 10-day plan'}</button>
+          </div>
+        </div>
+      </div>`;
+
+  // MOBILE: unchanged stacked layout (overview card + TDP band + filters + tabs).
+  const _vzHeadMobile = `
       <div class="vz-ov">
         <div class="vz-ov-ring">
           <div class="rw">
@@ -1879,35 +1927,24 @@ async function renderVision() {
         <div class="vz-ov-item"><b>${stats.achieved}</b><span>Achieved</span></div>
         ${_vzNext ? `<div class="vz-ov-next"><div class="t">⏳ ${escapeHtml(_vzNext.title || '')}</div><div class="d ${_vzNextD != null && _vzNextD <= 30 ? 'urgent' : ''}">${_vzNextD < 0 ? Math.abs(_vzNextD) + 'd overdue' : 'in ' + _vzNextD + 'd'}</div></div>` : ''}
       </div>
-
       ${tdpHtml}
-
-      <!-- ── Toolbar ── -->
-      <div class="vision-toolbar">
-        <div class="vision-filters" id="visionFilters">
-          ${renderFilterChips()}
-        </div>
-      </div>
-
-      <!-- ── View Toggle + Story launcher ── -->
+      <div class="vision-toolbar"><div class="vision-filters" id="visionFilters">${renderFilterChips()}</div></div>
       <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap">
         <div class="vision-view-tabs">
-          <button class="vision-tab ${visionState.view === 'grid' ? 'active' : ''}" onclick="switchVisionView('grid')" title="Grid">
-            ${renderIcon('grid', null, 'style="width:16px"')} Grid
-          </button>
-          <button class="vision-tab ${visionState.view === 'list' ? 'active' : ''}" onclick="switchVisionView('list')" title="List">
-            ${renderIcon('list', null, 'style="width:16px"')} List
-          </button>
-          <button class="vision-tab ${visionState.view === 'timeline' ? 'active' : ''}" onclick="switchVisionView('timeline')" title="Timeline">
-            ${renderIcon('calendar', null, 'style="width:16px"')} Timeline
-          </button>
+          <button class="vision-tab ${visionState.view === 'grid' ? 'active' : ''}" onclick="switchVisionView('grid')" title="Grid">${renderIcon('grid', null, 'style="width:16px"')} Grid</button>
+          <button class="vision-tab ${visionState.view === 'list' ? 'active' : ''}" onclick="switchVisionView('list')" title="List">${renderIcon('list', null, 'style="width:16px"')} List</button>
+          <button class="vision-tab ${visionState.view === 'timeline' ? 'active' : ''}" onclick="switchVisionView('timeline')" title="Timeline">${renderIcon('calendar', null, 'style="width:16px"')} Timeline</button>
         </div>
-        <button class="vision-tab vz-story-launch" style="margin-left:auto" onclick="openVisionStories()" title="View your visions one-by-one, full screen">
-          <i data-lucide="play" style="width:15px;height:15px;vertical-align:-2px"></i> Story view
-        </button>
-      </div>
+        <button class="vision-tab vz-story-launch" style="margin-left:auto" onclick="openVisionStories()" title="View your visions one-by-one, full screen"><i data-lucide="play" style="width:15px;height:15px;vertical-align:-2px"></i> Story view</button>
+      </div>`;
 
-      ${visionState.view === 'grid' ? `<div class="vz-workspace"><div class="vz-board">${renderVisionGrid(filtered)}</div><aside class="vz-pane">${vzPaneHTML()}</aside></div>` : ''}
+  document.getElementById('main').innerHTML = `
+    <div class="vision-wrapper vz-pro">
+      ${VISION_REFINE_CSS}
+
+      ${_vzDesktop() ? _vzHeadDesktop : _vzHeadMobile}
+
+      ${visionState.view === 'grid' ? `<div class="vz-board vz-board--full">${renderVisionGrid(filtered)}</div>` : ''}
       ${visionState.view === 'list' ? renderVisionList(filtered) : ''}
       ${visionState.view === 'timeline' ? renderVisionTimeline(filtered) : ''}
     </div>
