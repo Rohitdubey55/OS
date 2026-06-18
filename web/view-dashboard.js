@@ -3124,11 +3124,11 @@ function renderDashboard() {
 
       const headerCells = habits.map(h => {
         const fullName = h.habit_name || h.name || '';
-        // Show emoji (habits store .emoji, not .icon) and a short name label.
-        const iconChar = h.emoji || h.icon || '✦';
+        // Line icon (migrates legacy emoji); falls back to the stored char.
+        const iconHTML = (typeof habitIconHTML === 'function') ? habitIconHTML(h.emoji || h.icon, 16) : (h.emoji || h.icon || '✦');
         return `
         <div class="hg-col-head" title="${escapeHtml(fullName)}">
-          <span class="hg-col-icon">${iconChar}</span>
+          <span class="hg-col-icon">${iconHTML}</span>
           <span class="hg-col-name">${escapeHtml(fullName)}</span>
         </div>
       `;
@@ -3314,6 +3314,8 @@ function renderDashboard() {
     if (document.body.classList.contains('tiles-editing')) {
       _initLumiaEditing();
     }
+    // Hydrate any lucide line-icons in widgets (e.g. habit icons in the Habits Grid).
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   }, 50);
 }
 

@@ -178,6 +178,35 @@ window.habitScheduledOn = function (h, date) {
 };
 window.habitScheduledToday = function (h) { return window.habitScheduledOn(h, new Date()); };
 
+/* ── Habit icons (line icons instead of emojis) ───────────────────────────── */
+window.HABIT_ICONS = ['dumbbell','activity','heart','book-open','brain','droplet','apple','moon','sun','coffee','pencil','music','bike','leaf','target','flame','smile','laptop','wallet','phone','footprints','bed','sparkles','star','alarm-clock','glass-water','palette','code'];
+// Migrate the old emoji choices to the closest line icon.
+window._HABIT_EMOJI_MAP = { '💪':'dumbbell','📚':'book-open','🧘':'activity','💧':'droplet','🍎':'apple','🏃':'footprints','💤':'moon','✨':'sparkles','🏆':'star','⭐':'star','🔥':'flame','☕':'coffee','🎵':'music','🚴':'bike','🛏️':'bed','💻':'laptop' };
+window.habitIconKey = function (val) {
+    if (val && window.HABIT_ICONS.indexOf(val) !== -1) return val;
+    if (val && window._HABIT_EMOJI_MAP[val]) return window._HABIT_EMOJI_MAP[val];
+    return 'sparkles';
+};
+// Render a habit's icon as an inline lucide <i> (falls back to a legacy emoji char).
+window.habitIconHTML = function (val, size) {
+    size = size || 18;
+    const key = (val && window.HABIT_ICONS.indexOf(val) !== -1) ? val : (window._HABIT_EMOJI_MAP[val] || null);
+    if (key) return `<i data-lucide="${key}" style="width:${size}px;height:${size}px;vertical-align:middle"></i>`;
+    if (val) return val;
+    return `<i data-lucide="sparkles" style="width:${size}px;height:${size}px;vertical-align:middle"></i>`;
+};
+// The picker grid used in the habit modal.
+window.habitIconPickerHTML = function (current) {
+    const cur = window.habitIconKey(current);
+    return `<div class="hb-iconpick">${window.HABIT_ICONS.map(k =>
+        `<button type="button" class="hb-icon-opt ${cur === k ? 'sel' : ''}" data-key="${k}" onclick="selectHabitIcon('${k}')" title="${k.replace(/-/g, ' ')}"><i data-lucide="${k}"></i></button>`
+    ).join('')}</div>`;
+};
+window.selectHabitIcon = function (key) {
+    const inp = document.getElementById('mHabitEmoji'); if (inp) inp.value = key;
+    document.querySelectorAll('.hb-iconpick .hb-icon-opt').forEach(b => b.classList.toggle('sel', b.dataset.key === key));
+};
+
 /* Chronological rank for habit routine names so groups order Morning → Night
    (not alphabetically). Unknown names sort in the middle; "General" sorts last. */
 window.routineRank = function (name) {

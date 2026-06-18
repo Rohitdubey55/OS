@@ -245,7 +245,7 @@ function hbOverviewHTML() {
   sched.forEach(h => { const r = h.routine || h.category || 'General'; (routines[r] = routines[r] || { t: 0, d: 0 }).t++; if (isDone(h)) routines[r].d++; });
 
   const streakRows = ranked.length ? ranked.map(({ h, s }) =>
-    `<div class="hbp-srow" onclick="hbSelectDetail('${h.id}')"><span class="hbp-semoji">${h.emoji || '✨'}</span><span class="hbp-sname">${escapeHtml(h.habit_name || '')}</span><span class="hbp-sval">${s >= 30 ? '🏆' : s >= 7 ? '🔥' : '⭐'} ${s}</span></div>`
+    `<div class="hbp-srow" onclick="hbSelectDetail('${h.id}')"><span class="hbp-semoji">${habitIconHTML(h.emoji, 16)}</span><span class="hbp-sname">${escapeHtml(h.habit_name || '')}</span><span class="hbp-sval">${s >= 30 ? '🏆' : s >= 7 ? '🔥' : '⭐'} ${s}</span></div>`
   ).join('') : `<div class="hbp-empty">Complete a habit to start a streak.</div>`;
 
   const routineRows = Object.keys(routines).sort((a, b) => (window.routineRank ? window.routineRank(a) - window.routineRank(b) : 0)).map(r => {
@@ -284,7 +284,7 @@ function hbDetailHTML(h) {
   return `
   <div class="hbp-card">
     <div class="hbp-dhead">
-      <div class="hbp-dtitle"><span class="hbp-demoji">${h.emoji || '✨'}</span><div><div class="hbp-dname">${escapeHtml(h.habit_name || '')}</div><div class="hbp-dmeta">${escapeHtml(h.category || h.routine || 'General')} • ${displayTime}</div></div></div>
+      <div class="hbp-dtitle"><span class="hbp-demoji">${habitIconHTML(h.emoji, 18)}</span><div><div class="hbp-dname">${escapeHtml(h.habit_name || '')}</div><div class="hbp-dmeta">${escapeHtml(h.category || h.routine || 'General')} • ${displayTime}</div></div></div>
       <button class="hbp-x" onclick="hbCloseDetail()"><i data-lucide="x" style="width:14px;height:14px"></i></button>
     </div>
     <button class="hbp-done ${isDoneToday ? 'on' : ''}" onclick="toggleHabitOptimistic('${h.id}')">${isDoneToday ? '✓ Done today' : 'Mark done today'}</button>
@@ -477,7 +477,7 @@ function renderHabits() {
           <div class="habit-card-new ${isExpanded ? 'habit-expanded' : ''} ${isDoneToday ? 'done' : 'pending'} ${stats.consecutiveMissed >= 3 && !isHabitTimeInFuture(h.reminder_time) ? 'habit-card-warning' : ''} ${String(h.id) === String(nextUpHabitId) ? 'habit-next-up' : ''} ${String(h.id) === String(_habitDetailId) ? 'hb-sel' : ''}" id="habit-card-${h.id}">
             <div class="habit-card-header" onclick="hbRowOpen('${h.id}')">
               <div class="habit-title-wrapper">
-                <div class="habit-emoji-circle">${h.emoji || '✨'}</div>
+                <div class="habit-emoji-circle">${habitIconHTML(h.emoji, 18)}</div>
                 <div>
                   <div class="habit-title-lg">${h.habit_name} ${comingInText}${String(h.id) === String(nextUpHabitId) ? '<span class="up-next-badge">Up Next</span>' : ''}${missedChip}</div>
                   <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
@@ -1031,20 +1031,12 @@ window.openHabitModal = function () {
         <!-- Identity Section -->
         <div>
           <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Habit Details</label>
-          <div style="display:flex; gap:12px; align-items:center">
-             <div style="position: relative;">
-               <select class="input" id="mHabitEmoji" style="width:64px; font-size:20px; padding:0 8px; height: 48px; appearance: none; text-align: center;">
-                   <option value="✨">✨</option>
-                   <option value="💪">💪</option>
-                   <option value="📚">📚</option>
-                   <option value="🧘">🧘</option>
-                   <option value="💧">💧</option>
-                   <option value="🍎">🍎</option>
-                   <option value="🏃">🏃</option>
-                   <option value="💤">💤</option>
-               </select>
-             </div>
-             <input class="input" id="mHabitName" placeholder="What habit do you want to build?" style="flex:1; height: 48px; font-size: 15px;">
+          <input class="input" id="mHabitName" placeholder="What habit do you want to build?" style="width:100%; height: 48px; font-size: 15px;">
+          <input type="hidden" id="mHabitEmoji" value="sparkles">
+          <div style="margin-top:14px">
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Icon</label>
+            ${habitIconPickerHTML('sparkles')}
+          </div>
           </div>
         </div>
 
@@ -1175,18 +1167,11 @@ window.openEditHabit = function (id) {
       <!-- Identity Section -->
       <div>
         <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Habit Details</label>
-        <div style="display:flex; gap:12px; align-items:center">
-           <select class="input" id="mHabitEmoji" style="width:64px; font-size:20px; padding:0 8px; height: 48px; text-align: center; appearance: none;">
-               <option value="✨" ${h.emoji === '✨' ? 'selected' : ''}>✨</option>
-               <option value="💪" ${h.emoji === '💪' ? 'selected' : ''}>💪</option>
-               <option value="📚" ${h.emoji === '📚' ? 'selected' : ''}>📚</option>
-               <option value="🧘" ${h.emoji === '🧘' ? 'selected' : ''}>🧘</option>
-               <option value="💧" ${h.emoji === '💧' ? 'selected' : ''}>💧</option>
-               <option value="🍎" ${h.emoji === '🍎' ? 'selected' : ''}>🍎</option>
-               <option value="🏃" ${h.emoji === '🏃' ? 'selected' : ''}>🏃</option>
-               <option value="💤" ${h.emoji === '💤' ? 'selected' : ''}>💤</option>
-           </select>
-           <input class="input" id="mHabitName" value="${(h.habit_name || h.name || '').replace(/"/g, '"')}" placeholder="What habit do you want to build?" style="flex:1; height: 48px; font-size: 15px;">
+        <input class="input" id="mHabitName" value="${(h.habit_name || h.name || '').replace(/"/g, '"')}" placeholder="What habit do you want to build?" style="width:100%; height: 48px; font-size: 15px;">
+        <input type="hidden" id="mHabitEmoji" value="${habitIconKey(h.emoji)}">
+        <div style="margin-top:14px">
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Icon</label>
+          ${habitIconPickerHTML(h.emoji)}
         </div>
       </div>
 

@@ -1342,7 +1342,7 @@ const VISION_REFINE_CSS = `<style>
 
 /* Denser, refined, compact cards — desktop only (mobile card shape untouched) */
 @media (min-width:1000px){
-  .vz-pro .vz-board .vision-grid { grid-template-columns:repeat(auto-fill, minmax(208px, 1fr)); gap:14px; }
+  .vz-pro .vz-board .vision-grid { grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)) !important; gap:14px !important; }
   .vz-pro .vision-card { border-radius:var(--radius-lg); aspect-ratio:auto !important; min-height:0 !important; height:176px; box-shadow:var(--shadow-card); transition:box-shadow .18s ease, transform .18s ease; }
   .vz-pro .vision-card:hover { box-shadow:var(--shadow-lg); transform:translateY(-2px); }
   .vz-pro .vision-card.vz-sel { box-shadow:0 0 0 2px var(--primary), var(--shadow-lg); }

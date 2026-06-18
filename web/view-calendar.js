@@ -70,6 +70,7 @@ function renderCalendar() {
 
   // RE-INITIALIZE ICONS
   if (typeof renderAllIcons === 'function') renderAllIcons();
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
 /* --- LOGIC --- */
@@ -582,7 +583,7 @@ function renderTimeGrid() {
       const isDone = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(today));
       return `
               <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface-1);border:1px solid var(--border-color);border-radius:12px;${isDone ? 'opacity:.6' : ''}">
-                <span style="font-size:18px">${h.emoji || '✨'}</span>
+                <span style="font-size:18px">${typeof habitIconHTML === 'function' ? habitIconHTML(h.emoji, 18) : (h.emoji || '✨')}</span>
                 <div style="flex:1">
                   <div style="font-size:14px;font-weight:700;color:var(--text-1);${isDone ? 'text-decoration:line-through' : ''}">${h.habit_name}</div>
                   <div style="font-size:11px;color:var(--text-muted)">${h.category || 'Habit'} · ${h.reminder_time ? 'At ' + String(h.reminder_time).slice(0, 5) : h.frequency || 'Daily'}</div>
