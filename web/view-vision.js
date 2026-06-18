@@ -1627,6 +1627,182 @@ function vzGoalDetailHTML(g) {
   </div>`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   VISION STORIES — full-screen, one-by-one viewer (Instagram-style, desktop).
+   Focus/All toggle, prev/next, edit, close. Keyboard ←/→/Esc.
+   ═══════════════════════════════════════════════════════════════════════ */
+window._vzStory = window._vzStory || { ids: [], i: 0, mode: 'all' };
+
+function _vzStoryGoals(mode) {
+  const active = (state.data.vision || []).filter(g => g.status !== 'achieved');
+  const list = mode === 'focus' ? active.filter(_vzIsFocus) : active;
+  return sortVisions(list);
+}
+
+window.openVisionStories = function (startId, mode) {
+  let m = mode || (visionState.filter === 'focus' ? 'focus' : 'all');
+  let goals = _vzStoryGoals(m);
+  if (goals.length === 0 && m === 'focus') { m = 'all'; goals = _vzStoryGoals('all'); }
+  const ids = goals.map(g => String(g.id));
+  let i = (startId != null) ? ids.indexOf(String(startId)) : 0;
+  if (i < 0) i = 0;
+  window._vzStory = { ids, i, mode: m };
+  _vzStoryEnsureDom();
+  document.getElementById('vzStoryOverlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  if (!window._vzStoryKey) { window._vzStoryKey = _vzStoryKeyHandler; document.addEventListener('keydown', window._vzStoryKey); }
+  _vzStoryRender();
+};
+
+window.closeVisionStories = function () {
+  const ov = document.getElementById('vzStoryOverlay');
+  if (ov) {
+    ov.classList.add('hidden');
+    const v = ov.querySelector('video'); if (v) { try { v.pause(); } catch (e) {} }
+  }
+  document.body.style.overflow = '';
+  if (window._vzStoryKey) { document.removeEventListener('keydown', window._vzStoryKey); window._vzStoryKey = null; }
+};
+
+function _vzStoryKeyHandler(e) {
+  const ov = document.getElementById('vzStoryOverlay');
+  if (!ov || ov.classList.contains('hidden')) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeVisionStories(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); vzStoryNext(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); vzStoryPrev(); }
+}
+
+window.vzStoryNext = function () { const s = window._vzStory; if (s.i < s.ids.length - 1) { s.i++; _vzStoryRender(); } };
+window.vzStoryPrev = function () { const s = window._vzStory; if (s.i > 0) { s.i--; _vzStoryRender(); } };
+window.vzStoryGo = function (i) { const s = window._vzStory; if (i >= 0 && i < s.ids.length) { s.i = i; _vzStoryRender(); } };
+
+window.vzStorySetMode = function (mode) {
+  const s = window._vzStory;
+  const curId = s.ids[s.i];
+  const goals = _vzStoryGoals(mode);
+  const ids = goals.map(g => String(g.id));
+  let i = ids.indexOf(String(curId)); if (i < 0) i = 0;
+  window._vzStory = { ids, i, mode };
+  _vzStoryRender();
+};
+
+window.vzStoryEdit = function () {
+  const s = window._vzStory; const id = s.ids[s.i]; if (!id) return;
+  closeVisionStories();
+  setTimeout(() => openEditVision(id), 130);
+};
+
+window._vzStorySwap = function (u) { const el = document.getElementById('vzStoryImg'); if (el) el.style.backgroundImage = `url('${u}')`; };
+
+window._vzStoryBump = async function (id, delta) {
+  await vzBump(id, delta);
+  const g = (state.data.vision || []).find(v => String(v.id) === String(id)); if (!g) return;
+  const p = parseInt(g.progress, 10) || 0;
+  const b = document.querySelector('#vzStoryStage .vz-story-prog b'); if (b) b.textContent = p + '%';
+  const bar = document.querySelector('#vzStoryStage .vz-story-bar i'); if (bar) bar.style.width = p + '%';
+};
+
+function _vzStoryEnsureDom() {
+  if (document.getElementById('vzStoryOverlay')) return;
+  const ov = document.createElement('div');
+  ov.id = 'vzStoryOverlay';
+  ov.className = 'vz-story-overlay hidden';
+  ov.innerHTML = `
+    <div class="vz-story-tools">
+      <div class="vz-story-modes">
+        <button id="vzStoryMF" onclick="vzStorySetMode('focus')">Focus</button>
+        <button id="vzStoryMA" onclick="vzStorySetMode('all')">All</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="vz-story-tbtn" onclick="vzStoryEdit()" title="Edit goal">${renderIcon('edit', null, 'style="width:16px"')}</button>
+      <button class="vz-story-tbtn" onclick="closeVisionStories()" title="Close (Esc)" style="font-size:20px">&times;</button>
+    </div>
+    <div class="vz-story-top"><div class="vz-story-segs" id="vzStorySegs"></div></div>
+    <button class="vz-story-nav prev" onclick="vzStoryPrev()" aria-label="Previous">&lsaquo;</button>
+    <div class="vz-story-stage" id="vzStoryStage"></div>
+    <button class="vz-story-nav next" onclick="vzStoryNext()" aria-label="Next">&rsaquo;</button>
+  `;
+  ov.addEventListener('click', (e) => { if (e.target === ov) closeVisionStories(); });
+  document.body.appendChild(ov);
+}
+
+async function _vzStoryRender() {
+  const s = window._vzStory;
+  const stage = document.getElementById('vzStoryStage');
+  const segs = document.getElementById('vzStorySegs');
+  if (!stage) return;
+
+  const mf = document.getElementById('vzStoryMF'), ma = document.getElementById('vzStoryMA');
+  if (mf) mf.classList.toggle('active', s.mode === 'focus');
+  if (ma) ma.classList.toggle('active', s.mode === 'all');
+
+  if (!s.ids.length) {
+    if (segs) segs.innerHTML = '';
+    stage.innerHTML = `<div class="vz-story-empty">${s.mode === 'focus' ? 'No focus goals yet — star goals to add them here, or switch to All.' : 'No active visions yet. Add one to get started.'}</div>`;
+    return;
+  }
+
+  if (segs) segs.innerHTML = s.ids.map((_, idx) => `<button class="vz-seg ${idx === s.i ? 'on' : (idx < s.i ? 'past' : '')}" onclick="vzStoryGo(${idx})" aria-label="Go to ${idx + 1}"></button>`).join('');
+
+  const g = (state.data.vision || []).find(v => String(v.id) === String(s.ids[s.i]));
+  if (!g) return;
+  try { await preloadLocalMedia([g]); } catch (e) {}
+
+  const videoUrls = g.video_url ? g.video_url.split(',').map(x => x.trim()).filter(Boolean) : [];
+  const hasVideo = videoUrls.length > 0;
+  const img = g.image_url ? (resolveMediaUrl(g.image_url) || sanitizeUrl(g.image_url)) : getDefaultImage(g);
+  const prog = parseInt(g.progress, 10) || 0;
+  const d = _vzDays(g.target_date);
+  const habits = _vzLinkedHabitNames(g);
+  const affs = (state.data.vision_affirmations || []).filter(a => String(a.vision_id) === String(g.id));
+  const gallery = (state.data.vision_images || []).filter(im => String(im.vision_id) === String(g.id)).slice(0, 8);
+  const isFocus = _vzIsFocus(g);
+
+  const media = hasVideo
+    ? `<video class="vz-story-vid" muted loop autoplay playsinline webkit-playsinline preload="auto" poster="${g.image_url ? (resolveMediaUrl(g.image_url) || '') : ''}" data-vision-local="${videoUrls[0]}"></video>`
+    : `<div class="vz-story-img" id="vzStoryImg" style="background-image:url('${img}')"></div>`;
+
+  stage.innerHTML = `
+    <div class="vz-story-card">
+      <div class="vz-story-media">
+        ${media}
+        <span class="vz-story-cat">${escapeHtml(g.category || 'Personal')}</span>
+        <div class="vz-story-mtitle">${escapeHtml(g.title || '')}</div>
+      </div>
+      <div class="vz-story-side">
+        <div class="vz-story-row1">
+          <div class="vz-story-prog"><b>${prog}%</b><span>progress</span></div>
+          ${isFocus ? `<span class="vz-story-chip focus">★ Focus</span>` : ''}
+          ${g.target_date ? `<span class="vz-story-chip ${d != null && d < 0 ? 'over' : ''}">🎯 ${formatDate(g.target_date)}${d != null ? ` · ${d < 0 ? Math.abs(d) + 'd ago' : d + 'd left'}` : ''}</span>` : `<span class="vz-story-chip">No deadline</span>`}
+        </div>
+        <div class="vz-story-bar"><i style="width:${prog}%"></i></div>
+        <div class="vz-story-prog-ctl">
+          <button onclick="_vzStoryBump('${g.id}',-10)" title="−10%">−</button>
+          <button onclick="_vzStoryBump('${g.id}',10)" title="+10%">+</button>
+        </div>
+        ${g.description ? `<div class="vz-story-lbl">Vision</div><div class="vz-story-text">${escapeHtml(g.description)}</div>` : ''}
+        ${g.notes ? `<div class="vz-story-lbl">Notes</div><div class="vz-story-text">${escapeHtml(g.notes)}</div>` : ''}
+        ${habits.length ? `<div class="vz-story-lbl">Linked habits</div><div class="vz-story-habs">${habits.map(h => `<span class="vz-story-hab">${escapeHtml(h)}</span>`).join('')}</div>` : ''}
+        ${gallery.length ? `<div class="vz-story-lbl">Gallery</div><div class="vz-story-gal">${gallery.map(im => { const u = resolveMediaUrl(im.url) || sanitizeUrl(im.url); return `<i style="background-image:url('${u}')" onclick="_vzStorySwap('${u}')"></i>`; }).join('')}</div>` : ''}
+        <div class="vz-story-actions">
+          ${affs.length ? `<button class="vz-story-btn primary" onclick="closeVisionStories();setTimeout(()=>startManifestationRitual('${g.id}'),130)">Start ritual · ${affs.length}</button>` : ''}
+          <button class="vz-story-btn" onclick="vzStoryEdit()">Edit</button>
+          <button class="vz-story-btn ok" onclick="closeVisionStories();setTimeout(()=>markVisionAchieved('${g.id}'),130)">Achieve</button>
+        </div>
+      </div>
+    </div>
+    <div class="vz-story-count">${s.i + 1} / ${s.ids.length}</div>
+  `;
+
+  const prevB = document.querySelector('#vzStoryOverlay .vz-story-nav.prev');
+  const nextB = document.querySelector('#vzStoryOverlay .vz-story-nav.next');
+  if (prevB) prevB.classList.toggle('disabled', s.i === 0);
+  if (nextB) nextB.classList.toggle('disabled', s.i === s.ids.length - 1);
+
+  if (hasVideo) { try { initVisionMediaElements(stage); } catch (e) {} }
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
 async function renderVision() {
   await checkAndAutoRenewTDP();
   const goals = state.data.vision || [];
@@ -1690,16 +1866,21 @@ async function renderVision() {
         </div>
       </div>
 
-      <!-- ── View Toggle ── -->
-      <div class="vision-view-tabs" style="margin-bottom:20px">
-        <button class="vision-tab ${visionState.view === 'grid' ? 'active' : ''}" onclick="switchVisionView('grid')" title="Grid">
-          ${renderIcon('grid', null, 'style="width:16px"')} Grid
-        </button>
-        <button class="vision-tab ${visionState.view === 'list' ? 'active' : ''}" onclick="switchVisionView('list')" title="List">
-          ${renderIcon('list', null, 'style="width:16px"')} List
-        </button>
-        <button class="vision-tab ${visionState.view === 'timeline' ? 'active' : ''}" onclick="switchVisionView('timeline')" title="Timeline">
-          ${renderIcon('calendar', null, 'style="width:16px"')} Timeline
+      <!-- ── View Toggle + Story launcher ── -->
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap">
+        <div class="vision-view-tabs">
+          <button class="vision-tab ${visionState.view === 'grid' ? 'active' : ''}" onclick="switchVisionView('grid')" title="Grid">
+            ${renderIcon('grid', null, 'style="width:16px"')} Grid
+          </button>
+          <button class="vision-tab ${visionState.view === 'list' ? 'active' : ''}" onclick="switchVisionView('list')" title="List">
+            ${renderIcon('list', null, 'style="width:16px"')} List
+          </button>
+          <button class="vision-tab ${visionState.view === 'timeline' ? 'active' : ''}" onclick="switchVisionView('timeline')" title="Timeline">
+            ${renderIcon('calendar', null, 'style="width:16px"')} Timeline
+          </button>
+        </div>
+        <button class="vision-tab vz-story-launch" style="margin-left:auto" onclick="openVisionStories()" title="View your visions one-by-one, full screen">
+          <i data-lucide="play" style="width:15px;height:15px;vertical-align:-2px"></i> Story view
         </button>
       </div>
 
