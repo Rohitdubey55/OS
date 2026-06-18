@@ -129,6 +129,8 @@ CREATE TABLE IF NOT EXISTS public.vision_board (
     linked_habits JSONB,
     video_url TEXT,
     month_focus TEXT,
+    color TEXT,
+    display_mode TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );

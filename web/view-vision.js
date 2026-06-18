@@ -1339,6 +1339,34 @@ const VISION_REFINE_CSS = `<style>
 .vz-quick__b svg { width:14px; height:14px; }
 .vz-quick__p { font-size:13px; font-weight:800; color:#fff; min-width:40px; text-align:center; font-variant-numeric:tabular-nums; text-shadow:0 1px 3px rgba(0,0,0,.45); }
 .vz-quick__sp { flex:1; }
+.vz-quick__color { width:26px; height:26px; border-radius:8px; border:1px solid color-mix(in srgb, var(--vz-ink,#fff) 55%, transparent); cursor:pointer; flex-shrink:0; box-shadow:0 1px 3px rgba(0,0,0,.25); padding:0; }
+
+/* ── Solid-color cards: auto-contrast ink + tinted accents (no photo overlay) ── */
+.vision-card--color .vision-card-overlay { display:none !important; }
+.vision-card--color .vision-card-content { color:var(--vz-ink); }
+.vision-card--color .vision-card-title { color:var(--vz-ink); }
+.vision-card--color.vz-ink-light .vision-card-title { text-shadow:0 1px 8px rgba(0,0,0,.42); }
+.vision-card--color .vision-card-cat-tag { background:color-mix(in srgb, var(--vz-ink) 15%, transparent); color:var(--vz-ink); border-color:color-mix(in srgb, var(--vz-ink) 30%, transparent); }
+.vision-card--color .vision-aff-indicator { background:color-mix(in srgb, var(--vz-ink) 16%, transparent); color:var(--vz-ink); border-color:color-mix(in srgb, var(--vz-ink) 30%, transparent); }
+.vision-card--color .vision-card-progress { background:color-mix(in srgb, var(--vz-ink) 22%, transparent); }
+.vision-card--color .vision-progress-fill { background:var(--vz-ink) !important; }
+.vision-card--color .vz-quick__b { color:var(--vz-ink); border:1px solid color-mix(in srgb, var(--vz-ink) 32%, transparent); background:color-mix(in srgb, var(--vz-ink) 12%, transparent); }
+.vision-card--color .vz-quick__b:hover { background:color-mix(in srgb, var(--vz-ink) 22%, transparent); }
+.vision-card--color .vz-quick__p { color:var(--vz-ink); text-shadow:none; }
+.vision-card--color .vision-card-badge.normal { background:color-mix(in srgb, var(--vz-ink) 18%, transparent); color:var(--vz-ink); }
+
+/* ── Color picker modal: curated palette + custom ── */
+.vz-palette { display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; }
+.vz-sw { aspect-ratio:1; border-radius:10px; border:2px solid transparent; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.18); padding:0; }
+.vz-sw.sel { box-shadow:0 0 0 2px var(--surface-1), 0 0 0 4px var(--text-1); }
+.vz-sw--custom { display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden; background:var(--surface-2); border:1.5px dashed var(--border-color); color:var(--text-3); font-size:20px; box-shadow:none; }
+.vz-sw--custom input[type=color] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+/* Edit-goal "Show on board" Color/Image toggle */
+.vz-disp-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.vz-disp-lbl { font-size:12px; font-weight:600; color:var(--text-3); }
+.vz-disp-seg { display:inline-flex; background:var(--surface-2); border:1px solid var(--border-color); border-radius:9px; padding:3px; gap:2px; }
+.vz-disp { border:none; background:transparent; color:var(--text-3); font-size:12.5px; font-weight:600; padding:6px 14px; border-radius:7px; cursor:pointer; transition:all .14s; }
+.vz-disp.active { background:var(--surface-1); color:var(--text-1); box-shadow:var(--shadow-xs); }
 
 /* Denser, refined, compact cards — desktop only (mobile card shape untouched) */
 @media (min-width:1000px){
@@ -1347,8 +1375,9 @@ const VISION_REFINE_CSS = `<style>
   .vz-pro .vision-card:hover { box-shadow:var(--shadow-lg); transform:translateY(-2px); }
   .vz-pro .vision-card.vz-sel { box-shadow:0 0 0 2px var(--primary), var(--shadow-lg); }
   .vz-pro .vision-card-content { padding:12px 12px 11px; }
-  .vz-pro .vision-card-title { font-size:14.5px; margin-bottom:6px; -webkit-line-clamp:2; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
-  .vz-pro .vision-card-cat-tag { top:10px; left:10px; padding:3px 9px; font-size:10px; }
+  .vz-pro .vision-card-title { font-size:18px; font-weight:800; margin-bottom:7px; -webkit-line-clamp:2; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+  .vz-pro .vision-card-cat-tag { top:10px; left:10px; padding:4px 11px; font-size:11.5px; }
+  .vz-pro .vz-quick__p { font-size:15px; min-width:46px; }
   .vz-pro .vision-aff-indicator { width:30px; height:30px; top:10px; right:10px; }
   .vz-pro .vz-quick { display:flex; align-items:center; gap:6px; margin-top:9px; }
   .vz-pro .vz-pane { flex-basis:340px; }
@@ -1793,7 +1822,8 @@ async function _vzStoryRender() {
 
   const videoUrls = g.video_url ? g.video_url.split(',').map(x => x.trim()).filter(Boolean) : [];
   const hasVideo = videoUrls.length > 0;
-  const img = g.image_url ? (resolveMediaUrl(g.image_url) || sanitizeUrl(g.image_url)) : getDefaultImage(g);
+  const hasImg = !!g.image_url;
+  const img = hasImg ? (resolveMediaUrl(g.image_url) || sanitizeUrl(g.image_url)) : '';
   const prog = parseInt(g.progress, 10) || 0;
   const d = _vzDays(g.target_date);
   const habits = _vzLinkedHabitNames(g);
@@ -1801,9 +1831,12 @@ async function _vzStoryRender() {
   const gallery = (state.data.vision_images || []).filter(im => String(im.vision_id) === String(g.id)).slice(0, 8);
   const isFocus = _vzIsFocus(g);
 
+  // Color-or-image: a set photo/video wins in the immersive view; otherwise the goal's color.
   const media = hasVideo
-    ? `<video class="vz-story-vid" muted loop autoplay playsinline webkit-playsinline preload="auto" poster="${g.image_url ? (resolveMediaUrl(g.image_url) || '') : ''}" data-vision-local="${videoUrls[0]}"></video>`
-    : `<div class="vz-story-img" id="vzStoryImg" style="background-image:url('${img}')"></div>`;
+    ? `<video class="vz-story-vid" muted loop autoplay playsinline webkit-playsinline preload="auto" poster="${hasImg ? (resolveMediaUrl(g.image_url) || '') : ''}" data-vision-local="${videoUrls[0]}"></video>`
+    : (hasImg
+        ? `<div class="vz-story-img" id="vzStoryImg" style="background-image:url('${img}')"></div>`
+        : `<div class="vz-story-img" style="background:${_vzCardColor(g)}"></div>`);
 
   stage.innerHTML = `
     <div class="vz-story-card">
@@ -2019,12 +2052,78 @@ function renderVisionGrid(goals) {
   `;
 }
 
+// Pleasant default colors per category (deep enough for white text). Per-goal
+// g.color (from the color wheel) overrides.
+const VZ_CAT_COLORS = {
+  'Work': '#2563EB', 'Personality': '#7C3AED', 'Ouro': '#0F766E',
+  'Enjoyment': '#EA580C', 'Routine': '#0891B2', 'Personal': '#4F46E5',
+  'Health': '#DC2626', 'Finance': '#059669', 'Social': '#DB2777'
+};
+function _vzCardColor(g) {
+  if (g && /^#[0-9A-Fa-f]{6}$/.test(g.color || '')) return g.color;
+  return VZ_CAT_COLORS[g && g.category] || '#4F46E5';
+}
+
+// Perceived-luminance → a readable text color for a given background hex.
+function _vzTextOn(hex) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
+  if (!m) return '#FFFFFF';
+  const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 168 ? '#0F172A' : '#FFFFFF';
+}
+// Curated, harmonious palette shown first; the wheel is the "custom" option.
+window.VZ_PALETTE = ['#4F46E5', '#2563EB', '#0891B2', '#0F766E', '#059669', '#65A30D', '#CA8A04', '#EA580C', '#DC2626', '#DB2777', '#7C3AED', '#475569'];
+
+// Live-update a card's color + auto-contrast ink (no save yet).
+window.vzPreviewColor = function (id, color) {
+  const card = document.getElementById('vision-card-' + id);
+  if (!card) return;
+  const ink = _vzTextOn(color);
+  card.style.setProperty('--vz-ink', ink);
+  card.classList.toggle('vz-ink-light', ink === '#FFFFFF');
+  card.classList.toggle('vz-ink-dark', ink !== '#FFFFFF');
+  const bg = card.querySelector('.vision-card-bg'); if (bg) bg.style.background = color;
+  const sw = card.querySelector('.vz-quick__color'); if (sw) sw.style.background = color;
+};
+// Persist the chosen color.
+window.vzSetColor = async function (id, color) {
+  const g = (state.data.vision || []).find(v => String(v.id) === String(id));
+  if (!g) return;
+  g.color = color;
+  vzPreviewColor(id, color);
+  document.querySelectorAll('#universalModal .vz-sw[data-color]').forEach(b =>
+    b.classList.toggle('sel', (b.dataset.color || '').toLowerCase() === String(color).toLowerCase()));
+  const ci = document.getElementById('vzColorCustom'); if (ci) ci.value = color;
+  try { await apiCall('update', 'vision_board', { color: color }, id); } catch (e) {}
+};
+// Color picker: curated swatches first, custom wheel last.
+window.vzOpenColorModal = function (id) {
+  const g = (state.data.vision || []).find(v => String(v.id) === String(id)); if (!g) return;
+  const cur = _vzCardColor(g);
+  const modal = document.getElementById('universalModal'); const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <h3 style="margin:0 0 4px; font-weight:700">Goal color</h3>
+    <p style="font-size:13px; color:var(--text-muted); margin:0 0 16px">Pick a color for “${escapeHtml(g.title || '')}”.</p>
+    <div class="vz-palette">
+      ${window.VZ_PALETTE.map(c => `<button class="vz-sw ${c.toLowerCase() === String(cur).toLowerCase() ? 'sel' : ''}" data-color="${c}" style="background:${c}" title="${c}" onclick="vzSetColor('${id}','${c}')"></button>`).join('')}
+      <label class="vz-sw vz-sw--custom" title="Custom color">
+        <input type="color" id="vzColorCustom" value="${cur}" oninput="vzPreviewColor('${id}', this.value)" onchange="vzSetColor('${id}', this.value)">
+        <span>+</span>
+      </label>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:18px"><button class="btn primary" onclick="document.getElementById('universalModal').classList.add('hidden')">Done</button></div>
+  `;
+  modal.classList.remove('hidden');
+};
+// Edit-goal: choose whether the board shows this goal's color or its image.
+window.vzSetDisplayMode = function (v) {
+  const inp = document.getElementById('mVisDisplayMode'); if (inp) inp.value = v;
+  document.querySelectorAll('.vz-disp-seg .vz-disp').forEach(b => b.classList.toggle('active', b.dataset.v === v));
+};
+
 function renderVisionCard(g, isAchieved = false) {
-  const videoUrls = g.video_url ? g.video_url.split(',').map(s => s.trim()).filter(Boolean) : [];
-  const firstVideo = videoUrls.length > 0 ? videoUrls[0] : null;
-  const hasVideo = !!firstVideo;
-  const bgUrl = hasVideo ? '' : (g.image_url ? resolveMediaUrl(g.image_url) || sanitizeUrl(g.image_url) : getDefaultImage(g));
   const days = g.target_date ? Math.ceil((new Date(g.target_date) - new Date()) / 86400000) : null;
+  const color = _vzCardColor(g);
 
   let badge = '';
   if (isAchieved) {
@@ -2035,35 +2134,21 @@ function renderVisionCard(g, isAchieved = false) {
   }
 
   const cardId = `vision-card-${g.id}`;
-  const mediaId = `vision-card-media-${g.id}`;
-
-  // Set placeholder background initially
-  const mediaStyle = hasVideo ? `background:#111;` : `background-image:url('${bgUrl}')`;
-
-  // Auto-resolve local media after rendering
-  if (g.image_url && g.image_url.startsWith('local-img://')) {
-    setTimeout(async () => {
-      const resolved = await resolveMediaUrlAsync(g.image_url);
-      const el = document.getElementById(mediaId);
-      if (el && resolved) el.style.backgroundImage = `url('${resolved}')`;
-    }, 0);
-  }
+  const affCount = (state.data.vision_affirmations || []).filter(a => String(a.vision_id) === String(g.id)).length;
+  // Per-goal board display: 'image' shows the photo, otherwise the solid color.
+  const useImage = g.display_mode === 'image' && g.image_url;
+  const ink = useImage ? '#FFFFFF' : _vzTextOn(color);   // auto-contrast text color
+  const colorCls = useImage ? '' : ('vision-card--color ' + (ink === '#FFFFFF' ? 'vz-ink-light' : 'vz-ink-dark'));
+  const bgStyle = useImage
+    ? `background-image:url('${resolveMediaUrl(g.image_url) || sanitizeUrl(g.image_url)}'); background-size:cover; background-position:center;`
+    : `background:${color}`;
 
   return `
-    <div class="vision-card animate-enter ${String(g.id) === String(_vzSelId) ? 'vz-sel' : ''}" id="${cardId}" onclick="vzCardOpen('${g.id}')">
-      <div class="vision-card-bg" id="${mediaId}" style="${mediaStyle}">
-        ${hasVideo ? `<video id="video-${g.id}" style="width:100%;height:100%;object-fit:cover" muted loop autoplay playsinline webkit-playsinline preload="auto" poster="${g.image_url ? resolveMediaUrl(g.image_url) : ''}" data-vision-local="${firstVideo}">
-        </video>` : ''}
-      </div>
+    <div class="vision-card ${colorCls} animate-enter ${String(g.id) === String(_vzSelId) ? 'vz-sel' : ''}" id="${cardId}" style="--vz-ink:${ink}" onclick="vzCardOpen('${g.id}')">
+      <div class="vision-card-bg" style="${bgStyle}"></div>
       <div class="vision-card-overlay"></div>
       <div class="vision-card-cat-tag">${g.category || 'Personal'}</div>
-      ${hasVideo ? `<button class="vision-video-btn" onclick="event.stopPropagation();openVideoModal('${firstVideo}')">▶</button>` : ''}
-      
-      ${(() => {
-    const affirmations = (state.data.vision_affirmations || []).filter(a => String(a.vision_id) === String(g.id));
-    if (affirmations.length === 0) return '';
-    return `<div class="vision-aff-indicator" title="Manifest (${affirmations.length} affirmations)" onclick="event.stopPropagation();startManifestationRitual('${g.id}')">${renderIcon('sparkles', null, 'style="width:14px; color:var(--warning)"')}</div>`;
-  })()}
+      ${affCount ? `<div class="vision-aff-indicator" title="Manifest (${affCount} affirmations)" onclick="event.stopPropagation();startManifestationRitual('${g.id}')">${renderIcon('sparkles', null, 'style="width:14px; color:currentColor"')}</div>` : ''}
 
       <div class="vision-card-content">
         ${badge}
@@ -2077,6 +2162,7 @@ function renderVisionCard(g, isAchieved = false) {
           <span class="vz-quick__p" id="vzqp-${g.id}">${parseInt(g.progress, 10) || 0}%</span>
           <button class="vz-quick__b" title="Increase 1%" onclick="event.stopPropagation();vzBump('${g.id}',1)">+</button>
           <span class="vz-quick__sp"></span>
+          <button class="vz-quick__color" title="Pick color" style="background:${color}" onclick="event.stopPropagation();vzOpenColorModal('${g.id}')"></button>
           <button class="vz-quick__b" title="Edit goal" onclick="event.stopPropagation();openEditVision('${g.id}')">${renderIcon('edit', null, 'style="width:14px"')}</button>
         </div>` : ''}
       </div>
@@ -2835,6 +2921,14 @@ function buildVisionForm(g) {
       <!-- Section 4: Media -->
       <div class="vision-form-section">
         <div class="vision-form-label">${renderIcon('image', null, 'style="width:14px;"')} Media Attachments</div>
+        <div class="vz-disp-row">
+          <span class="vz-disp-lbl">Show on board</span>
+          <div class="vz-disp-seg">
+            <button type="button" class="vz-disp ${(isEdit && g && g.display_mode === 'image') ? '' : 'active'}" data-v="color" onclick="vzSetDisplayMode('color')">Color</button>
+            <button type="button" class="vz-disp ${(isEdit && g && g.display_mode === 'image') ? 'active' : ''}" data-v="image" onclick="vzSetDisplayMode('image')">Image</button>
+          </div>
+          <input type="hidden" id="mVisDisplayMode" value="${(isEdit && g && g.display_mode === 'image') ? 'image' : 'color'}">
+        </div>
         <div class="vision-modal-tabs">
           <button class="vision-modal-tab ${window._visionMediaTab === 'image' ? 'active' : ''}" id="vTabImg" onclick="switchVisionMediaTab('image')">Image</button>
           <button class="vision-modal-tab ${window._visionMediaTab === 'url' ? 'active' : ''}" id="vTabUrl" onclick="switchVisionMediaTab('url')">URL</button>
@@ -3156,6 +3250,7 @@ function collectVisionPayload() {
     video_url,
     month_focus: monthFocus,
     linked_habits: linkedHabits,
+    display_mode: document.getElementById('mVisDisplayMode')?.value || 'color',
   };
 }
 

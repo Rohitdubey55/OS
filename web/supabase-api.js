@@ -77,14 +77,24 @@
                     if (!user) throw new Error('Not authenticated');
                     if (!id) throw new Error('Missing id for update');
                     let updates = _normalizeForUpdate(sheet, payload);
-                    let res, tries = 0;
-                    do {
+                    let res = null, tries = 0;
+                    // If the payload is empty — or becomes empty after dropping a
+                    // not-yet-migrated column (e.g. `color`) — skip the DB call so we
+                    // don't send an empty UPDATE (which makes .single() throw
+                    // "Cannot coerce the result to a single JSON object").
+                    while (updates && Object.keys(updates).length > 0 && tries < 5) {
                         res = await sb.from(sheet).update(updates).eq('id', String(id)).select().single();
                         if (!res.error) break;
                         const stripped = _stripMissingCol(res.error, updates);
                         if (!stripped) break;
                         updates = stripped;
-                    } while (++tries < 5);
+                        tries++;
+                        // If stripping a not-yet-migrated column emptied the payload,
+                        // there's nothing left to persist — treat as a successful no-op
+                        // instead of throwing the original "column not found" error.
+                        if (Object.keys(updates).length === 0) { res = { data: null, error: null }; break; }
+                    }
+                    if (!res) return { success: true, data: null, skipped: true };
                     if (res.error) throw res.error;
                     return { success: true, data: res.data };
                 }
@@ -121,7 +131,7 @@
         expenses: new Set(['id','user_id','date','amount','category','description','type','payment_mode']),
         diary: new Set(['id','user_id','date','content','mood','tags']),
         planner_events: new Set(['id','user_id','title','start_datetime','end_datetime','category','color']),
-        vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus']),
+        vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus','color','display_mode']),
         funds: new Set(['id','user_id','name','balance','type','currency']),
         assets: new Set(['id','user_id','name','value','purchase_date','notes']),
         people: new Set(['id','user_id','name','relationship','birthday','phone','email','instagram','last_contact','next_interaction','is_favorite','is_priority','notes']),

@@ -745,6 +745,13 @@ input::placeholder, textarea::placeholder { color: var(--saas-text-dim) !importa
     .quick-log-sheet .quick-log-handle { display: none !important; }
 }
 
+/* Desktop: the Vision detail modal was a phone-portrait (9/16) giant image.
+   Cap the modal width and make the media a contained landscape banner. */
+@media (min-width: 1000px) {
+    .modal-box:has(.vision-detail-media-container) { max-width: 700px !important; }
+    .vision-detail-media-container { aspect-ratio: 16 / 9 !important; max-height: 300px !important; margin: 0 24px 18px !important; }
+}
+
 /* Habit icon picker (line icons instead of emojis) */
 .hb-iconpick { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 8px; }
 .hb-icon-opt { height: 46px; border: 1px solid var(--border-color, #e2e8f0); background: var(--surface-1, #fff); border-radius: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-3, #5B6470); transition: border-color .14s, color .14s, background .14s; }
@@ -2131,18 +2138,19 @@ html { scroll-behavior: smooth; }
     padding: 0 var(--sp-2);
 }
 .habits-grid-widget .hg-grid {
-    min-width: 100%;
+    min-width: max-content;   /* row can exceed the tile → habit area scrolls */
     display: flex;
     flex-direction: column;
 }
 .habits-grid-widget .hg-row {
     display: grid;
-    /* Widened habit columns from 32px → 56px so the name label fits below
-       the icon in the header row. */
-    grid-template-columns: 80px repeat(var(--hg-cols, 5), 56px) 1fr;
+    /* Wide habit columns (full names) → row scrolls horizontally. DAY (left) and
+       DAY SCORE (right) are frozen via the sticky rules below. gap:0 so no
+       transparent strip lets a scrolling cell peek beside the frozen columns. */
+    grid-template-columns: 78px repeat(var(--hg-cols, 5), 70px) 110px;
+    gap: 0;
     align-items: center;
-    gap: 6px;
-    padding: 8px 4px;
+    padding: 8px 0;
     border-bottom: 1px solid var(--saas-border);
     min-height: 38px;
 }
@@ -2172,6 +2180,15 @@ html { scroll-behavior: smooth; }
     color: var(--saas-text);
     font-weight: 700;
 }
+/* Freeze DAY (left) + DAY SCORE (right) while the habit columns scroll under
+   them. Opaque backgrounds + a 1px divider fully cover the scrolling cells, so
+   nothing peeks through; the divider marks the frozen edge (no shadow). */
+.habits-grid-widget .hg-day-label { position: sticky; left: 0; z-index: 3; background: var(--saas-surface); border-right: 1px solid var(--saas-border); padding-left: 6px; padding-right: 8px; }
+.habits-grid-widget .hg-score { position: sticky; right: 0; z-index: 3; background: var(--saas-surface); border-left: 1px solid var(--saas-border); }
+.habits-grid-widget .hg-row--today .hg-day-label,
+.habits-grid-widget .hg-row--today .hg-score { background: var(--saas-accent-soft); }
+.habits-grid-widget .hg-row--head .hg-day-label,
+.habits-grid-widget .hg-row--head .hg-score { z-index: 4; }
 .habits-grid-widget .hg-day-label--head {
     font-size: 11px;
     font-weight: 700;
@@ -2213,6 +2230,14 @@ html { scroll-behavior: smooth; }
     align-items: center;
     justify-content: center;
 }
+/* Weekly-view toggle switch in the Habits Grid header */
+.habits-grid-widget .hg-wk-toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--saas-text-muted, #5B6470); background: var(--saas-surface, #fff); border: 1px solid var(--saas-border, #e2e8f0); border-radius: 999px; padding: 5px 11px; cursor: pointer; white-space: nowrap; transition: color .14s, border-color .14s; }
+.habits-grid-widget .hg-wk-toggle .hg-wk-dot { width: 26px; height: 15px; border-radius: 999px; background: var(--saas-border-strong, #cbd5e1); position: relative; flex-shrink: 0; transition: background .15s; }
+.habits-grid-widget .hg-wk-toggle .hg-wk-dot::after { content: ''; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.habits-grid-widget .hg-wk-toggle.on { color: var(--saas-text, #0F172A); border-color: var(--saas-accent, var(--primary)); }
+.habits-grid-widget .hg-wk-toggle.on .hg-wk-dot { background: var(--saas-accent, var(--primary)); }
+.habits-grid-widget .hg-wk-toggle.on .hg-wk-dot::after { transform: translateX(11px); }
+
 /* Weekly habit not scheduled that day — quiet, non-interactive placeholder */
 .habits-grid-widget .hg-cell--off { cursor: default; }
 .habits-grid-widget .hg-cell--off .hg-off { color: var(--saas-border-strong, #cbd5e1); font-size: 16px; line-height: 1; user-select: none; }
@@ -2249,6 +2274,7 @@ html { scroll-behavior: smooth; }
     border-color: var(--saas-accent);
 }
 .habits-grid-widget .hg-score {
+    grid-column: -2 / -1;   /* always the last column (after the flexible spacer) */
     display: flex;
     align-items: center;
     gap: 8px;
@@ -2263,11 +2289,25 @@ html { scroll-behavior: smooth; }
     color: var(--saas-text-dim);
 }
 .habits-grid-widget .hg-score-pct {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--saas-text);
-    min-width: 36px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #FFFFFF;
+    background: var(--saas-text-dim);   /* opaque; overridden per score band below */
+    border: none;
+    padding: 3px 9px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
 }
+/* Opaque, color-coded score: red (low) → amber (mid) → green (high) */
+.habits-grid-widget .hg-score.is-zero .hg-score-pct { background: var(--saas-sunken); color: var(--saas-text-muted); }
+.habits-grid-widget .hg-score.is-low  .hg-score-pct { background: #EF4444; }
+.habits-grid-widget .hg-score.is-mid  .hg-score-pct { background: #F59E0B; }
+.habits-grid-widget .hg-score.is-high .hg-score-pct { background: #10B981; }
+.habits-grid-widget .hg-score.is-zero .hg-score-fill { background: var(--saas-border-strong); }
+.habits-grid-widget .hg-score.is-low  .hg-score-fill { background: #EF4444; }
+.habits-grid-widget .hg-score.is-mid  .hg-score-fill { background: #F59E0B; }
+.habits-grid-widget .hg-score.is-high .hg-score-fill { background: #10B981; }
 .habits-grid-widget .hg-score-bar {
     flex: 1;
     height: 4px;
@@ -2472,6 +2512,7 @@ html { scroll-behavior: smooth; }
 
 /* Mobile: tighten habit grid */
 @media (max-width: 720px) {
+    .habits-grid-widget .hg-grid { min-width: 100%; }
     .habits-grid-widget .hg-row {
         grid-template-columns: 64px repeat(var(--hg-cols, 5), 28px) 80px;
     }

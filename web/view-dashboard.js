@@ -1722,6 +1722,13 @@ window.resetLumiaTiles = async function () {
 // These helpers flip the DOM synchronously for instant feedback, then hand
 // off to the original optimistic toggle for data + sheet sync.
 
+// Toggle the Habits Grid "weekly view" (blank weekly habits on off-days) on/off.
+window.toggleHgWeekly = function () {
+    window._hgWeeklyAware = (window._hgWeeklyAware === false);
+    try { localStorage.setItem('hgWeeklyAware', window._hgWeeklyAware ? '1' : '0'); } catch (e) {}
+    if (typeof renderDashboard === 'function') renderDashboard();
+};
+
 window._tileHabitToggle = async function (cellEl, habitId, iso) {
     // iso defaults to today for backward compatibility with callers that
     // don't pass a date. The Habits Grid widget passes the specific row's
@@ -3119,13 +3126,21 @@ function renderDashboard() {
         String(l.habit_id) === String(habitId) && (l.date || '').startsWith(iso)
       );
 
-      // Cap visible habits to 8 so grid doesn't overflow
-      const habits = allHabits.slice(0, 8);
+      // Weekly-view toggle: ON = include weekly habits (each shown only on its
+      // scheduled weekdays); OFF = hide weekly habits from the grid entirely. Persisted.
+      if (typeof window._hgWeeklyAware === 'undefined') {
+        try { window._hgWeeklyAware = localStorage.getItem('hgWeeklyAware') !== '0'; } catch (e) { window._hgWeeklyAware = true; }
+      }
+      const showWeekly = window._hgWeeklyAware !== false;
+      const isWeeklyHabit = (h) => (typeof window.habitIsWeekly === 'function') ? window.habitIsWeekly(h) : false;
+
+      // Cap visible habits to 8 so grid doesn't overflow (weekly hidden when toggled off).
+      const habits = allHabits.filter(h => showWeekly || !isWeeklyHabit(h)).slice(0, 8);
 
       const headerCells = habits.map(h => {
         const fullName = h.habit_name || h.name || '';
-        // Line icon (migrates legacy emoji); falls back to the stored char.
-        const iconHTML = (typeof habitIconHTML === 'function') ? habitIconHTML(h.emoji || h.icon, 16) : (h.emoji || h.icon || '✦');
+        // Same icon resolution as the Habits page (line icon, migrates legacy emoji).
+        const iconHTML = (typeof habitIconHTML === 'function') ? habitIconHTML(h.emoji, 16) : (h.emoji || '✦');
         return `
         <div class="hg-col-head" title="${escapeHtml(fullName)}">
           <span class="hg-col-icon">${iconHTML}</span>
@@ -3134,7 +3149,7 @@ function renderDashboard() {
       `;
       }).join('');
 
-      // A weekly habit only counts on its scheduled weekdays.
+      // A shown weekly habit still only counts/checks on its scheduled weekdays.
       const _sched = (h, dateObj) => (typeof window.habitScheduledOn === 'function') ? window.habitScheduledOn(h, dateObj) : true;
       const bodyRows = dayRows.map((day, dayIdx) => {
         const schedH = habits.filter(h => _sched(h, day.date));
@@ -3157,11 +3172,13 @@ function renderDashboard() {
               </span>
             </div>`;
         }).join('');
+        // Color-code the day score: red (low) → amber (mid) → green (high).
+        const scoreCls = pct === 0 ? 'is-zero' : pct < 40 ? 'is-low' : pct < 70 ? 'is-mid' : 'is-high';
         return `
           <div class="hg-row ${dayIdx === 0 ? 'hg-row--today' : ''}">
             <div class="hg-day-label">${day.label}</div>
             ${cells}
-            <div class="hg-score">
+            <div class="hg-score ${scoreCls}">
               <span class="hg-score-pct">${pct}%</span>
               <div class="hg-score-bar"><div class="hg-score-fill" style="width:${pct}%"></div></div>
             </div>
@@ -3172,7 +3189,10 @@ function renderDashboard() {
         <div class="widget-card habits-grid-widget" data-widget-id="habitsGrid">
           <div class="hg-header">
             <span class="hg-title">Habits</span>
-            <button class="hg-newbtn" onclick="event.stopPropagation();_dashOpenModal('habits','openHabitModal')">+ New habit</button>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button class="hg-wk-toggle ${showWeekly ? 'on' : ''}" onclick="event.stopPropagation();toggleHgWeekly()" title="${showWeekly ? 'Weekly habits are shown (on their scheduled days). Click to hide them.' : 'Weekly habits are hidden — showing daily habits only. Click to show them.'}"><span class="hg-wk-dot"></span> Weekly view</button>
+              <button class="hg-newbtn" onclick="event.stopPropagation();_dashOpenModal('habits','openHabitModal')">+ New habit</button>
+            </div>
           </div>
           <div class="hg-scroll">
             <div class="hg-grid" style="--hg-cols: ${habits.length};">

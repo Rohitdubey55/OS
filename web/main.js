@@ -181,7 +181,14 @@ window.habitScheduledToday = function (h) { return window.habitScheduledOn(h, ne
 /* ── Habit icons (line icons instead of emojis) ───────────────────────────── */
 window.HABIT_ICONS = ['dumbbell','activity','heart','book-open','brain','droplet','apple','moon','sun','coffee','pencil','music','bike','leaf','target','flame','smile','laptop','wallet','phone','footprints','bed','sparkles','star','alarm-clock','glass-water','palette','code'];
 // Migrate the old emoji choices to the closest line icon.
-window._HABIT_EMOJI_MAP = { '💪':'dumbbell','📚':'book-open','🧘':'activity','💧':'droplet','🍎':'apple','🏃':'footprints','💤':'moon','✨':'sparkles','🏆':'star','⭐':'star','🔥':'flame','☕':'coffee','🎵':'music','🚴':'bike','🛏️':'bed','💻':'laptop' };
+window._HABIT_EMOJI_MAP = {
+    '💪':'dumbbell','🏋':'dumbbell','🏋️':'dumbbell','📚':'book-open','📖':'book-open','📓':'book-open','📔':'book-open','📝':'pencil','✏️':'pencil','✍️':'pencil',
+    '🧘':'activity','🧘‍♂️':'activity','🧘‍♀️':'activity','🏃':'footprints','🏃‍♂️':'footprints','🚶':'footprints','👣':'footprints',
+    '💧':'droplet','🚿':'droplet','🛁':'droplet','🧴':'droplet','🧼':'sparkles','🧹':'sparkles','🧽':'sparkles','🪥':'sparkles','✨':'sparkles','🌟':'star','⭐':'star','🏆':'star',
+    '🍎':'apple','🥗':'leaf','🥦':'leaf','🌿':'leaf','☀️':'sun','🌞':'sun','😴':'moon','💤':'moon','🌙':'moon','🛏️':'bed','🛌':'bed',
+    '🔥':'flame','☕':'coffee','🎵':'music','🎶':'music','🎸':'music','🚴':'bike','🚲':'bike','💻':'laptop','🖥️':'laptop','👨‍💻':'code','💼':'wallet','💰':'wallet','💵':'wallet',
+    '📞':'phone','📱':'phone','🎨':'palette','🧠':'brain','❤️':'heart','🫀':'heart','😀':'smile','😊':'smile','🙂':'smile','⏰':'alarm-clock','🎯':'target','🥤':'glass-water'
+};
 window.habitIconKey = function (val) {
     if (val && window.HABIT_ICONS.indexOf(val) !== -1) return val;
     if (val && window._HABIT_EMOJI_MAP[val]) return window._HABIT_EMOJI_MAP[val];
