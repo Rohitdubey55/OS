@@ -3111,7 +3111,7 @@ function renderDashboard() {
         if (i === 0) label = 'Today';
         else if (i === 1) label = 'Yesterday';
         else label = d.toLocaleDateString('en-US', { weekday: 'long' });
-        dayRows.push({ iso, label });
+        dayRows.push({ iso, label, date: new Date(d) });
       }
 
       const logs = state.data.habit_logs || [];
@@ -3134,10 +3134,17 @@ function renderDashboard() {
       `;
       }).join('');
 
+      // A weekly habit only counts on its scheduled weekdays.
+      const _sched = (h, dateObj) => (typeof window.habitScheduledOn === 'function') ? window.habitScheduledOn(h, dateObj) : true;
       const bodyRows = dayRows.map((day, dayIdx) => {
-        const doneCount = habits.filter(h => isDone(h.id, day.iso)).length;
-        const pct = habits.length ? Math.round((doneCount / habits.length) * 100) : 0;
+        const schedH = habits.filter(h => _sched(h, day.date));
+        const doneCount = schedH.filter(h => isDone(h.id, day.iso)).length;
+        const pct = schedH.length ? Math.round((doneCount / schedH.length) * 100) : 0;
         const cells = habits.map(h => {
+          // Weekly habit not scheduled this day → blank, non-interactive cell.
+          if (!_sched(h, day.date)) {
+            return `<div class="hg-cell hg-cell--off" title="Not scheduled this day"><span class="hg-off">·</span></div>`;
+          }
           const done = isDone(h.id, day.iso);
           const isToday = dayIdx === 0;
           // ALL past days are clickable — pass iso so the toggle targets the
@@ -3191,7 +3198,8 @@ function renderDashboard() {
         if (pa !== pb) return pa - pb;
         return (a.due_date || '9999-12-31').localeCompare(b.due_date || '9999-12-31');
       });
-      const visible = sorted.slice(0, 6);
+      // Show all pending (capped for perf); the tile scrolls when there are more than fit.
+      const visible = sorted.slice(0, 60);
 
       const PRIO_META = {
         P1: { label: 'Urgent', cls: 'tl-prio--urgent' },

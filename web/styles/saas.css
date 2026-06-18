@@ -2185,6 +2185,9 @@ html { scroll-behavior: smooth; }
     align-items: center;
     justify-content: center;
 }
+/* Weekly habit not scheduled that day — quiet, non-interactive placeholder */
+.habits-grid-widget .hg-cell--off { cursor: default; }
+.habits-grid-widget .hg-cell--off .hg-off { color: var(--saas-border-strong, #cbd5e1); font-size: 16px; line-height: 1; user-select: none; }
 /* Any clickable cell (today or past) gets pointer + hover state */
 .habits-grid-widget .hg-cell--clickable {
     cursor: pointer;
@@ -3697,6 +3700,37 @@ body.tiles-editing .main-header-bar .page-action-btn#lumiaEditBtn:hover {
     .lumia-grid--fixed .lumia-tile__body .ds-dot { font-size: 0 !important; }
     .lumia-grid--fixed .lumia-tile__body .ds-foot { display: none !important; }
 }
+
+/* Year/Life Progress (compact flat): content-sized rows so the label can't
+   collapse onto the value when the tile is short. */
+.lumia-grid--fixed .lumia-tile__body .lumia-compact.lumia-compact--flat {
+    grid-template-rows: auto auto auto auto !important;
+    align-content: center !important;
+    row-gap: 5px !important;
+}
+.lumia-grid--fixed .lumia-tile__body .lumia-compact.lumia-compact--flat .lumia-compact__label { align-self: start !important; }
+.lumia-grid--fixed .lumia-tile__body .lumia-compact.lumia-compact--flat .lumia-compact__value { font-size: clamp(15px, 16cqh, 28px) !important; }
+
+/* Budget Bar + other lw-card visual widgets: scale to the tile, keep the bar visible. */
+.lumia-grid--fixed .lumia-tile__body .lw-card { justify-content: center; }
+.lumia-grid--fixed .lumia-tile__body .lw-card__title { font-size: clamp(15px, 8cqw, 22px); }
+.lumia-grid--fixed .lumia-tile__body .lw-card__big-stat { font-size: clamp(18px, 12cqh, 30px); }
+@container (max-height: 150px) {
+    .lumia-grid--fixed .lumia-tile__body .lw-card__foot { display: none !important; }
+    .lumia-grid--fixed .lumia-tile__body .lw-card__head { margin-bottom: 7px !important; }
+}
+@container (max-height: 108px) {
+    .lumia-grid--fixed .lumia-tile__body .lw-card { padding: 9px 12px !important; }
+    .lumia-grid--fixed .lumia-tile__body .lw-card__head { margin-bottom: 5px !important; }
+    .lumia-grid--fixed .lumia-tile__body .lw-moodchart { display: none !important; }
+}
+
+/* Tasks list: pinned header + scrolling body so a tall tile shows many tasks. */
+.lumia-grid--fixed .lumia-tile__body > .tasks-list-widget { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.lumia-grid--fixed .lumia-tile__body .tasks-list-widget .tl-header,
+.lumia-grid--fixed .lumia-tile__body .tasks-list-widget .tl-col-heads,
+.lumia-grid--fixed .lumia-tile__body .tasks-list-widget .tl-footer { flex-shrink: 0; }
+.lumia-grid--fixed .lumia-tile__body .tasks-list-widget .tl-body { flex: 1; min-height: 0; overflow-y: auto; }
 
 /* Tile-content-fit for new widgets — when colored, drop their card chrome */
 .lumia-tile--colored .lumia-tile__body .lw-card,
