@@ -358,6 +358,29 @@ function renderDiary() {
   .modal-box:has(.dr-modal) { max-height:100vh !important; height:100vh !important; max-width:100% !important; width:100% !important; border-radius:0 !important; margin:0 !important; padding:20px !important; padding-top:calc(20px + env(safe-area-inset-top,0px)) !important; padding-bottom:calc(20px + env(safe-area-inset-bottom,0px)) !important; }
 }
 
+/* Context chips — color-coded by type, clearer labels */
+.dr-context-chip.is-task  { background:rgba(5,150,105,.07);  color:#059669;        border-color:rgba(5,150,105,.16); }
+.dr-context-chip.is-habit { background:rgba(79,70,229,.07);  color:var(--primary); border-color:rgba(79,70,229,.16); }
+.dr-context-chip.is-spend { background:rgba(217,119,6,.09);  color:#B45309;        border-color:rgba(217,119,6,.18); }
+
+/* Meta wrapper — transparent on mobile (children stack exactly as before),
+   becomes the right rail on desktop. */
+.dr-side { display:contents; }
+
+/* ═══ DESKTOP: two-column writer (editor + meta rail) ═══ */
+@media (min-width:769px) {
+  .modal-box:has(.dr-modal) { max-width:940px !important; }
+  .dr-modal { display:grid; grid-template-columns:minmax(0,1fr) 300px; grid-template-rows:auto minmax(0,1fr); column-gap:22px; }
+  .dr-modal-bar { grid-column:1 / -1; }
+  .dr-write-zone { grid-column:1; grid-row:2; margin-bottom:0; min-height:0; }
+  .dr-side { display:flex; flex-direction:column; gap:14px; grid-column:2; grid-row:2; align-self:start; }
+  .dr-side > * { margin-bottom:0 !important; }
+  .dr-side-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--text-3); margin:2px 0 -4px; }
+}
+/* The little rail labels only make sense in the desktop rail */
+.dr-side-label { display:none; }
+@media (min-width:769px){ .dr-side-label { display:block; } }
+
 /* ═══ STAGGERED CARD ANIMATIONS ═══ */
 .dr-entry-card:nth-child(1) { animation-delay:.02s; }
 .dr-entry-card:nth-child(2) { animation-delay:.06s; }
@@ -1413,29 +1436,33 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
         <button class="dr-modal-save-top" data-action="save-diary-modal">Save</button>
       </div>
 
-      ${templates.length > 0 ? `
-      <select class="dr-template-select" id="templateSelect" onchange="loadTemplateInModal(this.value)">
-        <option value="">Use a template...</option>
-        ${templates.map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
-      </select>
-      ` : ''}
+      <div class="dr-side">
+        ${templates.length > 0 ? `
+        <select class="dr-template-select" id="templateSelect" onchange="loadTemplateInModal(this.value)">
+          <option value="">Use a template...</option>
+          ${templates.map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
+        </select>
+        ` : ''}
 
-      ${((showTasks && contextData.tasks?.length) || (showHabits && contextData.habits?.length) || (showExpenses && contextData.expenses > 0)) ? `
-      <div class="dr-context-chips">
-        ${showTasks && contextData.tasks?.length ? `<span class="dr-context-chip">✓ ${contextData.tasks.length} task(s)</span>` : ''}
-        ${showHabits && contextData.habits?.length ? `<span class="dr-context-chip">✓ ${contextData.habits.length} habit(s)</span>` : ''}
-        ${showExpenses && contextData.expenses > 0 ? `<span class="dr-context-chip">💸 ${(contextData.expenses || 0).toFixed(2)}</span>` : ''}
-      </div>` : ''}
+        ${((showTasks && contextData.tasks?.length) || (showHabits && contextData.habits?.length) || (showExpenses && contextData.expenses > 0)) ? `
+        <div class="dr-side-label">Today</div>
+        <div class="dr-context-chips">
+          ${showTasks && contextData.tasks?.length ? `<span class="dr-context-chip is-task">✓ ${contextData.tasks.length} task${contextData.tasks.length > 1 ? 's' : ''} done</span>` : ''}
+          ${showHabits && contextData.habits?.length ? `<span class="dr-context-chip is-habit">◎ ${contextData.habits.length} habit${contextData.habits.length > 1 ? 's' : ''}</span>` : ''}
+          ${showExpenses && contextData.expenses > 0 ? `<span class="dr-context-chip is-spend">💸 ₹${(contextData.expenses || 0).toFixed(2)} spent</span>` : ''}
+        </div>` : ''}
 
-      <!-- Compact Mood Strip -->
-      <div class="dr-mood-strip">
-        <span id="moodEmoji" class="dr-mood-big-emoji">${getMoodEmoji(defaultMood)}</span>
-        <div class="dr-mood-slider-col">
-          <input type="range" min="1" max="10" value="${defaultMood}" class="mood-slider dr-mood-slider" id="mMoodScore"
-            oninput="updateMoodDisplay(this.value)">
-          <div class="dr-mood-ends"><span>Awful</span><span>Amazing</span></div>
+        <div class="dr-side-label">Mood</div>
+        <!-- Compact Mood Strip -->
+        <div class="dr-mood-strip">
+          <span id="moodEmoji" class="dr-mood-big-emoji">${getMoodEmoji(defaultMood)}</span>
+          <div class="dr-mood-slider-col">
+            <input type="range" min="1" max="10" value="${defaultMood}" class="mood-slider dr-mood-slider" id="mMoodScore"
+              oninput="updateMoodDisplay(this.value)">
+            <div class="dr-mood-ends"><span>Awful</span><span>Amazing</span></div>
+          </div>
+          <span id="moodVal" class="dr-mood-big-num">${defaultMood}</span>
         </div>
-        <span id="moodVal" class="dr-mood-big-num">${defaultMood}</span>
       </div>
 
       <!-- Write Zone — Full Space Editor -->
@@ -1517,15 +1544,18 @@ window.openEditDiary = function (id) {
         <button class="dr-modal-save-top" data-action="update-diary-modal" data-edit-id="${e.id}">Update</button>
       </div>
 
-      <!-- Compact Mood Strip -->
-      <div class="dr-mood-strip">
-        <span id="moodEmoji" class="dr-mood-big-emoji">${getMoodEmoji(score)}</span>
-        <div class="dr-mood-slider-col">
-          <input type="range" min="1" max="10" value="${score}" class="mood-slider dr-mood-slider" id="mMoodScore"
-            oninput="updateMoodDisplay(this.value)">
-          <div class="dr-mood-ends"><span>Awful</span><span>Amazing</span></div>
+      <div class="dr-side">
+        <div class="dr-side-label">Mood</div>
+        <!-- Compact Mood Strip -->
+        <div class="dr-mood-strip">
+          <span id="moodEmoji" class="dr-mood-big-emoji">${getMoodEmoji(score)}</span>
+          <div class="dr-mood-slider-col">
+            <input type="range" min="1" max="10" value="${score}" class="mood-slider dr-mood-slider" id="mMoodScore"
+              oninput="updateMoodDisplay(this.value)">
+            <div class="dr-mood-ends"><span>Awful</span><span>Amazing</span></div>
+          </div>
+          <span id="moodVal" class="dr-mood-big-num">${score}</span>
         </div>
-        <span id="moodVal" class="dr-mood-big-num">${score}</span>
       </div>
 
       <!-- Write Zone — Full Space Editor -->
