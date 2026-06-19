@@ -2091,12 +2091,22 @@ function computeBentoStat(statId) {
             return { value: '₹' + total.toLocaleString('en-IN'), sub: monthKey };
         }
         case 'weeklySpend': {
-            const ws = new Date(); ws.setDate(ws.getDate() - 6);
-            const wsKey = ws.toISOString().slice(0, 10);
+            // Mirror the Finance Weekly tab: Monday–Sunday of the current week, and
+            // only expenses tagged "weekly" (day-to-day). Big/monthly bills
+            // (budget_scope !== 'weekly') are excluded so this matches the Rs weekly budget.
+            const now = new Date();
+            const dow = now.getDay();
+            const monday = new Date(now);
+            monday.setDate(now.getDate() - dow + (dow === 0 ? -6 : 1));
+            monday.setHours(0, 0, 0, 0);
+            const sunday = new Date(monday);
+            sunday.setDate(monday.getDate() + 6);
+            sunday.setHours(23, 59, 59, 999);
             const total = expenses
-                .filter(e => (e.type || 'expense') === 'expense' && e.date && e.date >= wsKey && e.date <= today)
+                .filter(e => (e.type || 'expense') === 'expense' && e.budget_scope === 'weekly' && e.date)
+                .filter(e => { const d = new Date(e.date); return d >= monday && d <= sunday; })
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-            return { value: '₹' + total.toLocaleString('en-IN'), sub: 'last 7 days' };
+            return { value: '₹' + total.toLocaleString('en-IN'), sub: 'weekly budget' };
         }
         case 'habits': {
             const total = habits.length;

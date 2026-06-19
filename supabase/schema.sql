@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS public.expenses (
     description TEXT,
     type TEXT,
     payment_mode TEXT,
+    budget_scope TEXT,          -- 'weekly' (day-to-day; counts toward weekly + monthly) or 'monthly' (big bill; monthly only)
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -213,6 +214,7 @@ CREATE TABLE IF NOT EXISTS public.people (
     is_favorite BOOLEAN DEFAULT false,
     is_priority BOOLEAN DEFAULT false,
     notes TEXT,
+    contact_frequency INTEGER,   -- per-person cadence override in days; NULL = use relationship default
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );

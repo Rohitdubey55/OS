@@ -1734,7 +1734,11 @@ document.addEventListener('click', async (e) => {
         const date = document.getElementById('mTxDate').value;
         const source = document.getElementById('mTxSource')?.value || '';
         const notes = document.getElementById('mTxNote')?.value || '';
-        const payment_mode = document.getElementById('mTxPaymentMode')?.value || '';
+        // Budget scope only applies to expenses: 'weekly' (day-to-day) hits the
+        // weekly budget + monthly total; 'monthly' (big bill) hits monthly only.
+        const budget_scope = type === 'expense'
+            ? (document.querySelector('input[name="mTxScope"]:checked')?.value || 'weekly')
+            : null;
 
         if (!amt) return;
         document.getElementById('universalModal').classList.add('hidden');
@@ -1747,7 +1751,7 @@ document.addEventListener('click', async (e) => {
             date: date,
             source: source,
             description: notes,
-            payment_mode: payment_mode
+            budget_scope: budget_scope
         });
 
         await refreshData('finance');
@@ -2122,13 +2126,15 @@ document.addEventListener('click', async (e) => {
         const date = document.getElementById('mTxDate').value;
         const source = document.getElementById('mTxSource')?.value || '';
         const notes = document.getElementById('mTxNote')?.value || '';
-        const payment_mode = document.getElementById('mTxPaymentMode')?.value || '';
+        const budget_scope = type === 'expense'
+            ? (document.querySelector('input[name="mTxScope"]:checked')?.value || 'weekly')
+            : null;
 
         if (!amt) return;
         document.getElementById('universalModal').classList.add('hidden');
         if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating transaction...");
-        await apiCall('update', 'expenses', { amount: amt, category: cat, type: type, date: date, source: source, description: notes, payment_mode: payment_mode }, editId);
+        await apiCall('update', 'expenses', { amount: amt, category: cat, type: type, date: date, source: source, description: notes, budget_scope: budget_scope }, editId);
         await refreshData('finance');
     }
 

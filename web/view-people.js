@@ -95,6 +95,61 @@ function parseInteractionHistory(notes) {
     return entries.reverse();
 }
 
+/* ── Cadence engine ───────────────────────────────────────────────────────
+   Decides who you're "due" to reach out to. Default cadence is by relationship;
+   a per-person override (person.contact_frequency, in days) wins when set. */
+const PP_CADENCE_DEFAULTS = { Family: 14, Friend: 30, Work: 30, Network: 90, Other: 90 };
+function getCadenceDays(person) {
+    const o = parseInt(person && person.contact_frequency, 10);
+    if (o && o > 0) return o;
+    return PP_CADENCE_DEFAULTS[(person && person.relationship) || 'Other'] || 60;
+}
+function ppDaysSince(dateStr) {
+    if (!dateStr) return Infinity;
+    const t = new Date(dateStr).getTime();
+    if (isNaN(t)) return Infinity;
+    return (Date.now() - t) / 86400000;
+}
+function isPersonDue(person) { return ppDaysSince(person && person.last_contact) >= getCadenceDays(person); }
+function daysOverdue(person) {
+    const since = ppDaysSince(person && person.last_contact);
+    if (since === Infinity) return Infinity;
+    return Math.floor(since - getCadenceDays(person));
+}
+
+// All contact dates for a person: logged interaction history + last_contact.
+function ppContactDates(person) {
+    const dates = [];
+    parseInteractionHistory(person.notes).forEach(e => {
+        const parts = (e.date || '').split('/'); // stored as M/D/YYYY
+        if (parts.length === 3) { const d = new Date(parts[2], parts[0] - 1, parts[1]); if (!isNaN(d)) dates.push(d); }
+    });
+    if (person.last_contact) { const d = new Date(person.last_contact); if (!isNaN(d)) dates.push(d); }
+    return dates;
+}
+function ppWeekStart(d) { const x = new Date(d); const dow = x.getDay(); x.setDate(x.getDate() - (dow === 0 ? 6 : dow - 1)); x.setHours(0, 0, 0, 0); return x; }
+
+// Natural motivation: how many distinct people you reached out to this week, plus
+// a consecutive-week streak (weeks in a row with at least one logged contact).
+function ppReachStats(people) {
+    const thisStart = ppWeekStart(new Date());
+    const thisEnd = new Date(thisStart); thisEnd.setDate(thisEnd.getDate() + 7);
+    let reachedThisWeek = 0;
+    const weekHas = {};
+    people.forEach(p => {
+        let counted = false;
+        ppContactDates(p).forEach(d => {
+            if (!counted && d >= thisStart && d < thisEnd) { reachedThisWeek++; counted = true; }
+            weekHas[ppWeekStart(d).toISOString().slice(0, 10)] = true;
+        });
+    });
+    let streak = 0;
+    const cursor = new Date(thisStart);
+    if (!weekHas[cursor.toISOString().slice(0, 10)]) cursor.setDate(cursor.getDate() - 7); // count from last week if nothing logged yet this week
+    while (weekHas[cursor.toISOString().slice(0, 10)]) { streak++; cursor.setDate(cursor.getDate() - 7); }
+    return { reachedThisWeek, streak };
+}
+
 function getNeedsAttention(people) {
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
@@ -153,8 +208,9 @@ function getPeopleStats(people) {
     const now = new Date();
     let needsAttention = 0, upcomingBdays = 0, totalBalance = 0;
     for (const p of people) {
-        const days = p.last_contact ? (now - new Date(p.last_contact)) / 86400000 : 999;
-        if (days >= 30) needsAttention++;
+        // "Due" is now cadence-based (relationship default or per-person override),
+        // so this is a realistic handful instead of "everyone you've never logged".
+        if (isPersonDue(p)) needsAttention++;
         if (p.birthday) {
             const bday = new Date(p.birthday);
             const thisYear = new Date(now.getFullYear(), bday.getMonth(), bday.getDate());
@@ -269,6 +325,37 @@ const PEOPLE_REFINE_CSS = `<style>
   .pp-workspace { display:block; }
   .pp-pane { display:none; }
 }
+
+/* Action hub (hero) */
+.pp-hub { background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; box-shadow:var(--shadow-card); padding:14px 16px; margin-bottom:14px; }
+.pp-hub-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
+.pp-hub-title { font-size:15px; font-weight:800; color:var(--text-1); letter-spacing:-.01em; }
+.pp-hub-meta { font-size:12.5px; color:var(--text-3); display:flex; gap:12px; align-items:center; }
+.pp-hub-meta b { color:var(--text-1); }
+.pp-hub-streak { color:#B8860B; font-weight:700; }
+.pp-hub-list { display:grid; grid-template-columns:1fr; gap:2px; }
+@media (min-width:1100px){ .pp-hub-list { grid-template-columns:1fr 1fr; gap:4px 22px; } }
+.pp-hub-row { display:flex; align-items:center; gap:11px; padding:8px 6px; border-radius:10px; }
+.pp-hub-row:hover { background:var(--surface-2); }
+.pp-hub-av { width:36px; height:36px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:15px; }
+.pp-hub-info { flex:1; min-width:0; cursor:pointer; }
+.pp-hub-name { font-size:14px; font-weight:700; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pp-hub-reason { font-size:12px; color:var(--text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pp-hub-reason.urgent { color:#B42318; font-weight:600; }
+.pp-hub-actions { display:flex; gap:6px; flex-shrink:0; }
+.pp-hub-btn { width:34px; height:34px; border-radius:9px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.pp-hub-btn:hover { background:var(--surface-2); color:var(--text-1); }
+.pp-hub-btn.done:hover { background:rgba(16,185,129,.12); color:var(--success); border-color:rgba(16,185,129,.4); }
+.pp-hub-btn i { width:17px; height:17px; }
+.pp-hub-empty { font-size:13px; color:var(--text-3); padding:10px 6px; }
+
+/* Desktop: the action popups (Add / Log / Contact / Money) were a phone bottom
+   sheet, which is why they felt broken on a wide screen. Center them as a modal. */
+@media (min-width:1100px){
+  .pp-sheet { left:50%; right:auto; bottom:auto; top:50%; width:440px; max-width:90vw; max-height:86vh; border-radius:16px; transform:translate(-50%,-46%); opacity:0; pointer-events:none; transition:opacity .18s ease, transform .22s cubic-bezier(.32,.72,0,1); box-shadow:0 24px 60px rgba(0,0,0,.28); }
+  .pp-sheet.open { transform:translate(-50%,-50%); opacity:1; pointer-events:auto; }
+  .pp-sheet-handle { display:none; }
+}
 </style>`;
 
 let _ppSelId = null;
@@ -351,6 +438,73 @@ function ppPaneDetailHTML(p) {
   </div>`;
 }
 
+// The hero: a short, natural "reach out this week" list (birthdays, planned
+// contacts, and people overdue by their cadence) with one-tap Contact / Log,
+// plus gentle motivation (people reached this week + a streak).
+function renderPeopleActionHub(allPeople) {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const items = [];
+
+    allPeople.forEach(p => {
+        let bdayDays = null;
+        if (p.birthday) {
+            const b = new Date(p.birthday);
+            const ty = new Date(now.getFullYear(), b.getMonth(), b.getDate());
+            if (ty < todayMid) ty.setFullYear(now.getFullYear() + 1);
+            const du = Math.round((ty - todayMid) / 86400000);
+            if (du >= 0 && du <= 7) bdayDays = du;
+        }
+        const plannedOverdue = p.next_interaction && p.next_interaction <= todayStr;
+
+        if (bdayDays !== null) {
+            items.push({ p, rank: 0, od: 0, urgent: true, reason: bdayDays === 0 ? 'Birthday today' : `Birthday in ${bdayDays} day${bdayDays > 1 ? 's' : ''}` });
+        } else if (plannedOverdue) {
+            const when = p.next_interaction ? new Date(p.next_interaction).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+            items.push({ p, rank: 1, od: 0, urgent: true, reason: `Planned${when ? ' for ' + when : ''} · reach out` });
+        } else if (isPersonDue(p)) {
+            const od = daysOverdue(p);
+            const since = p.last_contact ? getRelativeTime(p.last_contact) : 'Never contacted';
+            items.push({ p, rank: 2, od: od === Infinity ? 1e9 : od, urgent: false, reason: `${since} · time to reconnect` });
+        }
+    });
+
+    items.sort((a, b) => (a.rank - b.rank) || (b.od - a.od));
+    const top = items.slice(0, 6);
+    const { reachedThisWeek, streak } = ppReachStats(allPeople);
+
+    const rows = top.map(({ p, reason, urgent }) => {
+        const grad = getAvatarGradient(p.name);
+        const initial = (p.name || '?').charAt(0).toUpperCase();
+        return `<div class="pp-hub-row">
+            <div class="pp-hub-av" style="background:${grad}">${initial}</div>
+            <div class="pp-hub-info" onclick="window.ppCardOpen('${p.id}')">
+                <div class="pp-hub-name">${p.name}</div>
+                <div class="pp-hub-reason ${urgent ? 'urgent' : ''}">${reason}</div>
+            </div>
+            <div class="pp-hub-actions">
+                <button class="pp-hub-btn" title="Contact ${p.name}" onclick="event.stopPropagation(); window.openContactOptions('${p.id}')"><i data-lucide="phone"></i></button>
+                <button class="pp-hub-btn done" title="Log: talked today" onclick="event.stopPropagation(); window.confirmLogContact('${p.id}')"><i data-lucide="check"></i></button>
+            </div>
+        </div>`;
+    }).join('');
+
+    return `
+    <div class="pp-hub">
+        <div class="pp-hub-head">
+            <div class="pp-hub-title">Reach out this week</div>
+            <div class="pp-hub-meta">
+                <span>Reached out to <b>${reachedThisWeek}</b> ${reachedThisWeek === 1 ? 'person' : 'people'} this week</span>
+                ${streak >= 2 ? `<span class="pp-hub-streak">🔥 ${streak}-week streak</span>` : ''}
+            </div>
+        </div>
+        ${top.length
+            ? `<div class="pp-hub-list">${rows}</div>`
+            : `<div class="pp-hub-empty">You're all caught up — no one's overdue right now.</div>`}
+    </div>`;
+}
+
 function renderPeople() {
     let people = (state.data.people || []).map(p => ({
         ...p,
@@ -426,8 +580,8 @@ function renderPeople() {
                 <div class="pp-stat-label">Soon</div>
             </div>
             <div class="pp-stat-card" onclick="window.openNeedsAttentionSheet()">
-                <div class="pp-stat-value" style="${stats.needsAttention > 0 ? 'color: var(--danger)' : ''}">${stats.needsAttention}</div>
-                <div class="pp-stat-label">Attn</div>
+                <div class="pp-stat-value" style="${stats.needsAttention > 0 ? 'color: var(--primary)' : ''}">${stats.needsAttention}</div>
+                <div class="pp-stat-label">Due</div>
             </div>
             <div class="pp-stat-card" onclick="peopleState.sortBy='birthday'; renderPeople()">
                 <div class="pp-stat-value" style="${stats.upcomingBdays > 0 ? 'color: var(--warning)' : ''}">${stats.upcomingBdays}</div>
@@ -440,6 +594,9 @@ function renderPeople() {
                 <div class="pp-stat-label">Balance</div>
             </div>
         </div>
+
+        <!-- Action hub: who to reach out to this week (the hero) -->
+        ${renderPeopleActionHub(state.data.people || [])}
 
         <!-- Birthday Banner -->
         ${bdays.length > 0 ? `
@@ -495,9 +652,8 @@ function renderPeople() {
                 : renderPeopleTimeline(people))
         }
 
-        <!-- Bottom Sheet -->
-        <div class="pp-sheet-overlay" id="ppSheetOverlay" onclick="closePeopleSheet()"></div>
-        <div class="pp-sheet" id="ppSheet"></div>
+        <!-- Action popups (sheet + overlay) are portaled to <body> by openPeopleSheet
+             so no view ancestor can trap/hide them. -->
     </div>`;
 
     if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
@@ -779,10 +935,30 @@ function renderPeopleEmpty() {
    BOTTOM SHEET — CORE
    ============================================================ */
 
+// The sheet + overlay live directly on <body> (created once) so that no view
+// ancestor — a transform, filter, overflow or stacking context — can trap or
+// hide these position:fixed elements. That was the cause of "popups not working".
+function ppEnsureSheet() {
+    let overlay = document.getElementById('ppSheetOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'ppSheetOverlay';
+        overlay.className = 'pp-sheet-overlay';
+        overlay.addEventListener('click', closePeopleSheet);
+        document.body.appendChild(overlay);
+    }
+    let sheet = document.getElementById('ppSheet');
+    if (!sheet) {
+        sheet = document.createElement('div');
+        sheet.id = 'ppSheet';
+        sheet.className = 'pp-sheet';
+        document.body.appendChild(sheet);
+    }
+    return { sheet, overlay };
+}
+
 function openPeopleSheet(html) {
-    const sheet = document.getElementById('ppSheet');
-    const overlay = document.getElementById('ppSheetOverlay');
-    if (!sheet || !overlay) return;
+    const { sheet, overlay } = ppEnsureSheet();
     sheet.innerHTML = `<div class="pp-sheet-handle"></div>` + html;
     requestAnimationFrame(() => {
         sheet.classList.add('open');
@@ -1099,6 +1275,17 @@ window.openEditPerson = function (id) {
                     ${['Friend', 'Family', 'Network', 'Work', 'Other'].map(r => `<option value="${r}" ${p.relationship === r ? 'selected' : ''}>${r}</option>`).join('')}
                 </select>
             </div>
+            <div class="pp-form-group">
+                <label class="pp-form-label">Keep in touch</label>
+                <select class="pp-form-input" id="ppCadence">
+                    <option value="">Auto (by relationship)</option>
+                    <option value="7" ${String(p.contact_frequency) === '7' ? 'selected' : ''}>Weekly</option>
+                    <option value="14" ${String(p.contact_frequency) === '14' ? 'selected' : ''}>Every 2 weeks</option>
+                    <option value="30" ${String(p.contact_frequency) === '30' ? 'selected' : ''}>Monthly</option>
+                    <option value="90" ${String(p.contact_frequency) === '90' ? 'selected' : ''}>Quarterly</option>
+                    <option value="365" ${String(p.contact_frequency) === '365' ? 'selected' : ''}>Yearly</option>
+                </select>
+            </div>
             <div class="pp-form-row">
                 <div class="pp-form-group">
                     <label class="pp-form-label">Birthday</label>
@@ -1188,7 +1375,9 @@ window.updatePerson = async function (id) {
         phone: document.getElementById('ppPhone')?.value || '',
         email: document.getElementById('ppEmail')?.value || '',
         instagram: document.getElementById('ppInstagram')?.value || '',
-        notes: document.getElementById('ppNotes')?.value || ''
+        notes: document.getElementById('ppNotes')?.value || '',
+        // Per-person cadence override (days); empty = auto by relationship.
+        contact_frequency: parseInt(document.getElementById('ppCadence')?.value, 10) || null
     };
 
     // Optimistic

@@ -46,7 +46,7 @@ const HABITS_REFINE_CSS = `<style>
 .hb-pro .hb-pane { flex:0 0 360px; position:sticky; top:14px; display:flex; flex-direction:column; gap:13px; }
 .hb-pro .habit-card-new.hb-sel { border-color:var(--primary); box-shadow:0 0 0 1px var(--primary), var(--shadow-card); }
 
-.hb-pro .hbp-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:16px; }
+.hb-pro .hbp-card { background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; box-shadow:var(--shadow-card); padding:16px; }
 .hb-pro .hbp-h { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:700; margin:0 0 2px; }
 .hb-pro .hbp-today { display:flex; align-items:center; gap:16px; margin-top:12px; }
 .hb-pro .hbp-ring { position:relative; width:92px; height:92px; flex-shrink:0; }
@@ -112,15 +112,44 @@ const HABITS_REFINE_CSS = `<style>
 .hb-pro .scorecard-date { font-size:11px; font-weight:600; color:var(--text-3); font-variant-numeric:tabular-nums; }
 .hb-pro .score-percent { font-size:8.5px; font-weight:700; color:var(--text-2); }
 
-/* Routine headers + cards */
-.hb-pro .habit-routine-header { font-size:11.5px !important; font-weight:700 !important; letter-spacing:.06em !important; color:var(--text-3) !important; }
-.hb-pro .habit-card-new { border-radius:12px; box-shadow:var(--shadow-card); transition:box-shadow .16s ease, border-color .16s ease; }
+/* Routine groups — MOBILE/base keeps the original look (green-bar label + floating
+   cards), so phones/iOS are unchanged. Desktop gets the Tasks section-card style. */
+.hb-pro .hb-section { margin-bottom:24px; }
+.hb-pro .hb-section-header { display:flex; align-items:center; gap:8px; margin-bottom:14px; padding-left:10px; border-left:3px solid var(--primary); line-height:1; }
+.hb-pro .hb-section.is-done .hb-section-header { border-left-color:var(--success,#10B981); }
+.hb-pro .hb-section-dot { display:none; }
+.hb-pro .hb-section-label { font-size:13px; font-weight:800; color:var(--primary); text-transform:uppercase; letter-spacing:1.2px; }
+.hb-pro .hb-section.is-done .hb-section-label { color:var(--success,#10B981); }
+.hb-pro .hb-section-count { display:none; }
+.hb-pro .hb-section-rows { display:flex; flex-direction:column; gap:10px; }
+
+.hb-pro .habit-card-new { border-radius:12px; box-shadow:var(--shadow-card); transition:box-shadow .16s ease, border-color .16s ease, background .15s ease; }
 .hb-pro .habit-card-new:hover { box-shadow:var(--shadow-md); border-color:var(--border-strong); }
 .hb-pro .habit-card-new.habit-next-up { border-color:var(--primary); box-shadow:0 0 0 1px var(--primary), var(--shadow-card); }
 .hb-pro .habit-card-header { padding:11px 14px; gap:12px; }
 .hb-pro .habit-emoji-circle { width:38px; height:38px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border-color); font-size:18px; }
 .hb-pro .habit-title-lg { font-size:14px; font-weight:650; gap:7px; }
 .hb-pro .habit-meta { font-size:11.5px; color:var(--text-3); margin-top:3px; }
+
+/* DESKTOP only: group the habits into one Tasks-style card with a dot + label +
+   count header and flat, divided rows (keeping every control in each row). */
+@media (min-width:1100px){
+  .hb-pro .hb-section { background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; margin-bottom:10px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.03); }
+  .hb-pro .hb-section-header { margin-bottom:0; padding:11px 14px; border-left:none; gap:9px; }
+  .hb-pro .hb-section-dot { display:block; width:7px; height:7px; border-radius:50%; background:var(--primary); flex-shrink:0; }
+  .hb-pro .hb-section.is-done .hb-section-dot { background:var(--success,#10B981); }
+  .hb-pro .hb-section-label { flex:1; font-size:12.5px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:.5px; }
+  .hb-pro .hb-section.is-done .hb-section-label { color:var(--text-2); }
+  .hb-pro .hb-section-count { display:block; font-size:12px; font-weight:600; color:var(--text-3); }
+  .hb-pro .hb-section-rows { display:block; border-top:1px solid var(--border-color); }
+  .hb-pro .hb-section-rows .swipe-reveal-container { border-radius:0; box-shadow:none; }
+  .hb-pro .hb-section-rows .habit-card-new { border:none !important; border-radius:0 !important; box-shadow:none !important; background:var(--surface-1); border-bottom:1px solid var(--border-color); }
+  .hb-pro .hb-section-rows > .swipe-reveal-container:last-child .habit-card-new,
+  .hb-pro .hb-section-rows > .habit-card-new:last-child { border-bottom:none; }
+  .hb-pro .hb-section-rows .habit-card-new:hover { background:var(--surface-2); box-shadow:none; }
+  .hb-pro .hb-section-rows .habit-card-new.habit-next-up { background:var(--primary-soft); box-shadow:none; }
+  .hb-pro .hb-section-rows .habit-card-new.hb-sel { background:var(--primary-soft); box-shadow:none; }
+}
 
 /* Right cluster: week dots + streak + complete + alarm + chevron */
 .hb-pro .hb-right { display:flex; align-items:center; gap:10px; }
@@ -517,18 +546,26 @@ function renderHabits() {
     };
 
     let html = routines.map(r => `
-      <div class="habit-routine-group" style="margin-bottom: 24px;">
-        <div class="habit-routine-header" style="font-size: 13px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 14px; padding-left: 10px; border-left: 3px solid var(--primary); line-height: 1;">${r}</div>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div class="habit-routine-group hb-section">
+        <div class="hb-section-header">
+          <span class="hb-section-dot"></span>
+          <span class="hb-section-label">${r}</span>
+          <span class="hb-section-count">${grouped[r].length}</span>
+        </div>
+        <div class="hb-section-rows">
           ${grouped[r].map(h => renderCard(h)).join('')}
         </div>
       </div>`).join('');
 
     if (completeHabits.length > 0) {
       html += `
-        <div class="habit-routine-group completed-section" style="margin-top: 32px; margin-bottom: 24px;">
-          <div class="habit-routine-header" style="font-size: 13px; font-weight: 800; color: #10B981; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 14px; padding-left: 10px; border-left: 3px solid #10B981; line-height: 1;">COMPLETED</div>
-          <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="habit-routine-group completed-section hb-section is-done" style="margin-top:20px;">
+          <div class="hb-section-header">
+            <span class="hb-section-dot"></span>
+            <span class="hb-section-label">Completed</span>
+            <span class="hb-section-count">${completeHabits.length}</span>
+          </div>
+          <div class="hb-section-rows">
             ${completeHabits.map(h => renderCard(h)).join('')}
           </div>
         </div>`;

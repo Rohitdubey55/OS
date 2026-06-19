@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tasks — master-detail workspace (prototype)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#06B6D4; --primary-d:#0891B2;
+    --surface-base:#F6F8FB; --surface-1:#FFFFFF; --surface-2:#F4F6FA; --surface-3:#E9EDF3;
+    --text-1:#1A1F36; --text-2:#3C4257; --text-3:#6B7280;
+    --border:#E4E8EE; --border-strong:#D4DAE3;
+    --soft:color-mix(in srgb,var(--primary) 10%,transparent);
+    --ring:0 0 0 3px color-mix(in srgb,var(--primary) 22%,transparent);
+    --xs:0 1px 2px rgba(16,24,40,.05);
+    --card:0 0 0 1px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06),0 6px 16px -6px rgba(16,24,40,.08);
+    --md:0 0 0 1px rgba(16,24,40,.04),0 4px 10px -2px rgba(16,24,40,.10);
+    --red:#DC2626; --amber:#D97706; --green:#059669;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-base);color:var(--text-2);font-family:'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:'cv02' 1,'cv11' 1}
+  .num{font-variant-numeric:tabular-nums lining-nums}
+  .page{max-width:1340px;margin:0 auto;padding:24px 36px 60px}
+  .ptitle{font-size:33px;font-weight:700;color:var(--text-1);letter-spacing:-.022em;margin:0 0 12px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+
+  /* toolbar */
+  .bar{display:flex;align-items:center;gap:16px;padding:2px 2px 14px}
+  .stat{display:inline-flex;align-items:baseline;gap:6px}
+  .stat b{font-size:17px;font-weight:700;color:var(--text-1);letter-spacing:-.02em}
+  .stat span{font-size:12.5px;color:var(--text-3)}
+  .sep{width:1px;height:15px;background:var(--border)}
+  .spacer{flex:1}
+  .seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:3px}
+  .seg button{border:none;background:transparent;height:28px;padding:0 13px;border-radius:6px;font:inherit;font-size:12.5px;font-weight:550;color:var(--text-3);cursor:pointer;display:flex;align-items:center;gap:6px}
+  .seg button.on{background:var(--surface-1);color:var(--text-1);box-shadow:var(--xs)}
+  .ibtn{width:36px;height:36px;border:none;background:transparent;border-radius:8px;color:var(--text-3);cursor:pointer;font-size:15px}
+  .ibtn:hover{background:var(--surface-2);color:var(--text-1)}
+  .add{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--xs)}
+  .add:hover{background:var(--primary-d);transform:translateY(-1px);box-shadow:var(--md)}
+
+  .cap{display:flex;align-items:center;background:var(--surface-1);border:1px solid var(--border);border-radius:12px;box-shadow:var(--xs);margin-bottom:12px;overflow:hidden}
+  .cap i{padding:0 12px 0 14px;color:var(--primary);font-style:normal}
+  .cap input{flex:1;border:none;outline:none;background:transparent;font:inherit;font-size:14px;color:var(--text-1);padding:12px 0}
+  .cap .cdiv{width:1px;height:20px;background:var(--border)}
+  .cap .ccat{font-size:12px;font-weight:600;color:var(--text-3);padding:0 14px}
+
+  .chips{display:flex;gap:6px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .chip{padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:550;background:var(--surface-1);border:1px solid var(--border);color:var(--text-3);cursor:pointer}
+  .chip:hover{background:var(--surface-2);border-color:var(--border-strong);color:var(--text-1)}
+  .chip.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:650}
+  .prio-g{display:inline-flex;align-items:center;gap:8px;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:6px 12px}
+  .prio-g b{font-size:11.5px;color:var(--primary);font-weight:700}
+  .pd{width:15px;height:15px;border-radius:50%}
+  .sort{margin-left:auto;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:7px 12px;font:inherit;font-size:12px;color:var(--text-2);font-weight:550}
+
+  /* two-pane */
+  .work{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:20px;align-items:start}
+
+  /* list */
+  .section{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;box-shadow:var(--card);overflow:hidden}
+  .shead{display:flex;align-items:center;gap:9px;padding:13px 16px;cursor:pointer}
+  .shead:hover{background:var(--surface-2)}
+  .sdot{width:7px;height:7px;border-radius:50%;background:var(--red)}
+  .slabel{flex:1;font-size:11.5px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em}
+  .badge{border-radius:999px;padding:3px 9px;font-weight:600;font-size:10.5px}
+  .badge.u{background:rgba(245,158,11,.12);color:#B54708}
+  .badge.l{background:rgba(220,38,38,.09);color:#B42318}
+  .scount{color:var(--text-3);font-weight:600}
+  .stasks{border-top:1px solid var(--border)}
+
+  .row{display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;position:relative;transition:background .14s}
+  .row:last-child{border-bottom:none}
+  .row:hover{background:var(--surface-2)}
+  .row.sel{background:var(--soft)}
+  .row.sel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--primary)}
+  .ring{width:21px;height:21px;min-width:21px;border-radius:50%;border:2px solid;margin-top:1px;cursor:pointer}
+  .rc{flex:1;min-width:0}
+  .rtop{display:flex;align-items:flex-start;gap:8px}
+  .rtitle{font-size:14px;font-weight:500;color:var(--text-1);line-height:1.4}
+  .rtitle.p1{font-weight:700}
+  .rmeta{display:flex;gap:5px;margin-top:6px}
+  .mchip{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text-3);background:var(--surface-2);padding:2px 8px;border-radius:999px;border:1px solid var(--border)}
+  .row:hover .mchip{background:var(--surface-1)}
+  .date{font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;margin-left:auto}
+  .date.over{background:rgba(220,38,38,.08);color:#B42318;border:1px solid rgba(220,38,38,.16)}
+  /* hover quick actions */
+  .qa{display:flex;gap:2px;margin-left:auto;opacity:0;transition:opacity .14s}
+  .row:hover .qa{opacity:1}
+  .row:hover .date{display:none}
+  .qa button{width:28px;height:28px;border:1px solid var(--border);background:var(--surface-1);border-radius:7px;color:var(--text-3);cursor:pointer;font-size:12px}
+  .qa button:hover{color:var(--text-1);border-color:var(--border-strong);background:var(--surface-2)}
+
+  /* right pane */
+  .pane{position:sticky;top:14px;display:flex;flex-direction:column;gap:14px}
+  .pcard{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;box-shadow:var(--card);padding:18px}
+  .pcard h3{margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);font-weight:700}
+
+  /* insights */
+  .focus{display:flex;align-items:center;gap:18px}
+  .ring-wrap{position:relative;width:96px;height:96px;flex-shrink:0}
+  .ring-wrap svg{transform:rotate(-90deg)}
+  .ring-wrap .pct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .ring-wrap .pct b{font-size:23px;font-weight:700;color:var(--text-1);letter-spacing:-.02em}
+  .ring-wrap .pct span{font-size:10px;color:var(--text-3)}
+  .fmeta div{font-size:13px;color:var(--text-2);margin-bottom:7px}
+  .fmeta b{color:var(--text-1)}
+  .spark{display:flex;align-items:flex-end;gap:3px;height:30px;margin-top:4px}
+  .spark i{width:7px;background:var(--soft);border-radius:2px;display:block}
+  .spark i.hi{background:var(--primary)}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{border:1px solid var(--border);border-radius:11px;padding:12px 13px;cursor:pointer;transition:all .14s;background:var(--surface-1)}
+  .kpi:hover{border-color:var(--border-strong);box-shadow:var(--xs)}
+  .kpi.on{border-color:var(--primary);background:var(--soft)}
+  .kpi .kn{font-size:21px;font-weight:700;letter-spacing:-.02em}
+  .kpi .kl{font-size:11.5px;color:var(--text-3);font-weight:550;margin-top:2px}
+  .due-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer}
+  .due-row:last-child{border-bottom:none}
+  .due-row:hover .dt{color:var(--text-1)}
+  .due-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .dt{flex:1;font-size:13px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dd{font-size:11px;font-weight:600;color:#B42318}
+  .pbar{display:flex;height:10px;border-radius:6px;overflow:hidden;margin:12px 0 10px}
+  .pbar i{display:block}
+  .pleg{display:flex;gap:14px}
+  .pleg span{font-size:12px;color:var(--text-3);display:inline-flex;align-items:center;gap:6px}
+  .pleg b{color:var(--text-1)}
+  .ld{width:9px;height:9px;border-radius:50%}
+  .pomo{display:flex;align-items:center;justify-content:space-between}
+  .pomo .tm{font-size:30px;font-weight:700;color:var(--text-1);letter-spacing:-.02em}
+  .pomo button{padding:8px 16px;border:none;border-radius:9px;background:var(--primary);color:#fff;font:inherit;font-weight:600;font-size:13px;cursor:pointer}
+
+  /* detail */
+  .dhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .dclose{width:30px;height:30px;border:1px solid var(--border);background:var(--surface-1);border-radius:8px;color:var(--text-3);cursor:pointer;font-size:14px}
+  .dclose:hover{background:var(--surface-2);color:var(--text-1)}
+  .dtitle{width:100%;border:none;border-bottom:2px solid var(--border);outline:none;font:inherit;font-size:19px;font-weight:700;color:var(--text-1);padding:2px 0 12px;letter-spacing:-.02em;background:transparent}
+  .dtitle:focus{border-color:var(--primary)}
+  .lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin:16px 0 8px;display:block}
+  .pseg{display:flex;gap:7px}
+  .pseg b{flex:1;text-align:center;font-size:12.5px;font-weight:600;padding:9px 0;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--text-3);cursor:pointer}
+  .pseg b.on{color:#fff}
+  .field{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font:inherit;font-size:13.5px;color:var(--text-1);background:var(--surface-1);outline:none}
+  .field:focus{border-color:var(--primary);box-shadow:var(--ring)}
+  .resched{display:flex;gap:7px;margin-top:8px}
+  .resched button{flex:1;padding:7px 0;border:1px solid var(--border);background:var(--surface-1);border-radius:8px;font:inherit;font-size:12px;font-weight:550;color:var(--text-2);cursor:pointer}
+  .resched button:hover{border-color:var(--primary);color:var(--primary);background:var(--soft)}
+  .sub{display:flex;align-items:center;gap:9px;padding:7px 0}
+  .sub input[type=checkbox]{width:16px;height:16px;accent-color:var(--primary)}
+  .sub span{font-size:13.5px;color:var(--text-2)}
+  .addsub{width:100%;padding:8px;border:1px dashed var(--border);border-radius:8px;background:transparent;color:var(--text-3);font:inherit;font-size:12.5px;cursor:pointer;margin-top:4px}
+  .two{display:flex;gap:10px}
+  .two>div{flex:1}
+  .dfoot{display:flex;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+  .done-btn{flex:1;padding:11px;border:none;border-radius:10px;background:var(--green);color:#fff;font:inherit;font-weight:600;font-size:13.5px;cursor:pointer}
+  .del-btn{padding:11px 16px;border:1px solid var(--border);background:var(--surface-1);border-radius:10px;color:#B42318;font:inherit;font-weight:600;font-size:13.5px;cursor:pointer}
+  .del-btn:hover{background:rgba(220,38,38,.06);border-color:rgba(220,38,38,.2)}
+  .hint{font-size:12px;color:var(--text-3);text-align:center;padding:6px 0 2px}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1 class="ptitle">Tasks</h1>
+
+  <div class="bar">
+    <div class="stat"><b class="num">5</b><span>open</span></div>
+    <div class="sep"></div>
+    <div class="stat"><b class="num">81%</b><span>done</span></div>
+    <div class="spacer"></div>
+    <div class="seg">
+      <button class="on">▤ List</button>
+      <button>▦ Board</button>
+      <button>▥ Calendar</button>
+    </div>
+    <button class="ibtn">☑</button>
+    <button class="ibtn">🏷</button>
+    <button class="add">+ Add</button>
+  </div>
+
+  <div class="cap">
+    <i>⚡</i>
+    <input placeholder="Capture a task…  try “Submit report friday 3pm #work !p1”">
+    <div class="cdiv"></div>
+    <span class="ccat">No category ⌄</span>
+  </div>
+
+  <div class="chips">
+    <button class="chip on">All</button>
+    <button class="chip">Work</button>
+    <button class="chip">Other</button>
+    <div class="prio-g"><b>All</b><span class="pd" style="background:#DC2626"></span><span class="pd" style="background:#D97706"></span><span class="pd" style="background:#059669"></span></div>
+    <select class="sort"><option>↑ Priority</option><option>Due date</option><option>A–Z</option></select>
+  </div>
+
+  <div class="work">
+    <!-- LEFT: list -->
+    <div class="section">
+      <div class="shead">
+        <span class="sdot"></span><span class="slabel">Work</span>
+        <span class="badge u">4 urgent</span><span class="badge l">5 late</span>
+        <span class="scount num">5</span><span style="color:var(--text-3)">⌄</span>
+      </div>
+      <div class="stasks" id="list"></div>
+    </div>
+
+    <!-- RIGHT: master-detail pane -->
+    <div class="pane" id="pane"></div>
+  </div>
+</div>
+
+<script>
+const TASKS = [
+  {id:'t1',title:'GSA',prio:'P1',days:115,cat:'Work',subs:[{t:'Draft scope',d:false},{t:'Share with team',d:false},{t:'Get sign-off',d:false}],desc:'',dur:30,pomo:0,recur:'None'},
+  {id:'t2',title:'Conexpo',prio:'P1',days:106,cat:'Work',subs:[],desc:'',dur:45,pomo:0,recur:'None'},
+  {id:'t3',title:'GSAI Planning',prio:'P1',days:104,cat:'Work',subs:[],desc:'',dur:60,pomo:2,recur:'None'},
+  {id:'t4',title:'Rafael Explanation',prio:'P1',days:97,cat:'Work',subs:[],desc:'',dur:30,pomo:0,recur:'None'},
+  {id:'t5',title:'Finalise Templates',prio:'P2',days:91,cat:'Work',subs:[],desc:'',dur:30,pomo:0,recur:'None'},
+];
+const PC={P1:'#DC2626',P2:'#D97706',P3:'#059669'};
+const PLABEL={P1:'High',P2:'Medium',P3:'Low'};
+let selected=null;
+
+function listHTML(){
+  return TASKS.map(t=>{
+    const subDone=t.subs.filter(s=>s.d).length;
+    const meta=[];
+    if(t.subs.length) meta.push(`<span class="mchip">☑ ${subDone}/${t.subs.length}</span>`);
+    meta.push(`<span class="mchip">${t.cat}</span>`);
+    return `<div class="row ${selected===t.id?'sel':''}" onclick="select('${t.id}')">
+      <span class="ring" style="border-color:${PC[t.prio]}66" onclick="event.stopPropagation()"></span>
+      <div class="rc">
+        <div class="rtop"><span class="rtitle ${t.prio==='P1'?'p1':''}">${t.title}</span>
+          <span class="date over num">${t.days}d ago</span>
+          <span class="qa">
+            <button title="Complete" onclick="event.stopPropagation()">✓</button>
+            <button title="Reschedule" onclick="event.stopPropagation()">⏰</button>
+            <button title="More" onclick="event.stopPropagation()">⋯</button>
+          </span>
+        </div>
+        <div class="rmeta">${meta.join('')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function insightsHTML(){
+  const open=TASKS.length, overdue=5, urgent=4, today=0;
+  const spark=[2,4,3,5,1,4,3].map((n,i)=>`<i class="${n>=4?'hi':''}" style="height:${6+n*4}px"></i>`).join('');
+  const dues=TASKS.map(t=>`<div class="due-row">
+      <span class="due-dot" style="background:${PC[t.prio]}"></span>
+      <span class="dt">${t.title}</span><span class="dd num">${t.days}d</span></div>`).join('');
+  return `
+  <div class="pcard">
+    <h3>Focus</h3>
+    <div class="focus" style="margin-top:14px">
+      <div class="ring-wrap">
+        <svg width="96" height="96"><circle cx="48" cy="48" r="42" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
+        <circle cx="48" cy="48" r="42" fill="none" stroke="var(--primary)" stroke-width="8" stroke-linecap="round"
+          stroke-dasharray="${2*Math.PI*42}" stroke-dashoffset="${2*Math.PI*42*(1-0.81)}"/></svg>
+        <div class="pct"><b>81%</b><span>done</span></div>
+      </div>
+      <div class="fmeta">
+        <div><b>13</b> of 16 tasks complete</div>
+        <div>🔥 <b>6-day</b> streak</div>
+        <div style="font-size:11px;color:var(--text-3)">This week</div>
+        <div class="spark">${spark}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pcard">
+    <h3>Overview</h3>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi" onclick="kpi(this)"><div class="kn num" style="color:var(--text-1)">${open}</div><div class="kl">Open</div></div>
+      <div class="kpi" onclick="kpi(this)"><div class="kn num" style="color:#B42318">${overdue}</div><div class="kl">Overdue</div></div>
+      <div class="kpi" onclick="kpi(this)"><div class="kn num" style="color:var(--red)">${urgent}</div><div class="kl">Urgent</div></div>
+      <div class="kpi" onclick="kpi(this)"><div class="kn num" style="color:var(--primary)">${today}</div><div class="kl">Due today</div></div>
+    </div>
+  </div>
+
+  <div class="pcard">
+    <h3>Due soon</h3>
+    <div style="margin-top:6px">${dues}</div>
+  </div>
+
+  <div class="pcard">
+    <h3>By priority</h3>
+    <div class="pbar"><i style="background:#DC2626;flex:4"></i><i style="background:#D97706;flex:1"></i><i style="background:#059669;flex:0.001"></i></div>
+    <div class="pleg">
+      <span><i class="ld" style="background:#DC2626"></i>High <b>4</b></span>
+      <span><i class="ld" style="background:#D97706"></i>Med <b>1</b></span>
+      <span><i class="ld" style="background:#059669"></i>Low <b>0</b></span>
+    </div>
+  </div>
+
+  <div class="pcard">
+    <h3>Focus timer</h3>
+    <div class="pomo" style="margin-top:12px">
+      <div class="tm num" id="tm">25:00</div>
+      <button id="tbtn" onclick="toggleTimer()">Start</button>
+    </div>
+  </div>
+  <div class="hint">Tip: click any task to open its details here →</div>`;
+}
+
+function detailHTML(t){
+  const subDone=t.subs.filter(s=>s.d).length;
+  return `
+  <div class="pcard">
+    <div class="dhead"><h3>Task details</h3><button class="dclose" onclick="select(null)">✕</button></div>
+    <input class="dtitle" value="${t.title}">
+
+    <span class="lbl">Priority</span>
+    <div class="pseg">
+      ${['P1','P2','P3'].map(p=>`<b class="${t.prio===p?'on':''}" style="${t.prio===p?`background:${PC[p]};border-color:${PC[p]}`:''}" onclick="setPrio('${t.id}','${p}')">${PLABEL[p]}</b>`).join('')}
+    </div>
+
+    <span class="lbl">Due date</span>
+    <input class="field" type="text" value="${t.days}d overdue — Feb 22, 2026">
+    <div class="resched">
+      <button>Today</button><button>Tomorrow</button><button>Next week</button>
+    </div>
+
+    <span class="lbl">Category</span>
+    <select class="field"><option>${t.cat}</option><option>Other</option><option>None</option></select>
+
+    <span class="lbl">Subtasks ${t.subs.length?`· ${subDone}/${t.subs.length}`:''}</span>
+    ${t.subs.map((s,i)=>`<label class="sub"><input type="checkbox" ${s.d?'checked':''} onchange="toggleSub('${t.id}',${i})"><span style="${s.d?'text-decoration:line-through;color:var(--text-3)':''}">${s.t}</span></label>`).join('')}
+    <button class="addsub">+ Add subtask</button>
+
+    <span class="lbl">Notes</span>
+    <textarea class="field" rows="2" placeholder="Add details…">${t.desc}</textarea>
+
+    <div class="two" style="margin-top:14px">
+      <div><span class="lbl" style="margin-top:0">Duration (min)</span><input class="field num" value="${t.dur}"></div>
+      <div><span class="lbl" style="margin-top:0">🍅 Sessions</span><input class="field num" value="${t.pomo}"></div>
+    </div>
+
+    <div class="dfoot">
+      <button class="done-btn" onclick="select(null)">✓ Mark complete</button>
+      <button class="del-btn">Delete</button>
+    </div>
+  </div>`;
+}
+
+function render(){
+  document.getElementById('list').innerHTML=listHTML();
+  const t=TASKS.find(x=>x.id===selected);
+  document.getElementById('pane').innerHTML=t?detailHTML(t):insightsHTML();
+}
+function select(id){selected=(id===selected)?null:id;render();}
+function setPrio(id,p){TASKS.find(x=>x.id===id).prio=p;render();}
+function toggleSub(id,i){const t=TASKS.find(x=>x.id===id);t.subs[i].d=!t.subs[i].d;render();}
+function kpi(el){document.querySelectorAll('.kpi').forEach(k=>k.classList.remove('on'));el.classList.add('on');}
+let timer=null,secs=1500;
+function toggleTimer(){
+  const b=document.getElementById('tbtn');
+  if(timer){clearInterval(timer);timer=null;b.textContent='Start';return;}
+  b.textContent='Pause';
+  timer=setInterval(()=>{secs--;const m=String(Math.floor(secs/60)).padStart(2,'0'),s=String(secs%60).padStart(2,'0');const el=document.getElementById('tm');if(el)el.textContent=`${m}:${s}`;if(secs<=0){clearInterval(timer);timer=null;}},1000);
+}
+render();
+</script>
+</body>
+</html>

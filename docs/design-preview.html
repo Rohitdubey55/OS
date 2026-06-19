@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PersonalOS — Design System Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* === Stripe/Mercury foundation (mirrors web/styles/refine.css) === */
+  :root{
+    --primary:#4F46E5;
+    --surface-base:#F6F8FB; --surface-1:#FFFFFF; --surface-2:#F4F6FA; --surface-3:#E9EDF3;
+    --text-1:#1A1F36; --text-2:#3C4257; --text-3:#6B7280;
+    --border-color:#E4E8EE; --border-strong:#D4DAE3;
+    --primary-soft:color-mix(in srgb,var(--primary) 9%,transparent);
+    --ring:0 0 0 3px var(--primary-soft);
+    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
+    --shadow-sm:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
+    --shadow-card:0 0 0 1px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06),0 6px 16px -6px rgba(16,24,40,.08);
+    --shadow-md:0 0 0 1px rgba(16,24,40,.04),0 4px 10px -2px rgba(16,24,40,.10);
+    --shadow-lg:0 0 0 1px rgba(16,24,40,.04),0 12px 28px -8px rgba(16,24,40,.14),0 4px 8px -4px rgba(16,24,40,.08);
+    --shadow-pop:0 0 0 1px rgba(16,24,40,.05),0 16px 40px -12px rgba(16,24,40,.22);
+    --r-sm:8px; --r-md:10px; --r-lg:12px; --r-xl:16px;
+    --success:#10B981; --warn:#F59E0B; --danger:#EF4444; --info:#0EA5E9;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--surface-base); color:var(--text-2);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    font-feature-settings:'cv02' 1,'cv03' 1,'cv04' 1,'cv11' 1,'ss01' 1;
+    -webkit-font-smoothing:antialiased; line-height:1.5;
+  }
+  .num{font-variant-numeric:tabular-nums lining-nums}
+  .wrap{max-width:1120px; margin:0 auto; padding:40px 32px 80px}
+  .pagehead{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:8px}
+  h1{color:var(--text-1); letter-spacing:-.02em; font-weight:700; font-size:30px; margin:0}
+  .sub{color:var(--text-3); font-size:14px; margin:6px 0 0}
+  .chip-dir{font-size:12px; font-weight:600; color:var(--primary); background:var(--primary-soft); padding:6px 12px; border-radius:999px}
+  .section{margin-top:40px}
+  .section > h2{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:600; margin:0 0 14px}
+  .row{display:flex; flex-wrap:wrap; gap:12px; align-items:center}
+  .grid{display:grid; gap:18px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:1.4fr 1fr}
+
+  /* Buttons */
+  .btn{height:36px; padding:0 14px; border-radius:var(--r-sm); border:1px solid var(--border-color);
+    background:var(--surface-1); color:var(--text-1); font-weight:550; font-size:13.5px; letter-spacing:-.01em;
+    box-shadow:var(--shadow-xs); display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+    transition:background .16s,border-color .16s,box-shadow .16s,transform .16s, filter .16s}
+  .btn:hover{background:var(--surface-2); border-color:var(--border-strong); box-shadow:var(--shadow-sm)}
+  .btn.primary{background:var(--primary); border-color:transparent; color:#fff; box-shadow:var(--shadow-xs),inset 0 1px 0 rgba(255,255,255,.16)}
+  .btn.primary:hover{filter:brightness(.96); transform:translateY(-1px); box-shadow:var(--shadow-md),inset 0 1px 0 rgba(255,255,255,.16)}
+  .btn.ghost{background:transparent; border-color:transparent; box-shadow:none; color:var(--text-2)}
+  .btn.ghost:hover{background:var(--surface-2); color:var(--text-1)}
+
+  /* Inputs */
+  .field{display:flex; flex-direction:column; gap:6px}
+  .label{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3)}
+  input,select{height:38px; padding:0 12px; background:var(--surface-1); border:1px solid var(--border-color);
+    border-radius:var(--r-sm); color:var(--text-1); font:inherit; font-size:14px; box-shadow:var(--shadow-xs); outline:none;
+    transition:border-color .16s, box-shadow .16s}
+  input:focus,select:focus{border-color:var(--primary); box-shadow:var(--ring)}
+
+  /* Cards */
+  .card{background:var(--surface-1); border:1px solid var(--border-color); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-card); padding:20px; transition:box-shadow .18s, border-color .18s}
+  .card:hover{box-shadow:var(--shadow-md); border-color:var(--border-strong)}
+  .kpi .k-label{font-size:12px; color:var(--text-3); font-weight:550}
+  .kpi .k-value{font-size:30px; font-weight:700; color:var(--text-1); letter-spacing:-.02em; margin-top:6px}
+  .kpi .k-delta{font-size:12px; font-weight:600; margin-top:8px; display:inline-flex; gap:5px; align-items:center}
+  .up{color:var(--success)} .down{color:var(--danger)}
+
+  /* List widget */
+  .wcard-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+  .wcard-title{font-size:14px; font-weight:600; color:var(--text-1)}
+  .lrow{display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--border-color)}
+  .lrow:last-child{border-bottom:none}
+  .dot{width:8px; height:8px; border-radius:50%; flex:0 0 auto}
+  .lrow .t{flex:1; font-size:13.5px; color:var(--text-1)}
+  .meta{font-size:12px; color:var(--text-3)}
+  .pill{font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; border:1px solid var(--border-color); color:var(--text-2); background:var(--surface-1)}
+  .pill.soft-red{color:#B42318; background:rgba(239,68,68,.08); border-color:rgba(239,68,68,.18)}
+  .pill.soft-amber{color:#B54708; background:rgba(245,158,11,.10); border-color:rgba(245,158,11,.20)}
+  .pill.soft-green{color:#067647; background:rgba(16,185,129,.10); border-color:rgba(16,185,129,.20)}
+
+  /* Table */
+  table{width:100%; border-collapse:separate; border-spacing:0; background:var(--surface-1);
+    border:1px solid var(--border-color); border-radius:var(--r-lg); overflow:hidden; box-shadow:var(--shadow-card)}
+  thead th{font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3);
+    text-align:left; padding:11px 16px; border-bottom:1px solid var(--border-color); background:var(--surface-2)}
+  tbody td{padding:13px 16px; border-bottom:1px solid var(--border-color); color:var(--text-2); font-size:13.5px}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:var(--surface-2)}
+  td.amt{text-align:right; font-weight:600; color:var(--text-1)}
+
+  /* Segmented */
+  .seg{display:inline-flex; background:var(--surface-2); border:1px solid var(--border-color); border-radius:var(--r-sm); padding:3px; gap:2px}
+  .seg button{border:none; background:transparent; height:28px; padding:0 12px; border-radius:6px; font:inherit; font-size:12.5px; font-weight:550; color:var(--text-3); cursor:pointer}
+  .seg button.active{background:var(--surface-1); color:var(--text-1); box-shadow:var(--shadow-xs)}
+
+  /* Mini modal demo */
+  .modal{background:var(--surface-1); border:1px solid var(--border-color); border-radius:var(--r-xl); box-shadow:var(--shadow-pop); width:360px; padding:22px}
+  .modal h3{margin:0 0 4px; font-size:17px; color:var(--text-1); letter-spacing:-.01em}
+  .modal .prio{display:flex; gap:7px; margin:12px 0}
+  .prio b{flex:1; text-align:center; font-size:12.5px; font-weight:600; padding:9px 0; border-radius:10px; border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-3); cursor:pointer}
+  .prio b.sel{border-color:var(--primary); background:var(--primary-soft); color:var(--primary)}
+  .swatches{display:flex; gap:10px; flex-wrap:wrap}
+  .sw{display:flex; flex-direction:column; gap:6px; align-items:center; font-size:11px; color:var(--text-3)}
+  .sw i{width:56px; height:40px; border-radius:8px; border:1px solid var(--border-color); display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="pagehead">
+    <div>
+      <h1>PersonalOS — Design System</h1>
+      <p class="sub">Unified Stripe / Mercury foundation · light-first · Inter · one accent · hairline borders · soft layered shadows</p>
+    </div>
+    <span class="chip-dir">Direction preview</span>
+  </div>
+
+  <div class="section">
+    <h2>Surfaces &amp; palette</h2>
+    <div class="swatches">
+      <div class="sw"><i style="background:var(--surface-base)"></i>canvas</div>
+      <div class="sw"><i style="background:var(--surface-1)"></i>surface-1</div>
+      <div class="sw"><i style="background:var(--surface-2)"></i>surface-2</div>
+      <div class="sw"><i style="background:var(--surface-3)"></i>surface-3</div>
+      <div class="sw"><i style="background:var(--primary)"></i>accent</div>
+      <div class="sw"><i style="background:var(--success)"></i>success</div>
+      <div class="sw"><i style="background:var(--warn)"></i>warning</div>
+      <div class="sw"><i style="background:var(--danger)"></i>danger</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Buttons &amp; controls</h2>
+    <div class="row">
+      <button class="btn primary">Save changes</button>
+      <button class="btn">Cancel</button>
+      <button class="btn ghost">Ghost</button>
+      <span class="seg"><button class="active">Day</button><button>Week</button><button>Month</button></span>
+      <span class="pill soft-green">Active</span>
+      <span class="pill soft-amber">Pending</span>
+      <span class="pill soft-red">Overdue</span>
+    </div>
+    <div class="row" style="margin-top:14px; max-width:620px">
+      <div class="field" style="flex:1"><span class="label">Task title</span><input value="Finalize Q3 board deck"></div>
+      <div class="field" style="width:160px"><span class="label">Priority</span><select><option>High</option><option>Medium</option><option>Low</option></select></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Dashboard widgets</h2>
+    <div class="grid g3">
+      <div class="card kpi"><div class="k-label">Open tasks</div><div class="k-value num">12</div><div class="k-delta down">▼ 3 vs last week</div></div>
+      <div class="card kpi"><div class="k-label">Net balance</div><div class="k-value num">$8,420</div><div class="k-delta up">▲ 6.2% this month</div></div>
+      <div class="card kpi"><div class="k-label">Habit streak</div><div class="k-value num">28<span style="font-size:15px;color:var(--text-3)"> days</span></div><div class="k-delta up">▲ on track</div></div>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="card">
+        <div class="wcard-head"><span class="wcard-title">Today's tasks</span><button class="btn ghost" style="height:28px;padding:0 8px">+ New</button></div>
+        <div class="lrow"><span class="dot" style="background:var(--danger)"></span><span class="t">Review pull request #412</span><span class="pill soft-red">High</span></div>
+        <div class="lrow"><span class="dot" style="background:var(--warn)"></span><span class="t">Reply to investor email</span><span class="meta">2:30 PM</span></div>
+        <div class="lrow"><span class="dot" style="background:var(--success)"></span><span class="t">Gym — leg day</span><span class="meta">6:00 PM</span></div>
+        <div class="lrow"><span class="dot" style="background:var(--primary)"></span><span class="t">Read 20 pages</span><span class="meta">Evening</span></div>
+      </div>
+      <div class="card">
+        <div class="wcard-head"><span class="wcard-title">This week</span><span class="meta">Jun 15–21</span></div>
+        <div class="lrow"><span class="t">Spending</span><span class="num" style="color:var(--text-1);font-weight:600">$642.10</span></div>
+        <div class="lrow"><span class="t">Budget left</span><span class="num" style="color:var(--success);font-weight:600">$358.00</span></div>
+        <div class="lrow"><span class="t">Pomodoros</span><span class="num" style="color:var(--text-1);font-weight:600">19</span></div>
+        <div class="lrow"><span class="t">Journal entries</span><span class="num" style="color:var(--text-1);font-weight:600">5</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Finance — data table</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody>
+        <tr><td class="num">Jun 16</td><td>Whole Foods Market</td><td><span class="pill">Groceries</span></td><td class="amt num">−$84.20</td></tr>
+        <tr><td class="num">Jun 15</td><td>Monthly salary</td><td><span class="pill soft-green">Income</span></td><td class="amt num" style="color:var(--success)">+$5,200.00</td></tr>
+        <tr><td class="num">Jun 14</td><td>Figma subscription</td><td><span class="pill">Software</span></td><td class="amt num">−$15.00</td></tr>
+        <tr><td class="num">Jun 13</td><td>Uber</td><td><span class="pill">Transport</span></td><td class="amt num">−$23.40</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Modal — clean, restrained (no rainbow bar)</h2>
+    <div class="modal">
+      <h3>New Task</h3>
+      <span class="meta">Quick capture</span>
+      <div style="margin-top:12px" class="field"><input placeholder="What needs to be done?"></div>
+      <div class="prio"><b>High</b><b class="sel">Medium</b><b>Low</b></div>
+      <div class="row" style="justify-content:flex-end; margin-top:6px"><button class="btn ghost">More</button><button class="btn primary">Save task</button></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

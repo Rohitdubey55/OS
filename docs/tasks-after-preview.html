@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tasks — redesigned (preview)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#EC4899; /* matches your pink theme */
+    --surface-base:#F6F8FB; --surface-1:#FFFFFF; --surface-2:#F4F6FA; --surface-3:#E9EDF3;
+    --text-1:#1A1F36; --text-2:#3C4257; --text-3:#6B7280;
+    --border-color:#E4E8EE; --border-strong:#D4DAE3;
+    --primary-soft:color-mix(in srgb,var(--primary) 9%,transparent);
+    --ring:0 0 0 3px var(--primary-soft);
+    --shadow-xs:0 1px 2px rgba(16,24,40,.05);
+    --shadow-card:0 0 0 1px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06),0 6px 16px -6px rgba(16,24,40,.08);
+    --shadow-md:0 0 0 1px rgba(16,24,40,.04),0 4px 10px -2px rgba(16,24,40,.10);
+    --danger:#DC2626;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface-base);color:var(--text-2);font-family:'Inter',-apple-system,sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:'cv02' 1,'cv03' 1,'cv11' 1}
+  .page{max-width:1280px;margin:0 auto;padding:28px 40px}
+  .page-title{font-size:34px;font-weight:700;color:var(--text-1);letter-spacing:-.022em;margin:0 0 14px;padding-bottom:18px;border-bottom:1px solid var(--border-color)}
+
+  .tk-shell{max-width:1060px}
+  .tk-header{display:flex;align-items:center;justify-content:space-between;padding:4px 16px 14px}
+  .tk-header-left{display:flex;align-items:center;gap:16px}
+  .tk-stat{display:inline-flex;align-items:baseline;gap:6px}
+  .tk-stat-n{font-size:17px;font-weight:700;color:var(--text-1);letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+  .tk-stat-l{font-size:12.5px;font-weight:500;color:var(--text-3)}
+  .tk-stat-sep{width:1px;height:15px;background:var(--border-color)}
+  .tk-header-right{display:flex;align-items:center;gap:4px}
+  .tk-icon-btn{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border:none;background:transparent;border-radius:8px;cursor:pointer;color:var(--text-3)}
+  .tk-icon-btn:hover{background:var(--surface-2);color:var(--text-1)}
+  .tk-add-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-xs);transition:all .18s}
+  .tk-add-btn:hover{filter:brightness(.97);transform:translateY(-1px);box-shadow:var(--shadow-md)}
+
+  .tk-capture-wrap{padding:0 16px 12px}
+  .tk-capture{display:flex;align-items:center;background:var(--surface-1);border:1px solid var(--border-color);border-radius:12px;overflow:hidden;box-shadow:var(--shadow-xs)}
+  .tk-capture-icon{display:flex;align-items:center;padding:0 12px 0 14px;color:var(--primary)}
+  .tk-capture-input{flex:1;background:transparent;border:none;outline:none;font-size:14px;color:var(--text-1);padding:12px 0}
+  .tk-capture-input::placeholder{color:var(--text-3)}
+  .tk-capture-divider{width:1px;background:var(--border-color);height:20px;margin:0 2px}
+  .tk-capture-cat{border:none;background:transparent;outline:none;font-size:12px;font-weight:600;color:var(--text-3);padding:12px 14px}
+
+  .tk-filter-row{display:flex;gap:6px;padding:0 16px 8px}
+  .tk-cat-pill{display:inline-flex;align-items:center;padding:6px 14px;border-radius:22px;font-size:12.5px;font-weight:550;background:var(--surface-1);border:1px solid var(--border-color);color:var(--text-3);cursor:pointer}
+  .tk-cat-pill:hover{background:var(--surface-2);border-color:var(--border-strong);color:var(--text-1)}
+  .tk-cat-pill.active{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:700}
+
+  .tk-priority-row{display:flex;align-items:center;gap:8px;padding:0 16px 12px}
+  .tk-prio-group{display:flex;align-items:center;gap:7px;background:var(--surface-1);border:1px solid var(--border-color);border-radius:10px;padding:5px 12px}
+  .tk-prio-all{font-size:11.5px;font-weight:700;color:var(--primary)}
+  .dot{width:16px;height:16px;border-radius:50%}
+  .tk-sort-select{margin-left:auto;background:var(--surface-1);border:1px solid var(--border-color);border-radius:10px;padding:7px 12px;font-size:12px;color:var(--text-2);font-weight:500;min-width:132px;max-width:184px}
+  .tk-toggle-done{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--border-color);background:var(--surface-1);border-radius:10px;color:var(--text-3);cursor:pointer}
+
+  .tk-section{background:var(--surface-1);border:1px solid var(--border-color);border-radius:12px;margin:0 16px 14px;overflow:hidden;box-shadow:var(--shadow-card)}
+  .tk-section-header{display:flex;align-items:center;gap:9px;padding:13px 16px;cursor:pointer}
+  .tk-section-header:hover{background:var(--surface-2)}
+  .tk-section-dot{width:7px;height:7px;border-radius:50%;background:var(--danger)}
+  .tk-section-label{flex:1;font-size:11.5px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em}
+  .tk-section-badge{border-radius:999px;padding:3px 9px;font-weight:600;font-size:10.5px}
+  .tk-section-badge.urgent{background:rgba(245,158,11,.12);color:#B54708}
+  .tk-section-badge.overdue{background:rgba(220,38,38,.09);color:#B42318}
+  .tk-section-count{font-variant-numeric:tabular-nums;color:var(--text-3);font-weight:600;padding-left:2px}
+  .chev{color:var(--text-3);opacity:.6}
+  .tk-section-tasks{border-top:1px solid var(--border-color)}
+
+  .row{display:flex;align-items:flex-start;gap:12px;padding:13px 16px;border-bottom:1px solid var(--border-color);cursor:pointer;transition:background .15s}
+  .row:last-child{border-bottom:none}
+  .row:hover{background:var(--surface-2)}
+  .row:hover .chev-r{opacity:.45}
+  .ring{width:21px;height:21px;min-width:21px;border-radius:50%;border:2px solid;margin-top:1px}
+  .content{flex:1;min-width:0}
+  .title{font-size:14px;font-weight:500;color:var(--text-1);line-height:1.4}
+  .title.p1{font-weight:700}
+  .meta{display:flex;gap:5px;margin-top:6px}
+  .chip{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:var(--text-3);background:var(--surface-2);padding:2px 8px;border-radius:999px;border:1px solid var(--border-color)}
+  .row:hover .chip{background:var(--surface-1)}
+  .datechip{font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;margin-left:auto}
+  .datechip.overdue{background:rgba(220,38,38,.08);color:#B42318;border:1px solid rgba(220,38,38,.16)}
+  .chev-r{opacity:0;color:var(--text-3);margin-top:3px;transition:opacity .15s}
+  .toprow{display:flex;align-items:flex-start;gap:8px}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1 class="page-title">Tasks</h1>
+
+  <div class="tk-shell">
+    <div class="tk-header">
+      <div class="tk-header-left">
+        <div class="tk-stat"><span class="tk-stat-n">5</span><span class="tk-stat-l">open</span></div>
+        <div class="tk-stat-sep"></div>
+        <div class="tk-stat"><span class="tk-stat-n">81%</span><span class="tk-stat-l">done</span></div>
+      </div>
+      <div class="tk-header-right">
+        <button class="tk-icon-btn">☑</button>
+        <button class="tk-icon-btn">🏷</button>
+        <button class="tk-add-btn">+ Add</button>
+      </div>
+    </div>
+
+    <div class="tk-capture-wrap">
+      <div class="tk-capture">
+        <span class="tk-capture-icon">⚡</span>
+        <input class="tk-capture-input" placeholder="Capture a task… press Enter to save">
+        <div class="tk-capture-divider"></div>
+        <span class="tk-capture-cat">No category ⌄</span>
+      </div>
+    </div>
+
+    <div class="tk-filter-row">
+      <button class="tk-cat-pill active">All</button>
+      <button class="tk-cat-pill">Other</button>
+      <button class="tk-cat-pill">Work</button>
+    </div>
+
+    <div class="tk-priority-row">
+      <div class="tk-prio-group">
+        <span class="tk-prio-all">All</span>
+        <span class="dot" style="background:#DC2626"></span>
+        <span class="dot" style="background:#D97706"></span>
+        <span class="dot" style="background:#059669"></span>
+      </div>
+      <select class="tk-sort-select"><option>↑ Priority</option></select>
+      <button class="tk-toggle-done">◷</button>
+    </div>
+
+    <div class="tk-section">
+      <div class="tk-section-header">
+        <span class="tk-section-dot"></span>
+        <span class="tk-section-label">Work</span>
+        <span class="tk-section-badge urgent">4 urgent</span>
+        <span class="tk-section-badge overdue">5 late</span>
+        <span class="tk-section-count">5</span>
+        <span class="chev">⌄</span>
+      </div>
+      <div class="tk-section-tasks">
+        <div class="row" style="border-left:3px solid #DC2626">
+          <span class="ring" style="border-color:#DC262655"></span>
+          <div class="content">
+            <div class="toprow"><span class="title p1">GSA</span><span class="datechip overdue">115d ago</span></div>
+            <div class="meta"><span class="chip">✓ 0/3</span><span class="chip">Work</span></div>
+          </div>
+          <span class="chev-r">›</span>
+        </div>
+        <div class="row" style="border-left:3px solid #DC2626">
+          <span class="ring" style="border-color:#DC262655"></span>
+          <div class="content">
+            <div class="toprow"><span class="title p1">Conexpo</span><span class="datechip overdue">106d ago</span></div>
+            <div class="meta"><span class="chip">Work</span></div>
+          </div>
+          <span class="chev-r">›</span>
+        </div>
+        <div class="row" style="border-left:3px solid #DC2626">
+          <span class="ring" style="border-color:#DC262655"></span>
+          <div class="content">
+            <div class="toprow"><span class="title p1">GSAI Planning</span><span class="datechip overdue">104d ago</span></div>
+            <div class="meta"><span class="chip">Work</span></div>
+          </div>
+          <span class="chev-r">›</span>
+        </div>
+        <div class="row" style="border-left:3px solid #DC2626">
+          <span class="ring" style="border-color:#DC262655"></span>
+          <div class="content">
+            <div class="toprow"><span class="title p1">Rafael Explanation</span><span class="datechip overdue">97d ago</span></div>
+            <div class="meta"><span class="chip">Work</span></div>
+          </div>
+          <span class="chev-r">›</span>
+        </div>
+        <div class="row" style="border-left:3px solid #D97706">
+          <span class="ring" style="border-color:#D9770655"></span>
+          <div class="content">
+            <div class="toprow"><span class="title">Finalise Templates</span><span class="datechip overdue">91d ago</span></div>
+            <div class="meta"><span class="chip">Work</span></div>
+          </div>
+          <span class="chev-r">›</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

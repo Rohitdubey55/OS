@@ -67,14 +67,14 @@
     --dur-slow: 320ms;
 }
 
-/* Dark family — applies to any of the theme palettes */
+/* Dark family — ONLY the genuinely dark themes. sunset, lavender and rose are
+   LIGHT themes (light surfaces, dark text), so they must NOT get the dark
+   --saas-* palette; they inherit the light defaults above and pick up their
+   tint from style.css via refine.css's --saas-* → --surface-* mapping. */
 [data-theme="dark"],
 [data-theme="midnight"],
 [data-theme="forest"],
-[data-theme="sunset"],
-[data-theme="ocean"],
-[data-theme="lavender"],
-[data-theme="rose"] {
+[data-theme="ocean"] {
     --saas-bg: #0B0E14;
     --saas-surface: #161B23;
     --saas-elevated: #1E242E;
@@ -2185,10 +2185,21 @@ html { scroll-behavior: smooth; }
    nothing peeks through; the divider marks the frozen edge (no shadow). */
 .habits-grid-widget .hg-day-label { position: sticky; left: 0; z-index: 3; background: var(--saas-surface); border-right: 1px solid var(--saas-border); padding-left: 6px; padding-right: 8px; }
 .habits-grid-widget .hg-score { position: sticky; right: 0; z-index: 3; background: var(--saas-surface); border-left: 1px solid var(--saas-border); }
+/* Opaque equivalent of the translucent Today tint, so scrolling habits can't show through */
 .habits-grid-widget .hg-row--today .hg-day-label,
-.habits-grid-widget .hg-row--today .hg-score { background: var(--saas-accent-soft); }
+.habits-grid-widget .hg-row--today .hg-score { background: color-mix(in srgb, var(--primary, #4F46E5) 16%, var(--saas-surface)); }
 .habits-grid-widget .hg-row--head .hg-day-label,
 .habits-grid-widget .hg-row--head .hg-score { z-index: 4; }
+/* Frozen cells MUST fill the full row height so their opaque background covers
+   every scrolling cell behind them. The header row uses `align-items:end`, which
+   would otherwise shrink these cells to their text height and let the tall habit
+   icons (icon-on-top) peek over the uncovered area. `align-self:stretch` forces
+   full-height coverage in every row; the inner flex keeps the label positioned. */
+.habits-grid-widget .hg-day-label,
+.habits-grid-widget .hg-score { align-self: stretch; }
+.habits-grid-widget .hg-day-label { display: flex; align-items: center; }
+.habits-grid-widget .hg-row--head .hg-day-label,
+.habits-grid-widget .hg-row--head .hg-score { align-items: flex-end; }
 .habits-grid-widget .hg-day-label--head {
     font-size: 11px;
     font-weight: 700;

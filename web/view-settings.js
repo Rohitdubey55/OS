@@ -194,61 +194,6 @@ function renderSettings() {
             </div>
         </div>
 
-        <!-- Orientation Lock -->
-        <div class="setting-item">
-            <label class="setting-label">Screen Orientation</label>
-            <div class="density-options" id="orientationOptions">
-                <button class="density-btn ${(settings.orientation_lock || 'auto') === 'auto' ? 'active' : ''}" onclick="selectOrientation('auto')">Auto</button>
-                <button class="density-btn ${settings.orientation_lock === 'portrait' ? 'active' : ''}" onclick="selectOrientation('portrait')">Portrait</button>
-                <button class="density-btn ${settings.orientation_lock === 'landscape' ? 'active' : ''}" onclick="selectOrientation('landscape')">Landscape</button>
-            </div>
-            <input type="hidden" id="sOrientation" value="${settings.orientation_lock || 'auto'}">
-        </div>
-
-            <label class="setting-label">Icon Pack</label>
-            <div class="icon-pack-grid">
-                <label class="icon-pack-option ${settings.icon_pack === 'lucide' ? 'active' : ''}" onclick="selectIconPack('lucide')">
-                    <input type="radio" name="iconPack" value="lucide" ${settings.icon_pack === 'lucide' ? 'checked' : ''}>
-                    <span class="pack-preview">${renderIcon('home', 'lucide')} ${renderIcon('calendar', 'lucide')} ${renderIcon('achievements', 'lucide')}</span>
-                    <span class="pack-name">Lucide</span>
-                </label>
-                <label class="icon-pack-option ${settings.icon_pack === 'remix' ? 'active' : ''}" onclick="selectIconPack('remix')">
-                    <input type="radio" name="iconPack" value="remix" ${settings.icon_pack === 'remix' ? 'checked' : ''}>
-                    <span class="pack-preview">${renderIcon('home', 'remix')} ${renderIcon('calendar', 'remix')} ${renderIcon('achievements', 'remix')}</span>
-                    <span class="pack-name">Remix</span>
-                </label>
-                <label class="icon-pack-option ${settings.icon_pack === 'tabler' ? 'active' : ''}" onclick="selectIconPack('tabler')">
-                    <input type="radio" name="iconPack" value="tabler" ${settings.icon_pack === 'tabler' ? 'checked' : ''}>
-                    <span class="pack-preview">${renderIcon('home', 'tabler')} ${renderIcon('calendar', 'tabler')} ${renderIcon('achievements', 'tabler')}</span>
-                    <span class="pack-name">Tabler</span>
-                </label>
-                <label class="icon-pack-option ${settings.icon_pack === 'material' ? 'active' : ''}" onclick="selectIconPack('material')">
-                    <input type="radio" name="iconPack" value="material" ${settings.icon_pack === 'material' ? 'checked' : ''}>
-                    <span class="pack-preview">${renderIcon('home', 'material')} ${renderIcon('calendar', 'material')} ${renderIcon('achievements', 'material')}</span>
-                    <span class="pack-name">Material</span>
-                </label>
-                <label class="icon-pack-option ${settings.icon_pack === 'fontawesome' ? 'active' : ''}" onclick="selectIconPack('fontawesome')">
-                    <input type="radio" name="iconPack" value="fontawesome" ${settings.icon_pack === 'fontawesome' ? 'checked' : ''}>
-                    <span class="pack-preview">${renderIcon('home', 'fontawesome')} ${renderIcon('calendar', 'fontawesome')} ${renderIcon('achievements', 'fontawesome')}</span>
-                    <span class="pack-name">Font Awesome</span>
-                </label>
-                <label class="icon-pack-option ${settings.icon_pack === 'heroicons' ? 'active' : ''}" onclick="selectIconPack('heroicons')">
-                    <input type="radio" name="iconPack" value="heroicons" ${settings.icon_pack === 'heroicons' ? 'checked' : ''}>
-                    <span class="pack-preview">${renderIcon('home', 'heroicons')} ${renderIcon('calendar', 'heroicons')} ${renderIcon('achievements', 'heroicons')}</span>
-                    <span class="pack-name">Heroicons</span>
-                </label>
-                <label class="icon-pack-option ${settings.icon_pack === 'feather' ? 'active' : ''}" onclick="selectIconPack('feather')">
-                    <input type="radio" name="iconPack" value="feather" ${settings.icon_pack === 'feather' ? 'checked' : ''}>
-                    <span class="pack-preview">${renderIcon('home', 'feather')} ${renderIcon('calendar', 'feather')} ${renderIcon('achievements', 'feather')}</span>
-                    <span class="pack-name">Feather</span>
-                </label>
-                <label class="icon-pack-option ${!settings.icon_pack || settings.icon_pack === 'emoji' ? 'active' : ''}" onclick="selectIconPack('emoji')">
-                    <input type="radio" name="iconPack" value="emoji" ${!settings.icon_pack || settings.icon_pack === 'emoji' ? 'checked' : ''}>
-                    <span class="pack-preview">🏠 📅 🏆</span>
-                    <span class="pack-name">Emoji</span>
-                </label>
-            </div>
-            <input type="hidden" id="sIconPack" value="${settings.icon_pack || 'emoji'}">
         </div>
         <button class="btn primary" onclick="saveAllSettings('appearance')">Save Appearance</button>
       </details>
@@ -1111,23 +1056,6 @@ window.selectThemeMode = function (mode) {
   document.documentElement.setAttribute('data-theme', mode);
 }
 
-// Icon Pack Selection
-window.selectIconPack = function (pack) {
-  document.querySelectorAll('.icon-pack-option').forEach(el => el.classList.remove('active'));
-  event.target.closest('.icon-pack-option').classList.add('active');
-  document.getElementById('sIconPack').value = pack;
-}
-
-window.selectOrientation = function (orientation) {
-  const parent = document.getElementById('orientationOptions');
-  parent.querySelectorAll('.density-btn').forEach(x => x.classList.remove('active'));
-  event.target.classList.add('active');
-  document.getElementById('sOrientation').value = orientation;
-
-  // Apply orientation lock
-  applyOrientationLock(orientation);
-}
-
 // --- Task Settings Helpers ---
 window.selectTaskDefaultView = function (view, el) {
   const container = document.getElementById('taskDefaultViewOptions');
@@ -1164,44 +1092,15 @@ window.removeTaskCategory = function (btn) {
   btn.closest('div').remove();
 };
 
-// Apply orientation lock
-function applyOrientationLock(orientation) {
-  console.log('Applying orientation lock:', orientation);
-
-  // Try Screen Orientation API first
-  if (screen.orientation) {
-    if (orientation === 'auto') {
-      screen.orientation.unlock().catch(e => console.log('Orientation unlock failed:', e));
-    } else if (orientation === 'portrait') {
-      screen.orientation.lock('portrait').catch(e => {
-        console.log('Portrait lock failed, trying portrait-primary:', e);
-        screen.orientation.lock('portrait-primary').catch(e2 => console.log('Orientation lock failed:', e2));
-      });
-    } else if (orientation === 'landscape') {
-      screen.orientation.lock('landscape').catch(e => {
-        console.log('Landscape lock failed, trying landscape-primary:', e);
-        screen.orientation.lock('landscape-primary').catch(e2 => console.log('Orientation lock failed:', e2));
-      });
-    }
-  } else {
-    console.log('Screen Orientation API not supported - using CSS fallback');
-    // Fallback: Apply CSS transform for visual effect (won't actually lock device)
-    applyOrientationCSS(orientation);
-  }
-}
-
-// CSS fallback for orientation (visual only)
-function applyOrientationCSS(orientation) {
-  const meta = document.querySelector('meta[name="viewport"]');
-  if (!meta) return;
-
-  if (orientation === 'portrait') {
-    meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
-  } else if (orientation === 'landscape') {
-    meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
-  } else {
-    meta.setAttribute('content', 'width=device-width, initial-scale=1');
-  }
+// True if an expense's date falls in the current calendar month. The Category
+// Limits screen shows THIS MONTH's spend (not all-time) so it lines up with the
+// monthly category limits instead of comparing a lifetime total to a monthly cap.
+function _expenseInThisMonth(e) {
+  if (!e || !e.date) return false;
+  const d = new Date(e.date);
+  if (isNaN(d.getTime())) return false;
+  const n = new Date();
+  return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
 }
 
 function initCategoryRows(jsonStr) {
@@ -1217,8 +1116,10 @@ function initCategoryRows(jsonStr) {
     state.data.expenses.forEach(e => {
       if (e.category) {
         txCategories.add(e.category);
-        // Track spending per category (all-time)
-        catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
+        // Track spending per category — THIS MONTH only (matches monthly limits)
+        if (e.type === 'expense' && _expenseInThisMonth(e)) {
+          catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
+        }
       }
     });
   }
@@ -1290,8 +1191,8 @@ window.addCategoryRow = function (cat = '', amt = '', source = 'weekly') {
     state.data.expenses.forEach(e => {
       if (e.category) {
         txCategories.add(e.category);
-        // Track all expense spending per category
-        if (e.type === 'expense') {
+        // Track this category's spend — THIS MONTH only (matches monthly limits)
+        if (e.type === 'expense' && _expenseInThisMonth(e)) {
           catSpent[e.category] = (catSpent[e.category] || 0) + Number(e.amount || 0);
         }
       }
@@ -1310,13 +1211,9 @@ window.addCategoryRow = function (cat = '', amt = '', source = 'weekly') {
       <datalist id="settingsCatOptions">
         ${[...txCategories].map(c => `<option value="${c}">`).join('')}
       </datalist>
-      <select class="input cat-source" style="width:90px; margin:0" onchange="updateCategorySummary()">
-        <option value="weekly" ${source === 'weekly' ? 'selected' : ''}>Weekly</option>
-        <option value="monthly" ${source === 'monthly' ? 'selected' : ''}>Monthly</option>
-      </select>
-      <input type="number" class="input cat-amt" placeholder="Limit" value="${amt}" style="flex:1; min-width:80px;" onchange="updateCategorySummary()">
-      ${spent > 0 ? `<span style="align-self:center; font-size:11px; color:var(--text-muted); min-width:60px;">₹${spent.toLocaleString()}</span>` : ''}
-      <button class="btn danger small" onclick="this.parentElement.remove(); updateCategorySummary()">X</button>
+      <input type="number" class="input cat-amt" placeholder="Monthly limit" value="${amt}" style="flex:1; min-width:80px;" onchange="updateCategorySummary()">
+      <span class="cat-spent" style="flex:none; width:76px; text-align:right; align-self:center; font-size:11px; color:var(--text-muted);">${spent > 0 ? '₹' + spent.toLocaleString() : ''}</span>
+      <button class="btn danger small" style="flex:none;" onclick="this.parentElement.remove(); updateCategorySummary()">X</button>
     `;
   document.getElementById('categoryBudgetList').appendChild(div);
   updateCategorySummary();
@@ -1339,11 +1236,11 @@ window.updateCategorySummary = function () {
     }
   });
 
-  // Calculate total spent from ALL categories (not just those with budget)
+  // Calculate total spent — THIS MONTH only, to match the monthly limits above
   let totalSpent = 0;
   if (state.data.expenses) {
     state.data.expenses.forEach(e => {
-      if (e.type === 'expense' && e.category) {
+      if (e.type === 'expense' && e.category && _expenseInThisMonth(e)) {
         totalSpent += Number(e.amount || 0);
       }
     });
@@ -1371,10 +1268,10 @@ window.saveAllSettings = async function (section = 'all') {
   document.querySelectorAll('.cat-budget-row').forEach(row => {
     const c = row.querySelector('.cat-name').value.trim();
     const a = row.querySelector('.cat-amt').value;
-    const s = row.querySelector('.cat-source')?.value || 'weekly';
     if (c && a) {
-      // Store as object with budget and source
-      cats[c] = { budget: Number(a), source: s };
+      // Category limits are monthly caps now (weekly vs monthly is decided per
+      // expense via budget_scope, not per category). Keep the object shape.
+      cats[c] = { budget: Number(a), source: 'monthly' };
     }
   });
 
@@ -1383,8 +1280,6 @@ window.saveAllSettings = async function (section = 'all') {
   let themeMode = 'light';
   const modeBtn = document.querySelector('#themeModeOptions .density-btn.active');
   if (modeBtn) themeMode = modeBtn.textContent.toLowerCase();
-  const orientationEl = document.getElementById('sOrientation');
-  const orientation = orientationEl?.value || 'auto';
 
   // AI fields
   const apiKey = document.getElementById('sApiKey').value;
@@ -1427,9 +1322,10 @@ window.saveAllSettings = async function (section = 'all') {
 
   if (section === 'all' || section === 'appearance') {
     newSettings.theme_color = color;
-    const currentPack = document.getElementById('sIconPack')?.value || 'emoji';
+    // Icon Pack picker was removed — preserve whatever pack was already saved so
+    // existing icon rendering is unaffected. Theme mode stays stored as "mode|pack".
+    const currentPack = (state.data.settings?.[0]?.theme_mode || 'light|lucide').split('|')[1] || 'lucide';
     newSettings.theme_mode = `${themeMode}|${currentPack}`;
-    newSettings.orientation_lock = orientation;
   }
 
   if (section === 'all' || section === 'ai') {

@@ -116,6 +116,26 @@ window._finSetAddType = function (type) {
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 };
 
+// Per-expense budget scope picker (Weekly = day-to-day, Monthly = big bill).
+// Weekly expenses count toward the weekly budget + the monthly total; monthly
+// ones count toward the monthly total only. Read on save via input[name=mTxScope].
+function _finScopeRadioHTML(selected) {
+  const sel = selected === 'monthly' ? 'monthly' : 'weekly';
+  const opt = (val, title, sub) => `
+      <label style="flex:1; display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer;">
+        <input type="radio" name="mTxScope" value="${val}" ${sel === val ? 'checked' : ''} style="margin:0; accent-color:var(--primary)">
+        <span><b>${title}</b> <span style="color:var(--text-muted); font-size:12px">· ${sub}</span></span>
+      </label>`;
+  return `
+    <div style="margin-top:12px">
+      <div style="font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:6px">Counts toward budget</div>
+      <div style="display:flex; gap:10px">
+        ${opt('weekly', 'Weekly', 'day-to-day')}
+        ${opt('monthly', 'Monthly', 'big bill')}
+      </div>
+    </div>`;
+}
+
 function _finAddModalHTML(type) {
   const labels = { expense: 'Expense', income: 'Income', fund: 'Fund', asset: 'Asset' };
   const segs = ['expense', 'income', 'fund', 'asset'].map(t =>
@@ -129,16 +149,11 @@ function _finAddModalHTML(type) {
       <input type="hidden" id="mTxType" value="${type}">
       <input type="date" class="input" id="mTxDate" value="${new Date().toISOString().slice(0, 10)}">
       <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)" style="margin-top:10px">
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px">
-          <select class="input" id="mTxCategory" style="margin:0">
-              <option value="">Select Category</option>
-              ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
-          </select>
-          <input class="input" id="mTxPaymentMode" placeholder="Payment Mode" list="paymentModeOptions" style="margin:0">
-          <datalist id="paymentModeOptions">
-            <option value="Cash"><option value="UPI"><option value="Card"><option value="Bank Transfer"><option value="Other">
-          </datalist>
-      </div>
+      <select class="input" id="mTxCategory" style="margin-top:10px; width:100%">
+          <option value="">Select Category</option>
+          ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+      </select>
+      ${type === 'expense' ? _finScopeRadioHTML('weekly') : ''}
       <input class="input" id="mTxNote" placeholder="Note (optional — e.g. 'Birthday dinner')" style="margin-top:10px">`;
     save = `<button class="btn primary" data-action="save-tx-modal">Save ${labels[type]}</button>`;
   } else if (type === 'fund') {
@@ -186,6 +201,99 @@ function getWeekBounds(date = new Date()) {
   return { start: monday, end: sunday };
 }
 
+// ── Weekly evaluation widgets ──────────────────────────────────────────────
+// Weekly mode is about the day-to-day budget, so instead of Income/Net/Savings
+// and a duplicate category list we compute pace, a daily chart, a week-over-week
+// trend and the biggest expenses — all from weekly-scoped expenses.
+function _finWeeklyStats(expenseItems, totalExp, weeklyBudget, weekBounds, now, allExpenses) {
+  const dow = now.getDay();                  // 0 Sun .. 6 Sat
+  const daysElapsed = dow === 0 ? 7 : dow;   // Mon=1 .. Sun=7
+  const daysLeft = 7 - daysElapsed;
+  const left = weeklyBudget - totalExp;
+  const dailyAvg = daysElapsed > 0 ? totalExp / daysElapsed : totalExp;
+  const projected = Math.round(dailyAvg * 7);
+  const safePerDay = daysLeft > 0 ? Math.max(0, left) / daysLeft : 0;
+
+  const dayTotals = [0, 0, 0, 0, 0, 0, 0];   // index 0 = Monday … 6 = Sunday
+  expenseItems.forEach(e => {
+    const wd = new Date(e.date).getDay();
+    dayTotals[wd === 0 ? 6 : wd - 1] += Number(e.amount) || 0;
+  });
+
+  // Same window, one week earlier — weekly-scoped expenses only.
+  const lwStart = new Date(weekBounds.start); lwStart.setDate(lwStart.getDate() - 7);
+  const lwEnd = new Date(weekBounds.end); lwEnd.setDate(lwEnd.getDate() - 7);
+  const lastWeekTotal = (allExpenses || []).reduce((s, e) => {
+    if (e.type !== 'expense' || e.budget_scope !== 'weekly') return s;
+    const d = new Date(e.date);
+    return (d >= lwStart && d <= lwEnd) ? s + (Number(e.amount) || 0) : s;
+  }, 0);
+
+  const biggest = [...expenseItems].sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 4);
+
+  return { daysElapsed, daysLeft, left, dailyAvg, projected, safePerDay, dayTotals, lastWeekTotal, biggest };
+}
+
+function _finWeeklyRailHTML(s, totalExp, weeklyBudget) {
+  const onTrack = weeklyBudget <= 0 || s.projected <= weeklyBudget;
+  const dayMax = Math.max(...s.dayTotals, 1);
+  const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  const paceCard = `
+    <div class="finr-card">
+      <div class="finr-h">Pace</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px">Day ${s.daysElapsed} of 7</div>
+      ${s.daysLeft > 0
+        ? `<div style="font-size:22px; font-weight:800; color:var(--text-1); line-height:1">₹${Math.round(s.safePerDay).toLocaleString()}<span style="font-size:12px; font-weight:600; color:var(--text-muted)"> /day</span></div>
+           <div style="font-size:12px; color:var(--text-muted); margin-top:2px">safe to spend for ${s.daysLeft} more day${s.daysLeft > 1 ? 's' : ''}</div>`
+        : `<div style="font-size:13px; color:var(--text-muted)">Week complete</div>`}
+      <div style="margin-top:10px; font-size:12.5px; color:var(--text-muted)">Projected: <b style="color:${onTrack ? 'var(--success)' : 'var(--danger)'}">₹${s.projected.toLocaleString()}</b> / ₹${weeklyBudget.toLocaleString()}</div>
+      <div style="margin-top:8px"><span style="display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:${onTrack ? 'color-mix(in srgb, var(--success) 16%, transparent)' : 'color-mix(in srgb, var(--danger) 16%, transparent)'}; color:${onTrack ? 'var(--success)' : 'var(--danger)'}">${onTrack ? 'On track' : 'Over pace'}</span></div>
+    </div>`;
+
+  const chartCard = `
+    <div class="finr-card">
+      <div class="finr-h">Daily spend</div>
+      <div style="display:flex; align-items:flex-end; gap:6px; margin-top:8px;">
+        ${s.dayTotals.map((v, i) => {
+          const h = v > 0 ? Math.max(4, Math.round((v / dayMax) * 64)) : 0;
+          const isToday = i === (s.daysElapsed - 1);
+          return `<div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
+            <div style="width:100%; height:64px; display:flex; align-items:flex-end;"><div title="₹${Math.round(v).toLocaleString()}" style="width:100%; height:${h}px; background:${isToday ? 'var(--primary)' : 'color-mix(in srgb, var(--primary) 35%, transparent)'}; border-radius:4px 4px 0 0;"></div></div>
+            <div style="font-size:10px; color:var(--text-muted)">${dayLabels[i]}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  let trendLine;
+  if (s.lastWeekTotal > 0) {
+    const diff = totalExp - s.lastWeekTotal;
+    const pct = Math.round(Math.abs(diff) / s.lastWeekTotal * 100);
+    const down = diff <= 0;
+    trendLine = `<div style="margin-top:8px; font-size:13px; font-weight:700; color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'} ${pct}% ${down ? 'less' : 'more'} than last week</div>`;
+  } else {
+    trendLine = `<div style="margin-top:8px; font-size:12px; color:var(--text-muted)">No data last week</div>`;
+  }
+  const trendCard = `
+    <div class="finr-card">
+      <div class="finr-h">vs last week</div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px"><span style="color:var(--text-muted)">This week</span><b>₹${Math.round(totalExp).toLocaleString()}</b></div>
+      <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted)">Last week</span><b>₹${Math.round(s.lastWeekTotal).toLocaleString()}</b></div>
+      ${trendLine}
+    </div>`;
+
+  const biggestCard = `
+    <div class="finr-card">
+      <div class="finr-h">Biggest this week</div>
+      ${s.biggest.length
+        ? s.biggest.map(e => `<div class="finr-cat"><div class="finr-cat-top"><span>${escapeHtml(e.category || 'Uncategorized')}${e.description ? ' · ' + escapeHtml(e.description) : ''}</span><b>₹${Number(e.amount).toLocaleString()}</b></div></div>`).join('')
+        : '<div class="finr-empty">No spending yet.</div>'}
+    </div>`;
+
+  return paceCard + chartCard + trendCard + biggestCard;
+}
+
 function renderFinExpenses(container) {
   const allExpenses = state.data.expenses || [];
   const settings = state.data.settings?.[0] || {};
@@ -206,22 +314,11 @@ function renderFinExpenses(container) {
     const d = new Date(e.date);
     // Weekly View: Show only weekly expenses from current week (Mon-Sun)
     if (finRange === 'week') {
-      // Check if this category is marked as weekly in settings
-      // Handle both old format (string/number) and new format (object)
-      const catData = categoryBudgets[e.category];
-      let catSource = 'weekly'; // Default to weekly for backward compatibility
-
-      if (catData !== undefined) {
-        if (typeof catData === 'object' && catData !== null) {
-          catSource = catData.source || 'weekly';
-        } else {
-          // Old format - treat as weekly
-          catSource = 'weekly';
-        }
-      }
-      // If category is not in budget settings at all, show in weekly (backward compat)
-
-      if (catSource !== 'weekly') return false;
+      // Weekly budget = only expenses tagged "weekly" (day-to-day), within the
+      // current week. Big/monthly bills (budget_scope === 'monthly') never count
+      // here. Legacy expenses with no scope yet are treated as monthly so they
+      // don't flood the weekly budget until you re-tag them. Income isn't scoped.
+      if (e.type === 'expense' && e.budget_scope !== 'weekly') return false;
 
       // Filter by current week (Monday-based)
       return d >= weekBounds.start && d <= weekBounds.end;
@@ -248,6 +345,30 @@ function renderFinExpenses(container) {
   const catBars = catEntries.map(([c, v]) => `<div class="finr-cat"><div class="finr-cat-top"><span>${escapeHtml(c || 'Uncategorized')}</span><b>₹${Number(v).toLocaleString()}</b></div><div class="finr-bar"><i style="width:${Math.round(v / catMax * 100)}%"></i></div></div>`).join('');
   const fundsRail = funds.slice(0, 5).map(f => { const cur = Number(f.current_amount || f.balance || 0); const tgt = Number(f.target_amount || 0); const pct = tgt > 0 ? Math.min(100, Math.round(cur / tgt * 100)) : 0; return `<div class="finr-cat"><div class="finr-cat-top"><span>${escapeHtml(f.fund_name || f.name || 'Fund')}</span><b>₹${cur.toLocaleString()}</b></div>${tgt > 0 ? `<div class="finr-bar"><i style="width:${pct}%"></i></div>` : ''}</div>`; }).join('');
 
+  // Weekly mode swaps the generic KPIs (Income/Net/Savings are meaningless for a
+  // day-to-day budget) for budget-pace metrics, and swaps the rail for evaluation
+  // cards. Monthly/Yearly keep the original KPIs + rail.
+  const wk = finRange === 'week'
+    ? _finWeeklyStats(expenseItems, totalExp, weeklyBudget, weekBounds, now, allExpenses)
+    : null;
+
+  const kpisHTML = (finRange === 'week')
+    ? `
+      <div class="fin-kpi"><div class="k-l">Spent</div><div class="k-v" style="color:#B42318">₹${totalExp.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Left</div><div class="k-v" style="color:${wk.left >= 0 ? 'var(--success,#10B981)' : '#B42318'}">${wk.left < 0 ? '-' : ''}₹${Math.abs(Math.round(wk.left)).toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Daily avg</div><div class="k-v">₹${Math.round(wk.dailyAvg).toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Projected</div><div class="k-v" style="color:${(weeklyBudget <= 0 || wk.projected <= weeklyBudget) ? 'var(--success,#10B981)' : '#B42318'}">₹${wk.projected.toLocaleString()}</div></div>`
+    : `
+      <div class="fin-kpi"><div class="k-l">Spent</div><div class="k-v" style="color:#B42318">₹${totalExp.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Income</div><div class="k-v" style="color:var(--success,#10B981)">₹${totalInc.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Net</div><div class="k-v" style="color:${net >= 0 ? 'var(--success,#10B981)' : '#B42318'}">${net < 0 ? '-' : ''}₹${Math.abs(net).toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Savings</div><div class="k-v">₹${fundsTotal.toLocaleString()}</div></div>`;
+
+  const railHTML = (finRange === 'week')
+    ? _finWeeklyRailHTML(wk, totalExp, weeklyBudget)
+    : `<div class="finr-card"><div class="finr-h">Top categories</div>${catBars || '<div class="finr-empty">No spending in this period.</div>'}</div>
+       <div class="finr-card"><div class="finr-h">Savings</div>${fundsRail || '<div class="finr-empty">No funds yet.</div>'}</div>`;
+
   // Render
   container.innerHTML = `
     <div style="display:flex; justify-content:center; margin-bottom:18px;">
@@ -258,12 +379,7 @@ function renderFinExpenses(container) {
       </div>
     </div>
 
-    <div class="fin-kpis">
-      <div class="fin-kpi"><div class="k-l">Spent</div><div class="k-v" style="color:#B42318">₹${totalExp.toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Income</div><div class="k-v" style="color:var(--success,#10B981)">₹${totalInc.toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Net</div><div class="k-v" style="color:${net >= 0 ? 'var(--success,#10B981)' : '#B42318'}">${net < 0 ? '-' : ''}₹${Math.abs(net).toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Savings</div><div class="k-v">₹${fundsTotal.toLocaleString()}</div></div>
-    </div>
+    <div class="fin-kpis">${kpisHTML}</div>
 
     <div class="fin-workspace">
       <div class="fin-main">
@@ -274,10 +390,7 @@ function renderFinExpenses(container) {
           ${expenseItems.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 15).map(renderTransactionCard).join('')}
         </div>
       </div>
-      <aside class="fin-rail">
-        <div class="finr-card"><div class="finr-h">Top categories</div>${catBars || '<div class="finr-empty">No spending in this period.</div>'}</div>
-        <div class="finr-card"><div class="finr-h">Savings</div>${fundsRail || '<div class="finr-empty">No funds yet.</div>'}</div>
-      </aside>
+      <aside class="fin-rail">${railHTML}</aside>
     </div>
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
@@ -356,28 +469,22 @@ function renderWeeklyOverview(totalExp, limit, catSpent = {}, catLimits = {}) {
   const pct = limit > 0 ? Math.min(100, (totalExp / limit) * 100) : 0;
   const color = pct > 100 ? 'var(--danger)' : (pct > 80 ? 'var(--warning)' : 'var(--success)');
 
-  // Per-category breakdown for WEEKLY-source categories — so the limits & frequency set
-  // in Budget Settings are visibly applied here.
-  const keys = [...new Set([...Object.keys(catLimits || {}), ...Object.keys(catSpent || {})])].filter(c => {
-    const cd = (catLimits || {})[c];
-    const src = (cd && typeof cd === 'object') ? (cd.source || 'weekly') : 'weekly';
-    return src === 'weekly';
-  });
-  // Build per-category rows (drop empties).
-  const rows = keys.map(c => {
-    const spent = Number(catSpent?.[c] || 0);
-    const cd = (catLimits || {})[c];
-    const cl = (cd && typeof cd === 'object') ? Number(cd.budget) || 0 : Number(cd) || 0;
-    return { c, spent, cl };
-  }).filter(r => r.spent > 0 || r.cl > 0);
+  // Per-category breakdown of THIS WEEK's day-to-day spending. catSpent is already
+  // limited to weekly-scoped expenses in the current week, so just show whatever
+  // categories appear there. (Category limits are monthly, so we don't compare
+  // weekly spend against them here — that would mix periods.)
+  const rows = Object.keys(catSpent || {})
+    .map(c => ({ c, spent: Number(catSpent[c] || 0) }))
+    .filter(r => r.spent > 0)
+    .sort((a, b) => b.spent - a.spent);
 
-  // If the only weekly category equals the whole weekly spend, its bar just
-  // repeats the overall bar above — skip it so we don't show a duplicate.
+  // If the only category equals the whole weekly spend, its bar just repeats the
+  // overall bar above — skip it so we don't show a duplicate.
   const redundant = rows.length === 1 && Math.round(rows[0].spent) === Math.round(totalExp);
-  const catHtml = redundant ? '' : rows.map(({ c, spent, cl }) => {
-    const cpct = cl > 0 ? Math.min(100, (spent / cl) * 100) : (spent > 0 ? 100 : 0);
-    const ccolor = (cl > 0 && spent > cl) ? 'var(--danger)' : 'var(--primary)';
-    return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="font-weight:600">${escapeHtml(c)}</span><span>₹${spent.toLocaleString()}${cl ? ' / ₹' + cl.toLocaleString() : ''}</span></div><div class="progress-bg" style="height:6px"><div class="progress-fill" style="width:${cpct}%;background:${ccolor}"></div></div></div>`;
+  const catMax = rows.length ? Math.max(...rows.map(r => r.spent)) : 1;
+  const catHtml = redundant ? '' : rows.map(({ c, spent }) => {
+    const cpct = Math.min(100, (spent / catMax) * 100);
+    return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="font-weight:600">${escapeHtml(c)}</span><span>₹${spent.toLocaleString()}</span></div><div class="progress-bg" style="height:6px"><div class="progress-fill" style="width:${cpct}%;background:var(--primary)"></div></div></div>`;
   }).join('');
 
   // Balance = budget − spend (how much is left this week).
@@ -400,7 +507,7 @@ function renderWeeklyOverview(totalExp, limit, catSpent = {}, catLimits = {}) {
         </div>
         ${catHtml ? `<div style="margin-top:14px; border-top:1px solid var(--border-color); padding-top:12px;">${catHtml}</div>` : ''}
         <div style="font-size:12px; margin-top:8px; color:var(--text-muted)">
-            Weekly-budget categories only; fixed monthly bills are excluded.
+            Only day-to-day (weekly) expenses; monthly bills are excluded.
         </div>
     </div>`;
 }
@@ -572,20 +679,11 @@ window.openEditTransaction = function (id) {
       <input type="date" class="input" id="mTxDate" value="${(tx.date || '').slice(0, 10)}" style="margin:0">
     </div>
     <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)" value="${tx.amount || ''}">
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-        <select class="input" id="mTxCategory" style="margin:0">
-            <option value="">Select Category</option>
-            ${categories.map(c => `<option value="${c}" ${tx.category === c ? 'selected' : ''}>${c}</option>`).join('')}
-        </select>
-        <input class="input" id="mTxPaymentMode" placeholder="Payment Mode" list="paymentModeEdit" value="${(tx.payment_mode || '').replace(/"/g, '&quot;')}">
-        <datalist id="paymentModeEdit">
-          <option value="Cash">
-          <option value="UPI">
-          <option value="Card">
-          <option value="Bank Transfer">
-          <option value="Other">
-        </datalist>
-    </div>
+    <select class="input" id="mTxCategory" style="margin-top:10px; width:100%">
+        <option value="">Select Category</option>
+        ${categories.map(c => `<option value="${c}" ${tx.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+    </select>
+    ${isExpense ? _finScopeRadioHTML(tx.budget_scope === 'weekly' ? 'weekly' : 'monthly') : ''}
     <input class="input" id="mTxNote" placeholder="Note (optional)" value="${(tx.description || tx.notes || '').replace(/"/g, '&quot;')}" style="margin-top:10px">
 
     <div style="display:flex; justify-content:space-between; gap:10px; margin-top:16px;">

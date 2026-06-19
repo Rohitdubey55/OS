@@ -17,24 +17,9 @@
    component + shadow refinements automatically (everything is token-driven).
    ========================================================================== */
 
-/* ───────────────────────────── 1. TOKENS (light/default) ───────────────── */
+/* ───────────────────────────── 1. TOKENS ───────────────────────────────── */
+/* Theme-NEUTRAL tokens — apply in every theme (halo, shadows, radii). */
 :root {
-  /* Canvas & surfaces — subtle cool layering */
-  --surface-base: #F6F8FB;   /* app background            */
-  --surface-1:    #FFFFFF;   /* cards / modals / popovers  */
-  --surface-2:    #F4F6FA;   /* inputs / hover fills       */
-  --surface-3:    #E9EDF3;   /* active / selected fills    */
-
-  /* Ink — Stripe-style slate ramp */
-  --text-1: #1A1F36;         /* headings / primary         */
-  --text-2: #3C4257;         /* body                       */
-  --text-3: #6B7280;         /* muted / meta               */
-
-  /* Hairline borders */
-  --border-color: #E4E8EE;
-  --border-strong: #D4DAE3;
-  --inner-border: transparent;
-
   /* Accent halo (kept in sync with the user-selectable --primary) */
   --primary-soft: color-mix(in srgb, var(--primary) 9%, transparent);
   --primary-glow: color-mix(in srgb, var(--primary) 26%, transparent);
@@ -57,6 +42,31 @@
   --radius-pill: 999px;
 }
 
+/* Light/default surface, ink & border palette.
+   IMPORTANT: scoped to LIGHT ONLY (pre-init bare :root + explicit
+   [data-theme="light"]). refine.css loads LAST, so declaring these on an
+   unconditional :root previously overrode every per-theme palette in style.css
+   (equal specificity, later source wins) — that was the root cause of "theme
+   switching does nothing". Dark/colored themes now keep their own surfaces. */
+:root:not([data-theme]),
+[data-theme="light"] {
+  /* Canvas & surfaces — subtle cool layering */
+  --surface-base: #F6F8FB;   /* app background            */
+  --surface-1:    #FFFFFF;   /* cards / modals / popovers  */
+  --surface-2:    #F4F6FA;   /* inputs / hover fills       */
+  --surface-3:    #E9EDF3;   /* active / selected fills    */
+
+  /* Ink — Stripe-style slate ramp */
+  --text-1: #1A1F36;         /* headings / primary         */
+  --text-2: #3C4257;         /* body                       */
+  --text-3: #6B7280;         /* muted / meta               */
+
+  /* Hairline borders */
+  --border-color: #E4E8EE;
+  --border-strong: #D4DAE3;
+  --inner-border: transparent;
+}
+
 /* Keep the app-shell (saas.css) palette in lock-step with the views above */
 :root {
   --saas-bg: var(--surface-base);
@@ -64,7 +74,7 @@
   --saas-elevated: var(--surface-1);
   --saas-sunken: var(--surface-2);
   --saas-border: var(--border-color);
-  --saas-border-strong: var(--border-strong);
+  --saas-border-strong: var(--border-strong, var(--border-color));
   --saas-text: var(--text-1);
   --saas-text-muted: var(--text-2);
   --saas-text-dim: var(--text-3);
@@ -84,9 +94,10 @@
   --r-xl: var(--radius-xl);
 }
 
-/* Slightly deeper shadows on dark themes so elevation still reads */
+/* Slightly deeper shadows on truly-dark themes so elevation still reads.
+   (sunset / lavender / rose are LIGHT themes and are intentionally excluded.) */
 [data-theme="dark"], [data-theme="midnight"], [data-theme="forest"],
-[data-theme="ocean"], [data-theme="sunset"] {
+[data-theme="ocean"] {
   --shadow-card: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.30), 0 10px 24px -8px rgba(0, 0, 0, 0.45);
   --shadow-md: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 6px 14px -4px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.40), 0 16px 36px -10px rgba(0, 0, 0, 0.55);

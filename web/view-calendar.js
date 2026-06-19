@@ -418,7 +418,10 @@ function renderTimeGrid() {
             id: 'habit_' + h.id,
             is_habit: true,
             habit_id: h.id,
-            title: (h.emoji || '✨') + ' ' + h.habit_name,
+            // Keep the title as plain text only. The icon is carried separately
+            // in `emoji` and rendered via habitIconHTML — never baked into text.
+            title: h.habit_name,
+            emoji: h.emoji,
             start_datetime: iso + 'T' + timeStr + ':00',
             end_datetime: iso + 'T' + (parseInt(timeStr.slice(0, 2)) + Math.floor(hbDuration / 60)).toString().padStart(2, '0') + ':' + (parseInt(timeStr.slice(3)) + hbDuration % 60).toString().padStart(2, '0') + ':00',
             duration: hbDuration, // pass along explicitly
@@ -531,7 +534,7 @@ function renderTimeGrid() {
                      style="${inlineStyle} background:${bg}; color:${color}; font-weight:600; border-radius:8px; border:2px solid ${border}; box-shadow:0 2px 4px rgba(0,0,0,0.05); cursor:pointer;"
                      onclick="event.stopPropagation(); toggleHabitOptimistic('${e.habit_id}')">
             <span class="event-time" style="color:var(--text-muted); opacity:0.9;">${e.startT}</span>
-            <span style="text-decoration:${e.is_done ? 'line-through' : 'none'}">${e.title}</span>
+            <span style="display:inline-flex; align-items:center; gap:4px; text-decoration:${e.is_done ? 'line-through' : 'none'}">${typeof habitIconHTML === 'function' ? habitIconHTML(e.emoji, 14) : ''}<span>${e.title}</span></span>
           </div>`;
       } else if (e.is_task) {
         const bg = e.is_done ? 'var(--surface-2)' : 'var(--surface-1)';
