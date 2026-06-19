@@ -47,7 +47,9 @@ const FINANCE_REFINE_CSS = `<style>
   .fin-pro { max-width:none; }
   .fin-kpis { grid-template-columns:repeat(2,1fr); }
   .fin-workspace { display:block; }
-  .fin-rail { display:none; }
+  /* Stack the rail (weekly Pace / Daily chart / vs-last-week / Biggest, or
+     Top categories + Savings) BELOW the main content on phone instead of hiding it. */
+  .fin-rail { display:flex; flex:none; width:100%; position:static; top:auto; margin-top:18px; }
 }
 </style>`;
 

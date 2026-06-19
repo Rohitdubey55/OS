@@ -1211,16 +1211,15 @@ function renderLumiaTile(tile, sectionRenderers, isMobile) {
         ? `onclick="if(document.body.classList.contains('tiles-editing'))openLumiaTileEditor('${tile.uid}');else { ${routeJS}; }"`
         : '';
 
-    // Desktop = explicit coordinate placement (gaps stay empty). Mobile = flow.
-    const placement = (!isMobile && tile.x >= 1 && tile.y >= 1)
+    // Explicit coordinate placement on both desktop and phone (gaps stay empty).
+    const placement = (tile.x >= 1 && tile.y >= 1)
         ? `grid-column: ${tile.x} / span ${w}; grid-row: ${tile.y} / span ${h};`
         : `grid-column: span ${w}; grid-row: span ${h};`;
     const inlineStyle = placement +
         (colored ? ` background:${tile.color}; --lumia-tile-bg:${tile.color};` : '');
 
-    // Corner resize handle — desktop only (mobile keeps the modal size picker).
-    const resizeHandle = isMobile ? '' :
-        `<div class="lumia-tile__resize" title="Drag to resize" aria-label="Resize tile"></div>`;
+    // Corner resize handle — now on phone too (drag the corner to resize).
+    const resizeHandle = `<div class="lumia-tile__resize" title="Drag to resize" aria-label="Resize tile"></div>`;
 
     return `
         <div class="lumia-tile ${colored ? 'lumia-tile--colored' : 'lumia-tile--plain'} ${(isWidget && fitsFull && !colored) ? 'lumia-tile--mode-full' : 'lumia-tile--mode-compact'} lumia-tile--kind-${cat.kind}"
@@ -1250,30 +1249,18 @@ function renderLumiaGrid(sectionRenderers) {
     const tiles = getLumiaConfig();
     const editing = typeof document !== 'undefined' && document.body.classList.contains('tiles-editing');
 
-    // ── MOBILE: unchanged flow layout (auto-flow, Sortable reorder) ──
-    if (isMobile) {
-        const tilesHtml = tiles.map(t => renderLumiaTile(t, sectionRenderers, true)).join('');
-        return `
-            <div class="lumia-grid" id="lumiaGrid">
-                ${tilesHtml}
-                <button class="lumia-tile lumia-tile--add" onclick="openLumiaTilePicker()" title="Add a tile">
-                    <div class="lumia-tile__icon">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    </div>
-                    <div class="lumia-tile__label lumia-tile__label--xs">Add tile</div>
-                </button>
-            </div>`;
-    }
-
-    // ── DESKTOP: coordinate (free-placement) grid; gaps stay empty ──
-    const cols = _lumiaCols(false);
+    // ── Coordinate (free-placement) grid for BOTH desktop and phone ──
+    // Phone uses 4 columns + the shorter mobile row; tiles snap to cells and gaps
+    // stay empty (no auto-reflow). Drag-to-move + corner-resize work on touch, and
+    // the container-query widget fits (scoped to .lumia-grid--fixed) now apply too.
+    const cols = _lumiaCols(isMobile);
     const changed = _lumiaEnsurePositions(tiles, cols);
     if (changed) { try { saveLumiaConfig(tiles); } catch (e) {} }  // persist coords once
 
     const maxRow = tiles.reduce((m, t) => Math.max(m, (t.y || 1) + (t.h || 1) - 1), 0);
     const rows = Math.max(maxRow + (editing ? 4 : 0), 1);  // spare rows for dropping while editing
 
-    const tilesHtml = tiles.map(t => renderLumiaTile(t, sectionRenderers, false)).join('');
+    const tilesHtml = tiles.map(t => renderLumiaTile(t, sectionRenderers, isMobile)).join('');
 
     // Empty-cell "+" buttons so users can drop a new tile into leftover space.
     let cellsHtml = '';
@@ -1292,7 +1279,7 @@ function renderLumiaGrid(sectionRenderers) {
         }
     }
 
-    const gridStyle = `grid-template-columns:repeat(${cols},minmax(0,1fr));grid-auto-flow:row;grid-template-rows:repeat(${rows}, var(--lumia-row-desktop));`;
+    const gridStyle = `grid-template-columns:repeat(${cols},minmax(0,1fr));grid-auto-flow:row;grid-template-rows:repeat(${rows}, ${isMobile ? 'var(--lumia-row-mobile)' : 'var(--lumia-row-desktop)'});`;
     return `<div class="lumia-grid lumia-grid--fixed" id="lumiaGrid" style="${gridStyle}">${tilesHtml}${cellsHtml}</div>`;
 }
 
@@ -1311,11 +1298,7 @@ window.toggleLumiaEditMode = function () {
 // Bind the right drag interaction for the current layout after each render.
 function _initLumiaEditing() {
     if (!document.body.classList.contains('tiles-editing')) return;
-    if (_currentLayoutKey() === 'mobile') {
-        _initLumiaSortable();            // mobile keeps flow-reorder (unchanged)
-    } else {
-        _bindLumiaGridInteractions();    // desktop free-placement drag + resize
-    }
+    _bindLumiaGridInteractions();        // free-placement drag + resize (desktop + phone)
 }
 
 function _initLumiaSortable() {
@@ -1360,18 +1343,18 @@ function _bindLumiaGridInteractions() {
 
 function _lumiaGridMetrics(grid) {
     const rect = grid.getBoundingClientRect();
-    const cols = _lumiaCols(false);
+    const isMobile = _currentLayoutKey() === 'mobile';
+    const cols = _lumiaCols(isMobile);
     const cs = getComputedStyle(grid);
     const gap = parseFloat(cs.columnGap || cs.gap || '10') || 10;
     const rowH = parseFloat(getComputedStyle(document.documentElement)
-        .getPropertyValue('--lumia-row-desktop')) || 100;
+        .getPropertyValue(isMobile ? '--lumia-row-mobile' : '--lumia-row-desktop')) || (isMobile ? 80 : 100);
     const cellW = (rect.width - gap * (cols - 1)) / cols;
     return { rect, cols, gap, rowH, cellW, pitchX: cellW + gap, pitchY: rowH + gap };
 }
 
 function _lumiaPointerDown(e) {
     if (!document.body.classList.contains('tiles-editing')) return;
-    if (_currentLayoutKey() === 'mobile') return;
     if (e.button != null && e.button !== 0) return;             // left/touch only
     // Let the edit/remove buttons handle their own clicks.
     if (e.target.closest('.lumia-tile__edit-handle, .lumia-tile__remove-handle, .lumia-cell-add')) return;
@@ -1683,10 +1666,10 @@ window._lumiaAddTile = async function (catalogId) {
     else if (cat.kind === 'kpi') { w = 2; h = 2; }
     else { w = 1; h = 1; }
     const newTile = { uid, catalogId, w, h };
-    // Desktop: give the tile explicit coordinates so it lands in the chosen gap
-    // (or the first free spot) instead of reflowing the whole grid.
-    if (_currentLayoutKey() !== 'mobile') {
-        const cols = _lumiaCols(false);
+    // Give the tile explicit coordinates (desktop + phone) so it lands in the
+    // chosen gap (or the first free spot) instead of reflowing the whole grid.
+    {
+        const cols = _lumiaCols(_currentLayoutKey() === 'mobile');
         const at = window._lumiaAddAt;
         if (at && _lumiaAreaFree(tiles, { x: at.x, y: at.y, w, h }, null, cols)) {
             newTile.x = at.x; newTile.y = at.y;
