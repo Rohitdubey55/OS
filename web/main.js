@@ -179,34 +179,37 @@ window.habitScheduledOn = function (h, date) {
 window.habitScheduledToday = function (h) { return window.habitScheduledOn(h, new Date()); };
 
 /* ── Habit icons (line icons instead of emojis) ───────────────────────────── */
-window.HABIT_ICONS = ['dumbbell','activity','heart','book-open','brain','droplet','apple','moon','sun','coffee','pencil','music','bike','leaf','target','flame','smile','laptop','wallet','phone','footprints','bed','sparkles','star','alarm-clock','glass-water','palette','code'];
-// Migrate the old emoji choices to the closest line icon.
+// Use ONLY keys that exist in the app's own inline icon set (window.INLINE_ICON_SVGS),
+// rendered via renderIcon() — so they show everywhere (unknown lucide names rendered
+// as a "default" dot, which is what caused the ◉ glyphs).
+window.HABIT_ICONS = ['dumbbell','fitness','activity','book-open','book','entries','file-text','sparkles','star','target','moon','sunrise','coffee','heart','smile','palette','wallet','piggy','sprout','spiritual','yoga','zap','globe','lightbulb','bell','clock','flag','trophy'];
+// Map legacy emoji choices AND old lucide keys → an icon that exists in the set.
 window._HABIT_EMOJI_MAP = {
-    '💪':'dumbbell','🏋':'dumbbell','🏋️':'dumbbell','📚':'book-open','📖':'book-open','📓':'book-open','📔':'book-open','📝':'pencil','✏️':'pencil','✍️':'pencil',
-    '🧘':'activity','🧘‍♂️':'activity','🧘‍♀️':'activity','🏃':'footprints','🏃‍♂️':'footprints','🚶':'footprints','👣':'footprints',
-    '💧':'droplet','🚿':'droplet','🛁':'droplet','🧴':'droplet','🧼':'sparkles','🧹':'sparkles','🧽':'sparkles','🪥':'sparkles','✨':'sparkles','🌟':'star','⭐':'star','🏆':'star',
-    '🍎':'apple','🥗':'leaf','🥦':'leaf','🌿':'leaf','☀️':'sun','🌞':'sun','😴':'moon','💤':'moon','🌙':'moon','🛏️':'bed','🛌':'bed',
-    '🔥':'flame','☕':'coffee','🎵':'music','🎶':'music','🎸':'music','🚴':'bike','🚲':'bike','💻':'laptop','🖥️':'laptop','👨‍💻':'code','💼':'wallet','💰':'wallet','💵':'wallet',
-    '📞':'phone','📱':'phone','🎨':'palette','🧠':'brain','❤️':'heart','🫀':'heart','😀':'smile','😊':'smile','🙂':'smile','⏰':'alarm-clock','🎯':'target','🥤':'glass-water'
+    '💪':'dumbbell','🏋':'dumbbell','🏋️':'dumbbell','📚':'book-open','📖':'book-open','📓':'entries','📔':'entries','📝':'entries','✏️':'entries','✍️':'entries',
+    '🧘':'yoga','🧘‍♂️':'yoga','🧘‍♀️':'yoga','🏃':'fitness','🏃‍♂️':'fitness','🚶':'fitness','👣':'fitness',
+    '💧':'spiritual','🚿':'spiritual','🛁':'spiritual','🧴':'smile','🧼':'sparkles','🧹':'sparkles','🧽':'sparkles','🪥':'sparkles','✨':'sparkles','🌟':'star','⭐':'star','🏆':'trophy',
+    '🍎':'sprout','🥗':'sprout','🥦':'sprout','🌿':'sprout','☀️':'sunrise','🌞':'sunrise','😴':'moon','💤':'moon','🌙':'moon','🛏️':'moon','🛌':'moon',
+    '🔥':'zap','☕':'coffee','🎵':'activity','🎶':'activity','🎸':'activity','🚴':'fitness','🚲':'fitness','💻':'file-text','🖥️':'file-text','👨‍💻':'file-text','💼':'wallet','💰':'piggy','💵':'wallet',
+    '📞':'bell','📱':'bell','🎨':'palette','🧠':'lightbulb','❤️':'heart','🫀':'heart','😀':'smile','😊':'smile','🙂':'smile','⏰':'clock','🎯':'target','🥤':'spiritual',
+    // old lucide keys that aren't in the inline set → closest inline icon
+    'droplet':'spiritual','apple':'sprout','sun':'sunrise','pencil':'entries','music':'activity','bike':'fitness','leaf':'sprout','flame':'zap','laptop':'file-text','phone':'bell','footprints':'fitness','bed':'moon','alarm-clock':'clock','glass-water':'spiritual','code':'file-text','brain':'lightbulb'
 };
 window.habitIconKey = function (val) {
     if (val && window.HABIT_ICONS.indexOf(val) !== -1) return val;
     if (val && window._HABIT_EMOJI_MAP[val]) return window._HABIT_EMOJI_MAP[val];
     return 'sparkles';
 };
-// Render a habit's icon as an inline lucide <i> (falls back to a legacy emoji char).
+// Render a habit's icon as inline SVG via the app's renderIcon (always available).
 window.habitIconHTML = function (val, size) {
     size = size || 18;
-    const key = (val && window.HABIT_ICONS.indexOf(val) !== -1) ? val : (window._HABIT_EMOJI_MAP[val] || null);
-    if (key) return `<i data-lucide="${key}" style="width:${size}px;height:${size}px;vertical-align:middle"></i>`;
-    if (val) return val;
-    return `<i data-lucide="sparkles" style="width:${size}px;height:${size}px;vertical-align:middle"></i>`;
+    const key = window.habitIconKey(val);
+    return (typeof renderIcon === 'function') ? renderIcon(key, null, 'style="width:' + size + 'px;height:' + size + 'px"') : '';
 };
 // The picker grid used in the habit modal.
 window.habitIconPickerHTML = function (current) {
     const cur = window.habitIconKey(current);
     return `<div class="hb-iconpick">${window.HABIT_ICONS.map(k =>
-        `<button type="button" class="hb-icon-opt ${cur === k ? 'sel' : ''}" data-key="${k}" onclick="selectHabitIcon('${k}')" title="${k.replace(/-/g, ' ')}"><i data-lucide="${k}"></i></button>`
+        `<button type="button" class="hb-icon-opt ${cur === k ? 'sel' : ''}" data-key="${k}" onclick="selectHabitIcon('${k}')" title="${k.replace(/-/g, ' ')}">${(typeof renderIcon === 'function') ? renderIcon(k, null, 'style="width:20px;height:20px"') : ''}</button>`
     ).join('')}</div>`;
 };
 window.selectHabitIcon = function (key) {

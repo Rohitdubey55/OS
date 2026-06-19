@@ -1756,6 +1756,13 @@ window._tileHabitToggle = async function (cellEl, habitId, iso) {
         if (pctEl) pctEl.textContent = pct + '%';
         const fillEl = row.querySelector('.hg-score-fill');
         if (fillEl) fillEl.style.width = pct + '%';
+        // Update the color band live (red → amber → green) so it's real-time.
+        const scoreEl = row.querySelector('.hg-score');
+        if (scoreEl) {
+            const cls = pct === 0 ? 'is-zero' : pct < 40 ? 'is-low' : pct < 70 ? 'is-mid' : 'is-high';
+            scoreEl.classList.remove('is-zero', 'is-low', 'is-mid', 'is-high');
+            scoreEl.classList.add(cls);
+        }
     }
     // Do the data write DIRECTLY (not via view-habits.js's toggleHabitOptimistic).
     try {
