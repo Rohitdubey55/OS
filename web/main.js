@@ -363,13 +363,13 @@ function addLongPressListener(selector, callback) {
 // Each view's JS is loaded on demand the first time the user navigates to it.
 // This drops the cold-start payload from ~2.7 MB to ~200 KB.
 const VIEW_MAP = {
-    dashboard:     { src: 'view-dashboard.js',     render: 'renderDashboard' },
+    dashboard:     { src: 'view-dashboard.js?v=20260622', render: 'renderDashboard' },
     calendar:      { src: 'view-calendar.js?v=20260621', render: 'renderCalendar' },
     tasks:         { src: 'view-tasks.js?v=20260619', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260621b', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
-    vision:        { src: 'view-vision.js',        render: 'renderVision' },
+    vision:        { src: 'view-vision.js?v=20260621k', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260619d', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
     gym:           { src: 'view-gym.js',           render: 'renderGym' },
@@ -379,11 +379,12 @@ const VIEW_MAP = {
     pomodoro:      { src: 'view-pomodoro.js?v=20260621d', render: 'renderPomodoro' },
     books:         { src: 'view-books.js?v=20260619c', render: 'renderBooks' },
     reader:        { src: 'view-reader.js',        render: 'renderReader' },
-    mural:         { src: 'view-mural.js?v=20260621', render: 'renderMural' },
+    mural:         { src: 'view-mural.js?v=20260621c', render: 'renderMural' },
     tutor:         { src: 'view-tutor.js',         render: 'renderTutor' },
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js',   render: 'renderDailyTools' },
-    wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' }
+    wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
+    meals:         { src: 'view-meals.js?v=20260622d', render: 'renderMeals' }
 };
 
 const _loadedScripts = new Set();
@@ -465,7 +466,7 @@ async function routeTo(viewName) {
         mural: 'Mural', settings: 'Settings', pomodoro: 'Pomodoro',
         notes: 'Notes', gym: 'Gym', chimes: 'Chimes', tutor: 'Tutor',
         meditation: 'Meditate', reader: 'Reader', lifeCalendar: 'Life',
-        dailyTools: 'Daily Life Tools', wishlist: 'Wishlist'
+        dailyTools: 'Daily Life Tools', wishlist: 'Wishlist', meals: 'Food Planner'
     };
     const headerBar = document.querySelector('.main-header-bar');
     if (headerBar) headerBar.setAttribute('data-page-title', PAGE_TITLES[viewName] || '');

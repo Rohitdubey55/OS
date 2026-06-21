@@ -121,6 +121,28 @@
     transform: translateY(0);
 }
 
+/* ── Desktop (≥1000px): centred card instead of a full-width bottom sheet ── */
+@media (min-width: 1000px) {
+    .tdp-modal-overlay {
+        align-items: center;
+        padding: 24px;
+    }
+    .tdp-modal {
+        width: min(100%, 560px);
+        max-height: 82vh;
+        border-radius: 20px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+        transform: translateY(0) scale(0.96);
+    }
+    .tdp-modal.active {
+        transform: translateY(0) scale(1);
+    }
+    .tdp-sheet-handle {
+        display: none;
+    }
+}
+
 /* Bottom Sheet Swipe Handle */
 .tdp-sheet-handle {
     width: 40px;

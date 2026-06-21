@@ -340,22 +340,22 @@ async function renderMuralCanvasView() {
                 <svg id="muralConnectorSvg" class="mural-connector-svg" width="10000" height="10000">
                     <defs>
                         <marker id="mural-arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                            <polygon points="0 0, 10 3.5, 0 7" fill="var(--mural-accent, #6366F1)" />
+                            <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
                         </marker>
                         <marker id="mural-arrowhead-selected" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                            <polygon points="0 0, 10 3.5, 0 7" fill="#F59E0B" />
+                            <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
                         </marker>
                         <marker id="mural-arrowhead-start" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                            <polygon points="10 0, 0 3.5, 10 7" fill="var(--mural-accent, #6366F1)" />
+                            <polygon points="10 0, 0 3.5, 10 7" fill="context-stroke" />
                         </marker>
                         <marker id="mural-arrowhead-start-selected" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                            <polygon points="10 0, 0 3.5, 10 7" fill="#F59E0B" />
+                            <polygon points="10 0, 0 3.5, 10 7" fill="context-stroke" />
                         </marker>
                         <marker id="mural-dot" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
-                            <circle cx="4" cy="4" r="3" fill="var(--mural-accent, #6366F1)" />
+                            <circle cx="4" cy="4" r="3" fill="context-stroke" />
                         </marker>
                         <marker id="mural-dot-selected" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
-                            <circle cx="4" cy="4" r="3" fill="#F59E0B" />
+                            <circle cx="4" cy="4" r="3" fill="context-stroke" />
                         </marker>
                     </defs>
                 </svg>
@@ -556,22 +556,22 @@ function renderMuralElementsDOM() {
         svg.innerHTML = `
             <defs>
                 <marker id="mural-arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="var(--mural-accent, #6366F1)" />
+                    <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
                 </marker>
                 <marker id="mural-arrowhead-selected" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#F59E0B" />
+                    <polygon points="0 0, 10 3.5, 0 7" fill="context-stroke" />
                 </marker>
                 <marker id="mural-arrowhead-start" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                    <polygon points="10 0, 0 3.5, 10 7" fill="var(--mural-accent, #6366F1)" />
+                    <polygon points="10 0, 0 3.5, 10 7" fill="context-stroke" />
                 </marker>
                 <marker id="mural-arrowhead-start-selected" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto" markerUnits="strokeWidth">
-                    <polygon points="10 0, 0 3.5, 10 7" fill="#F59E0B" />
+                    <polygon points="10 0, 0 3.5, 10 7" fill="context-stroke" />
                 </marker>
                 <marker id="mural-dot" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
-                    <circle cx="4" cy="4" r="3" fill="var(--mural-accent, #6366F1)" />
+                    <circle cx="4" cy="4" r="3" fill="context-stroke" />
                 </marker>
                 <marker id="mural-dot-selected" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
-                    <circle cx="4" cy="4" r="3" fill="#F59E0B" />
+                    <circle cx="4" cy="4" r="3" fill="context-stroke" />
                 </marker>
             </defs>`;
         canvas.appendChild(svg);
@@ -764,14 +764,27 @@ function highlightMuralElements(ids) {
         const dom = document.getElementById(`mural-el-${id}`);
         if (dom) dom.classList.add('selected');
     });
+    // Connectors live in the SVG layer, not as .mural-element DOM nodes — re-render them
+    // so any connectors in the selection (e.g. from a marquee) pick up the selected style.
+    if (typeof renderAllMuralConnectors === 'function') renderAllMuralConnectors();
     updateSelectionBoundingBox();
 }
 
 /* ═══════════════════════════════════════
    SELECTION BOUNDING BOX — Group drag & resize
    ═══════════════════════════════════════ */
+// How many of the selected ids are real shapes (not connectors). The group bounding box
+// only makes sense for 2+ shapes; a lone shape co-selected with its connectors must NOT
+// get a group box (that was the second, larger boundary around a single shape).
+function _muralSelectedShapeCount() {
+    return (muralSelectedElementIds || []).reduce((n, id) => {
+        const el = muralElements.find(e => String(e.id) === String(id));
+        return n + (el && el.type !== 'connector' ? 1 : 0);
+    }, 0);
+}
+
 function getSelectionBounds() {
-    if (muralSelectedElementIds.length < 2) return null;
+    if (_muralSelectedShapeCount() < 2) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     muralSelectedElementIds.forEach(id => {
         const el = muralElements.find(e => String(e.id) === String(id));
@@ -789,10 +802,11 @@ function getSelectionBounds() {
 
 function updateSelectionBoundingBox() {
     let box = document.getElementById('muralSelectionBox');
-    // Only show the group bounding box + corner handles for a MULTI-selection. A
-    // single element already shows its own selection outline and resize handle, so
-    // an extra box just stacks another boundary around it.
-    if (muralSelectedElementIds.length < 2) {
+    // Only show the group bounding box + corner handles for a MULTI-selection of SHAPES.
+    // A single element already shows its own selection outline and resize handle, so an
+    // extra box just stacks another (larger) boundary around it. Connectors in the
+    // selection don't count — otherwise one shape + its connectors would trigger it.
+    if (_muralSelectedShapeCount() < 2) {
         removeSelectionBoundingBox();
         return;
     }
@@ -1902,21 +1916,37 @@ function onMuralPointerUp(e) {
 
         // Find elements inside rectangle
         const selected = [];
+        const mr = muralMarqueeRect;
         muralElements.forEach(el => {
-            if (el.type === 'connector') return;
+            // Connectors have no x/y/w/h of their own — derive a bounding box from
+            // their resolved endpoints so they can be marquee-selected alongside shapes.
+            if (el.type === 'connector') {
+                const a = _muralResolveEndpoint(el, 'from');
+                const b = _muralResolveEndpoint(el, 'to');
+                if (!a || !b) return;
+                const bx = Math.min(a.x, b.x), by = Math.min(a.y, b.y);
+                const bX = Math.max(a.x, b.x), bY = Math.max(a.y, b.y);
+                if (bx < mr.x + mr.w && bX > mr.x && by < mr.y + mr.h && bY > mr.y) {
+                    selected.push(el.id);
+                }
+                return;
+            }
             const ex = el.x || 0;
             const ey = el.y || 0;
             const ew = el.w || 150;
             const eh = el.h || 150;
 
-            if (ex < muralMarqueeRect.x + muralMarqueeRect.w &&
-                ex + ew > muralMarqueeRect.x &&
-                ey < muralMarqueeRect.y + muralMarqueeRect.h &&
-                ey + eh > muralMarqueeRect.y) {
+            if (ex < mr.x + mr.w &&
+                ex + ew > mr.x &&
+                ey < mr.y + mr.h &&
+                ey + eh > mr.y) {
                 selected.push(el.id);
             }
         });
 
+        // The marquee owns the multi-selection (array); drop any lone single-connector
+        // selection so the two selection models don't both stay "live".
+        muralSelectedConnectorId = null;
         if (e.shiftKey || e.metaKey || e.ctrlKey) {
             muralSelectedElementIds = [...new Set([...muralSelectedElementIds, ...selected])];
         } else {
@@ -2634,16 +2664,22 @@ window.deleteMuralElement = deleteMuralElement;
 window.deleteMuralSelected = deleteMuralSelected;
 
 function deleteMuralSelected() {
-    if (muralSelectedConnectorId) {
-        deleteMuralConnector(muralSelectedConnectorId);
-        muralSelectedConnectorId = null;
-        return;
-    }
-    if (muralSelectedElementIds.length === 0) return toast('Select elements first');
-    
-    const idsToDelete = [...muralSelectedElementIds];
+    // Gather everything selected — the lone selected connector plus the multi-selection,
+    // which may now contain connectors (marquee) mixed with shapes.
+    const ids = new Set();
+    if (muralSelectedConnectorId) ids.add(muralSelectedConnectorId);
+    (muralSelectedElementIds || []).forEach(id => ids.add(id));
+    if (ids.size === 0) return toast('Select elements first');
+
+    muralSelectedConnectorId = null;
     muralSelectedElementIds = [];
-    idsToDelete.forEach(id => deleteMuralElement(id));
+    ids.forEach(id => {
+        // Connectors must go through deleteMuralConnector (removes the SVG path + array entry);
+        // plain elements through deleteMuralElement.
+        const conn = muralConnectors.find(c => String(c.id) === String(id));
+        if (conn) deleteMuralConnector(conn.id);
+        else deleteMuralElement(id);
+    });
 }
 
 async function duplicateMuralElement(id) {
@@ -3321,7 +3357,8 @@ function renderSingleConnector(conn) {
     const pathD = getConnectorPath(conn);
     if (!pathD) return;
 
-    const isSelected = conn.id === muralSelectedConnectorId;
+    const isSelected = conn.id === muralSelectedConnectorId ||
+        (muralSelectedElementIds || []).some(id => String(id) === String(conn.id));
 
     // Invisible wider hit area for easier clicking
     const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -3332,6 +3369,9 @@ function renderSingleConnector(conn) {
     hitPath.setAttribute('fill', 'none');
     hitPath.style.cursor = 'pointer';
     hitPath.addEventListener('pointerdown', (e) => {
+        // Ignore right/middle button — a right-click should open the context menu without
+        // wiping a marquee multi-selection of connectors (needed for group recolor/delete).
+        if (e.button && e.button !== 0) return;
         e.stopPropagation();
         muralSelectedConnectorId = conn.id;
         muralSelectedElementIds = [];
@@ -3349,6 +3389,11 @@ function renderSingleConnector(conn) {
     hitPath.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        // If right-clicking a connector that ISN'T part of the current multi-selection,
+        // collapse to just this one. If it IS part of the group, keep the group so the
+        // menu's colour/delete apply to all selected connectors.
+        const inGroup = (muralSelectedElementIds || []).some(id => String(id) === String(conn.id));
+        if (!inGroup) muralSelectedElementIds = [];
         muralSelectedConnectorId = conn.id;
         highlightMuralConnector(conn.id);
         showConnectorContextMenu(e.clientX, e.clientY, conn.id);
@@ -3555,7 +3600,7 @@ function showConnectorContextMenu(x, y, connId) {
     menu.id = 'muralContextMenu';
 
     const menuWidth = 240;
-    const menuHeight = 260;
+    const menuHeight = 320;
     if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
     if (y + menuHeight > window.innerHeight) y = Math.max(8, window.innerHeight - menuHeight - 8);
 
@@ -3566,6 +3611,12 @@ function showConnectorContextMenu(x, y, connId) {
     const currentStyle = conn.connector_style || 'bezier';
     const currentLine = conn.line_style || 'solid';
     const currentArrow = conn.arrow_mode || 'arrow';
+    const currentColor = (conn.color || '#6366F1').toLowerCase();
+    const connColors = ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#64748B', '#0F172A'];
+    const colorSwatches = connColors.map(c => {
+        const active = c.toLowerCase() === currentColor;
+        return `<button class="mfp-sw${active ? ' active' : ''}" title="${c}" onclick="changeConnectorColor('${connId}','${c}'); dismissMuralPopups();" style="background:${c}"></button>`;
+    }).join('');
 
     // Compact icon-button rows so the menu stays short (was a long vertical list
     // that got clipped at the bottom of the screen). Tooltips name each option.
@@ -3595,6 +3646,10 @@ function showConnectorContextMenu(x, y, connId) {
                 <button class="mfp-btn mfp-sq ${currentArrow === 'none' ? 'active' : ''}" title="No arrows" onclick="changeConnectorArrow('${connId}','none'); dismissMuralPopups();"><i data-lucide="minus"></i></button>
                 <button class="mfp-btn mfp-sq ${currentArrow === 'dot' ? 'active' : ''}" title="Dot ends" onclick="changeConnectorArrow('${connId}','dot'); dismissMuralPopups();"><i data-lucide="circle-dot"></i></button>
             </div>
+        </div>
+        <div class="mfp-sec">
+            <div class="mfp-label">Color</div>
+            <div class="mfp-row mfp-swatch-row">${colorSwatches}</div>
         </div>
         <div class="mural-context-divider"></div>
         <button class="mural-context-item danger" onclick="deleteMuralConnector('${connId}'); dismissMuralPopups();">
@@ -3641,6 +3696,33 @@ async function changeConnectorArrow(connId, arrowMode) {
     saveMuralElement(conn);
 }
 window.changeConnectorArrow = changeConnectorArrow;
+
+// All connectors currently selected — the lone right-clicked/clicked one plus any in the
+// marquee multi-selection. Lets colour changes apply to a whole group at once.
+function _muralSelectedConnectorIds() {
+    const ids = new Set();
+    if (muralSelectedConnectorId) ids.add(muralSelectedConnectorId);
+    (muralSelectedElementIds || []).forEach(id => {
+        const c = muralConnectors.find(c => String(c.id) === String(id));
+        if (c) ids.add(c.id);
+    });
+    return [...ids];
+}
+
+async function changeConnectorColor(connId, color) {
+    // Apply to the whole connector selection when connId is part of it; otherwise just connId.
+    let ids = _muralSelectedConnectorIds();
+    if (!ids.some(id => String(id) === String(connId))) ids = [connId];
+    ids.forEach(id => {
+        const conn = muralConnectors.find(c => String(c.id) === String(id));
+        if (!conn) return;
+        conn.color = color;
+        renderSingleConnector(conn);
+        saveMuralElement(conn);
+    });
+    showSaveIndicator('saving');
+}
+window.changeConnectorColor = changeConnectorColor;
 window.deleteMuralConnector = deleteMuralConnector;
 
 /* ═══════════════════════════════════════

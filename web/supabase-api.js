@@ -180,7 +180,7 @@
         expenses: new Set(['id','user_id','date','amount','category','description','type','payment_mode','budget_scope']),
         diary: new Set(['id','user_id','date','content','mood','tags']),
         planner_events: new Set(['id','user_id','title','start_datetime','end_datetime','category','color']),
-        vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus','color','display_mode']),
+        vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus','color','display_mode','horizon']),
         funds: new Set(['id','user_id','name','balance','type','currency']),
         assets: new Set(['id','user_id','name','value','purchase_date','notes']),
         people: new Set(['id','user_id','name','relationship','birthday','phone','email','instagram','last_contact','next_interaction','is_favorite','is_priority','notes','contact_frequency']),
@@ -205,7 +205,11 @@
         mural_categories: new Set(['id','user_id','name','color']),
         mural_elements: new Set(['id','user_id','project_id','type','x','y','w','h','content','color','z_index','shape','from_id','to_id','connector_style','from_side','to_side','line_style','arrow_mode','font_size','text_color','bold','text_align','stroke_width','from_x','from_y','to_x','to_y','from_rx','from_ry','to_rx','to_ry','border_radius']),
         english_sessions: new Set(['id','user_id','date','duration_seconds','topic','level','score','weak_areas','strong_areas','summary','message_count']),
-        english_messages: new Set(['id','user_id','session_id','role','content','correction','feedback','timestamp'])
+        english_messages: new Set(['id','user_id','session_id','role','content','correction','feedback','timestamp']),
+        // Weekly food planner — one row per (date, slot); planned vs what was eaten.
+        meal_plan: new Set(['id','user_id','date','slot','planned','eaten','status','created_at','updated_at']),
+        // Daily check-in — mood/energy (1-5) + "ate healthy?" for food↔energy analysis.
+        meal_day: new Set(['id','user_id','date','mood','energy','ate_healthy','note','created_at','updated_at'])
     };
 
     // If a write fails because a column doesn't exist yet (e.g. a column added in a
@@ -288,7 +292,8 @@
             'pomodoro_settings','pomodoro_sessions','pomodoro_badges','vision_tdp',
             'book_library','book_summaries','reader_settings','mural_projects',
             'mural_categories','mural_elements','vision_affirmations','ritual_logs',
-            'english_sessions','english_messages','wishlist'
+            'english_sessions','english_messages','wishlist',
+            'meal_plan','meal_day'
         ];
     }
 })();

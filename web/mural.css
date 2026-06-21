@@ -500,8 +500,25 @@
 
 .mural-element.selected {
     outline: 2px solid var(--mural-accent);
-    outline-offset: 1px;
+    /* Offset 0 keeps the ring exactly on the element's box edge so there's a SINGLE
+       boundary that lines up with the grid (was 1px, which drew a second ring just
+       outside the shape's own resting border). */
+    outline-offset: 0;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+}
+
+/* Rectangle-family shapes (rect / rounded / ellipse / circle): make the SELECTED boundary
+   the shape's OWN border, recoloured to the accent — so the edge you see while selected
+   sits exactly where the resting edge is (on the grid line), not 2px outside it via an
+   outline. The inset shadow just thickens it inward; the outer edge never moves, so the
+   shape stays grid-aligned and there's a single boundary. */
+.mural-element.shape-el.rect.selected,
+.mural-element.shape-el.rounded.selected,
+.mural-element.shape-el.ellipse.selected,
+.mural-element.shape-el.circle.selected {
+    outline: none;
+    border-color: var(--mural-accent);
+    box-shadow: inset 0 0 0 1.5px var(--mural-accent), 0 6px 18px rgba(0, 0, 0, 0.10);
 }
 
 /* Mural draws its own selection ring, so suppress the GLOBAL :focus-visible outline
@@ -2072,6 +2089,7 @@ input:checked + .slider:before {
 .mfp-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3, #94a3b8); margin-bottom: 7px; }
 .mfp-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .mfp-sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.14); cursor: pointer; padding: 0; position: relative; overflow: hidden; }
+.mfp-sw.active { box-shadow: 0 0 0 2px var(--surface-1, #fff), 0 0 0 4px var(--mural-accent, #6366F1); }
 .mfp-custom { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-2, #475569); background: var(--surface-2, #f1f5f9); }
 .mfp-custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .mfp-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }

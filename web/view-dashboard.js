@@ -351,6 +351,10 @@ const LUMIA_TILE_CATALOG = [
     { id: 'widget-dailyTools',   kind: 'widget', widget: 'dailyTools',   icon: 'layers',     label: 'Daily Tools',    category: 'Widgets', minW: 3, minH: 2 },
     { id: 'widget-vision',       kind: 'widget', widget: 'vision',       icon: 'goals',      label: 'Vision Banner',  category: 'Widgets', minW: 3, minH: 2, route: 'vision' },
     { id: 'widget-cashflow',     kind: 'widget', widget: 'cashflow',     icon: 'insights',   label: 'Cashflow',       category: 'Widgets', minW: 3, minH: 2, route: 'finance' },
+    { id: 'widget-pomodoroStats',kind: 'widget', widget: 'pomodoroStats',icon: 'focus',      label: 'Focus Stats',    category: 'Widgets', minW: 2, minH: 2, route: 'pomodoro' },
+    { id: 'widget-image',        kind: 'widget', widget: 'image',        icon: 'image',      label: 'Image',          category: 'Widgets', minW: 2, minH: 2 },
+    { id: 'widget-tdp',          kind: 'widget', widget: 'tdp',          icon: 'goals',      label: '10-Day Plan',    category: 'Widgets', minW: 2, minH: 2, route: 'vision' },
+    { id: 'widget-meals',        kind: 'widget', widget: 'meals',        icon: 'sprout',     label: 'Food Planner',   category: 'Widgets', minW: 2, minH: 2, route: 'meals' },
 
     // ─────────────────────────────────────────────────────────────────
     // QUICK ADD — tap the tile to open the existing form modal
@@ -434,10 +438,56 @@ function _computeWidgetCompact(cat) {
             const s = computeBentoStat('monthSpend');
             return { value: s.value, sub: 'this month' };
         }
+        case 'pomodoroStats': {
+            const today = new Date().toISOString().slice(0, 10);
+            const min = (data.pomodoro_sessions || [])
+                .filter(s => (s.type === 'work' || !s.type) && String(s.date || '').startsWith(today))
+                .reduce((a, s) => a + (Number(s.duration) || 0), 0);
+            return { value: min + 'm', sub: 'focused today' };
+        }
+        case 'image':
+            return { value: 'Image', sub: 'Tap to set' };
+        case 'tdp': {
+            const active = (data.vision_tdp || []).find(p => p.status === 'active');
+            if (!active) return { value: '—', sub: 'No plan' };
+            let total = 0, completed = 0;
+            try {
+                const c = typeof active.categories_json === 'string' ? JSON.parse(active.categories_json) : (active.categories_json || {});
+                Object.values(c).forEach(it => (it || []).forEach(x => { total++; if (x.completed) completed++; }));
+            } catch (e) {}
+            return { value: (total ? Math.round(completed / total * 100) : 0) + '%', sub: '10-day plan' };
+        }
+        case 'meals': {
+            const today = (() => { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
+            const planned = (data.meal_plan || []).filter(r => r.date === today && r.planned && String(r.planned).trim()).length;
+            return { value: planned + '/3', sub: 'planned today' };
+        }
         default:
             return { value: cat.label, sub: '' };
     }
 }
+
+// Dashboard image widget — store a single image URL locally (no DB change needed).
+window._dashSetImage = function () {
+    let cur = '';
+    try { cur = localStorage.getItem('dashImageUrl') || ''; } catch (e) {}
+    const url = window.prompt('Paste an image URL for the dashboard (leave empty to remove):', cur);
+    if (url === null) return;
+    try {
+        if (url.trim()) localStorage.setItem('dashImageUrl', url.trim());
+        else localStorage.removeItem('dashImageUrl');
+    } catch (e) {}
+    if (typeof renderDashboard === 'function') renderDashboard();
+};
+
+// Open the 10-Day-Plan modal from the dashboard (lazy-load the vision module first).
+window._dashOpenTDP = async function () {
+    if (typeof openTDPModal !== 'function' && typeof ensureViewLoaded === 'function') {
+        try { await ensureViewLoaded('vision'); } catch (e) {}
+    }
+    if (typeof openTDPModal === 'function') openTDPModal();
+    else if (typeof routeTo === 'function') routeTo('vision');
+};
 
 // Helper to look up catalog entry
 function getCatalogEntry(catalogId) {
@@ -2776,6 +2826,136 @@ function renderDashboard() {
          <div class="widget-body">
             <div style="height:220px; position:relative"><canvas id="mainDashChart"></canvas></div>
          </div>
+      </div>`;
+    },
+
+    // ── Pomodoro / Focus stats ──────────────────────────────────────────────
+    pomodoroStats: () => {
+      const sessions = state.data.pomodoro_sessions || [];
+      const isWork = (s) => (s.type === 'work' || !s.type);
+      const today = new Date().toISOString().slice(0, 10);
+      const wk = new Date(); wk.setDate(wk.getDate() - 6);
+      const wkStr = wk.toISOString().slice(0, 10);
+      const todayWork = sessions.filter(s => isWork(s) && String(s.date || '').startsWith(today));
+      const todayMin = todayWork.reduce((a, s) => a + (Number(s.duration) || 0), 0);
+      const weekMin = sessions.filter(s => isWork(s) && String(s.date || '').slice(0, 10) >= wkStr)
+        .reduce((a, s) => a + (Number(s.duration) || 0), 0);
+      return `
+      <div class="widget-card" style="height:100%; display:flex; flex-direction:column; background:var(--surface-1); border:1px solid var(--border-color); border-radius:18px; box-shadow:0 4px 15px rgba(0,0,0,.05); overflow:hidden;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 16px 0;">
+          <div style="display:flex; align-items:center; gap:9px; font-weight:800; color:var(--text-1); font-size:15px;">
+            <span style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#FB923C,#EA580C);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M9 2h6"/></svg></span>Focus
+          </div>
+          <button class="btn icon" onclick="event.stopPropagation(); routeTo('pomodoro')" title="Open Pomodoro" style="background:var(--surface-2); border:none; border-radius:9px; width:30px; height:30px;">→</button>
+        </div>
+        <div style="flex:1; display:flex; align-items:center; gap:16px; padding:8px 16px 16px;">
+          <div>
+            <div style="font-size:32px; font-weight:850; line-height:1; color:var(--text-1); font-variant-numeric:tabular-nums;">${todayMin}<span style="font-size:14px;color:var(--text-muted);font-weight:700;"> min</span></div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:5px; text-transform:uppercase; letter-spacing:.05em; font-weight:700;">Focused today</div>
+          </div>
+          <div style="width:1px; align-self:stretch; background:var(--border-color); margin:6px 0;"></div>
+          <div style="display:flex; flex-direction:column; gap:9px; font-size:13px; color:var(--text-2);">
+            <div><b style="color:var(--text-1); font-size:16px;">${todayWork.length}</b> sessions today</div>
+            <div><b style="color:var(--text-1); font-size:16px;">${weekMin}</b> min this week</div>
+          </div>
+        </div>
+      </div>`;
+    },
+
+    // ── Image widget (single dashboard image, stored locally) ───────────────
+    image: () => {
+      let url = '';
+      try { url = localStorage.getItem('dashImageUrl') || ''; } catch (e) {}
+      if (url) {
+        return `
+        <div class="widget-card" style="height:100%; position:relative; border-radius:18px; overflow:hidden; border:1px solid var(--border-color); box-shadow:0 4px 15px rgba(0,0,0,.05); padding:0;">
+          <img src="${escapeHtml(url)}" alt="" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling)this.nextElementSibling.style.display='flex';">
+          <div style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; background:var(--surface-2); color:var(--text-muted); font-size:12px;">Couldn't load image</div>
+          <button class="btn icon" onclick="event.stopPropagation(); _dashSetImage()" title="Change image" style="position:absolute; top:8px; right:8px; width:30px; height:30px; border-radius:9px; border:none; background:rgba(0,0,0,.5); color:#fff; display:flex; align-items:center; justify-content:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+        </div>`;
+      }
+      return `
+      <div class="widget-card" onclick="event.stopPropagation(); _dashSetImage()" style="height:100%; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; border:2px dashed var(--border-color); border-radius:18px; background:var(--surface-1); color:var(--text-muted);">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.5-3.5a2 2 0 0 0-3 0L5 21"/></svg>
+        <div style="font-size:13px; font-weight:650; color:var(--text-2);">Add an image</div>
+        <div style="font-size:11px;">Tap to paste an image URL</div>
+      </div>`;
+    },
+
+    // ── 10-Day Plan (TDP) ───────────────────────────────────────────────────
+    tdp: () => {
+      const active = (state.data.vision_tdp || []).find(p => p.status === 'active');
+      const ICON = `<span style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#818CF8,#4F46E5);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>`;
+      if (!active) {
+        return `
+        <div class="widget-card" style="height:100%; display:flex; flex-direction:column; background:var(--surface-1); border:1px solid var(--border-color); border-radius:18px; box-shadow:0 4px 15px rgba(0,0,0,.05); overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:9px; font-weight:800; color:var(--text-1); font-size:15px; padding:15px 16px 0;">${ICON}10-Day Plan</div>
+          <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:8px 16px 16px; text-align:center;">
+            <div style="font-size:14px; font-weight:700; color:var(--text-1);">No active plan</div>
+            <div style="font-size:12px; color:var(--text-muted); max-width:210px;">Start a 10-day sprint across your vision categories.</div>
+            <button class="btn primary" onclick="event.stopPropagation(); _dashOpenTDP()" style="margin-top:4px; padding:9px 18px; border-radius:11px; font-size:13px; font-weight:700;">Create Plan</button>
+          </div>
+        </div>`;
+      }
+      let total = 0, completed = 0;
+      try {
+        const cats = typeof active.categories_json === 'string' ? JSON.parse(active.categories_json) : (active.categories_json || {});
+        Object.values(cats).forEach(items => (items || []).forEach(it => { total++; if (it.completed) completed++; }));
+      } catch (e) {}
+      const pct = total ? Math.round(completed / total * 100) : 0;
+      const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+      const sd = new Date(active.start_date); sd.setHours(0, 0, 0, 0);
+      const ed = new Date(active.end_date); ed.setHours(0, 0, 0, 0);
+      const day = Math.min(10, Math.max(0, Math.floor((t0 - sd) / 86400000) + 1));
+      const remaining = Math.max(0, Math.ceil((ed - t0) / 86400000));
+      return `
+      <div class="widget-card" onclick="event.stopPropagation(); _dashOpenTDP()" style="height:100%; cursor:pointer; display:flex; flex-direction:column; background:var(--surface-1); border:1px solid var(--border-color); border-radius:18px; box-shadow:0 4px 15px rgba(0,0,0,.05); overflow:hidden;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 16px 0;">
+          <div style="display:flex; align-items:center; gap:9px; font-weight:800; color:var(--text-1); font-size:15px;">${ICON}10-Day Plan</div>
+          <span style="font-size:12px; font-weight:700; color:var(--text-muted);">Day ${day}/10</span>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:10px; padding:10px 16px 16px;">
+          <div style="font-size:30px; font-weight:850; line-height:1; color:var(--text-1);">${pct}<span style="font-size:15px; color:var(--text-muted);">%</span></div>
+          <div style="height:8px; border-radius:999px; background:var(--surface-3); overflow:hidden;"><div style="height:100%; width:${pct}%; background:linear-gradient(90deg,#818CF8,#4F46E5); border-radius:999px;"></div></div>
+          <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted);"><span>${completed}/${total} done</span><span>${remaining} day${remaining === 1 ? '' : 's'} left</span></div>
+        </div>
+      </div>`;
+    },
+
+    meals: () => {
+      const data = state.data || {};
+      const p = n => String(n).padStart(2, '0');
+      const ld = d => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      const today = ld(new Date());
+      const ws = new Date(); ws.setHours(0, 0, 0, 0);
+      const dow = ws.getDay(); ws.setDate(ws.getDate() + (dow === 0 ? -6 : 1 - dow));
+      const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(ws); d.setDate(ws.getDate() + i); return ld(d); });
+      const isH = r => r && (r.ate_healthy === true || r.ate_healthy === 'true' || r.ate_healthy === 1);
+      const healthy = (data.meal_day || []).filter(r => week.includes(r.date) && isH(r)).length;
+      const slots = [['breakfast', '🌅', 'breakfast'], ['lunch', '☀️', 'lunch'], ['dinner', '🌙', 'dinner']];
+      const ICON = `<span style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#34D399,#16A34A);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2M5 2v20M19 2v7c0 1.5-1 2.5-2.5 2.5S14 10.5 14 9V2M19 2v20"/></svg></span>`;
+      const rows = slots.map(([k, emo, lbl]) => {
+        const mp = (data.meal_plan || []).find(r => r.date === today && r.slot === k);
+        const planned = mp && mp.planned ? String(mp.planned).trim() : '';
+        const done = mp && mp.status === 'as_planned';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;">
+            <span style="font-size:13px;width:18px;text-align:center;">${emo}</span>
+            <span style="flex:1;font-size:13px;color:${planned ? 'var(--text-1)' : 'var(--text-3)'};font-weight:${planned ? '600' : '500'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${planned ? escapeHtml(planned) : 'Plan ' + lbl}</span>
+            ${done ? '<span style="color:#16a34a;font-size:12px;font-weight:800;">✓</span>' : ''}
+          </div>`;
+      }).join('');
+      const md = (data.meal_day || []).find(r => r.date === today);
+      const checkin = (md && (md.mood || md.energy))
+        ? `<span>Today ${md.mood ? (['', '😞', '😕', '😐', '🙂', '😄'][+md.mood] || '') : ''} ${md.energy ? '⚡' + md.energy + '/5' : ''}</span>`
+        : `<span style="color:var(--primary);font-weight:700;">+ Daily check-in</span>`;
+      return `
+      <div class="widget-card" onclick="routeTo('meals')" style="height:100%;cursor:pointer;display:flex;flex-direction:column;background:var(--surface-1);border:1px solid var(--border-color);border-radius:18px;box-shadow:0 4px 15px rgba(0,0,0,.05);overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 16px 6px;">
+          <div style="display:flex;align-items:center;gap:9px;font-weight:800;color:var(--text-1);font-size:15px;">${ICON}Food Planner</div>
+          <span style="font-size:12px;font-weight:800;color:#16a34a;">${healthy}/7 healthy</span>
+        </div>
+        <div style="flex:1;padding:2px 16px 8px;">${rows}</div>
+        <div style="padding:9px 16px 14px;border-top:1px solid var(--border-color);font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center;">${checkin}<span style="color:var(--text-3);">this week</span></div>
       </div>`;
     },
 

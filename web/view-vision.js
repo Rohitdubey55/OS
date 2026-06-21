@@ -1277,6 +1277,22 @@ let visionState = {
 
 const VISION_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine'];
 
+// Time horizons — how far out a goal reaches. Stored in vision_board.horizon.
+const VISION_HORIZONS = [
+  { key: 'month', label: 'This Month', short: '1 Month', abbr: '1M' },
+  { key: '3month', label: '3 Months', short: '3 Months', abbr: '3M' },
+  { key: '3year', label: '3 Years', short: '3 Years', abbr: '3Y' },
+  { key: '10year', label: '10 Years', short: '10 Years', abbr: '10Y' },
+];
+const VZ_HORIZON_LABEL = VISION_HORIZONS.reduce((m, h) => (m[h.key] = h.short, m), {});
+const VZ_HORIZON_ABBR = VISION_HORIZONS.reduce((m, h) => (m[h.key] = h.abbr, m), {});
+const VZ_HORIZON_ORDER = VISION_HORIZONS.reduce((m, h, i) => (m[h.key] = i, m), {}); // month→0 … 10year→3
+function vzHorizonShort(key) { return VZ_HORIZON_LABEL[key] || ''; }
+function vzHorizonAbbr(key) { return VZ_HORIZON_ABBR[key] || ''; }
+function _vzHorizonRank(g) { const o = VZ_HORIZON_ORDER[g && g.horizon]; return o == null ? 99 : o; } // no horizon → last
+// Order cards 1M → 3M → 3Y → 10Y (goals without a horizon fall to the end).
+function _vzByHorizon(a, b) { return _vzHorizonRank(a) - _vzHorizonRank(b); }
+
 /* ══════════════════════════════════════════════════════════════════════
    VISION DESKTOP COMMAND CENTER — scoped to .vz-pro. Two-pane on desktop:
    board (left) + insight/detail pane (right). Mobile (<1100px) keeps the
@@ -1355,6 +1371,27 @@ const VISION_REFINE_CSS = `<style>
 .vision-card--color .vz-quick__p { color:var(--vz-ink); text-shadow:none; }
 .vision-card--color .vision-card-badge.normal { background:color-mix(in srgb, var(--vz-ink) 18%, transparent); color:var(--vz-ink); }
 
+/* ── Inline affirmations preview on each goal card ── */
+.vz-affs { display:flex; flex-direction:column; gap:2px; margin:0 0 13px; }
+.vz-aff { font-size:13px; line-height:1.44; color:var(--vz-ink, #fff); opacity:.86; font-style:italic;
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+  text-shadow:0 1px 3px rgba(0,0,0,.22); }
+.vz-aff-pin { font-style:normal; margin-right:3px; }
+.vz-aff-more { font-size:11px; font-weight:600; opacity:.66; color:var(--vz-ink, #fff); cursor:pointer; margin-top:1px; }
+.vz-aff-more:hover { opacity:1; text-decoration:underline; }
+.vz-aff-add { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; width:fit-content;
+  color:var(--vz-ink, #fff); opacity:.78; background:color-mix(in srgb, var(--vz-ink, #fff) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--vz-ink, #fff) 26%, transparent); border-radius:8px; padding:4px 10px; margin:0 0 13px; cursor:pointer; transition:opacity .14s; }
+.vz-aff-add:hover { opacity:1; }
+.vz-aff-add svg { width:12px; height:12px; }
+
+/* Progress block — the big % + a positive status make where-you-stand instantly readable
+   and motivating (goal-gradient). */
+.vz-prog { margin:2px 0 11px; }
+.vz-prog-head { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
+.vz-prog-pct { font-size:21px; font-weight:800; color:var(--vz-ink, #fff); line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+.vz-prog-tag { font-size:11.5px; font-weight:600; color:var(--vz-ink, #fff); opacity:.8; }
+
 /* ── Color picker modal: curated palette + custom ── */
 .vz-palette { display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; }
 .vz-sw { aspect-ratio:1; border-radius:10px; border:2px solid transparent; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.18); padding:0; }
@@ -1368,18 +1405,46 @@ const VISION_REFINE_CSS = `<style>
 .vz-disp { border:none; background:transparent; color:var(--text-3); font-size:12.5px; font-weight:600; padding:6px 14px; border-radius:7px; cursor:pointer; transition:all .14s; }
 .vz-disp.active { background:var(--surface-1); color:var(--text-1); box-shadow:var(--shadow-xs); }
 
+/* Horizon selector (goal form) — segmented chips, wrap on narrow screens */
+.vz-hz-field { margin-top:12px; }
+.vz-hz-lbl { font-size:12px; font-weight:600; color:var(--text-3); margin-bottom:7px; }
+.vz-hz-seg { display:flex; gap:6px; flex-wrap:wrap; }
+.vz-hz { flex:1 1 0; min-width:88px; border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-2); font-size:13px; font-weight:600; padding:9px 8px; border-radius:9px; cursor:pointer; transition:all .14s; }
+.vz-hz:hover { border-color:var(--border-strong); color:var(--text-1); }
+.vz-hz.active { background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:var(--shadow-xs); }
+
+/* Horizon filter chips — small divider separates them from the category chips */
+.vz-chip-div { display:inline-block; width:1px; align-self:stretch; min-height:22px; background:var(--border-color); margin:0 4px; vertical-align:middle; }
+.vision-filter-chip.vz-hz-chip.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+
+/* Horizon chip occupies the card's badge slot (above the title) when a horizon is set —
+   clearer than a raw "3650d left" countdown for long-range goals. */
+.vision-card-badge.horizon { background:rgba(0,0,0,.32); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px); color:#fff; }
+.vision-card--color .vision-card-badge.horizon { background:color-mix(in srgb, var(--vz-ink, #fff) 18%, transparent); color:var(--vz-ink); }
+/* Reserve the badge row even when a goal has no horizon/deadline, so every title starts
+   at the same height across cards. */
+.vz-badge-slot { min-height:23px; margin-bottom:5px; display:flex; align-items:flex-start; }
+.vz-badge-slot .vision-card-badge { margin-bottom:0; }
+
 /* Denser, refined, compact cards — desktop only (mobile card shape untouched) */
 @media (min-width:1000px){
-  .vz-pro .vz-board .vision-grid { grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)) !important; gap:14px !important; }
-  .vz-pro .vision-card { border-radius:var(--radius-lg); aspect-ratio:auto !important; min-height:0 !important; height:176px; box-shadow:var(--shadow-card); transition:box-shadow .18s ease, transform .18s ease; }
+  .vz-pro .vz-board .vision-grid { grid-template-columns:repeat(4, minmax(0, 1fr)) !important; gap:16px !important; }
+  .vz-pro .vision-card { border-radius:var(--radius-lg); aspect-ratio:auto !important; min-height:0 !important; height:264px; box-shadow:var(--shadow-card); transition:box-shadow .2s ease, transform .2s ease; }
+  .vz-pro .vision-card-progress { height:6px; }
+  /* Solid-colour cards fill the whole card: identity block (badge/title/affirmation) pinned
+     to the top, action block (progress/controls) pinned to the bottom, breathing room
+     between them — so there is NO empty band at the top. The title keeps its 2-line clamp
+     because it sits inside .vz-card-top (a normal block), not directly in the flex column. */
+  .vz-pro .vision-card--color .vision-card-content { top:0; bottom:0; display:flex; flex-direction:column; justify-content:space-between; }
+  .vz-pro .vision-card--color .vz-card-top, .vz-pro .vision-card--color .vz-card-bottom { min-width:0; flex:0 0 auto; }
   .vz-pro .vision-card:hover { box-shadow:var(--shadow-lg); transform:translateY(-2px); }
   .vz-pro .vision-card.vz-sel { box-shadow:0 0 0 2px var(--primary), var(--shadow-lg); }
-  .vz-pro .vision-card-content { padding:12px 12px 11px; }
-  .vz-pro .vision-card-title { font-size:18px; font-weight:800; margin-bottom:7px; -webkit-line-clamp:2; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
-  .vz-pro .vision-card-cat-tag { top:10px; left:10px; padding:4px 11px; font-size:11.5px; }
+  .vz-pro .vision-card-content { padding:14px 14px 13px; }
+  .vz-pro .vision-card-title { font-size:19.5px; font-weight:800; letter-spacing:-.01em; margin-bottom:7px; -webkit-line-clamp:2; display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
+  .vz-pro .vision-card-cat-tag { top:11px; left:11px; padding:4px 11px; font-size:11.5px; }
   .vz-pro .vz-quick__p { font-size:15px; min-width:46px; }
-  .vz-pro .vision-aff-indicator { width:30px; height:30px; top:10px; right:10px; }
-  .vz-pro .vz-quick { display:flex; align-items:center; gap:6px; margin-top:9px; }
+  .vz-pro .vision-aff-indicator { width:30px; height:30px; top:11px; right:11px; }
+  .vz-pro .vz-quick { display:flex; align-items:center; gap:6px; margin-top:12px; }
   .vz-pro .vz-pane { flex-basis:340px; }
 }
 
@@ -1638,6 +1703,7 @@ function _vzSyncProgressUI(id, p) {
     if (fill) { fill.style.width = p + '%'; fill.style.setProperty('--progress-width', p + '%'); }
   }
   const qp = document.getElementById('vzqp-' + id); if (qp) qp.textContent = p + '%';
+  if (card) { const tag = card.querySelector('.vz-prog-tag'); if (tag) tag.textContent = _vzProgressTag(p); }
   if (String(_vzSelId) === String(id)) {
     const lbl = document.getElementById('vzProgVal'); if (lbl) lbl.textContent = p + '%';
     const rng = document.querySelector('.vz-pane .vzp-range'); if (rng) rng.value = p;
@@ -1998,12 +2064,18 @@ async function renderVision() {
 function renderFilterChips() {
   const cats = ['focus', 'all', ...VISION_CATEGORIES];
   const labels = { focus: `${renderIcon('target', null, 'style="width:14px; display:inline-block; vertical-align:middle; margin-right:4px;"')} Focus`, all: 'All' };
-  return cats.map(c => `
+  const catChips = cats.map(c => `
     <button class="vision-filter-chip ${visionState.filter === c ? 'active' : ''}"
             onclick="setVisionFilter('${c}')">
       ${labels[c] || c}
     </button>
   `).join('');
+  // Horizon filters, grouped after a divider so they read as a separate (time) lens.
+  const hzChips = VISION_HORIZONS.map(h => {
+    const key = 'hz:' + h.key;
+    return `<button class="vision-filter-chip vz-hz-chip ${visionState.filter === key ? 'active' : ''}" onclick="setVisionFilter('${key}')">${h.short}</button>`;
+  }).join('');
+  return catChips + `<span class="vz-chip-div" aria-hidden="true"></span>` + hzChips;
 }
 
 function calculateVisionStats(goals) {
@@ -2019,12 +2091,15 @@ function calculateVisionStats(goals) {
 
 /* ─── GRID VIEW ─────────────────────────────────────────────────── */
 function renderVisionGrid(goals) {
-  const active = goals.filter(g => g.status !== 'achieved');
-  const achieved = goals.filter(g => g.status === 'achieved');
+  const active = goals.filter(g => g.status !== 'achieved').sort(_vzByHorizon);
+  const achieved = goals.filter(g => g.status === 'achieved').sort(_vzByHorizon);
 
   // Section heading anchors the grid as the primary content (desktop only).
   const f = visionState.filter;
-  const headLabel = f === 'focus' ? 'Focus this month' : (f === 'all' ? 'All goals' : (String(f).charAt(0).toUpperCase() + String(f).slice(1)));
+  const headLabel = f === 'focus' ? 'Focus this month'
+    : f === 'all' ? 'All goals'
+    : String(f).startsWith('hz:') ? vzHorizonShort(String(f).slice(3)) + ' horizon'
+    : (String(f).charAt(0).toUpperCase() + String(f).slice(1));
   const head = _vzDesktop() ? `<div class="vz-board-head"><h2>${escapeHtml(headLabel)}</h2><span class="n">${active.length} active</span></div>` : '';
 
   return `
@@ -2052,16 +2127,23 @@ function renderVisionGrid(goals) {
   `;
 }
 
-// Pleasant default colors per category (deep enough for white text). Per-goal
-// g.color (from the color wheel) overrides.
+// Softer, muted defaults per category — deep enough for white text but easier on the
+// eyes than saturated primaries. Per-goal g.color overrides.
 const VZ_CAT_COLORS = {
-  'Work': '#2563EB', 'Personality': '#7C3AED', 'Ouro': '#0F766E',
-  'Enjoyment': '#EA580C', 'Routine': '#0891B2', 'Personal': '#4F46E5',
-  'Health': '#DC2626', 'Finance': '#059669', 'Social': '#DB2777'
+  'Work': '#456A95', 'Personality': '#7A5C97', 'Ouro': '#2F7368',
+  'Enjoyment': '#B36A4A', 'Routine': '#2E7D86', 'Personal': '#5B6491',
+  'Health': '#AA5450', 'Finance': '#3F7A5E', 'Social': '#A85877'
+};
+// Maps the old saturated palette → the new muted tones so EXISTING goals (whose bright
+// color is already saved) render with the calmer colour without any data migration.
+const VZ_COLOR_REMAP = {
+  '#4F46E5': '#5B6491', '#2563EB': '#456A95', '#0891B2': '#2E7D86', '#0F766E': '#2F7368',
+  '#059669': '#3F7A5E', '#65A30D': '#5E7E4E', '#CA8A04': '#A8823E', '#EA580C': '#B36A4A',
+  '#DC2626': '#AA5450', '#DB2777': '#A85877', '#7C3AED': '#7A5C97', '#475569': '#5A6373'
 };
 function _vzCardColor(g) {
-  if (g && /^#[0-9A-Fa-f]{6}$/.test(g.color || '')) return g.color;
-  return VZ_CAT_COLORS[g && g.category] || '#4F46E5';
+  const c = (g && /^#[0-9A-Fa-f]{6}$/.test(g.color || '')) ? g.color : (VZ_CAT_COLORS[g && g.category] || '#5B6491');
+  return VZ_COLOR_REMAP[c.toUpperCase()] || c;
 }
 
 // Perceived-luminance → a readable text color for a given background hex.
@@ -2071,8 +2153,8 @@ function _vzTextOn(hex) {
   const n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 168 ? '#0F172A' : '#FFFFFF';
 }
-// Curated, harmonious palette shown first; the wheel is the "custom" option.
-window.VZ_PALETTE = ['#4F46E5', '#2563EB', '#0891B2', '#0F766E', '#059669', '#65A30D', '#CA8A04', '#EA580C', '#DC2626', '#DB2777', '#7C3AED', '#475569'];
+// Curated, calm palette (muted jewel/earth tones) shown first; the wheel is "custom".
+window.VZ_PALETTE = ['#5B6491', '#456A95', '#2E7D86', '#2F7368', '#3F7A5E', '#5E7E4E', '#A8823E', '#B36A4A', '#AA5450', '#A85877', '#7A5C97', '#5A6373'];
 
 // Live-update a card's color + auto-contrast ink (no save yet).
 window.vzPreviewColor = function (id, color) {
@@ -2120,6 +2202,35 @@ window.vzSetDisplayMode = function (v) {
   const inp = document.getElementById('mVisDisplayMode'); if (inp) inp.value = v;
   document.querySelectorAll('.vz-disp-seg .vz-disp').forEach(b => b.classList.toggle('active', b.dataset.v === v));
 };
+// Edit/new-goal: pick a time horizon. As a convenience, when no target date is set yet,
+// pre-fill one that matches the horizon so the goal also lands correctly in Timeline.
+window.vzPickHorizon = function (key) {
+  const seg = document.getElementById('mVisHorizonSeg');
+  if (seg) seg.querySelectorAll('.vz-hz').forEach(b => b.classList.toggle('active', b.dataset.hz === key));
+  const inp = document.getElementById('mVisHorizon'); if (inp) inp.value = key;
+  const dateInp = document.getElementById('mVisDate');
+  if (dateInp && !dateInp.value) {
+    const d = new Date();
+    if (key === 'month') d.setMonth(d.getMonth() + 1);
+    else if (key === '3month') d.setMonth(d.getMonth() + 3);
+    else if (key === '3year') d.setFullYear(d.getFullYear() + 3);
+    else if (key === '10year') d.setFullYear(d.getFullYear() + 10);
+    const pad = n => String(n).padStart(2, '0');
+    dateInp.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+};
+
+// A short, positive status for the current progress — turns a dead "0%" into a nudge to
+// act, and rewards momentum (goal-gradient + positive reinforcement, no shaming).
+function _vzProgressTag(pct) {
+  const p = parseInt(pct, 10) || 0;
+  if (p >= 100) return 'Achieved';
+  if (p >= 80) return 'Almost there';
+  if (p >= 50) return 'Over halfway';
+  if (p >= 25) return 'Good momentum';
+  if (p >= 1) return 'Just started';
+  return 'Start today';
+}
 
 function renderVisionCard(g, isAchieved = false) {
   const days = g.target_date ? Math.ceil((new Date(g.target_date) - new Date()) / 86400000) : null;
@@ -2128,13 +2239,37 @@ function renderVisionCard(g, isAchieved = false) {
   let badge = '';
   if (isAchieved) {
     badge = `<div class="vision-card-badge achieved" style="display:flex; align-items:center; gap:4px;">${renderIcon('trophy', null, 'style="width:12px;"')} Achieved</div>`;
+  } else if (g.horizon) {
+    // Horizon is the goal's chosen time-frame — clearer than a huge "3650d left" for
+    // long-range goals. Days-left still shows for goals with a date but no horizon.
+    badge = `<div class="vision-card-badge horizon">${vzHorizonAbbr(g.horizon)}</div>`;
   } else if (days !== null) {
     const cls = days < 0 ? 'expired' : (days <= 30 ? 'urgent' : 'normal');
     badge = `<div class="vision-card-badge ${cls}">${days < 0 ? 'Ended' : days === 0 ? 'Today!' : days + 'd left'}</div>`;
   }
 
   const cardId = `vision-card-${g.id}`;
-  const affCount = (state.data.vision_affirmations || []).filter(a => String(a.vision_id) === String(g.id)).length;
+  const _isPinned = a => a.is_pinned === true || a.is_pinned === 'true' || a.is_pinned === 'TRUE';
+  const affList = (state.data.vision_affirmations || [])
+    .filter(a => String(a.vision_id) === String(g.id))
+    // Pinned first, then by saved order — show the affirmations that matter most.
+    .sort((a, b) => (_isPinned(b) - _isPinned(a)) || ((a.order || 0) - (b.order || 0)));
+  const affCount = affList.length;
+  // Inline affirmations preview so each goal carries its affirmations, not just a count.
+  // Show the primary (pinned/first) affirmation in full (wraps to 2 lines); the rest are
+  // reachable via "+N more". Showing one readable affirmation beats cramming several
+  // truncated to a few words.
+  let affHtml = '';
+  if (affCount) {
+    const primary = affList[0];
+    const more = affCount - 1;
+    affHtml = `<div class="vz-affs">
+      <div class="vz-aff">${_isPinned(primary) ? '<span class="vz-aff-pin">📌</span>' : ''}${escapeHtml(primary.text || '')}</div>
+      ${more ? `<div class="vz-aff-more" onclick="event.stopPropagation();startManifestationRitual('${g.id}')">+${more} more affirmation${more > 1 ? 's' : ''}</div>` : ''}
+    </div>`;
+  } else if (!isAchieved) {
+    affHtml = `<button class="vz-aff-add" onclick="event.stopPropagation();openAffirmationCreator('${g.id}')">${renderIcon('sparkles', null, 'style="width:12px"')} Add affirmation</button>`;
+  }
   // Per-goal board display: 'image' shows the photo, otherwise the solid color.
   const useImage = g.display_mode === 'image' && g.image_url;
   const ink = useImage ? '#FFFFFF' : _vzTextOn(color);   // auto-contrast text color
@@ -2143,28 +2278,39 @@ function renderVisionCard(g, isAchieved = false) {
     ? `background-image:url('${resolveMediaUrl(g.image_url) || sanitizeUrl(g.image_url)}'); background-size:cover; background-position:center;`
     : `background:${color}`;
 
+  const pct = parseInt(g.progress, 10) || 0;
+
   return `
     <div class="vision-card ${colorCls} animate-enter ${String(g.id) === String(_vzSelId) ? 'vz-sel' : ''}" id="${cardId}" style="--vz-ink:${ink}" onclick="vzCardOpen('${g.id}')">
       <div class="vision-card-bg" style="${bgStyle}"></div>
       <div class="vision-card-overlay"></div>
-      <div class="vision-card-cat-tag">${g.category || 'Personal'}</div>
       ${affCount ? `<div class="vision-aff-indicator" title="Manifest (${affCount} affirmations)" onclick="event.stopPropagation();startManifestationRitual('${g.id}')">${renderIcon('sparkles', null, 'style="width:14px; color:currentColor"')}</div>` : ''}
 
       <div class="vision-card-content">
-        ${badge}
-        <div class="vision-card-title">${g.title}</div>
-        <div class="vision-card-progress">
-        <div class="vision-progress-fill" style="--progress-width:${g.progress || 0}%; width:${g.progress || 0}%"></div>
+        <div class="vz-card-top">
+          <div class="vz-badge-slot">${badge}</div>
+          <div class="vision-card-title">${g.title}</div>
+          ${affHtml}
         </div>
-        ${!isAchieved ? `
-        <div class="vz-quick" onclick="event.stopPropagation()">
-          <button class="vz-quick__b" title="Decrease 1%" onclick="event.stopPropagation();vzBump('${g.id}',-1)">−</button>
-          <span class="vz-quick__p" id="vzqp-${g.id}">${parseInt(g.progress, 10) || 0}%</span>
-          <button class="vz-quick__b" title="Increase 1%" onclick="event.stopPropagation();vzBump('${g.id}',1)">+</button>
-          <span class="vz-quick__sp"></span>
-          <button class="vz-quick__color" title="Pick color" style="background:${color}" onclick="event.stopPropagation();vzOpenColorModal('${g.id}')"></button>
-          <button class="vz-quick__b" title="Edit goal" onclick="event.stopPropagation();openEditVision('${g.id}')">${renderIcon('edit', null, 'style="width:14px"')}</button>
-        </div>` : ''}
+        <div class="vz-card-bottom">
+          <div class="vz-prog">
+            <div class="vz-prog-head">
+              <span class="vz-prog-pct" id="vzqp-${g.id}">${pct}%</span>
+              <span class="vz-prog-tag">${_vzProgressTag(pct)}</span>
+            </div>
+            <div class="vision-card-progress">
+              <div class="vision-progress-fill" style="--progress-width:${pct}%; width:${pct}%"></div>
+            </div>
+          </div>
+          ${!isAchieved ? `
+          <div class="vz-quick" onclick="event.stopPropagation()">
+            <button class="vz-quick__b" title="Decrease 1%" onclick="event.stopPropagation();vzBump('${g.id}',-1)">−</button>
+            <button class="vz-quick__b" title="Increase 1%" onclick="event.stopPropagation();vzBump('${g.id}',1)">+</button>
+            <span class="vz-quick__sp"></span>
+            <button class="vz-quick__b" title="Pick color" onclick="event.stopPropagation();vzOpenColorModal('${g.id}')">${renderIcon('palette', null, 'style="width:14px"')}</button>
+            <button class="vz-quick__b" title="Edit goal" onclick="event.stopPropagation();openEditVision('${g.id}')">${renderIcon('edit', null, 'style="width:14px"')}</button>
+          </div>` : ''}
+        </div>
       </div>
     </div>
   `;
@@ -2857,14 +3003,34 @@ window.openVisionModal = function () {
   initVisionFormListeners();
 };
 
+// Safely parse a goal's linked_habits into an array. Returns [] on bad/empty data instead
+// of throwing — a stray JSON.parse here used to crash the whole edit form (e.g. Exercise),
+// so the modal never opened.
+function _vzLinkedHabits(g) {
+  try {
+    const lh = g && g.linked_habits;
+    if (lh && String(lh).trim().startsWith('[')) {
+      const arr = JSON.parse(lh);
+      return Array.isArray(arr) ? arr : [];
+    }
+  } catch (e) { /* malformed — treat as no linked habits */ }
+  return [];
+}
+
 window.openEditVision = function (id) {
   const g = state.data.vision.find(v => String(v.id) === String(id));
-  if (!g) return;
+  if (!g) { if (typeof showToast === 'function') showToast('Goal not found', 'error'); return; }
   window._visionPendingVideos = g.video_url ? g.video_url.split(',').map(s => s.trim()).filter(Boolean).map(u => ({ localKey: u.replace('local://', ''), filename: 'Existing Video', type: 'video/mp4', isExisting: true })) : [];
   window._visionMediaTab = 'image';
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  box.innerHTML = buildVisionForm(g);
+  try {
+    box.innerHTML = buildVisionForm(g);
+  } catch (e) {
+    console.error('buildVisionForm failed', e);
+    if (typeof showToast === 'function') showToast('Could not open editor', 'error');
+    return;
+  }
   modal.classList.remove('hidden');
   initVisionFormListeners();
   setTimeout(() => {
@@ -2895,6 +3061,16 @@ function buildVisionForm(g) {
           </select>
           <input type="date" class="input" id="mVisDate" value="${isEdit ? (g.target_date || '') : ''}">
         </div>
+        <div class="vz-hz-field">
+          <div class="vz-hz-lbl">Horizon</div>
+          <div class="vz-hz-seg" id="mVisHorizonSeg">
+            ${VISION_HORIZONS.map(h => {
+              const sel = isEdit ? (g.horizon === h.key) : (h.key === 'month');
+              return `<button type="button" class="vz-hz ${sel ? 'active' : ''}" data-hz="${h.key}" onclick="vzPickHorizon('${h.key}')">${h.label}</button>`;
+            }).join('')}
+          </div>
+          <input type="hidden" id="mVisHorizon" value="${isEdit ? (g.horizon || '') : 'month'}">
+        </div>
       </div>
 
       <!-- Section 2: Progress -->
@@ -2905,9 +3081,9 @@ function buildVisionForm(g) {
         </label>
         <div style="margin-top:8px;">
           <input type="range" id="mVisProgress" min="0" max="100" value="${isEdit ? (g.progress || 0) : 0}"
-            ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ? 'disabled' : ''}
+            ${isEdit && _vzLinkedHabits(g).length > 0 ? 'disabled' : ''}
             oninput="document.getElementById('mVisProgressVal').textContent = this.value + '%'">
-          ${isEdit && g.linked_habits && String(g.linked_habits).startsWith('[') && JSON.parse(g.linked_habits).length > 0 ?
+          ${isEdit && _vzLinkedHabits(g).length > 0 ?
       `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Auto-calculated from habits</div>` : ''}
         </div>
       </div>
@@ -3251,6 +3427,7 @@ function collectVisionPayload() {
     month_focus: monthFocus,
     linked_habits: linkedHabits,
     display_mode: document.getElementById('mVisDisplayMode')?.value || 'color',
+    horizon: document.getElementById('mVisHorizon')?.value || '',
   };
 }
 
@@ -5886,6 +6063,9 @@ function filterVisions(goals) {
   let filtered = [...goals];
   if (visionState.filter === 'focus') {
     filtered = filtered.filter(g => g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE');
+  } else if (String(visionState.filter).startsWith('hz:')) {
+    const key = String(visionState.filter).slice(3);
+    filtered = filtered.filter(g => g.horizon === key);
   } else if (visionState.filter !== 'all') {
     filtered = filtered.filter(g => g.category === visionState.filter);
   }
@@ -6030,19 +6210,44 @@ function calculateTDPProgress(plan) {
   return { total, completed, percentage: total > 0 ? Math.round((completed / total) * 100) : 0 };
 }
 
+// Local YYYY-MM-DD (NOT toISOString, which is UTC and shifts the date across midnight
+// for any timezone offset — that's what made plans default to "yesterday").
+function _tdpLocalDateStr(d = new Date()) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+// Parse a YYYY-MM-DD as a LOCAL calendar date so day math never drifts by a day.
+function _tdpParseLocal(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(s); d.setHours(0, 0, 0, 0); return d;
+}
+
 function getTDPDayInfo(plan) {
   if (!plan) return { day: 0, remaining: 0 };
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = new Date(plan.start_date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(plan.end_date);
-  end.setHours(0, 0, 0, 0);
+  const start = _tdpParseLocal(plan.start_date);
+  const end = _tdpParseLocal(plan.end_date);
 
   const day = Math.floor((today - start) / 86400000) + 1;
   const remaining = Math.ceil((end - today) / 86400000);
   return { day: Math.max(0, day), remaining: Math.max(0, remaining) };
 }
+
+// Change the active plan's start date (recomputes the 10-day end) — lets the user correct
+// a plan that began on the wrong day. Re-renders so Day X / range update immediately.
+window.tdpUpdateStart = async function (val) {
+  if (!val) return;
+  const active = (state.data.vision_tdp || []).find(p => p.status === 'active');
+  if (!active) return;
+  const sd = _tdpParseLocal(val);
+  active.start_date = val;
+  active.end_date = _tdpLocalDateStr(new Date(sd.getFullYear(), sd.getMonth(), sd.getDate() + 9));
+  if (typeof showToast === 'function') showToast('Start date updated');
+  try { await apiPost('vision_tdp', active); } catch (e) { console.error('TDP start update failed', e); }
+  renderTDPModalContent(null, 'current');
+};
 
 async function checkAndAutoRenewTDP() {
   const active = await getActiveTDP();
@@ -6157,7 +6362,11 @@ function renderCurrentTDP(plan) {
       <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:12px;">
         <div>
           <div style="font-size:12px; font-weight:700; color:var(--primary); text-transform:uppercase;">Day ${info.day} of 10</div>
-          <div style="font-size:18px; font-weight:800;">${formatDate(plan.start_date)} - ${formatDate(plan.end_date)}</div>
+          <div style="font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px;">
+            <span>${formatDate(plan.start_date)} - ${formatDate(plan.end_date)}</span>
+            <button title="Change start date" onclick="document.getElementById('tdpStartEdit').showPicker ? document.getElementById('tdpStartEdit').showPicker() : document.getElementById('tdpStartEdit').focus()" style="background:none; border:none; cursor:pointer; color:var(--text-muted); padding:2px; display:inline-flex; align-items:center;">${renderIcon('edit', null, 'style="width:15px"')}</button>
+            <input type="date" id="tdpStartEdit" value="${plan.start_date}" onchange="tdpUpdateStart(this.value)" style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;">
+          </div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:18px; font-weight:800; color:var(--primary);">${prog.percentage}%</div>
@@ -6275,7 +6484,7 @@ async function deleteTDPItem(planId, cat, idx) {
 function renderCreateTDPView() {
   const nextStart = new Date();
   nextStart.setHours(0, 0, 0, 0);
-  const dateStr = nextStart.toISOString().split('T')[0];
+  const dateStr = _tdpLocalDateStr(nextStart);
 
   return `
     <div class="tdp-create-header">
@@ -6308,8 +6517,8 @@ async function createNewTDP() {
   const start = document.getElementById('tdpNewStartDate').value;
   if (!start) return;
 
-  const endDate = new Date(new Date(start).getTime() + 9 * 86400000);
-  const end = endDate.toISOString().split('T')[0];
+  const sd = _tdpParseLocal(start);
+  const end = _tdpLocalDateStr(new Date(sd.getFullYear(), sd.getMonth(), sd.getDate() + 9));
 
   const categories = {};
   VISION_TDP_CATEGORIES.forEach(c => categories[c] = []);

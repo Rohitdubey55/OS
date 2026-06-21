@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS public.vision_board (
     month_focus TEXT,
     color TEXT,
     display_mode TEXT,
+    horizon TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -342,6 +343,31 @@ CREATE TABLE IF NOT EXISTS public.vision_images (
     url TEXT,
     name TEXT,
     uploaded_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Weekly Food Planner: plan vs eaten per (date, slot), + daily mood/energy check-in.
+CREATE TABLE IF NOT EXISTS public.meal_plan (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    date DATE,
+    slot TEXT,                       -- 'breakfast' | 'lunch' | 'dinner'
+    planned TEXT,
+    eaten TEXT,
+    status TEXT,                     -- 'as_planned' | 'different' | 'skipped'
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.meal_day (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    date DATE,
+    mood INT,                        -- 1..5
+    energy INT,                      -- 1..5
+    ate_healthy BOOLEAN,
+    note TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );

@@ -31,6 +31,10 @@ const DAILY_TOOLS = [
     {
         view: 'wishlist', name: 'Wishlist', sub: 'Things you want · buy, do, gift', accent: '#8B5CF6',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>'
+    },
+    {
+        view: 'meals', name: 'Food Planner', sub: 'Plan meals · track energy & mood', accent: '#16A34A',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h0c1.1 0 2-.9 2-2V2"/><path d="M5 2v20"/><path d="M19 2v7c0 1.5-1 2.5-2.5 2.5S14 10.5 14 9V2"/><path d="M19 2v20"/></svg>'
     }
 ];
 
