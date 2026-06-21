@@ -175,7 +175,7 @@
         reader_settings: new Set(['id','user_id','background_color','font_color','font_family','font_size','line_spacing','fullscreen_mode','page_animation','auto_save_position']),
         pomodoro_settings: new Set(['id','user_id','work_duration','short_break','long_break','long_break_interval','sound_work','sound_break','auto_start_break','background_mode']),
         tasks: new Set(['id','user_id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','completed_at','duration','subtasks','pomodoro_estimate','pomodoro_length']),
-        habits: new Set(['id','user_id','habit_name','frequency','streak','reminder_time','emoji','pomodoro_sessions','pomodoro_length','alarm_enabled','routine']),
+        habits: new Set(['id','user_id','habit_name','frequency','streak','reminder_time','emoji','pomodoro_sessions','pomodoro_length','alarm_enabled','routine','duration']),
         habit_logs: new Set(['id','user_id','habit_id','date','status','pomodoro_completed']),
         expenses: new Set(['id','user_id','date','amount','category','description','type','payment_mode','budget_scope']),
         diary: new Set(['id','user_id','date','content','mood','tags']),

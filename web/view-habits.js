@@ -256,7 +256,7 @@ function hbOverviewHTML() {
     .filter(x => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 5);
 
   const routines = {};
-  sched.forEach(h => { const r = h.routine || h.category || 'General'; (routines[r] = routines[r] || { t: 0, d: 0 }).t++; if (isDone(h)) routines[r].d++; });
+  sched.forEach(h => { const r = h.routine || 'General'; (routines[r] = routines[r] || { t: 0, d: 0 }).t++; if (isDone(h)) routines[r].d++; });
 
   const streakRows = ranked.length ? ranked.map(({ h, s }) =>
     `<div class="hbp-srow" onclick="hbSelectDetail('${h.id}')"><span class="hbp-semoji">${habitIconHTML(h.emoji, 16)}</span><span class="hbp-sname">${escapeHtml(h.habit_name || '')}</span><span class="hbp-sval">${s >= 30 ? '🏆' : s >= 7 ? '🔥' : '⭐'} ${s}</span></div>`
@@ -298,7 +298,7 @@ function hbDetailHTML(h) {
   return `
   <div class="hbp-card">
     <div class="hbp-dhead">
-      <div class="hbp-dtitle"><span class="hbp-demoji">${habitIconHTML(h.emoji, 18)}</span><div><div class="hbp-dname">${escapeHtml(h.habit_name || '')}</div><div class="hbp-dmeta">${escapeHtml(h.category || h.routine || 'General')} • ${displayTime}</div></div></div>
+      <div class="hbp-dtitle"><span class="hbp-demoji">${habitIconHTML(h.emoji, 18)}</span><div><div class="hbp-dname">${escapeHtml(h.habit_name || '')}</div><div class="hbp-dmeta">${escapeHtml(h.routine || 'General')} • ${displayTime}</div></div></div>
       <button class="hbp-x" onclick="hbCloseDetail()"><i data-lucide="x" style="width:14px;height:14px"></i></button>
     </div>
     <button class="hbp-done ${isDoneToday ? 'on' : ''}" onclick="toggleHabitOptimistic('${h.id}')">${isDoneToday ? '✓ Done today' : 'Mark done today'}</button>
@@ -318,6 +318,9 @@ function hbDetailHTML(h) {
 }
 
 function renderHabits() {
+  // While in management mode, any habits re-render (edit/delete/refresh) keeps the
+  // manager up instead of dropping back to the tracker. Reset on navigation (routeTo).
+  if (window._hmActive && typeof renderHabitsManager === 'function') { return renderHabitsManager(); }
   let habits = Array.isArray(state.data.habits) ? [...state.data.habits] : [];
   const logs = state.data.habit_logs || [];
   const today = new Date().toISOString().slice(0, 10);
@@ -403,6 +406,7 @@ function renderHabits() {
               <option value="All" ${_habitDayFilter === 'All' ? 'selected' : ''}>All</option>
               ${DAY_NAMES.map(d => `<option value="${d}" ${_habitDayFilter === d ? 'selected' : ''}>${d}</option>`).join('')}
             </select>` : ''}
+            <button class="btn secondary circle small" onclick="openHabitsManager()" title="Manage habits (list / by-day)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
             <button class="btn primary circle small hb-add" onclick="openHabitModal()">${renderIcon('plus', null, 'style="width:18px"')}</button>
           </div>
         </div>
@@ -494,7 +498,7 @@ function renderHabits() {
                 <div class="habit-emoji-circle">${habitIconHTML(h.emoji, 18)}</div>
                 <div>
                   <div class="habit-title-lg">${h.habit_name} ${comingInText}${String(h.id) === String(nextUpHabitId) ? '<span class="up-next-badge">Up Next</span>' : ''}${missedChip}</div>
-                  <div class="habit-meta">${h.category || 'General'} • ${displayTime}</div>
+                  <div class="habit-meta">${h.routine || 'General'} • ${displayTime}</div>
                 </div>
               </div>
               <div class="hb-right">
@@ -1034,6 +1038,166 @@ function getSelectedDays(containerId = 'mHabitDays') {
 }
 
 // --- MODAL INJECTOR ---
+/* ═══════════════════════════════════════════════════════════════════════
+   HABITS MANAGEMENT VIEW — All-habits list + By-day, with inline time/day editing
+   ═══════════════════════════════════════════════════════════════════════ */
+window._hmView = window._hmView || 'list';
+const _HM_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const _HM_DAY_FULL = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
+
+function _hmTimeVal(h) {
+  const rt = String((h && h.reminder_time) || '');
+  if (rt.startsWith('1899-12-30T')) return rt.slice(11, 16);
+  const m = rt.match(/^(\d{2}:\d{2})/);
+  return m ? m[1] : '';
+}
+function _hmActiveDays(h) {
+  const f = String((h && h.frequency) || '').toLowerCase().trim();
+  if (!f || f === 'daily') return _HM_DAYS.slice();
+  const days = (window.habitDayList ? window.habitDayList(h) : []);
+  if (!days.length) return _HM_DAYS.slice();            // weekly w/ no days ⇒ every day
+  const norm = days.map(d => d.slice(0, 3).toLowerCase());
+  return _HM_DAYS.filter(d => norm.includes(d.slice(0, 3).toLowerCase()));
+}
+
+window.hmSetTime = function (id, value) {
+  const h = (state.data.habits || []).find(x => String(x.id) === String(id));
+  if (!h) return;
+  h.reminder_time = value || '';
+  try { apiCall('update', 'habits', { reminder_time: value || '' }, id); } catch (e) {}
+  if (typeof window.syncNativeNotifications === 'function') setTimeout(window.syncNativeNotifications, 400);
+  renderHabitsManager();
+};
+
+window.hmToggleDay = function (id, day) {
+  const h = (state.data.habits || []).find(x => String(x.id) === String(id));
+  if (!h) return;
+  let active = _hmActiveDays(h);
+  active = active.includes(day) ? active.filter(d => d !== day) : active.concat(day);
+  active = _HM_DAYS.filter(d => active.includes(d));
+  const freq = (active.length === 7 || active.length === 0) ? 'daily' : ('weekly:' + active.join(','));
+  h.frequency = freq;
+  try { apiCall('update', 'habits', { frequency: freq }, id); } catch (e) {}
+  renderHabitsManager();
+};
+
+function _hmRowHTML(h) {
+  const active = _hmActiveDays(h);
+  const time = _hmTimeVal(h);
+  const icon = (typeof habitIconHTML === 'function') ? habitIconHTML(h.emoji, 18) : '';
+  return `
+    <div class="hm-row">
+      <div class="hm-main">
+        <span class="hm-emoji">${icon}</span>
+        <div class="hm-info">
+          <div class="hm-name">${escapeHtml(h.habit_name || h.name || 'Untitled')}</div>
+          <div class="hm-sub">${escapeHtml(h.routine || 'General')}${h.duration ? ' · ' + parseInt(h.duration, 10) + 'm' : ''}</div>
+        </div>
+      </div>
+      <input type="time" class="hm-time" value="${time}" onchange="hmSetTime('${h.id}', this.value)" title="Reminder time">
+      <div class="hm-days">
+        ${_HM_DAYS.map(d => `<button class="hm-day ${active.includes(d) ? 'on' : ''}" title="${_HM_DAY_FULL[d]}" onclick="hmToggleDay('${h.id}','${d}')">${d[0]}</button>`).join('')}
+      </div>
+      <div class="hm-actions">
+        <button class="hm-iconbtn" title="Edit habit" onclick="openEditHabit('${h.id}')"><i data-lucide="pencil"></i></button>
+        <button class="hm-iconbtn hm-del" title="Delete habit" onclick="deleteHabit('${h.id}')"><i data-lucide="trash-2"></i></button>
+      </div>
+    </div>`;
+}
+
+function _hmListHTML(habits) {
+  if (!habits.length) return '<div class="hm-empty">No habits yet — tap + to add one.</div>';
+  const sorted = habits.slice().sort((a, b) =>
+    (_hmTimeVal(a) || '99:99').localeCompare(_hmTimeVal(b) || '99:99') ||
+    String(a.habit_name || '').localeCompare(String(b.habit_name || '')));
+  return `
+    <div class="hm-listhead"><span>Habit</span><span>Time</span><span>Days</span><span></span></div>
+    <div class="hm-list">${sorted.map(_hmRowHTML).join('')}</div>`;
+}
+
+function _hmByDayHTML(habits) {
+  return `<div class="hm-bydaywrap">${_HM_DAYS.map(d => {
+    const list = habits.filter(h => _hmActiveDays(h).includes(d))
+      .sort((a, b) => (_hmTimeVal(a) || '99:99').localeCompare(_hmTimeVal(b) || '99:99'));
+    return `
+      <div class="hm-daysec">
+        <div class="hm-dayhead">${_HM_DAY_FULL[d]}<span class="hm-daycount">${list.length}</span></div>
+        ${list.length ? list.map(h => `
+          <div class="hm-dayrow" onclick="openEditHabit('${h.id}')">
+            <span class="hm-emoji">${(typeof habitIconHTML === 'function') ? habitIconHTML(h.emoji, 16) : ''}</span>
+            <span class="hm-dayname">${escapeHtml(h.habit_name || 'Untitled')}</span>
+            <span class="hm-daytime">${_hmTimeVal(h) || '—'}</span>
+          </div>`).join('') : '<div class="hm-dayempty">Nothing scheduled</div>'}
+      </div>`;
+  }).join('')}</div>`;
+}
+
+window.openHabitsManager = function () { window._hmActive = true; renderHabitsManager(); };
+
+window.renderHabitsManager = function () {
+  const main = document.getElementById('main');
+  if (!main) return;
+  const habits = Array.isArray(state.data.habits) ? state.data.habits : [];
+  const view = window._hmView || 'list';
+  main.innerHTML = `
+    <style>
+      .hm-wrap { max-width: 1040px; margin: 0 auto; padding: 8px 22px 110px; }
+      .hm-head { display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+      .hm-back { width:36px; height:36px; border-radius:10px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
+      .hm-back svg { width:18px; height:18px; }
+      .hm-title { font-size:20px; font-weight:750; color:var(--text-1); margin:0; }
+      .hm-toggle { display:flex; gap:2px; padding:3px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:10px; margin-left:auto; }
+      .hm-tg { border:none; background:transparent; color:var(--text-3); font-weight:650; font-size:13px; padding:7px 14px; border-radius:8px; cursor:pointer; }
+      .hm-tg.on { background:var(--surface-1); color:var(--text-1); box-shadow:0 1px 3px rgba(0,0,0,.12); }
+      .hm-add { width:36px; height:36px; border-radius:10px; border:none; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; font-size:20px; line-height:1; }
+      .hm-listhead { display:grid; grid-template-columns: 1fr 122px auto 72px; gap:12px; padding:0 14px 8px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); }
+      .hm-list { display:flex; flex-direction:column; gap:8px; }
+      .hm-row { display:grid; grid-template-columns: 1fr 122px auto 72px; gap:12px; align-items:center; background:var(--surface-1); border:1px solid var(--border-color); border-radius:12px; padding:10px 14px; }
+      .hm-main { display:flex; align-items:center; gap:10px; min-width:0; }
+      .hm-emoji { flex:none; display:inline-flex; align-items:center; }
+      .hm-info { min-width:0; }
+      .hm-name { font-size:14.5px; font-weight:650; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .hm-sub { font-size:12px; color:var(--text-3); }
+      .hm-time { width:122px; box-sizing:border-box; padding:7px 9px; border:1px solid var(--border-color); border-radius:8px; background:var(--surface-1); color:var(--text-1); font-size:13px; font-family:inherit; }
+      .hm-days { display:flex; gap:4px; }
+      .hm-day { width:26px; height:26px; border-radius:7px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-3); font-size:11px; font-weight:700; cursor:pointer; padding:0; transition:background .12s, color .12s; }
+      .hm-day.on { background:var(--primary); border-color:var(--primary); color:#fff; }
+      .hm-actions { display:flex; gap:4px; justify-content:flex-end; }
+      .hm-iconbtn { width:30px; height:30px; border-radius:8px; border:none; background:transparent; color:var(--text-3); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+      .hm-iconbtn svg { width:15px; height:15px; }
+      .hm-iconbtn:hover { background:var(--surface-2); color:var(--text-1); }
+      .hm-iconbtn.hm-del:hover { color:var(--danger,#ef4444); background:color-mix(in srgb, var(--danger,#ef4444) 12%, transparent); }
+      .hm-empty, .hm-dayempty { color:var(--text-3); font-size:13px; padding:14px; }
+      .hm-bydaywrap { display:grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap:14px; }
+      .hm-daysec { background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; padding:14px; }
+      .hm-dayhead { font-size:13px; font-weight:750; color:var(--text-1); margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+      .hm-daycount { font-size:11px; font-weight:700; color:var(--text-3); background:var(--surface-2); border-radius:999px; padding:1px 8px; }
+      .hm-dayrow { display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--border-color); cursor:pointer; }
+      .hm-dayrow:hover .hm-dayname { color:var(--primary); }
+      .hm-dayname { flex:1; font-size:13.5px; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .hm-daytime { font-size:12px; color:var(--text-3); font-variant-numeric:tabular-nums; flex:none; }
+      @media (max-width: 680px) {
+        .hm-wrap { padding:8px 14px 110px; }
+        .hm-listhead { display:none; }
+        .hm-row { grid-template-columns: 1fr auto; grid-template-areas: 'main time' 'days actions'; row-gap:10px; }
+        .hm-main { grid-area:main; } .hm-time { grid-area:time; } .hm-days { grid-area:days; flex-wrap:wrap; } .hm-actions { grid-area:actions; }
+      }
+    </style>
+    <div class="hm-wrap">
+      <div class="hm-head">
+        <button class="hm-back" onclick="window._hmActive=false; renderHabits()" title="Back to tracker"><i data-lucide="arrow-left"></i></button>
+        <h2 class="hm-title">Manage Habits</h2>
+        <div class="hm-toggle">
+          <button class="hm-tg ${view === 'list' ? 'on' : ''}" onclick="_hmView='list'; renderHabitsManager()">All habits</button>
+          <button class="hm-tg ${view === 'byday' ? 'on' : ''}" onclick="_hmView='byday'; renderHabitsManager()">By day</button>
+        </div>
+        <button class="hm-add" onclick="openHabitModal()" title="Add habit">+</button>
+      </div>
+      ${view === 'list' ? _hmListHTML(habits) : _hmByDayHTML(habits)}
+    </div>`;
+  if (window.lucide) lucide.createIcons();
+};
+
 window.openHabitModal = function () {
   const modal = document.getElementById('universalModal');
   modal.classList.add('bottom-sheet');
@@ -1083,14 +1247,7 @@ window.openHabitModal = function () {
         </div>
 
         <!-- Metadata Section -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-          <div>
-            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Category</label>
-            <select class="input" id="mHabitCat" style="width: 100%;">
-                <option value="" disabled selected>Select...</option>
-                ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
-            </select>
-          </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div>
             <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Routine</label>
             <select class="input" id="mHabitRoutine" style="width: 100%;">
@@ -1218,13 +1375,7 @@ window.openEditHabit = function (id) {
       </div>
 
       <!-- Metadata Section -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-        <div>
-          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Category</label>
-          <select class="input" id="mHabitCat" style="width: 100%;">
-              ${categories.map(c => `<option value="${c}" ${h.category === c ? 'selected' : ''}>${c}</option>`).join('')}
-          </select>
-        </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
         <div>
           <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Routine</label>
           <select class="input" id="mHabitRoutine" style="width: 100%;">

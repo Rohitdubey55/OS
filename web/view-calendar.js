@@ -532,7 +532,7 @@ function renderTimeGrid() {
         const color = e.is_done ? 'var(--success)' : 'var(--text-1)';
         return `<div class="event-block" data-id="${e.id}" data-ishabit="true"
                      style="${inlineStyle} background:${bg}; color:${color}; font-weight:600; border-radius:8px; border:2px solid ${border}; box-shadow:0 2px 4px rgba(0,0,0,0.05); cursor:pointer;"
-                     onclick="event.stopPropagation(); toggleHabitOptimistic('${e.habit_id}')">
+                     onclick="event.stopPropagation(); plannerToggleHabit('${e.habit_id}', '${iso}')">
             <span class="event-time" style="color:var(--text-muted); opacity:0.9;">${e.startT}</span>
             <span style="display:inline-flex; align-items:center; gap:4px; text-decoration:${e.is_done ? 'line-through' : 'none'}">${typeof habitIconHTML === 'function' ? habitIconHTML(e.emoji, 14) : ''}<span>${e.title}</span></span>
           </div>`;
@@ -664,6 +664,31 @@ function extractDatetime(dtStr) {
   // Date only
   return { date: s.slice(0, 10), time: '' };
 }
+
+// Toggle a habit's completion for a specific day FROM THE PLANNER. Defined here so
+// it always exists on the calendar view (toggleHabitOptimistic lives in the lazily
+// loaded view-habits.js — undefined here on a fresh planner visit — and it also
+// re-renders the Habits view, which would yank you off the Planner).
+window.plannerToggleHabit = async function (habitId, iso) {
+  iso = iso || new Date().toISOString().slice(0, 10);
+  if (!Array.isArray(state.data.habit_logs)) state.data.habit_logs = [];
+  const idx = state.data.habit_logs.findIndex(
+    l => String(l.habit_id) === String(habitId) && (l.date || '').startsWith(iso)
+  );
+  try {
+    if (idx !== -1) {
+      const del = state.data.habit_logs[idx];
+      state.data.habit_logs.splice(idx, 1);
+      renderCalendar();
+      if (del && del.id) await apiCall('delete', 'habit_logs', {}, del.id);
+    } else {
+      state.data.habit_logs.push({ id: 'temp-' + Date.now(), habit_id: habitId, date: iso, completed: true });
+      renderCalendar();
+      await apiCall('create', 'habit_logs', { habit_id: habitId, date: iso, status: 'completed', pomodoro_completed: false });
+    }
+    if (typeof refreshData === 'function') refreshData('habit_logs');
+  } catch (e) { console.warn('plannerToggleHabit failed', e); }
+};
 
 window.openEditEvent = function (id) {
   const e = (state.data.planner || []).find(x => String(x.id) === String(id));

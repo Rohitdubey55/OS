@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS public.habits (
     pomodoro_length INT,
     alarm_enabled BOOLEAN DEFAULT false,
     routine TEXT,
+    duration INT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );

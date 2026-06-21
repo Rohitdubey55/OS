@@ -1550,6 +1550,19 @@ function initMuralCanvas() {
     const page = document.getElementById('muralPage');
     if (!canvas || !page) return;
 
+    // Exit text editing the instant you click outside the focused shape's text:
+    // blur it and clear the text selection, so the editor stops treating clicks as
+    // text selection and the shape becomes movable again. Capture phase so it runs
+    // before the element/drag handlers regardless of stopPropagation.
+    page.addEventListener('pointerdown', (e) => {
+        const ae = document.activeElement;
+        if (ae && ae.classList && ae.classList.contains('mural-element-content') && !ae.contains(e.target)) {
+            ae.blur();
+            const sel = window.getSelection && window.getSelection();
+            if (sel && sel.removeAllRanges) sel.removeAllRanges();
+        }
+    }, true);
+
     // Pointer events
     page.addEventListener('pointerdown', onMuralPointerDown);
     page.addEventListener('pointermove', onMuralPointerMove);
@@ -1647,6 +1660,16 @@ function applyMuralTransform() {
     const canvas = document.getElementById('muralCanvas');
     if (!canvas) return;
     canvas.style.transform = `translate(${muralTransform.x}px, ${muralTransform.y}px) scale(${muralTransform.scale})`;
+    // The dotted grid is a CSS background on the (un-transformed) page, so lock it to
+    // the SAME pan/zoom as the elements — pan = background-position, zoom = grid size.
+    // (Canvas transform-origin is 0 0, so this maps exactly.) Without this the grid
+    // stays put while elements move/scale, drifting them out of alignment.
+    const page = document.getElementById('muralPage');
+    if (page) {
+        const gs = 32 * muralTransform.scale;
+        page.style.backgroundSize = `${gs}px ${gs}px`;
+        page.style.backgroundPosition = `${muralTransform.x}px ${muralTransform.y}px`;
+    }
 }
 
 function updateMuralZoomBadge() {

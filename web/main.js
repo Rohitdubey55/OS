@@ -364,10 +364,10 @@ function addLongPressListener(selector, callback) {
 // This drops the cold-start payload from ~2.7 MB to ~200 KB.
 const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js',     render: 'renderDashboard' },
-    calendar:      { src: 'view-calendar.js',      render: 'renderCalendar' },
+    calendar:      { src: 'view-calendar.js?v=20260621', render: 'renderCalendar' },
     tasks:         { src: 'view-tasks.js?v=20260619', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
-    habits:        { src: 'view-habits.js?v=20260619', render: 'renderHabits' },
+    habits:        { src: 'view-habits.js?v=20260621b', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
     vision:        { src: 'view-vision.js',        render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260619d', render: 'renderSettings' },
@@ -376,10 +376,10 @@ const VIEW_MAP = {
     notes:         { src: 'view-notes.js',         render: 'renderNotes' },
     chimes:        { src: 'view-chimes.js',        render: 'renderChimesView' },
     lifeCalendar:  { src: 'view-life-calendar.js', render: 'renderLifeCalendar' },
-    pomodoro:      { src: 'view-pomodoro.js',      render: 'renderPomodoro' },
+    pomodoro:      { src: 'view-pomodoro.js?v=20260621d', render: 'renderPomodoro' },
     books:         { src: 'view-books.js?v=20260619c', render: 'renderBooks' },
     reader:        { src: 'view-reader.js',        render: 'renderReader' },
-    mural:         { src: 'view-mural.js?v=20260619c', render: 'renderMural' },
+    mural:         { src: 'view-mural.js?v=20260621', render: 'renderMural' },
     tutor:         { src: 'view-tutor.js',         render: 'renderTutor' },
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js',   render: 'renderDailyTools' },
@@ -418,6 +418,10 @@ async function routeTo(viewName) {
     // Cleanup any active intervals from specialized views
     if (typeof clearLifeTimer === 'function') clearLifeTimer();
 
+    // Leaving/entering a view resets the Habits "manage" mode so Habits opens on the
+    // tracker by default (the manager is opened explicitly via its button).
+    window._hmActive = false;
+
     // The Mural editor hides the app chrome (header, nav, FAB) for a full-screen
     // canvas. If the user leaves the editor via the sidebar instead of its own
     // back button, exitMuralProject() never runs — so restore the chrome on every
@@ -444,6 +448,10 @@ async function routeTo(viewName) {
     }
 
     state.view = viewName;
+
+    // Show/hide the floating Pomodoro mini-timer: it appears on every page EXCEPT
+    // the Pomodoro page itself while a session is running.
+    if (typeof window._pomoRenderMini === 'function') window._pomoRenderMini();
 
     // Publish the view change so any subscribers (analytics, breadcrumb,
     // future per-view stores) react without us calling them by name.
@@ -1960,7 +1968,6 @@ document.addEventListener('click', async (e) => {
 
     else if (action === 'save-habit-modal') {
         const name = document.getElementById('mHabitName').value;
-        const cat = document.getElementById('mHabitCat').value;
         const freq = document.getElementById('mHabitFreq').value;
         const days = typeof getSelectedDays === 'function' ? getSelectedDays('mHabitDays') : '';
 
@@ -1988,7 +1995,7 @@ document.addEventListener('click', async (e) => {
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Creating habit...");
         const habitPayload = {
-            habit_name: name, category: cat,
+            habit_name: name,
             frequency: freq === 'weekly' ? ('weekly:' + days) : (freq || 'daily'),
             reminder_time: time,
             duration: duration,
@@ -2206,7 +2213,6 @@ document.addEventListener('click', async (e) => {
     else if (action === 'update-habit-modal') {
         const editId = btn.dataset.editId;
         const name = document.getElementById('mHabitName').value;
-        const cat = document.getElementById('mHabitCat').value;
         const freq = document.getElementById('mHabitFreq').value;
         const days = typeof getSelectedDays === 'function' ? getSelectedDays('mHabitDays') : '';
 
@@ -2234,7 +2240,7 @@ document.addEventListener('click', async (e) => {
         document.getElementById('universalModal').classList.add('hidden');
         showToast("Updating habit...");
         const updatePayload = {
-            habit_name: name, category: cat,
+            habit_name: name,
             frequency: freq === 'weekly' ? ('weekly:' + days) : (freq || 'daily'),
             reminder_time: time,
             duration: duration,
