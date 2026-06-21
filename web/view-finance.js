@@ -38,11 +38,26 @@ const FINANCE_REFINE_CSS = `<style>
 .finr-bar { height:6px; background:var(--surface-3); border-radius:999px; overflow:hidden; }
 .finr-bar i { display:block; height:100%; background:var(--primary); border-radius:999px; }
 .finr-empty { font-size:12.5px; color:var(--text-3); }
+/* Daily-spend bars: instant hover (and tap) tooltip with the amount */
+.fin-daycell { position:relative; width:100%; height:64px; display:flex; align-items:flex-end; cursor:pointer; }
+.fin-daytip { position:absolute; bottom:100%; left:50%; transform:translateX(-50%) translateY(-5px); background:var(--text-1); color:var(--surface-1); font-size:11px; font-weight:700; padding:3px 8px; border-radius:7px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .12s ease; z-index:6; box-shadow:var(--shadow-card); font-variant-numeric:tabular-nums; }
+.fin-daytip::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:5px solid transparent; border-top-color:var(--text-1); }
+.fin-daycell:hover .fin-daytip, .fin-daycell.show-tip .fin-daytip { opacity:1; }
 /* Unified "Add to Finance" type selector (in the modal — global, not scoped to .fin-pro) */
 .fin-add-segs { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:4px 0 16px; }
 .fin-add-seg { border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-2); padding:9px 6px; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer; transition:background .14s ease, color .14s ease, border-color .14s ease; }
 .fin-add-seg:hover { border-color:var(--border-strong); color:var(--text-1); }
 .fin-add-seg.active { background:var(--primary); border-color:var(--primary); color:#fff; box-shadow:var(--shadow-sm); }
+/* Custom category picker (shows each category's description inline while choosing) */
+.fin-cat-select { position:relative; margin-top:10px; }
+.fin-cat-trigger { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; text-align:left; cursor:pointer; appearance:none; -webkit-appearance:none; font:inherit; background:var(--surface-1); }
+.fin-cat-trigger .fin-cat-ph { color:var(--text-muted); }
+.fin-cat-caret { color:var(--text-muted); font-size:12px; flex-shrink:0; }
+.fin-cat-menu { margin-top:6px; border:1px solid var(--border-color); border-radius:10px; background:var(--surface-1); max-height:260px; overflow-y:auto; box-shadow:var(--shadow-card); padding:4px; }
+.fin-cat-opt { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; text-align:left; background:none; border:none; cursor:pointer; padding:9px 11px; border-radius:8px; }
+.fin-cat-opt:hover { background:var(--surface-2); }
+.fin-cat-opt-name { font-size:14px; font-weight:600; color:var(--text-1); }
+.fin-cat-opt-desc { font-size:12px; color:var(--text-muted); line-height:1.3; }
 @media (max-width:1099px){
   .fin-pro { max-width:none; }
   .fin-kpis { grid-template-columns:repeat(2,1fr); }
@@ -138,6 +153,58 @@ function _finScopeRadioHTML(selected) {
     </div>`;
 }
 
+// Map of category name → its description (set in Settings ▸ Budget ▸ Category Limits).
+function _finCatDescriptions() {
+  const map = {};
+  try {
+    const raw = state.data.settings && state.data.settings[0] && state.data.settings[0].category_budgets;
+    const data = raw ? (typeof raw === 'object' ? raw : JSON.parse(raw)) : {};
+    Object.keys(data).forEach(k => {
+      const v = data[k];
+      if (v && typeof v === 'object' && v.description) map[k] = v.description;
+    });
+  } catch (e) { /* no descriptions */ }
+  return map;
+}
+
+// Custom category picker — each option shows the category name AND its description
+// inline, so the description is visible WHILE choosing (a native <select> can't do this).
+function _finCatOutside(e) {
+  const wrap = document.getElementById('finCatSelect');
+  if (wrap && !wrap.contains(e.target)) {
+    const menu = document.getElementById('finCatMenu');
+    if (menu) menu.hidden = true;
+    document.removeEventListener('click', _finCatOutside);
+  }
+}
+window._finToggleCatMenu = function () {
+  const menu = document.getElementById('finCatMenu');
+  if (!menu) return;
+  if (menu.hidden) {
+    menu.hidden = false;
+    setTimeout(() => document.addEventListener('click', _finCatOutside), 0);
+  } else {
+    menu.hidden = true;
+    document.removeEventListener('click', _finCatOutside);
+  }
+};
+window._finPickCat = function (btn) {
+  const val = btn.getAttribute('data-val') || '';
+  const desc = btn.getAttribute('data-desc') || '';
+  const hidden = document.getElementById('mTxCategory');
+  if (hidden) hidden.value = val;
+  const label = document.getElementById('finCatLabel');
+  if (label) { label.textContent = val || 'Select Category'; label.classList.toggle('fin-cat-ph', !val); }
+  const box = document.getElementById('mTxCatDesc');
+  if (box) {
+    if (desc) { box.textContent = desc; box.style.display = 'block'; }
+    else { box.style.display = 'none'; box.textContent = ''; }
+  }
+  const menu = document.getElementById('finCatMenu');
+  if (menu) menu.hidden = true;
+  document.removeEventListener('click', _finCatOutside);
+};
+
 function _finAddModalHTML(type) {
   const labels = { expense: 'Expense', income: 'Income', fund: 'Fund', asset: 'Asset' };
   const segs = ['expense', 'income', 'fund', 'asset'].map(t =>
@@ -147,14 +214,27 @@ function _finAddModalHTML(type) {
   let body = '', save = '';
   if (type === 'expense' || type === 'income') {
     const categories = getAllFinanceCategories();
+    const catDesc = _finCatDescriptions();
+    const escA = (s) => escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;');
     body = `
       <input type="hidden" id="mTxType" value="${type}">
       <input type="date" class="input" id="mTxDate" value="${new Date().toISOString().slice(0, 10)}">
       <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)" style="margin-top:10px">
-      <select class="input" id="mTxCategory" style="margin-top:10px; width:100%">
-          <option value="">Select Category</option>
-          ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
-      </select>
+      <div class="fin-cat-select" id="finCatSelect">
+        <input type="hidden" id="mTxCategory" value="">
+        <button type="button" class="input fin-cat-trigger" onclick="_finToggleCatMenu()">
+          <span id="finCatLabel" class="fin-cat-ph">Select Category</span>
+          <span class="fin-cat-caret">▾</span>
+        </button>
+        <div class="fin-cat-menu" id="finCatMenu" hidden>
+          ${categories.length ? categories.map(c => `
+            <button type="button" class="fin-cat-opt" data-val="${escA(c)}" data-desc="${escA(catDesc[c] || '')}" onclick="_finPickCat(this)">
+              <span class="fin-cat-opt-name">${escapeHtml(c)}</span>
+              ${catDesc[c] ? `<span class="fin-cat-opt-desc">${escapeHtml(catDesc[c])}</span>` : ''}
+            </button>`).join('') : '<div style="padding:10px; color:var(--text-muted); font-size:13px">No categories yet</div>'}
+        </div>
+      </div>
+      <div id="mTxCatDesc" style="display:none; margin-top:6px; font-size:12.5px; color:var(--text-muted); padding-left:2px; line-height:1.4;"></div>
       ${type === 'expense' ? _finScopeRadioHTML('weekly') : ''}
       <input class="input" id="mTxNote" placeholder="Note (optional — e.g. 'Birthday dinner')" style="margin-top:10px">`;
     save = `<button class="btn primary" data-action="save-tx-modal">Save ${labels[type]}</button>`;
@@ -253,6 +333,7 @@ function _finWeeklyRailHTML(s, totalExp, weeklyBudget) {
       <div style="margin-top:8px"><span style="display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:${onTrack ? 'color-mix(in srgb, var(--success) 16%, transparent)' : 'color-mix(in srgb, var(--danger) 16%, transparent)'}; color:${onTrack ? 'var(--success)' : 'var(--danger)'}">${onTrack ? 'On track' : 'Over pace'}</span></div>
     </div>`;
 
+  const fullDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const chartCard = `
     <div class="finr-card">
       <div class="finr-h">Daily spend</div>
@@ -261,7 +342,10 @@ function _finWeeklyRailHTML(s, totalExp, weeklyBudget) {
           const h = v > 0 ? Math.max(4, Math.round((v / dayMax) * 64)) : 0;
           const isToday = i === (s.daysElapsed - 1);
           return `<div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
-            <div style="width:100%; height:64px; display:flex; align-items:flex-end;"><div title="₹${Math.round(v).toLocaleString()}" style="width:100%; height:${h}px; background:${isToday ? 'var(--primary)' : 'color-mix(in srgb, var(--primary) 35%, transparent)'}; border-radius:4px 4px 0 0;"></div></div>
+            <div class="fin-daycell" onclick="this.classList.toggle('show-tip')">
+              <span class="fin-daytip">${fullDays[i]} · ₹${Math.round(v).toLocaleString()}</span>
+              <div style="width:100%; height:${h}px; background:${isToday ? 'var(--primary)' : 'color-mix(in srgb, var(--primary) 35%, transparent)'}; border-radius:4px 4px 0 0;"></div>
+            </div>
             <div style="font-size:10px; color:var(--text-muted)">${dayLabels[i]}</div>
           </div>`;
         }).join('')}

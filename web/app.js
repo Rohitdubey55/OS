@@ -834,16 +834,18 @@ async function handleToggleTask(id) {
 
   // Optimistic update
   task.status = newStatus;
+  task.completed_at = newStatus === 'completed' ? new Date().toISOString() : null;
   if (state.currentView === 'tasks') renderTasksList(); // Re-render list immediately
   else if (state.currentView === 'dashboard') renderDashboard();
 
   try {
-    await apiPost({ action: "update", sheet: SHEETS.tasks, id, payload: { status: newStatus } });
+    await apiPost({ action: "update", sheet: SHEETS.tasks, id, payload: { status: newStatus, completed_at: task.completed_at } });
     toast("Updated");
     // We don't need to refreshAll if optimistic worked, but good for sync
   } catch (e) {
     // Revert
     task.status = newStatus === 'completed' ? 'pending' : 'completed';
+    task.completed_at = task.status === 'completed' ? new Date().toISOString() : null;
     toast("Failed to update task");
     console.error(e);
     await refreshAll();

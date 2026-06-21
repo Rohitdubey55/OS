@@ -108,6 +108,55 @@
                     return { success: true };
                 }
 
+                // ─────────────────────────────────────────────────────
+                // Bulk save for the Mural canvas. The view keeps all edits in memory
+                // and calls this once on "Save". We upsert every element (ids are TEXT,
+                // so client-generated ids persist as-is — connector from_id/to_id stay
+                // valid, no remap needed) and delete anything removed locally.
+                case 'syncMuralElements': {
+                    if (!user) throw new Error('Not authenticated');
+                    const projectId = payload && payload.project_id != null ? String(payload.project_id) : null;
+                    const elements = (payload && Array.isArray(payload.elements)) ? payload.elements : [];
+
+                    let rows = elements.map((el) => {
+                        const r = _normalizeForInsert('mural_elements', el, user.id);
+                        if (projectId != null) r.project_id = projectId;
+                        return r;
+                    });
+                    // De-duplicate by id — a temp-id collision would otherwise make the
+                    // upsert fail ("ON CONFLICT DO UPDATE cannot affect row a second time").
+                    const _seen = new Set();
+                    rows = rows.filter((r) => { const k = String(r.id); if (_seen.has(k)) return false; _seen.add(k); return true; });
+
+                    if (rows.length) {
+                        let res, tries = 0;
+                        do {
+                            res = await sb.from('mural_elements').upsert(rows, { onConflict: 'id' });
+                            if (!res.error) break;
+                            // A not-yet-migrated column (e.g. text_color, from_rx) fails the
+                            // whole batch — strip it from every row and retry so the save
+                            // still succeeds; that field just isn't persisted until migrated.
+                            const probe = _stripMissingCol(res.error, rows[0]);
+                            const missing = probe ? Object.keys(rows[0]).find((k) => !(k in probe)) : null;
+                            if (!missing) break;
+                            rows = rows.map((r) => { const c = { ...r }; delete c[missing]; return c; });
+                        } while (++tries < 10);
+                        if (res.error) throw res.error;
+                    }
+
+                    // Prune elements deleted locally: in DB for this project but not in payload.
+                    try {
+                        const keep = new Set(rows.map((r) => String(r.id)));
+                        let q = sb.from('mural_elements').select('id');
+                        if (projectId != null) q = q.eq('project_id', projectId);
+                        const { data: existing } = await q;
+                        const toDelete = (existing || []).map((e) => String(e.id)).filter((eid) => !keep.has(eid));
+                        if (toDelete.length) await sb.from('mural_elements').delete().in('id', toDelete);
+                    } catch (e) { /* best-effort cleanup */ }
+
+                    return { success: true, idMap: {} };
+                }
+
                 default:
                     throw new Error('Unknown action: ' + action);
             }
@@ -125,7 +174,7 @@
         settings: new Set(['id','user_id','name','dob','morning_message','afternoon_message','evening_message','weekly_budget','monthly_budget','category_budgets','theme_color','theme_mode','orientation_lock','ai_api_key','ai_model','nav_layout','dashboard_config','kpi_config','bento_config','dashboard_tiles','mobile_dashboard_tiles','notification_enabled','notification_sound','notification_method','quiet_hours_start','quiet_hours_end','diary_default_mood','diary_show_tasks','diary_show_habits','diary_show_expenses','task_default_view','task_categories','habit_routines','elevenlabs_api_key','elevenlabs_voice_id','tts_provider','tts_voice_id']),
         reader_settings: new Set(['id','user_id','background_color','font_color','font_family','font_size','line_spacing','fullscreen_mode','page_animation','auto_save_position']),
         pomodoro_settings: new Set(['id','user_id','work_duration','short_break','long_break','long_break_interval','sound_work','sound_break','auto_start_break','background_mode']),
-        tasks: new Set(['id','user_id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','duration','subtasks','pomodoro_estimate','pomodoro_length']),
+        tasks: new Set(['id','user_id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','completed_at','duration','subtasks','pomodoro_estimate','pomodoro_length']),
         habits: new Set(['id','user_id','habit_name','frequency','streak','reminder_time','emoji','pomodoro_sessions','pomodoro_length','alarm_enabled','routine']),
         habit_logs: new Set(['id','user_id','habit_id','date','status','pomodoro_completed']),
         expenses: new Set(['id','user_id','date','amount','category','description','type','payment_mode','budget_scope']),
@@ -137,6 +186,7 @@
         people: new Set(['id','user_id','name','relationship','birthday','phone','email','instagram','last_contact','next_interaction','is_favorite','is_priority','notes','contact_frequency']),
         people_debts: new Set(['id','user_id','person_id','amount','type','date','notes']),
         notes: new Set(['id','user_id','title','content','category','is_pinned','tags']),
+        wishlist: new Set(['id','user_id','title','type','price','priority','url','image_url','category','for_person','notes','status','got_at']),
         reminders: new Set(['id','user_id','title','reminder_datetime','is_active','linked_item_id']),
         book_library: new Set(['id','user_id','title','author','cover_url','category','status','date_added','date_completed','rating','notes','linked_goals','tags']),
         book_summaries: new Set(['id','user_id','book_id','book_title','author','summary_json','total_pages','linked_vision_ids','key_takeaways','action_items','memorable_quotes']),
@@ -153,7 +203,7 @@
         vision_tdp: new Set(['id','user_id','start_date','end_date','status','categories_json']),
         mural_projects: new Set(['id','user_id','title','category','bg_pattern','bg_color']),
         mural_categories: new Set(['id','user_id','name','color']),
-        mural_elements: new Set(['id','user_id','project_id','type','x','y','w','h','content','color','z_index','shape','from_id','to_id','connector_style','from_side','to_side','line_style','arrow_mode']),
+        mural_elements: new Set(['id','user_id','project_id','type','x','y','w','h','content','color','z_index','shape','from_id','to_id','connector_style','from_side','to_side','line_style','arrow_mode','font_size','text_color','bold','text_align','stroke_width','from_x','from_y','to_x','to_y','from_rx','from_ry','to_rx','to_ry','border_radius']),
         english_sessions: new Set(['id','user_id','date','duration_seconds','topic','level','score','weak_areas','strong_areas','summary','message_count']),
         english_messages: new Set(['id','user_id','session_id','role','content','correction','feedback','timestamp'])
     };
@@ -238,7 +288,7 @@
             'pomodoro_settings','pomodoro_sessions','pomodoro_badges','vision_tdp',
             'book_library','book_summaries','reader_settings','mural_projects',
             'mural_categories','mural_elements','vision_affirmations','ritual_logs',
-            'english_sessions','english_messages'
+            'english_sessions','english_messages','wishlist'
         ];
     }
 })();

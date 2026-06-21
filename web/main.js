@@ -365,23 +365,25 @@ function addLongPressListener(selector, callback) {
 const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js',     render: 'renderDashboard' },
     calendar:      { src: 'view-calendar.js',      render: 'renderCalendar' },
-    tasks:         { src: 'view-tasks.js?v=2',     render: 'renderTasks' },
-    finance:       { src: 'view-finance.js',       render: 'renderFinance' },
-    habits:        { src: 'view-habits.js?v=3',    render: 'renderHabits' },
-    diary:         { src: 'view-diary.js',         render: 'renderDiary' },
+    tasks:         { src: 'view-tasks.js?v=20260619', render: 'renderTasks' },
+    finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
+    habits:        { src: 'view-habits.js?v=20260619', render: 'renderHabits' },
+    diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
     vision:        { src: 'view-vision.js',        render: 'renderVision' },
-    settings:      { src: 'view-settings.js',      render: 'renderSettings' },
+    settings:      { src: 'view-settings.js?v=20260619d', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
     gym:           { src: 'view-gym.js',           render: 'renderGym' },
     notes:         { src: 'view-notes.js',         render: 'renderNotes' },
     chimes:        { src: 'view-chimes.js',        render: 'renderChimesView' },
     lifeCalendar:  { src: 'view-life-calendar.js', render: 'renderLifeCalendar' },
     pomodoro:      { src: 'view-pomodoro.js',      render: 'renderPomodoro' },
-    books:         { src: 'view-books.js',         render: 'renderBooks' },
+    books:         { src: 'view-books.js?v=20260619c', render: 'renderBooks' },
     reader:        { src: 'view-reader.js',        render: 'renderReader' },
-    mural:         { src: 'view-mural.js?v=20260314-v3', render: 'renderMural' },
+    mural:         { src: 'view-mural.js?v=20260619c', render: 'renderMural' },
     tutor:         { src: 'view-tutor.js',         render: 'renderTutor' },
-    meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' }
+    meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
+    dailyTools:    { src: 'view-daily-tools.js',   render: 'renderDailyTools' },
+    wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' }
 };
 
 const _loadedScripts = new Set();
@@ -416,6 +418,13 @@ async function routeTo(viewName) {
     // Cleanup any active intervals from specialized views
     if (typeof clearLifeTimer === 'function') clearLifeTimer();
 
+    // The Mural editor hides the app chrome (header, nav, FAB) for a full-screen
+    // canvas. If the user leaves the editor via the sidebar instead of its own
+    // back button, exitMuralProject() never runs — so restore the chrome on every
+    // navigation. (Only the Mural *canvas* re-hides it, and that is reached via
+    // openMuralProject, never directly through routeTo, so this is always safe.)
+    if (typeof window.hideMuralAppChrome === 'function') window.hideMuralAppChrome(false);
+
 
     // Hash Routing
     if (window.location.hash !== '#' + viewName) {
@@ -447,7 +456,8 @@ async function routeTo(viewName) {
         vision: 'Vision', people: 'People', books: 'Books',
         mural: 'Mural', settings: 'Settings', pomodoro: 'Pomodoro',
         notes: 'Notes', gym: 'Gym', chimes: 'Chimes', tutor: 'Tutor',
-        meditation: 'Meditate', reader: 'Reader', lifeCalendar: 'Life'
+        meditation: 'Meditate', reader: 'Reader', lifeCalendar: 'Life',
+        dailyTools: 'Daily Life Tools', wishlist: 'Wishlist'
     };
     const headerBar = document.querySelector('.main-header-bar');
     if (headerBar) headerBar.setAttribute('data-page-title', PAGE_TITLES[viewName] || '');

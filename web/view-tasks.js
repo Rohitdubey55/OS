@@ -186,9 +186,36 @@ function renderTasks(filter = '') {
     pendingByCat[cat].push(t);
   });
 
+  // Completed tasks stay visible at the BOTTOM of their category for 3 days — so you
+  // can see what you finished and feel good about it. Older ones move to the
+  // (toggleable) "Completed earlier" archive.
+  const _threeDaysAgo = Date.now() - 3 * 86400000;
+  const _isRecentDone = (t) => t.status === 'completed' && t.completed_at && new Date(t.completed_at).getTime() >= _threeDaysAgo;
+  const recentDone = completed.filter(_isRecentDone).sort((a, b) => String(b.completed_at).localeCompare(String(a.completed_at)));
+  const oldDone = completed.filter(t => !_isRecentDone(t));
+  recentDone.forEach(t => {
+    const cat = t.category || 'Uncategorized';
+    if (!pendingByCat[cat]) pendingByCat[cat] = [];
+    pendingByCat[cat].push(t);   // after the pending ones → sits at the bottom
+  });
+
   const doneCount = (state.data.tasks || []).filter(t => t.status === 'completed').length;
   const totalCount = (state.data.tasks || []).length;
   const pctDone = totalCount ? Math.round((doneCount / totalCount) * 100) : 0;
+
+  // "This week" progress — tasks due in the current week (Mon–Sun): done vs total.
+  // This is what the top progress bar tracks, so it climbs as you clear the week.
+  const _tkWeek = (() => {
+    const now = new Date();
+    const dow = now.getDay();
+    const mon = new Date(now); mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1)); mon.setHours(0, 0, 0, 0);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23, 59, 59, 999);
+    const monS = mon.toISOString().slice(0, 10), sunS = sun.toISOString().slice(0, 10);
+    const inWk = (state.data.tasks || []).filter(t => t.due_date && t.due_date >= monS && t.due_date <= sunS);
+    const total = inWk.length;
+    const done = inWk.filter(t => t.status === 'completed').length;
+    return { total, done, pct: total ? Math.round(done / total * 100) : 0 };
+  })();
 
   document.getElementById('main').innerHTML = `
   <style>
@@ -207,6 +234,26 @@ function renderTasks(filter = '') {
     .tk-icon-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border:none; background:transparent; border-radius:10px; cursor:pointer; color:var(--text-3); transition:all .15s; }
     .tk-icon-btn:hover,.tk-icon-btn:active { background:var(--surface-2); color:var(--text-1); }
     .tk-icon-btn.active { color:var(--primary); background:var(--primary-soft,rgba(79,70,229,.08)); }
+
+    /* ══ THIS WEEK PROGRESS BAR ══ */
+    .tk-weekbar { margin:0 16px 12px; padding:11px 14px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; box-shadow:var(--shadow-xs); }
+    .tk-weekbar-top { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:8px; }
+    .tk-weekbar-label { font-size:12px; font-weight:700; color:var(--text-2); text-transform:uppercase; letter-spacing:.5px; }
+    .tk-weekbar-val { font-size:13px; font-weight:600; color:var(--text-1); font-variant-numeric:tabular-nums; }
+    .tk-weekbar-track { height:8px; background:var(--surface-3); border-radius:999px; overflow:hidden; }
+    .tk-weekbar-fill { height:100%; border-radius:999px; background:linear-gradient(90deg, var(--primary), var(--success,#10B981)); width:0; transition:width .6s cubic-bezier(.2,.8,.2,1); }
+    .tk-weekbar-fill.pulse { animation:tkWeekPulse .65s ease; }
+    @keyframes tkWeekPulse { 0%{box-shadow:0 0 0 0 rgba(16,185,129,.55)} 100%{box-shadow:0 0 0 9px rgba(16,185,129,0)} }
+
+    /* ══ COMPLETED-THIS-WEEK CHART (right pane) ══ */
+    .tkp-weekchart { display:flex; align-items:flex-end; gap:6px; height:84px; margin-top:6px; }
+    .tkp-wc-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; justify-content:flex-end; }
+    .tkp-wc-n { font-size:10.5px; font-weight:700; color:var(--text-2); min-height:13px; line-height:1; }
+    .tkp-wc-barwrap { width:100%; height:60px; display:flex; align-items:flex-end; }
+    .tkp-wc-bar { width:100%; border-radius:5px 5px 0 0; background:color-mix(in srgb, var(--success,#10B981) 55%, transparent); transition:height .45s cubic-bezier(.2,.8,.2,1); }
+    .tkp-wc-bar.today { background:var(--success,#10B981); }
+    .tkp-wc-d { font-size:10px; color:var(--text-3); }
+    .tkp-wc-foot { font-size:11.5px; color:var(--text-3); margin-top:10px; text-align:center; }
 
     /* ══ QUICK CAPTURE ══ */
     .tk-capture-wrap { padding:0 16px 10px; flex-shrink:0; }
@@ -503,8 +550,9 @@ function renderTasks(filter = '') {
     <!-- Header -->
     <div class="tk-header">
       <div class="tk-header-left">
-        <div class="tk-stat"><span class="tk-stat-n">${totalPending}</span><span class="tk-stat-l">open</span></div>
-        ${pctDone > 0 ? `<div class="tk-stat-sep"></div><div class="tk-stat"><span class="tk-stat-n">${pctDone}%</span><span class="tk-stat-l">done</span></div>` : ''}
+        <div class="tk-stat" title="Open tasks — created but not yet completed (includes recurring tasks due today)."><span class="tk-stat-n">${totalPending}</span><span class="tk-stat-l">open</span></div>
+        <div class="tk-stat-sep"></div>
+        <div class="tk-stat" title="Progress on tasks due THIS WEEK (Mon–Sun): ${_tkWeek.done} of ${_tkWeek.total} done. Resets each week — not a lifetime number."><span class="tk-stat-n">${_tkWeek.pct}%</span><span class="tk-stat-l">this week</span></div>
       </div>
       <div class="tk-header-right">
         <button class="tk-icon-btn ${_itemSelectionMode ? 'active' : ''}" onclick="toggleTaskSelectionMode()" title="Select mode">
@@ -518,6 +566,15 @@ function renderTasks(filter = '') {
           <span>Add</span>
         </button>
       </div>
+    </div>
+
+    <!-- This week progress — fills as you complete tasks due this week (Mon–Sun). -->
+    <div class="tk-weekbar" title="Tasks due this week (Mon–Sun): completed vs total. The bar fills as you check off this week's tasks, and resets each week.">
+      <div class="tk-weekbar-top">
+        <span class="tk-weekbar-label">This week</span>
+        <span class="tk-weekbar-val">${_tkWeek.total ? `${_tkWeek.done} of ${_tkWeek.total} done · ${_tkWeek.pct}%` : 'Nothing due this week'}</span>
+      </div>
+      <div class="tk-weekbar-track"><div class="tk-weekbar-fill" id="tkWeekFill" data-pct="${_tkWeek.pct}" style="width:0%"></div></div>
     </div>
 
     ${_itemSelectionMode ? `
@@ -586,7 +643,7 @@ function renderTasks(filter = '') {
 
       ${recurringToday.length > 0 ? tkSectionHTML('__recurring_today__', 'Recurring Today', recurringToday, true) : ''}
 
-      ${pending.length === 0 && recurringToday.length === 0 ? `
+      ${Object.keys(pendingByCat).length === 0 && recurringToday.length === 0 ? `
         <div class="tk-empty">
           <div class="tk-empty-icon">✓</div>
           <div class="tk-empty-title">All clear!</div>
@@ -596,7 +653,7 @@ function renderTasks(filter = '') {
           tkSectionHTML(cat, cat, pendingByCat[cat], false, true, false, idx)
         ).join('')}
 
-      ${_showCompletedTasks && completed.length > 0 ? tkSectionHTML('__completed__', `Completed (${completed.length})`, completed, false) : ''}
+      ${_showCompletedTasks && oldDone.length > 0 ? tkSectionHTML('__completed__', `Completed earlier (${oldDone.length})`, oldDone, false) : ''}
 
       ${recurringOther.length > 0 ? tkSectionHTML('__recurring_other__', 'Other Recurring', recurringOther, true, false, true) : ''}
 
@@ -608,6 +665,20 @@ function renderTasks(filter = '') {
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
   _attachTaskSwipes();
+  _tkAnimateWeekBar();
+}
+
+// Animate the "This week" bar: fill from the previous value to the new one, and
+// pulse green when it climbs (e.g. right after you complete a task this week).
+function _tkAnimateWeekBar() {
+  const fill = document.getElementById('tkWeekFill');
+  if (!fill) return;
+  const target = Number(fill.dataset.pct) || 0;
+  const prev = (typeof window._tkWeekPrevPct === 'number') ? window._tkWeekPrevPct : 0;
+  fill.style.width = prev + '%';
+  requestAnimationFrame(() => requestAnimationFrame(() => { fill.style.width = target + '%'; }));
+  if (target > prev) { fill.classList.add('pulse'); setTimeout(() => { fill.classList.remove('pulse'); }, 700); }
+  window._tkWeekPrevPct = target;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -1072,6 +1143,34 @@ function tkInsightsHTML() {
   const p2 = pending.filter(t => t.priority === 'P2').length;
   const p3 = pending.filter(t => t.priority === 'P3').length;
   const dues = pending.filter(t => t.due_date).sort((a, b) => a.due_date < b.due_date ? -1 : 1).slice(0, 5);
+
+  // FOCUS pie = THIS MONTH: tasks due this month, done vs total (not lifetime).
+  const _mNow = new Date();
+  const _mStart = new Date(_mNow.getFullYear(), _mNow.getMonth(), 1).toISOString().slice(0, 10);
+  const _mEnd = new Date(_mNow.getFullYear(), _mNow.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const _inMonth = all.filter(t => t.due_date && t.due_date >= _mStart && t.due_date <= _mEnd);
+  const monthTotal = _inMonth.length;
+  const monthDone = _inMonth.filter(t => t.status === 'completed').length;
+  const monthPct = monthTotal ? Math.round(monthDone / monthTotal * 100) : 0;
+
+  // Weekly completed chart — count of tasks completed on each day of the current
+  // week (Mon–Sun). Recurring tasks use completed_dates; one-off completed tasks
+  // use updated_at as the completion date.
+  const _wNow = new Date();
+  const _wDow = _wNow.getDay();
+  const _wMon = new Date(_wNow); _wMon.setDate(_wNow.getDate() - (_wDow === 0 ? 6 : _wDow - 1)); _wMon.setHours(0, 0, 0, 0);
+  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+  const _bucket = (dObj) => { const d0 = new Date(dObj); if (isNaN(d0)) return; d0.setHours(0, 0, 0, 0); const diff = Math.round((d0 - _wMon) / 86400000); if (diff >= 0 && diff < 7) dayCounts[diff]++; };
+  all.forEach(t => {
+    let cd = t.completed_dates;
+    if (cd && typeof cd === 'string') { try { cd = JSON.parse(cd); } catch (e) { cd = String(t.completed_dates).split(',').map(s => s.trim()).filter(Boolean); } }
+    if (Array.isArray(cd) && cd.length) { cd.forEach(ds => _bucket(String(ds).length <= 10 ? ds + 'T00:00:00' : ds)); }
+    else if (t.status === 'completed' && (t.completed_at || t.updated_at)) { _bucket(t.completed_at || t.updated_at); }
+  });
+  const _dayMax = Math.max(...dayCounts, 1);
+  const _wkDone = dayCounts.reduce((a, b) => a + b, 0);
+  const _todayIdx = (_wDow === 0 ? 6 : _wDow - 1);
+
   const C = 2 * Math.PI * 42;
   const dueRow = t => {
     const diff = Math.round((new Date(t.due_date) - new Date(today)) / 86400000);
@@ -1082,34 +1181,44 @@ function tkInsightsHTML() {
   };
   return `
   <div class="tkp-card">
-    <div class="tkp-h">Focus</div>
+    <div class="tkp-h">This month</div>
     <div class="tkp-focus">
-      <div class="tkp-ring">
+      <div class="tkp-ring" title="Tasks due this month (${_mStart.slice(0,7)}): ${monthDone} of ${monthTotal} done. Resets monthly — not a lifetime number.">
         <svg width="92" height="92"><circle cx="46" cy="46" r="42" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
-          <circle cx="46" cy="46" r="42" fill="none" stroke="var(--primary)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}" transform="rotate(-90 46 46)"/></svg>
-        <div class="tkp-pct"><b>${pct}%</b><span>done</span></div>
+          <circle cx="46" cy="46" r="42" fill="none" stroke="var(--primary)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - monthPct / 100)}" transform="rotate(-90 46 46)"/></svg>
+        <div class="tkp-pct"><b>${monthPct}%</b><span>this month</span></div>
       </div>
-      <div class="tkp-fmeta"><div><b>${doneCount}</b> of ${totalCount} complete</div><div><b>${pending.length}</b> still open</div></div>
+      <div class="tkp-fmeta"><div title="Tasks due this month that are completed"><b>${monthDone}</b> of ${monthTotal} this month</div><div title="Tasks not yet completed (all)"><b>${pending.length}</b> still open</div></div>
     </div>
-  </div>
-  <div class="tkp-card">
-    <div class="tkp-h">Overview</div>
-    <div class="tkp-kpis">
-      <div class="tkp-kpi"><div class="tkp-kn">${pending.length}</div><div class="tkp-kl">Open</div></div>
-      <div class="tkp-kpi"><div class="tkp-kn" style="color:#B42318">${overdue}</div><div class="tkp-kl">Overdue</div></div>
-      <div class="tkp-kpi" onclick="tkSetPrio('P1')" style="cursor:pointer"><div class="tkp-kn" style="color:#DC2626">${urgent}</div><div class="tkp-kl">Urgent ›</div></div>
-      <div class="tkp-kpi"><div class="tkp-kn" style="color:var(--primary)">${dueToday}</div><div class="tkp-kl">Due today</div></div>
-    </div>
-  </div>
-  ${dues.length ? `<div class="tkp-card"><div class="tkp-h">Due soon</div><div class="tkp-dues">${dues.map(dueRow).join('')}</div></div>` : ''}
-  <div class="tkp-card">
-    <div class="tkp-h">By priority</div>
-    <div class="tkp-bar">${p1 ? `<i style="background:#DC2626;flex:${p1}"></i>` : ''}${p2 ? `<i style="background:#D97706;flex:${p2}"></i>` : ''}${p3 ? `<i style="background:#059669;flex:${p3}"></i>` : ''}${(p1 + p2 + p3) === 0 ? `<i style="background:var(--surface-3);flex:1"></i>` : ''}</div>
-    <div class="tkp-leg"><span><i style="background:#DC2626"></i>High <b>${p1}</b></span><span><i style="background:#D97706"></i>Med <b>${p2}</b></span><span><i style="background:#059669"></i>Low <b>${p3}</b></span></div>
   </div>
   <div class="tkp-card tkp-focuscta" onclick="if(typeof routeTo==='function')routeTo('pomodoro')">
     <div><div class="tkp-h" style="margin:0">Focus session</div><div style="font-size:12.5px;color:var(--text-3);margin-top:3px">Start a Pomodoro →</div></div>
     <span class="tkp-go"><i data-lucide="play" style="width:13px;height:13px"></i></span>
+  </div>
+  ${dues.length ? `<div class="tkp-card"><div class="tkp-h">Due soon</div><div class="tkp-dues">${dues.map(dueRow).join('')}</div></div>` : ''}
+  <div class="tkp-card">
+    <div class="tkp-h">Completed this week</div>
+    <div class="tkp-weekchart">
+      ${dayCounts.map((c, i) => {
+        const h = c > 0 ? Math.max(6, Math.round(c / _dayMax * 60)) : 0;
+        return `<div class="tkp-wc-col"><div class="tkp-wc-n">${c || ''}</div><div class="tkp-wc-barwrap"><div class="tkp-wc-bar ${i === _todayIdx ? 'today' : ''}" style="height:${h}px" title="${c} completed"></div></div><div class="tkp-wc-d">${['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}</div></div>`;
+      }).join('')}
+    </div>
+    <div class="tkp-wc-foot">${_wkDone} task${_wkDone === 1 ? '' : 's'} completed this week</div>
+  </div>
+  <div class="tkp-card">
+    <div class="tkp-h">Overview</div>
+    <div class="tkp-kpis">
+      <div class="tkp-kpi" title="Tasks created but not yet completed"><div class="tkp-kn">${pending.length}</div><div class="tkp-kl">Open</div></div>
+      <div class="tkp-kpi" title="Open tasks past their due date"><div class="tkp-kn" style="color:#B42318">${overdue}</div><div class="tkp-kl">Overdue</div></div>
+      <div class="tkp-kpi" onclick="tkSetPrio('P1')" style="cursor:pointer" title="Open high-priority (P1) tasks — tap to filter to them"><div class="tkp-kn" style="color:#DC2626">${urgent}</div><div class="tkp-kl">Urgent ›</div></div>
+      <div class="tkp-kpi" title="Open tasks due today"><div class="tkp-kn" style="color:var(--primary)">${dueToday}</div><div class="tkp-kl">Due today</div></div>
+    </div>
+  </div>
+  <div class="tkp-card">
+    <div class="tkp-h">By priority</div>
+    <div class="tkp-bar">${p1 ? `<i style="background:#DC2626;flex:${p1}"></i>` : ''}${p2 ? `<i style="background:#D97706;flex:${p2}"></i>` : ''}${p3 ? `<i style="background:#059669;flex:${p3}"></i>` : ''}${(p1 + p2 + p3) === 0 ? `<i style="background:var(--surface-3);flex:1"></i>` : ''}</div>
+    <div class="tkp-leg"><span><i style="background:#DC2626"></i>High <b>${p1}</b></span><span><i style="background:#D97706"></i>Med <b>${p2}</b></span><span><i style="background:#059669"></i>Low <b>${p3}</b></span></div>
   </div>`;
 }
 
@@ -1233,13 +1342,18 @@ window.toggleTaskOptimistic = async function (id) {
     await new Promise(r => setTimeout(r, 400));
   }
   t.status = newStatus;
-  _reRenderTaskRow(id);
+  t.completed_at = newStatus === 'completed' ? new Date().toISOString() : null;
+  // Full re-render (not just the row) so the bar / pie / weekly chart / overview
+  // all update instantly, and the finished task moves to the bottom of its category.
+  renderTasks(typeof _getSearchValue === 'function' ? _getSearchValue() : '');
   try {
-    await apiCall('update', 'tasks', { status: newStatus }, id);
+    await apiCall('update', 'tasks', { status: newStatus, completed_at: t.completed_at }, id);
     if (newStatus === 'completed') showToast('Task completed! ✓');
   } catch (e) {
-    t.status = newStatus === 'completed' ? 'pending' : 'completed';
-    _reRenderTaskRow(id);
+    const revert = newStatus === 'completed' ? 'pending' : 'completed';
+    t.status = revert;
+    t.completed_at = revert === 'completed' ? new Date().toISOString() : null;
+    renderTasks(typeof _getSearchValue === 'function' ? _getSearchValue() : '');
     showToast('Error updating task');
   }
 };

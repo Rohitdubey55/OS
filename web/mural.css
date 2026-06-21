@@ -500,11 +500,18 @@
 
 .mural-element.selected {
     outline: 2px solid var(--mural-accent);
-    outline-offset: 2px;
-    box-shadow:
-        0 4px 12px rgba(0, 0, 0, 0.1),
-        0 12px 32px rgba(0, 0, 0, 0.08),
-        0 0 0 4px var(--mural-accent-glow);
+    outline-offset: 1px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.10);
+}
+
+/* Mural draws its own selection ring, so suppress the GLOBAL :focus-visible outline
+   (a themed --saas-accent ring with !important) that otherwise stacks an extra
+   coloured boundary on a focused shape or its editable text. */
+.mural-element:focus,
+.mural-element:focus-visible,
+.mural-element-content:focus,
+.mural-element-content:focus-visible {
+    outline: none !important;
 }
 
 .mural-element.text-el {
@@ -527,7 +534,7 @@
 }
 
 .mural-element.shape-el {
-    border: 2px solid var(--mural-accent);
+    border: 1.5px solid rgba(15, 23, 42, 0.18);
     border-radius: var(--mural-radius-sm);
     background: var(--mural-accent-soft);
     min-width: 20px;
@@ -571,6 +578,38 @@
 .mural-element.shape-el.star {
     clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
 }
+
+/* Rectangles: sharp corners vs rounded (rounded radius is adjustable inline) */
+.mural-element.shape-el.rect { border-radius: 0; }
+.mural-element.shape-el.rounded { border-radius: 16px; }
+
+/* Additional shapes */
+.mural-element.shape-el.ellipse { border-radius: 50%; }
+.mural-element.shape-el.pentagon { clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
+.mural-element.shape-el.parallelogram { clip-path: polygon(20% 0%, 100% 0%, 80% 100%, 0% 100%); }
+.mural-element.shape-el.arrow { clip-path: polygon(0% 30%, 60% 30%, 60% 0%, 100% 50%, 60% 100%, 60% 70%, 0% 70%); }
+.mural-element.shape-el.octagon { clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); }
+.mural-element.shape-el.plus { clip-path: polygon(35% 0%, 65% 0%, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0% 65%, 0% 35%, 35% 35%); }
+/* Clip-path shapes can't render a border cleanly, so drop it for them */
+.mural-element.shape-el.triangle,
+.mural-element.shape-el.diamond,
+.mural-element.shape-el.hexagon,
+.mural-element.shape-el.star,
+.mural-element.shape-el.pentagon,
+.mural-element.shape-el.parallelogram,
+.mural-element.shape-el.arrow,
+.mural-element.shape-el.octagon,
+.mural-element.shape-el.plus { border: none; }
+
+/* Shape picker — compact icon grid */
+.mural-shape-grid { display: grid; grid-template-columns: repeat(5, 34px); gap: 4px; padding: 4px; }
+.mural-shape-btn {
+    width: 34px; height: 34px; border-radius: 8px; border: none; background: transparent;
+    color: var(--text-2); display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: var(--mural-transition); -webkit-tap-highlight-color: transparent;
+}
+.mural-shape-btn:hover { background: var(--surface-2); color: var(--text-1); }
+.mural-shape-sep { height: 1px; background: var(--border-color); margin: 5px 6px; opacity: .5; }
 
 .mural-element.icon-el {
     background: transparent !important;
@@ -687,16 +726,30 @@
    ══════════════════════════════════════ */
 .mural-context-menu {
     position: fixed;
-    background: var(--mural-glass-bg);
-    backdrop-filter: var(--mural-blur);
-    -webkit-backdrop-filter: var(--mural-blur);
-    border: 1px solid var(--mural-glass-border);
+    /* Theme-aware opaque surface. Was --mural-glass-bg, which keys off the OS
+       prefers-color-scheme — so on a dark OS the menu went dark while the app's
+       light theme kept text dark → unreadable dark-on-dark. */
+    background: var(--surface-1);
+    border: 1px solid var(--border-color);
     border-radius: var(--mural-radius-md);
     padding: 6px;
     box-shadow: var(--mural-shadow-elevated);
     z-index: 2000;
     min-width: 180px;
+    /* Never exceed the viewport — scroll instead of being clipped at the bottom. */
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
     animation: muralScaleIn 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Compact icon buttons used inside the connector menu (keeps it short). */
+.mural-context-menu .mfp-sq { display: flex; align-items: center; justify-content: center; }
+.mural-context-menu .mfp-sq i,
+.mural-context-menu .mfp-sq svg { width: 17px; height: 17px; }
+.mural-context-menu .mfp-sq.active {
+    background: var(--mural-accent-soft, #eef0ff);
+    border-color: var(--mural-accent, #6366f1);
+    color: var(--mural-accent, #6366f1);
 }
 
 .mural-context-item {
@@ -933,10 +986,9 @@
    DASHBOARD — Project Management
    ══════════════════════════════════════ */
 .mural-dashboard {
-    padding: 20px;
-    max-width: 960px;
+    padding: 8px 28px 120px;
+    max-width: 1180px;
     margin: 0 auto;
-    padding-bottom: 120px;
     animation: muralFadeIn 0.3s ease;
 }
 
@@ -944,45 +996,58 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 28px;
-    padding: 4px 0;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
 }
 
 .mural-header-left {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 10px;
 }
 
-.mural-header-title {
-    font-size: 32px;
-    font-weight: 800;
-    letter-spacing: -0.03em;
-    background: linear-gradient(135deg, var(--text-1) 0%, var(--mural-accent) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+.mural-h2 {
+    font-size: 20px;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    color: var(--text-1);
+    margin: 0;
 }
 
-.mural-header-subtitle {
-    font-size: 14px;
+.mural-count-badge {
+    font-size: 12.5px;
+    font-weight: 700;
     color: var(--text-3);
-    font-weight: 400;
+    background: var(--surface-2);
+    border: 1px solid var(--border-color);
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
 }
 
 .mural-header-actions {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
 }
 
-.mural-header-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: var(--mural-radius-md);
+.mural-tool-cluster {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    background: var(--surface-2);
     border: 1px solid var(--border-color);
-    background: var(--surface-1);
-    color: var(--text-2);
+    border-radius: 12px;
+}
+
+.mural-header-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    border: none;
+    background: transparent;
+    color: var(--text-3);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -992,36 +1057,41 @@
 }
 
 .mural-header-btn:hover {
-    background: var(--surface-2);
+    background: var(--surface-1);
     color: var(--text-1);
-    border-color: var(--text-3);
+    box-shadow: var(--mural-shadow-card);
 }
 
 .mural-header-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.94);
+}
+
+.mural-header-btn svg {
+    width: 17px;
+    height: 17px;
 }
 
 .mural-add-btn {
     height: 40px;
     padding: 0 18px;
-    border-radius: var(--mural-radius-md);
+    border-radius: 11px;
     border: none;
-    background: var(--mural-accent);
+    background: linear-gradient(135deg, var(--mural-accent), #8B5CF6);
     color: white;
-    font-weight: 600;
+    font-weight: 650;
     font-size: 14px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     transition: var(--mural-transition);
+    box-shadow: 0 2px 10px var(--mural-accent-glow);
     -webkit-tap-highlight-color: transparent;
 }
 
 .mural-add-btn:hover {
-    background: #4F46E5;
     transform: translateY(-1px);
-    box-shadow: 0 4px 16px var(--mural-accent-glow);
+    box-shadow: 0 6px 20px var(--mural-accent-glow);
 }
 
 .mural-add-btn:active {
@@ -1050,22 +1120,34 @@
 }
 
 .mural-cat-pill {
-    padding: 7px 16px;
-    border-radius: 100px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
+    border-radius: 999px;
     border: 1px solid var(--border-color);
     background: var(--surface-1);
     color: var(--text-2);
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 550;
     cursor: pointer;
     white-space: nowrap;
     transition: var(--mural-transition);
     -webkit-tap-highlight-color: transparent;
 }
 
+.mural-cat-pill .mcp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--cat-dot, var(--text-3));
+    flex-shrink: 0;
+}
+
 .mural-cat-pill:hover {
-    border-color: var(--mural-accent);
-    color: var(--mural-accent);
+    color: var(--text-1);
+    background: var(--surface-2);
+    border-color: var(--text-3);
 }
 
 .mural-cat-pill:active {
@@ -1073,154 +1155,157 @@
 }
 
 .mural-cat-pill.active {
-    background: var(--mural-accent);
-    color: white;
-    border-color: var(--mural-accent);
-    box-shadow: 0 2px 8px var(--mural-accent-glow);
+    background: var(--text-1);
+    color: var(--surface-1);
+    border-color: var(--text-1);
+}
+
+.mural-cat-pill.active .mcp-dot {
+    background: var(--surface-1);
 }
 
 /* Project Grid */
 .mural-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 18px;
 }
 
+/* ── Card ── */
 .mural-project-card {
     background: var(--surface-1);
     border: 1px solid var(--border-color);
-    border-radius: var(--mural-radius-lg);
-    padding: 20px;
+    border-radius: 16px;
+    overflow: hidden;
+    cursor: pointer;
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    transition: var(--mural-transition);
-    position: relative;
-    cursor: pointer;
-    overflow: hidden;
+    transition: transform var(--mural-transition), box-shadow var(--mural-transition), border-color var(--mural-transition);
     -webkit-tap-highlight-color: transparent;
-}
-
-.mural-project-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--mural-accent), #8B5CF6);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.mural-project-card:hover::before {
-    opacity: 1;
 }
 
 .mural-project-card:hover {
-    transform: translateY(-3px);
+    transform: translateY(-4px);
     box-shadow: var(--mural-shadow-card-hover);
-    border-color: var(--mural-accent-soft);
+    border-color: color-mix(in srgb, var(--mural-accent) 40%, var(--border-color));
 }
 
 .mural-project-card:active {
-    transform: translateY(-1px) scale(0.99);
+    transform: translateY(-1px);
 }
 
-.mural-project-card-preview {
-    width: 100%;
-    height: 100px;
-    background: var(--surface-2);
-    border-radius: var(--mural-radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-3);
-    font-size: 28px;
-    overflow: hidden;
+/* Thumbnail — a mini whiteboard with scattered sticky notes */
+.mc-thumb {
     position: relative;
+    height: 150px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--surface-2);
+    background-image:
+        radial-gradient(circle, var(--border-color) 1px, transparent 1.4px),
+        linear-gradient(135deg, color-mix(in srgb, var(--mural-accent) 5%, var(--surface-2)), var(--surface-2));
+    background-size: 18px 18px, 100% 100%;
 }
 
-.mural-project-card-preview .preview-dots {
+.mc-sticky {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 7px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.mc-thumb-empty {
+    position: absolute;
+    inset: 0;
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: center;
-    padding: 12px;
-}
-
-.mural-project-card-preview .preview-dot {
-    width: 16px;
-    height: 16px;
-    border-radius: 3px;
-    opacity: 0.7;
-}
-
-.mural-project-info {
-    flex: 1;
-}
-
-.mural-project-name {
-    font-size: 16px;
-    font-weight: 650;
-    margin-bottom: 6px;
-    color: var(--text-1);
-    line-height: 1.3;
-}
-
-.mural-project-meta {
-    font-size: 12px;
-    color: var(--text-3);
-    display: flex;
+    flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-}
-
-.mural-project-meta-dot {
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    background: var(--text-3);
-    display: inline-block;
-}
-
-.mural-project-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.mural-project-el-count {
-    font-size: 11px;
     color: var(--text-3);
-    background: var(--surface-2);
-    padding: 3px 8px;
-    border-radius: 100px;
-    font-weight: 500;
 }
 
-.mural-project-del {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--mural-radius-sm);
+.mc-thumb-empty svg { width: 22px; height: 22px; opacity: 0.5; }
+.mc-thumb-empty span { font-size: 12px; font-weight: 500; opacity: 0.75; }
+
+.mc-thumb-actions {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 6px;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity var(--mural-transition), transform var(--mural-transition);
+}
+
+.mural-project-card:hover .mc-thumb-actions {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.mc-iconbtn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-1);
+    color: var(--text-2);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-3);
-    transition: var(--mural-transition);
-    border: none;
-    background: transparent;
     cursor: pointer;
+    box-shadow: var(--mural-shadow-card);
+    transition: var(--mural-transition);
     -webkit-tap-highlight-color: transparent;
 }
 
-.mural-project-del:hover {
-    background: var(--mural-danger-soft);
-    color: var(--mural-danger);
+.mc-iconbtn svg { width: 15px; height: 15px; }
+.mc-iconbtn:hover { color: var(--text-1); transform: translateY(-1px); }
+.mc-iconbtn.mc-del:hover { color: var(--mural-danger); background: var(--mural-danger-soft); border-color: transparent; }
+
+/* Body */
+.mc-body {
+    padding: 13px 15px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
 }
 
-.mural-project-del:active {
-    transform: scale(0.9);
+.mc-title {
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--text-1);
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mc-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.mc-chip {
+    font-size: 11.5px;
+    font-weight: 650;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.mc-date { font-size: 12px; color: var(--text-3); }
+
+.mc-count {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Empty State */
@@ -1456,16 +1541,15 @@
     }
 
     .mural-project-card {
-        padding: 16px;
-        border-radius: var(--mural-radius-md);
+        border-radius: 14px;
     }
 
-    .mural-project-card-preview {
-        height: 72px;
+    .mc-thumb {
+        height: 116px;
     }
 
-    .mural-project-name {
-        font-size: 14px;
+    .mc-title {
+        font-size: 14.5px;
     }
 
     /* Canvas — Mobile toolbar */
@@ -1592,6 +1676,12 @@
     .mural-project-del {
         width: 36px;
         height: 36px;
+    }
+
+    /* No hover on touch — keep the card edit/delete actions visible */
+    .mc-thumb-actions {
+        opacity: 1;
+        transform: none;
     }
 
     .mural-back-btn {
@@ -1963,3 +2053,29 @@ input:checked + .slider:before {
     border-color: var(--mural-accent);
     box-shadow: 0 0 0 3px var(--mural-accent-glow);
 }
+
+/* Icons scale with their element box so they can be resized like shapes/stickies */
+.mural-element.icon-el { display: flex; align-items: center; justify-content: center; }
+.mural-element.icon-el .mural-element-content { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.mural-element.icon-el svg { width: 78%; height: 78%; }
+
+/* Draggable toolbar grip (#2) */
+.mural-tool-grip { display: flex; align-items: center; justify-content: center; width: 18px; cursor: grab; color: var(--text-3, #94a3b8); flex-shrink: 0; touch-action: none; }
+.mural-tool-grip:active { cursor: grabbing; }
+
+/* Format panel (#4 text, #7 line/arrow, fill) */
+.mural-format-pop { display: none; position: absolute; bottom: 120%; right: 0; width: 244px; background: var(--surface-1, #fff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.22); padding: 12px; z-index: 10000; }
+.mural-format-pop.open { display: block; }
+.mfp-sec { padding: 8px 0; border-bottom: 1px solid var(--border-color, #eef2f6); }
+.mfp-sec:last-child { border-bottom: none; padding-bottom: 0; }
+.mfp-sec:first-child { padding-top: 0; }
+.mfp-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3, #94a3b8); margin-bottom: 7px; }
+.mfp-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.mfp-sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.14); cursor: pointer; padding: 0; position: relative; overflow: hidden; }
+.mfp-custom { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-2, #475569); background: var(--surface-2, #f1f5f9); }
+.mfp-custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.mfp-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.mfp-row:last-child { margin-bottom: 0; }
+.mfp-btn { flex: 1; min-width: 54px; font: inherit; font-size: 12px; font-weight: 600; border: 1px solid var(--border-color, #e2e8f0); background: var(--surface-1, #fff); color: var(--text-2, #475569); border-radius: 8px; padding: 7px 8px; cursor: pointer; white-space: nowrap; }
+.mfp-btn:hover { background: var(--surface-2, #f1f5f9); color: var(--text-1, #0f172a); }
+.mfp-sq { flex: 0 0 auto; min-width: 36px; }

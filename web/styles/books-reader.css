@@ -1070,3 +1070,53 @@
   .bld-hero-cover { font-size: 36px; }
   .bld-title { font-size: 20px; }
 }
+
+/* ── Manual Add Book + Write-your-own-summary (theme-aware) ── */
+.bl-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  background: var(--surface-2, #f1f5f9);
+  color: var(--text-1, #0f172a);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  white-space: nowrap;
+}
+.bl-add-btn:hover { background: var(--surface-3, #e2e8f0); transform: translateY(-1px); }
+
+.bl-empty-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+.bl-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2, #475569);
+  margin-bottom: 6px;
+}
+
+.bl-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: var(--surface-1, #fff);
+  color: var(--text-1, #0f172a);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.bl-input:focus { border-color: var(--primary, #6366f1); }
+select.bl-input { appearance: none; -webkit-appearance: none; cursor: pointer; }
+
+.bl-summary-textarea {
+  min-height: 260px;
+  resize: vertical;
+  line-height: 1.6;
+}

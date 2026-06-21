@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     recurrence_days TEXT,
     recurrence_end DATE,
     completed_dates JSONB,
+    completed_at TIMESTAMPTZ,
     duration INT,
     subtasks JSONB,
     pomodoro_estimate INT,
@@ -314,6 +315,24 @@ CREATE TABLE IF NOT EXISTS public.notes (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.wishlist (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    title TEXT,
+    type TEXT,                       -- 'buy' | 'experience' | 'gift'
+    price NUMERIC(14,2),
+    priority TEXT,                   -- 'high' | 'medium' | 'low'
+    url TEXT,
+    image_url TEXT,
+    category TEXT,                   -- managed category (primary grouping)
+    for_person TEXT,
+    notes TEXT,
+    status TEXT DEFAULT 'wanted',    -- 'wanted' | 'got' | 'archived'
+    got_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.vision_images (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -464,6 +483,20 @@ CREATE TABLE IF NOT EXISTS public.mural_elements (
     to_side TEXT,
     line_style TEXT,
     arrow_mode TEXT,
+    font_size INTEGER,
+    text_color TEXT,
+    bold BOOLEAN,
+    text_align TEXT,
+    stroke_width INTEGER,
+    from_x NUMERIC(10,2),
+    from_y NUMERIC(10,2),
+    to_x NUMERIC(10,2),
+    to_y NUMERIC(10,2),
+    from_rx NUMERIC(6,4),
+    from_ry NUMERIC(6,4),
+    to_rx NUMERIC(6,4),
+    to_ry NUMERIC(6,4),
+    border_radius NUMERIC(6,2),
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -539,7 +572,7 @@ DECLARE
         'gym_exercises','notes','vision_images','pomodoro_sessions',
         'pomodoro_badges','vision_tdp','book_library','book_summaries',
         'mural_projects','mural_categories','mural_elements','vision_affirmations',
-        'ritual_logs','english_sessions','english_messages'
+        'ritual_logs','english_sessions','english_messages','wishlist'
     ];
 BEGIN
     FOREACH tbl IN ARRAY tables LOOP
@@ -568,7 +601,7 @@ DECLARE
         'pomodoro_settings','pomodoro_sessions','pomodoro_badges','vision_tdp',
         'book_library','book_summaries','reader_settings','mural_projects',
         'mural_categories','mural_elements','vision_affirmations','ritual_logs',
-        'english_sessions','english_messages'
+        'english_sessions','english_messages','wishlist'
     ];
 BEGIN
     FOREACH tbl IN ARRAY tables LOOP
@@ -591,7 +624,7 @@ DECLARE
         'pomodoro_settings','pomodoro_sessions','pomodoro_badges','vision_tdp',
         'book_library','book_summaries','reader_settings','mural_projects',
         'mural_categories','mural_elements','vision_affirmations','ritual_logs',
-        'english_sessions','english_messages'
+        'english_sessions','english_messages','wishlist'
     ];
 BEGIN
     FOREACH tbl IN ARRAY tables LOOP

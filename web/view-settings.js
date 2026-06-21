@@ -140,7 +140,7 @@ function renderSettings() {
         </div>
         
         <label class="setting-label">Category Limits</label>
-        <div id="categoryBudgetList"></div>
+        <div id="categoryBudgetList" style="max-height:48vh; overflow-y:auto; padding:2px 8px 2px 2px; margin-top:4px;"></div>
         <button class="btn small" style="margin-top:12px" onclick="addCategoryRow()">+ Add Category</button>
         <div id="categorySummary" style="margin-top:16px; padding:12px; background:var(--surface-3); border-radius:8px; display:flex; justify-content:space-between; font-size:13px;">
           <span>Total Budget: <strong id="totalCatBudget">₹0</strong></span>
@@ -1106,6 +1106,7 @@ function _expenseInThisMonth(e) {
 function initCategoryRows(jsonStr) {
   const container = document.getElementById('categoryBudgetList');
   container.innerHTML = '';
+  window._budgetCatDeletes = []; // reset pending deletions for this fresh render
   const data = safeJsonParse(jsonStr);
 
   // Get unique categories from transactions (Money tab) - only from sheet
@@ -1163,13 +1164,15 @@ function initCategoryRows(jsonStr) {
       // Handle both old format (number) and new format (object)
       let budget = '';
       let source = 'weekly';
+      let desc = '';
       if (typeof data[cat] === 'object' && data[cat] !== null) {
         budget = data[cat].budget || '';
         source = data[cat].source || 'weekly';
+        desc = data[cat].description || '';
       } else if (typeof data[cat] === 'number' || typeof data[cat] === 'string') {
         budget = data[cat];
       }
-      addCategoryRow(cat, budget, source);
+      addCategoryRow(cat, budget, source, desc);
     });
   }
 
@@ -1183,7 +1186,36 @@ function safeJsonParse(str) {
   try { return JSON.parse(str); } catch (e) { return {}; }
 }
 
-window.addCategoryRow = function (cat = '', amt = '', source = 'weekly') {
+// Budget status for a category: within (ok), about to breach (warn, ≥85%), or
+// breached (over, ≥100%). No limit set → no status.
+function _catStatusClass(spent, limit) {
+  if (!limit || limit <= 0) return '';
+  const r = spent / limit;
+  if (r >= 1) return 'over';
+  if (r >= 0.85) return 'warn';
+  return 'ok';
+}
+
+// Recolour a row live when its limit changes (no need to re-read expenses).
+window.updateCatRowStatus = function (amtInput) {
+  const row = amtInput.closest('.cat-budget-row');
+  if (!row) return;
+  const spent = Number(row.dataset.spent || 0);
+  const limit = Number(amtInput.value) || 0;
+  const st = _catStatusClass(spent, limit);
+  row.classList.remove('cat-row--ok', 'cat-row--warn', 'cat-row--over');
+  if (st) row.classList.add('cat-row--' + st);
+  const badge = row.querySelector('.cat-spent');
+  if (badge) {
+    badge.classList.remove('cat-spent--ok', 'cat-spent--warn', 'cat-spent--over');
+    if (st) badge.classList.add('cat-spent--' + st);
+    badge.title = 'Spent ₹' + spent.toLocaleString() + (limit ? ' of ₹' + limit.toLocaleString() : '');
+  }
+};
+
+window.addCategoryRow = function (cat = '', amt = '', source = 'weekly', desc = '') {
+  // Attribute-safe escape (escapeHtml doesn't escape quotes, which would break value="...")
+  const escA = (s) => escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;');
   // Get unique categories from transactions for suggestions (only from sheet)
   const txCategories = new Set();
   const catSpent = {};
@@ -1201,23 +1233,84 @@ window.addCategoryRow = function (cat = '', amt = '', source = 'weekly') {
 
   const spent = catSpent[cat] || 0;
   const div = document.createElement('div');
-  div.style.display = 'flex';
-  div.style.gap = '10px';
-  div.style.marginBottom = '10px';
-  div.style.alignItems = 'center';
   div.className = 'cat-budget-row';
+  div.dataset.orig = cat || ''; // original name — lets us detect a rename on save
+  div.dataset.spent = spent;    // this month's spend — for live status colouring
+  const _st = _catStatusClass(spent, Number(amt) || 0);
+  if (_st) div.classList.add('cat-row--' + _st);
+  const _spentTitle = 'Spent ₹' + spent.toLocaleString() + (Number(amt) > 0 ? ' of ₹' + Number(amt).toLocaleString() : '');
   div.innerHTML = `
-      <input type="text" class="input cat-name" placeholder="Category" value="${cat}" style="flex:1; min-width:100px;" list="settingsCatOptions" onchange="updateCategorySummary()">
-      <datalist id="settingsCatOptions">
-        ${[...txCategories].map(c => `<option value="${c}">`).join('')}
-      </datalist>
-      <input type="number" class="input cat-amt" placeholder="Monthly limit" value="${amt}" style="flex:1; min-width:80px;" onchange="updateCategorySummary()">
-      <span class="cat-spent" style="flex:none; width:76px; text-align:right; align-self:center; font-size:11px; color:var(--text-muted);">${spent > 0 ? '₹' + spent.toLocaleString() : ''}</span>
-      <button class="btn danger small" style="flex:none;" onclick="this.parentElement.remove(); updateCategorySummary()">X</button>
+      <input type="text" class="input cat-name" placeholder="Category" value="${escA(cat)}" list="settingsCatOptions" onchange="updateCategorySummary()">
+      <datalist id="settingsCatOptions">${[...txCategories].map(c => `<option value="${escA(c)}">`).join('')}</datalist>
+      <input type="number" class="input cat-amt" placeholder="Limit" value="${amt}" oninput="updateCatRowStatus(this)" onchange="updateCategorySummary()">
+      <input type="text" class="input cat-desc" placeholder="Description (optional)" value="${escA(desc)}">
+      <span class="cat-spent ${_st ? 'cat-spent--' + _st : ''}" title="${escA(_spentTitle)}">${spent > 0 ? '₹' + spent.toLocaleString() : ''}</span>
+      <button class="btn danger small" onclick="removeCategoryRow(this)">X</button>
     `;
   document.getElementById('categoryBudgetList').appendChild(div);
   updateCategorySummary();
 };
+
+// Delete a category row. We remember the original name so that, on Save, any
+// expenses logged under it can be moved to "Uncategorized" (so the category
+// truly disappears instead of reappearing from transaction history).
+window.removeCategoryRow = function (btn) {
+  const row = btn.closest('.cat-budget-row');
+  if (!row) return;
+  const orig = (row.dataset.orig || '').trim();
+  if (!window._budgetCatDeletes) window._budgetCatDeletes = [];
+  if (orig && !window._budgetCatDeletes.includes(orig)) window._budgetCatDeletes.push(orig);
+  row.remove();
+  updateCategorySummary();
+};
+
+// Apply category edits to the underlying expense data when saving Budget Settings:
+//   • Rename (a row's name changed) → move every expense from the old name to the new one.
+//   • Delete (row removed via X)    → relabel those expenses as "Uncategorized".
+// Without this, the old category lingers in transactions and reappears on reload.
+async function _applyCategoryDataChanges() {
+  const expenses = state.data.expenses || [];
+
+  // Renames: rows whose current name differs from the original we stored.
+  const renameMap = {}; // oldName -> newName
+  document.querySelectorAll('.cat-budget-row').forEach(row => {
+    const from = (row.dataset.orig || '').trim();
+    const to = (row.querySelector('.cat-name')?.value || '').trim();
+    if (from && to && from !== to) renameMap[from] = to;
+  });
+
+  // Deletes: names removed via X that weren't simply re-added or renamed away.
+  const currentNames = new Set(
+    [...document.querySelectorAll('.cat-budget-row .cat-name')].map(i => i.value.trim()).filter(Boolean)
+  );
+  const deletes = new Set(
+    (window._budgetCatDeletes || []).filter(n => n && !currentNames.has(n) && !renameMap[n])
+  );
+
+  if (!Object.keys(renameMap).length && !deletes.size) { window._budgetCatDeletes = []; return 0; }
+
+  const changed = [];
+  expenses.forEach(e => {
+    if (!e.category) return;
+    if (renameMap[e.category]) { e.category = renameMap[e.category]; changed.push(e); }
+    else if (deletes.has(e.category)) { e.category = 'Uncategorized'; changed.push(e); }
+  });
+
+  for (const e of changed) {
+    try { await apiCall('update', 'expenses', { category: e.category }, e.id); }
+    catch (err) { console.warn('Category data update failed for expense', e.id, err); }
+  }
+  // Keep each surviving row's "original" in sync so a second save isn't a no-op rename.
+  document.querySelectorAll('.cat-budget-row').forEach(row => {
+    const to = (row.querySelector('.cat-name')?.value || '').trim();
+    if (to) row.dataset.orig = to;
+  });
+  window._budgetCatDeletes = [];
+  if (changed.length && typeof toast === 'function') {
+    toast(`Updated ${changed.length} expense${changed.length > 1 ? 's' : ''}`);
+  }
+  return changed.length;
+}
 
 // Update the category summary totals
 window.updateCategorySummary = function () {
@@ -1268,10 +1361,11 @@ window.saveAllSettings = async function (section = 'all') {
   document.querySelectorAll('.cat-budget-row').forEach(row => {
     const c = row.querySelector('.cat-name').value.trim();
     const a = row.querySelector('.cat-amt').value;
-    if (c && a) {
+    const d = (row.querySelector('.cat-desc')?.value || '').trim();
+    if (c && (a || d)) {
       // Category limits are monthly caps now (weekly vs monthly is decided per
       // expense via budget_scope, not per category). Keep the object shape.
-      cats[c] = { budget: Number(a), source: 'monthly' };
+      cats[c] = { budget: Number(a) || 0, source: 'monthly', description: d };
     }
   });
 
@@ -1315,6 +1409,8 @@ window.saveAllSettings = async function (section = 'all') {
   }
 
   if (section === 'all' || section === 'budget') {
+    // Move/rename expense data to match category edits BEFORE saving the limits.
+    await _applyCategoryDataChanges();
     newSettings.weekly_budget = Number(weekly);
     newSettings.monthly_budget = Number(monthly);
     newSettings.category_budgets = JSON.stringify(cats);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'personal-os-v9';
+const CACHE_NAME = 'personal-os-v10';
 
 // Get the base path for GitHub Pages compatibility
 const BASE_PATH = self.location.pathname.replace('/sw.js', '');

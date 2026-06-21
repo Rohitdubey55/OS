@@ -17,6 +17,8 @@ let muralTransform = { x: 0, y: 0, scale: 1 };
 let muralActiveTool = 'select';
 let muralIsDragging = false;
 let muralDragStart = { x: 0, y: 0 };
+let muralDraggingConnector = null;      // a free line/arrow being dragged to reposition
+let muralConnDragStart = { x: 0, y: 0 };
 let muralDragInitialTransform = { x: 0, y: 0, scale: 1 };
 let muralSelectedElementIds = []; // Array of selected element IDs
 let muralPointerDown = false;
@@ -45,6 +47,7 @@ let muralBgColor = '';         // empty = default (var(--surface-base))
 let muralConnectors = [];
 let muralConnectorSource = null;   // ID of source element when creating connector
 let muralSelectedConnectorId = null;
+let muralDrawingLine = null;       // the free line being drawn with the Line tool (#8)
 
 /* ── Constants ── */
 const MURAL_COLORS = [
@@ -115,21 +118,23 @@ async function renderMuralDashboard() {
         <div class="mural-dashboard">
             <div class="mural-header">
                 <div class="mural-header-left">
-                    <div class="mural-header-title">Mural</div>
-                    <div class="mural-header-subtitle">${muralProjects.length} project${muralProjects.length !== 1 ? 's' : ''}</div>
+                    <h2 class="mural-h2">Projects</h2>
+                    <span class="mural-count-badge">${muralProjects.length}</span>
                 </div>
                 <div class="mural-header-actions">
-                    <button class="mural-header-btn" onclick="repairMuralData()" title="Repair Data & Remove Duplicates">
-                        <i data-lucide="wrench" style="width:18px;height:18px"></i>
-                    </button>
-                    <button class="mural-header-btn" onclick="openMuralCategoryManager()" title="Edit Categories">
-                        <i data-lucide="settings-2" style="width:18px;height:18px"></i>
-                    </button>
-                    <button class="mural-header-btn" onclick="openMuralShortcutsModal()" title="Keyboard Shortcuts">
-                        <i data-lucide="keyboard" style="width:18px;height:18px"></i>
-                    </button>
+                    <div class="mural-tool-cluster">
+                        <button class="mural-header-btn" onclick="openMuralCategoryManager()" title="Edit categories">
+                            <i data-lucide="tag"></i>
+                        </button>
+                        <button class="mural-header-btn" onclick="openMuralShortcutsModal()" title="Keyboard shortcuts">
+                            <i data-lucide="keyboard"></i>
+                        </button>
+                        <button class="mural-header-btn" onclick="repairMuralData()" title="Repair data & remove duplicates">
+                            <i data-lucide="wrench"></i>
+                        </button>
+                    </div>
                     <button class="mural-add-btn" onclick="openNewMuralProjectModal()">
-                        <i data-lucide="plus" style="width:18px;height:18px"></i>
+                        <i data-lucide="plus"></i>
                         <span>New Project</span>
                     </button>
                 </div>
@@ -137,11 +142,15 @@ async function renderMuralDashboard() {
 
             ${muralCategories.length > 0 ? `
             <div class="mural-cat-bar">
-                <button class="mural-cat-pill ${muralActiveCategory === 'all' ? 'active' : ''}" onclick="filterMuralBy('all')">All</button>
-                ${muralCategories.map(cat => `
-                    <button class="mural-cat-pill ${muralActiveCategory === cat.name ? 'active' : ''}"
-                        onclick="filterMuralBy('${escapeHtml(cat.name)}')">${escapeHtml(cat.name)}</button>
-                `).join('')}
+                <button class="mural-cat-pill ${muralActiveCategory === 'all' ? 'active' : ''}" style="--cat-dot:var(--mural-accent)" onclick="filterMuralBy('all')">
+                    <span class="mcp-dot"></span>All
+                </button>
+                ${muralCategories.map(cat => {
+        const cc = _muralCatColor(cat.name);
+        return `<button class="mural-cat-pill ${muralActiveCategory === cat.name ? 'active' : ''}" style="--cat-dot:${cc.dot}" onclick="filterMuralBy('${escapeHtml(cat.name)}')">
+                    <span class="mcp-dot"></span>${escapeHtml(cat.name)}
+                </button>`;
+    }).join('')}
             </div>` : ''}
 
             <div class="mural-grid">
@@ -154,34 +163,28 @@ async function renderMuralDashboard() {
                 ` : ''}
                 ${filtered.map(project => {
         const count = elementCounts[String(project.id)] || 0;
-        // Generate preview dots from element colors
         const projectEls = (muralElements || []).filter(el => String(el.project_id) === String(project.id));
+        const cc = _muralCatColor(project.category);
+        const catName = project.category || 'Uncategorized';
         return `
                     <div class="mural-project-card" onclick="openMuralProject('${project.id}')">
-                        <div class="mural-project-card-preview">
-                            <div class="preview-dots">
-                                ${count > 0 ? Array.from({ length: Math.min(count, 8) }).map((_, i) =>
-            `<div class="preview-dot" style="background:${MURAL_COLORS[i % MURAL_COLORS.length]}"></div>`
-        ).join('') : '<i data-lucide="layers" style="width:24px;height:24px;opacity:0.3"></i>'}
+                        <div class="mc-thumb">
+                            ${_muralProjectPreview(count, projectEls)}
+                            <div class="mc-thumb-actions">
+                                <button class="mc-iconbtn" onclick="event.stopPropagation(); openEditMuralProjectModal('${project.id}')" title="Rename">
+                                    <i data-lucide="pencil"></i>
+                                </button>
+                                <button class="mc-iconbtn mc-del" onclick="event.stopPropagation(); deleteMuralProject('${project.id}')" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
                             </div>
                         </div>
-                        <div class="mural-project-info">
-                            <div class="mural-project-name">${escapeHtml(project.title)}</div>
-                            <div class="mural-project-meta">
-                                <span>${escapeHtml(project.category || 'Uncategorized')}</span>
-                                <span class="mural-project-meta-dot"></span>
-                                <span>${formatMuralDate(project.created_at)}</span>
-                            </div>
-                        </div>
-                        <div class="mural-project-footer">
-                            <div class="mural-project-el-count">${count} element${count !== 1 ? 's' : ''}</div>
-                            <div class="mural-project-actions">
-                                <button class="mural-project-edit" onclick="event.stopPropagation(); openEditMuralProjectModal('${project.id}')" title="Edit project">
-                                    <i data-lucide="edit-3" style="width:14px;height:14px"></i>
-                                </button>
-                                <button class="mural-project-del" onclick="event.stopPropagation(); deleteMuralProject('${project.id}')" title="Delete project">
-                                    <i data-lucide="trash-2" style="width:14px;height:14px"></i>
-                                </button>
+                        <div class="mc-body">
+                            <div class="mc-title">${escapeHtml(project.title)}</div>
+                            <div class="mc-meta">
+                                <span class="mc-chip" style="background:${cc.bg}; color:${cc.fg}">${escapeHtml(catName)}</span>
+                                <span class="mc-date">${formatMuralDate(project.created_at)}</span>
+                                <span class="mc-count">${count} element${count !== 1 ? 's' : ''}</span>
                             </div>
                         </div>
                     </div>`;
@@ -191,6 +194,48 @@ async function renderMuralDashboard() {
     `;
 
     if (window.lucide) lucide.createIcons();
+}
+
+// Deterministic soft colour per category (chip bg/text + filter dot). Uncategorized = grey.
+function _muralCatColor(name) {
+    if (!name || name === 'Uncategorized') {
+        return { bg: 'var(--surface-3)', fg: 'var(--text-3)', dot: 'var(--text-3)' };
+    }
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+    return {
+        bg: `hsla(${h}, 70%, 55%, 0.15)`,
+        fg: `hsl(${h}, 60%, 42%)`,
+        dot: `hsl(${h}, 65%, 58%)`
+    };
+}
+
+// Scattered sticky-note positions for the card thumbnail (a mini whiteboard).
+const _MURAL_PREVIEW_POS = [
+    { l: '10%', t: '20%', r: '-7deg' },
+    { l: '36%', t: '34%', r: '5deg' },
+    { l: '62%', t: '16%', r: '-4deg' },
+    { l: '20%', t: '54%', r: '6deg' },
+    { l: '50%', t: '58%', r: '-6deg' },
+    { l: '74%', t: '50%', r: '4deg' }
+];
+
+function _muralProjectPreview(count, projectEls) {
+    if (!count) {
+        return `<div class="mc-thumb-empty"><i data-lucide="sparkles"></i><span>Empty canvas</span></div>`;
+    }
+    let colors = (projectEls || [])
+        .map(e => e && e.color)
+        .filter(c => typeof c === 'string' && (c[0] === '#' || c.startsWith('rgb')) && c !== 'transparent');
+    const n = Math.min(count, _MURAL_PREVIEW_POS.length);
+    while (colors.length < n) colors.push(MURAL_COLORS[colors.length % MURAL_COLORS.length]);
+    let html = '';
+    for (let i = 0; i < n; i++) {
+        const p = _MURAL_PREVIEW_POS[i];
+        const c = colors[i] || MURAL_COLORS[i % MURAL_COLORS.length];
+        html += `<span class="mc-sticky" style="left:${p.l}; top:${p.t}; transform:rotate(${p.r}); background:${c}"></span>`;
+    }
+    return html;
 }
 
 function formatMuralDate(dateStr) {
@@ -318,6 +363,7 @@ async function renderMuralCanvasView() {
 
             <!-- Toolbar -->
             <div class="mural-toolbar" id="muralToolbar">
+                <div class="mural-tool-grip" id="muralToolbarGrip" title="Drag toolbar"><svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="3" r="1.4"/><circle cx="8" cy="3" r="1.4"/><circle cx="2" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="2" cy="13" r="1.4"/><circle cx="8" cy="13" r="1.4"/></svg></div>
                 <button class="mural-tool active" data-tool="select" onclick="setMuralTool('select')" data-tooltip="Select & Move (V)">
                     <i data-lucide="mouse-pointer-2"></i>
                 </button>
@@ -335,12 +381,23 @@ async function renderMuralCanvasView() {
                     <i data-lucide="shapes"></i>
                 </button>
                 <div class="mural-tool-popover" id="muralShapeMenu">
-                    <button class="mural-popover-item" onclick="addMuralShape('rect')"><i data-lucide="square"></i> Rectangle</button>
-                    <button class="mural-popover-item" onclick="addMuralShape('circle')"><i data-lucide="circle"></i> Circle</button>
-                    <button class="mural-popover-item" onclick="addMuralShape('triangle')"><i data-lucide="triangle"></i> Triangle</button>
-                    <button class="mural-popover-item" onclick="addMuralShape('diamond')"><i data-lucide="diamond"></i> Diamond</button>
-                    <button class="mural-popover-item" onclick="addMuralShape('hexagon')"><i data-lucide="hexagon"></i> Hexagon</button>
-                    <button class="mural-popover-item" onclick="addMuralShape('star')"><i data-lucide="star"></i> Star</button>
+                    <div class="mural-shape-grid">
+                        <button class="mural-shape-btn" title="Rectangle (sharp)" onclick="addMuralShape('rect')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12"/></svg></button>
+                        <button class="mural-shape-btn" title="Rounded rectangle" onclick="addMuralShape('rounded')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="4"/></svg></button>
+                        <button class="mural-shape-btn" title="Circle" onclick="addMuralShape('circle')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/></svg></button>
+                        <button class="mural-shape-btn" title="Ellipse" onclick="addMuralShape('ellipse')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="12" rx="10" ry="6.5"/></svg></button>
+                        <button class="mural-shape-btn" title="Triangle" onclick="addMuralShape('triangle')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="12,4 21,20 3,20"/></svg></button>
+                        <button class="mural-shape-btn" title="Diamond" onclick="addMuralShape('diamond')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="12,3 21,12 12,21 3,12"/></svg></button>
+                        <button class="mural-shape-btn" title="Pentagon" onclick="addMuralShape('pentagon')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="12,3 21,10 17,20 7,20 3,10"/></svg></button>
+                        <button class="mural-shape-btn" title="Hexagon" onclick="addMuralShape('hexagon')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="7,4 17,4 22,12 17,20 7,20 2,12"/></svg></button>
+                        <button class="mural-shape-btn" title="Octagon" onclick="addMuralShape('octagon')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="8,3 16,3 21,8 21,16 16,21 8,21 3,16 3,8"/></svg></button>
+                        <button class="mural-shape-btn" title="Star" onclick="addMuralShape('star')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="12,3 14.5,9 21,9.3 16,13.5 17.8,20 12,16.2 6.2,20 8,13.5 3,9.3 9.5,9"/></svg></button>
+                        <button class="mural-shape-btn" title="Parallelogram" onclick="addMuralShape('parallelogram')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="8,5 21,5 16,19 3,19"/></svg></button>
+                        <button class="mural-shape-btn" title="Arrow" onclick="addMuralShape('arrow')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="3,9 13,9 13,5 21,12 13,19 13,15 3,15"/></svg></button>
+                        <button class="mural-shape-btn" title="Cross / Plus" onclick="addMuralShape('plus')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><polygon points="9,3 15,3 15,9 21,9 21,15 15,15 15,21 9,21 9,15 3,15 3,9 9,9"/></svg></button>
+                    </div>
+                    <div class="mural-shape-sep"></div>
+                    <button class="mural-popover-item" onclick="setMuralTool('line'); dismissMuralPopups();"><i data-lucide="minus"></i> Line</button>
                 </div>
             </div>
             <button class="mural-tool" onclick="openMuralIconLibrary()" data-tooltip="Icons">
@@ -350,6 +407,59 @@ async function renderMuralCanvasView() {
                 <button class="mural-tool" data-tool="connector" onclick="setMuralTool('connector')" data-tooltip="Connector (L)">
                     <i data-lucide="arrow-up-right"></i>
                 </button>
+                <div class="mural-tool-group">
+                    <button class="mural-tool" onclick="toggleMuralFormat(event)" data-tooltip="Format (fill, text, line)">
+                        <i data-lucide="palette"></i>
+                    </button>
+                    <div class="mural-tool-popover mural-format-pop" id="muralFormatPop">
+                        <div class="mfp-sec">
+                            <div class="mfp-label">Fill</div>
+                            <div class="mfp-swatches">${['#FFFFFF','#FECACA','#FED7AA','#FEF08A','#BBF7D0','#BFDBFE','#DDD6FE','#FBCFE8','#E2E8F0','#0F172A','#EF4444','#10B981'].map(c => `<button class="mfp-sw" style="background:${c}" title="${c}" onclick="applyMuralFill('${c}')"></button>`).join('')}<label class="mfp-sw mfp-custom" title="Custom"><input type="color" onchange="applyMuralFill(this.value)">+</label></div>
+                            <button class="mfp-btn" onclick="applyMuralFill('transparent')">No fill</button>
+                        </div>
+                        <div class="mfp-sec">
+                            <div class="mfp-label">Corners (rectangles)</div>
+                            <div class="mfp-row">
+                                <button class="mfp-btn mfp-sq" onclick="applyMuralRadius('dec')" title="Less rounded">−</button>
+                                <button class="mfp-btn mfp-sq" onclick="applyMuralRadius('inc')" title="More rounded">+</button>
+                                <button class="mfp-btn" onclick="applyMuralRadius(0)" title="Sharp corners">Sharp</button>
+                                <button class="mfp-btn" onclick="applyMuralRadius(16)" title="Rounded">Round</button>
+                                <button class="mfp-btn" onclick="applyMuralRadius(999)" title="Fully rounded">Pill</button>
+                            </div>
+                        </div>
+                        <div class="mfp-sec">
+                            <div class="mfp-label">Text</div>
+                            <div class="mfp-row">
+                                <button class="mfp-btn mfp-sq" onclick="applyMuralText('font_size','dec')" title="Smaller">A-</button>
+                                <button class="mfp-btn mfp-sq" onclick="applyMuralText('font_size','inc')" title="Bigger">A+</button>
+                                <button class="mfp-btn mfp-sq" onclick="applyMuralText('bold','toggle')" title="Bold" style="font-weight:800">B</button>
+                                <button class="mfp-btn mfp-sq" onclick="applyMuralText('text_align','left')" title="Align left">⇤</button>
+                                <button class="mfp-btn mfp-sq" onclick="applyMuralText('text_align','center')" title="Align center">≡</button>
+                                <button class="mfp-btn mfp-sq" onclick="applyMuralText('text_align','right')" title="Align right">⇥</button>
+                            </div>
+                            <div class="mfp-swatches">${['#0F172A','#FFFFFF','#EF4444','#F59E0B','#10B981','#6366F1','#EC4899','#64748B'].map(c => `<button class="mfp-sw" style="background:${c}" title="Text ${c}" onclick="applyMuralText('text_color','${c}')"></button>`).join('')}</div>
+                        </div>
+                        <div class="mfp-sec">
+                            <div class="mfp-label">Line / arrow</div>
+                            <div class="mfp-swatches">${['#6366F1','#0F172A','#64748B','#EF4444','#F59E0B','#10B981','#EC4899','#0EA5E9'].map(c => `<button class="mfp-sw" style="background:${c}" title="Line ${c}" onclick="applyMuralLine('color','${c}')"></button>`).join('')}</div>
+                            <div class="mfp-row">
+                                <button class="mfp-btn" onclick="applyMuralLine('stroke_width',2)">Thin</button>
+                                <button class="mfp-btn" onclick="applyMuralLine('stroke_width',4)">Med</button>
+                                <button class="mfp-btn" onclick="applyMuralLine('stroke_width',7)">Thick</button>
+                            </div>
+                            <div class="mfp-row">
+                                <button class="mfp-btn" onclick="applyMuralLine('line_style','solid')">— Solid</button>
+                                <button class="mfp-btn" onclick="applyMuralLine('line_style','dashed')">– – Dash</button>
+                                <button class="mfp-btn" onclick="applyMuralLine('line_style','dotted')">··· Dot</button>
+                            </div>
+                            <div class="mfp-row">
+                                <button class="mfp-btn" onclick="applyMuralLine('arrow_mode','none')">No arrow</button>
+                                <button class="mfp-btn" onclick="applyMuralLine('arrow_mode','arrow')">End →</button>
+                                <button class="mfp-btn" onclick="applyMuralLine('arrow_mode','both')">↔ Both</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <button class="mural-tool" id="muralUndoBtn" onclick="muralUndo()" data-tooltip="Undo (⌘Z)" style="opacity:0.4" disabled>
                     <i data-lucide="undo-2"></i>
                 </button>
@@ -372,6 +482,7 @@ async function renderMuralCanvasView() {
     hideMuralAppChrome(true);
 
     initMuralCanvas();
+    initMuralToolbarDrag();
     await loadMuralElements();
 }
 
@@ -388,7 +499,7 @@ function exitMuralProject() {
 }
 
 function hideMuralAppChrome(hide) {
-    const selectors = ['.mobile-nav', '.fab', '.fab-overlay', '.fab-menu', '.ai-fab'];
+    const selectors = ['.mobile-nav', '.fab', '.fab-overlay', '.fab-menu', '.ai-fab', '.main-header-bar'];
     selectors.forEach(sel => {
         document.querySelectorAll(sel).forEach(el => {
             if (hide) {
@@ -402,7 +513,15 @@ function hideMuralAppChrome(hide) {
             }
         });
     });
+    // Leaving the editor: remove the floating toolbar we portaled onto <body>
+    // (it lives outside #main now, so a view re-render won't clean it up).
+    if (!hide) {
+        document.querySelectorAll('body > #muralToolbar').forEach(n => n.remove());
+    }
 }
+// Exposed so routeTo() can restore the chrome if the user leaves the editor
+// through the sidebar instead of the in-editor back button.
+window.hideMuralAppChrome = hideMuralAppChrome;
 
 async function loadMuralElements() {
     try {
@@ -488,11 +607,21 @@ function createMuralElementDOM(data) {
     if (data.h) div.style.height = `${data.h}px`;
     if (data.color && elType !== 'icon') div.style.backgroundColor = data.color;
     if (data.color && elType === 'icon') div.style.color = data.color;
+    // Adjustable corner radius for rectangles (rect = sharp default, rounded = curved)
+    if (elType === 'shape' && (data.shape === 'rect' || data.shape === 'rounded')
+        && data.border_radius != null && data.border_radius !== '') {
+        div.style.borderRadius = `${Number(data.border_radius)}px`;
+    }
     div.style.zIndex = data.z_index || 1;
 
     // Content wrapper for text isolation
     const content = document.createElement('div');
     content.className = 'mural-element-content';
+    // Per-element text formatting (font size / colour / bold / align)
+    if (data.font_size) content.style.fontSize = `${data.font_size}px`;
+    if (data.text_color) content.style.color = data.text_color;
+    if (data.bold === true || data.bold === 'true') content.style.fontWeight = '700';
+    if (data.text_align) content.style.textAlign = data.text_align;
     div.appendChild(content);
 
     // Content: Icons use <i> tags, Others use text
@@ -536,8 +665,8 @@ function createMuralElementDOM(data) {
         });
     }
 
-    // Add resize handle for sticky notes and shapes
-    if (elType === 'sticky' || elType === 'shape') {
+    // Add resize handle for sticky notes, shapes, and icons
+    if (elType === 'sticky' || elType === 'shape' || elType === 'icon') {
         const handle = document.createElement('div');
         handle.className = 'mural-resize-handle';
         handle.addEventListener('pointerdown', (e) => {
@@ -660,6 +789,13 @@ function getSelectionBounds() {
 
 function updateSelectionBoundingBox() {
     let box = document.getElementById('muralSelectionBox');
+    // Only show the group bounding box + corner handles for a MULTI-selection. A
+    // single element already shows its own selection outline and resize handle, so
+    // an extra box just stacks another boundary around it.
+    if (muralSelectedElementIds.length < 2) {
+        removeSelectionBoundingBox();
+        return;
+    }
     const bounds = getSelectionBounds();
     if (!bounds) {
         removeSelectionBoundingBox();
@@ -834,18 +970,49 @@ function showMuralContextMenu(x, y, elementId) {
     menu.id = 'muralContextMenu';
 
     // Keep menu in viewport
-    const menuWidth = 180;
-    const menuHeight = 220;
+    const menuWidth = 252;
+    const menuHeight = 360;
     if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
+    if (y + menuHeight > window.innerHeight) y = Math.max(8, window.innerHeight - menuHeight - 8);
 
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
+    menu.style.minWidth = '248px';
+
+    // Stickies / shapes / text get one-click inline formatting; icons & connectors
+    // fall back to the simple colour picker (text/fill controls don't apply).
+    const fmt = el && el.type !== 'connector' && el.type !== 'icon';
+    const fillColors = ['#FFFFFF','#FECACA','#FED7AA','#FEF08A','#BBF7D0','#BFDBFE','#DDD6FE','#FBCFE8','#E2E8F0','#0F172A','#EF4444','#10B981'];
+    const textColors = ['#0F172A','#FFFFFF','#EF4444','#F59E0B','#10B981','#6366F1','#EC4899','#64748B'];
 
     menu.innerHTML = `
+        ${fmt ? `
+        <div class="mfp-sec">
+            <div class="mfp-label">Fill</div>
+            <div class="mfp-swatches">
+                ${fillColors.map(c => `<button class="mfp-sw" style="background:${c}" title="${c}" onclick="applyMuralFill('${c}')"></button>`).join('')}
+                <label class="mfp-sw mfp-custom" title="Custom fill"><input type="color" onchange="applyMuralFill(this.value)">+</label>
+            </div>
+            <button class="mfp-btn" onclick="applyMuralFill('transparent')">No fill</button>
+        </div>
+        <div class="mfp-sec">
+            <div class="mfp-label">Text</div>
+            <div class="mfp-row">
+                <button class="mfp-btn mfp-sq" title="Smaller" onclick="applyMuralText('font_size','dec')">A−</button>
+                <button class="mfp-btn mfp-sq" title="Bigger" onclick="applyMuralText('font_size','inc')">A+</button>
+                <button class="mfp-btn mfp-sq" title="Bold" style="font-weight:800" onclick="applyMuralText('bold','toggle')">B</button>
+                <button class="mfp-btn mfp-sq" title="Align left" onclick="applyMuralText('text_align','left')">⇤</button>
+                <button class="mfp-btn mfp-sq" title="Align center" onclick="applyMuralText('text_align','center')">≡</button>
+                <button class="mfp-btn mfp-sq" title="Align right" onclick="applyMuralText('text_align','right')">⇥</button>
+            </div>
+            <div class="mfp-swatches">
+                ${textColors.map(c => `<button class="mfp-sw" style="background:${c}" title="Text ${c}" onclick="applyMuralText('text_color','${c}')"></button>`).join('')}
+            </div>
+        </div>
+        <div class="mural-context-divider"></div>` : `
         <button class="mural-context-item" onclick="showMuralColorPicker(${x}, ${y}, '${elementId}')">
             <i data-lucide="palette"></i> Change Color
-        </button>
+        </button>`}
         <button class="mural-context-item" onclick="duplicateMuralElement('${elementId}'); dismissMuralPopups();">
             <i data-lucide="copy"></i> Duplicate
         </button>
@@ -867,7 +1034,7 @@ function showMuralContextMenu(x, y, elementId) {
 
     // Close on outside click
     setTimeout(() => {
-        document.addEventListener('pointerdown', dismissMuralPopupsOnOutside, { once: true });
+        document.addEventListener('pointerdown', dismissMuralPopupsOnOutside);
     }, 10);
 }
 window.showMuralContextMenu = showMuralContextMenu;
@@ -949,7 +1116,7 @@ function showMuralColorPicker(x, y, elementId) {
     muralColorPickerEl = picker;
 
     setTimeout(() => {
-        document.addEventListener('pointerdown', dismissMuralPopupsOnOutside, { once: true });
+        document.addEventListener('pointerdown', dismissMuralPopupsOnOutside);
     }, 10);
 }
 
@@ -1167,8 +1334,14 @@ window.setMuralBgColor = setMuralBgColor;
 function dismissMuralPopupsOnOutside(e) {
     const ctx = document.getElementById('muralContextMenu');
     const cp = document.getElementById('muralColorPicker');
+    // Clicks INSIDE a menu keep it open (so inline format swatches can be used
+    // repeatedly); only outside clicks close it.
     if (ctx && !ctx.contains(e.target)) { ctx.remove(); muralContextMenuEl = null; }
     if (cp && !cp.contains(e.target)) { cp.remove(); muralColorPickerEl = null; }
+    // Stop listening once nothing is open anymore.
+    if (!document.getElementById('muralContextMenu') && !document.getElementById('muralColorPicker')) {
+        document.removeEventListener('pointerdown', dismissMuralPopupsOnOutside);
+    }
 }
 
 /* ═══════════════════════════════════════
@@ -1444,8 +1617,9 @@ function onMuralTouchMove(e) {
             y: (t1.clientY + t2.clientY) / 2
         };
 
-        // Zoom
-        const factor = dist / muralTouchState.lastDist;
+        // Zoom — damped so a small finger pinch doesn't jump the scale too far.
+        const rawFactor = dist / muralTouchState.lastDist;
+        const factor = 1 + (rawFactor - 1) * 0.5;
         const oldScale = muralTransform.scale;
         const newScale = Math.min(Math.max(oldScale * factor, 0.1), 5);
         muralTransform.x = center.x - (center.x - muralTransform.x) * (newScale / oldScale);
@@ -1480,6 +1654,21 @@ function updateMuralZoomBadge() {
     if (badge) badge.textContent = `${Math.round(muralTransform.scale * 100)}%`;
 }
 
+// Convert a viewport pointer position into canvas "world" coordinates.
+// #muralPage is the (untransformed) fixed container, but it lives inside #main —
+// which is a CSS containing block — so its top-left is NOT the viewport origin
+// (the sidebar/header offset it). We must subtract the page's real origin, then
+// the pan, then divide by zoom. Omitting the page origin made the marquee (and
+// line/connector endpoints) drift to the right by the sidebar width.
+function muralClientToWorld(clientX, clientY) {
+    const page = document.getElementById('muralPage');
+    const pr = page ? page.getBoundingClientRect() : { left: 0, top: 0 };
+    return {
+        x: (clientX - pr.left - muralTransform.x) / muralTransform.scale,
+        y: (clientY - pr.top - muralTransform.y) / muralTransform.scale
+    };
+}
+
 function onMuralPointerDown(e) {
     if (muralTouchState.isPinching) return;
 
@@ -1498,13 +1687,25 @@ function onMuralPointerDown(e) {
         return;
     }
 
+    // Line tool (#8) — drag on the canvas to draw a free line (free endpoints).
+    if (muralActiveTool === 'line') {
+        const { x: sx, y: sy } = muralClientToWorld(e.clientX, e.clientY);
+        muralDrawingLine = {
+            id: `temp_line_${Date.now()}`, project_id: muralActiveProjectId, type: 'connector',
+            from_id: null, to_id: null, from_x: sx, from_y: sy, to_x: sx, to_y: sy,
+            color: '#6366F1', connector_style: 'straight', arrow_mode: 'none', stroke_width: 2,
+            x: 0, y: 0, w: 0, h: 0, content: '', z_index: 0
+        };
+        muralElements.push(muralDrawingLine);
+        muralConnectors.push(muralDrawingLine);
+        renderSingleConnector(muralDrawingLine);
+        return;
+    }
+
     if (e.target.id === 'muralPage' || e.target.id === 'muralCanvas' || e.target.id === 'muralConnectorSvg') {
         if (muralActiveTool === 'select') {
             muralIsMarquee = true;
-            muralMarqueeStart = { 
-                x: (e.clientX - muralTransform.x) / muralTransform.scale, 
-                y: (e.clientY - muralTransform.y) / muralTransform.scale 
-            };
+            muralMarqueeStart = muralClientToWorld(e.clientX, e.clientY);
             muralMarqueeRect = { x: muralMarqueeStart.x, y: muralMarqueeStart.y, w: 0, h: 0 };
             
             // Re-render marquee if exists
@@ -1530,6 +1731,31 @@ function onMuralPointerDown(e) {
 
 function onMuralPointerMove(e) {
     if (muralTouchState.isPinching) return;
+
+    // Line tool (#8) — stretch the free line to the cursor while drawing.
+    if (muralDrawingLine) {
+        { const w = muralClientToWorld(e.clientX, e.clientY); muralDrawingLine.to_x = w.x; muralDrawingLine.to_y = w.y; }
+        renderSingleConnector(muralDrawingLine);
+        return;
+    }
+
+    // Drag a free line/arrow — shift both loose endpoints by the pointer delta.
+    if (muralDraggingConnector) {
+        const dx = (e.clientX - muralConnDragStart.x) / muralTransform.scale;
+        const dy = (e.clientY - muralConnDragStart.y) / muralTransform.scale;
+        const c = muralDraggingConnector;
+        if (c.from_x != null) c.from_x += dx;
+        if (c.from_y != null) c.from_y += dy;
+        if (c.to_x != null) c.to_x += dx;
+        if (c.to_y != null) c.to_y += dy;
+        muralConnDragStart = { x: e.clientX, y: e.clientY };
+        if (!window._muralConnDragMoved) {
+            try { if (typeof snapshotElementsForUndo === 'function') snapshotElementsForUndo([c.id], 'move'); } catch (_) {}
+            window._muralConnDragMoved = true;
+        }
+        renderSingleConnector(c);
+        return;
+    }
 
     // Group resize from bounding box handles
     if (muralGroupResizing) {
@@ -1558,9 +1784,8 @@ function onMuralPointerMove(e) {
     }
 
     if (muralIsMarquee) {
-        const curX = (e.clientX - muralTransform.x) / muralTransform.scale;
-        const curY = (e.clientY - muralTransform.y) / muralTransform.scale;
-        
+        const { x: curX, y: curY } = muralClientToWorld(e.clientX, e.clientY);
+
         muralMarqueeRect.x = Math.min(muralMarqueeStart.x, curX);
         muralMarqueeRect.y = Math.min(muralMarqueeStart.y, curY);
         muralMarqueeRect.w = Math.abs(curX - muralMarqueeStart.x);
@@ -1579,23 +1804,25 @@ function onMuralPointerMove(e) {
     if (!muralIsDragging) return;
 
     if (muralSelectedElementIds.length > 0) {
+        // Per-frame delta → update el.x/el.y LIVE. This makes dragging track the
+        // cursor accurately (#5) and lets connectors follow instantly (#6), instead
+        // of only catching up on pointer-up.
         const dx = (e.clientX - muralDragStart.x) / muralTransform.scale;
         const dy = (e.clientY - muralDragStart.y) / muralTransform.scale;
-        
-        muralSelectedElementIds.forEach(id => {
-            const el = muralElements.find(item => String(item.id) === String(id));
-            if (el) {
-                // We use a temporary display offset, but we don't update el.x/y until pointerup
-                const dom = document.getElementById(`mural-el-${el.id}`);
-                if (dom) {
-                    dom.style.left = `${el.x + dx}px`;
-                    dom.style.top = `${el.y + dy}px`;
+        if (dx || dy) {
+            if (!window._muralDragMoved) { snapshotElementsForUndo(muralSelectedElementIds, 'move'); window._muralDragMoved = true; }
+            muralSelectedElementIds.forEach(id => {
+                const el = muralElements.find(item => String(item.id) === String(id));
+                if (el) {
+                    el.x += dx; el.y += dy;
+                    const dom = document.getElementById(`mural-el-${el.id}`);
+                    if (dom) { dom.style.left = `${el.x}px`; dom.style.top = `${el.y}px`; }
+                    updateConnectorsForElement(el.id);
                 }
-                updateConnectorsForElement(el.id);
-            }
-        });
-        // Move selection bounding box in sync
-        updateSelectionBoundingBoxOffset(dx, dy);
+            });
+            updateSelectionBoundingBox();
+            muralDragStart = { x: e.clientX, y: e.clientY };
+        }
     } else {
         // If hand tool OR background drag
         muralTransform.x = muralDragInitialTransform.x + (e.clientX - muralDragStart.x);
@@ -1606,6 +1833,32 @@ function onMuralPointerMove(e) {
 
 function onMuralPointerUp(e) {
     muralPointerDown = false;
+
+    // Finish dragging a free line/arrow — persist its new position.
+    if (muralDraggingConnector) {
+        const c = muralDraggingConnector;
+        muralDraggingConnector = null;
+        if (window._muralConnDragMoved) { saveMuralElement(c); showSaveIndicator('saving'); }
+        window._muralConnDragMoved = false;
+        return;
+    }
+
+    // Line tool (#8) — finalize the free line (discard if it's just a dot).
+    if (muralDrawingLine) {
+        const ln = muralDrawingLine;
+        muralDrawingLine = null;
+        const len = Math.hypot((ln.to_x || 0) - (ln.from_x || 0), (ln.to_y || 0) - (ln.from_y || 0));
+        if (len < 6) {
+            muralElements = muralElements.filter(el => el.id !== ln.id);
+            muralConnectors = muralConnectors.filter(c => c.id !== ln.id);
+            renderAllMuralConnectors();
+        } else {
+            try { if (typeof snapshotElementsForUndo === 'function') snapshotElementsForUndo([ln.id], 'add'); } catch (_) {}
+            if (typeof manualMuralSync === 'function') manualMuralSync();
+        }
+        setMuralTool('select');
+        return;
+    }
 
     if (muralGroupResizing) {
         onGroupResizeUp(e);
@@ -1664,29 +1917,28 @@ function onMuralPointerUp(e) {
     }
 
     if (muralSelectedElementIds.length > 0 && muralIsDragging) {
-        const dx = (e.clientX - muralDragStart.x) / muralTransform.scale;
-        const dy = (e.clientY - muralDragStart.y) / muralTransform.scale;
-
-        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
-            // Snapshot BEFORE committing the move
-            snapshotElementsForUndo(muralSelectedElementIds, 'move');
+        // Positions were already committed live during the drag; just finalize.
+        if (window._muralDragMoved) {
             muralSelectedElementIds.forEach(id => {
                 const el = muralElements.find(item => String(item.id) === String(id));
-                if (el) {
-                    el.x += dx;
-                    el.y += dy;
-                    saveMuralElement(el);
-                }
+                if (el) saveMuralElement(el);
             });
+            updateSelectionBoundingBox();
         }
-        updateSelectionBoundingBox();
+        window._muralDragMoved = false;
     }
     muralIsDragging = false;
 }
 
 function onMuralWheel(e) {
     e.preventDefault();
-    zoomMural(e.deltaY > 0 ? 0.92 : 1.08, e.clientX, e.clientY);
+    // Trackpad pinch arrives as wheel + ctrlKey with deltaY proportional to the
+    // pinch — scale it smoothly and gently instead of in big aggressive jumps.
+    if (e.ctrlKey) {
+        zoomMural(Math.exp(-e.deltaY * 0.0075), e.clientX, e.clientY);
+    } else {
+        zoomMural(e.deltaY > 0 ? 0.96 : 1.04, e.clientX, e.clientY);
+    }
 }
 
 function zoomMural(factor, centerX, centerY) {
@@ -1746,7 +1998,7 @@ function setMuralTool(tool) {
     const canvas = document.getElementById('muralCanvas');
     const page = document.getElementById('muralPage');
     if (canvas) {
-        if (tool === 'connector') canvas.style.cursor = 'crosshair';
+        if (tool === 'connector' || tool === 'line') canvas.style.cursor = 'crosshair';
         else if (tool === 'hand') canvas.style.cursor = 'grab';
         else canvas.style.cursor = 'default';
     }
@@ -1755,6 +2007,116 @@ function setMuralTool(tool) {
     }
 }
 window.setMuralTool = setMuralTool;
+
+/* ── Toolbar drag (#2): grip moves the toolbar anywhere; bottom-centre by default ── */
+function initMuralToolbarDrag() {
+    // Drop any stale toolbar we previously portaled onto <body>.
+    document.querySelectorAll('body > #muralToolbar').forEach(n => n.remove());
+    const bar = document.getElementById('muralToolbar');
+    const grip = document.getElementById('muralToolbarGrip');
+    if (!bar) return;
+    // ROOT FIX: the toolbar lives inside #main, which carries a lingering
+    // `transform: translateY(0)` from its page-enter animation (animation-fill-mode
+    // both). A non-none transform makes #main a containing block for position:fixed,
+    // and because .mural-page is itself fixed, #main collapses to ~0 height at the
+    // top — so `bottom:24px` resolved to the TOP of the screen. Portal the toolbar
+    // to <body> so its fixed positioning is genuinely viewport-relative.
+    if (bar.parentElement !== document.body) document.body.appendChild(bar);
+    try { localStorage.removeItem('muralToolbarPos'); } catch (e) {}
+    bar.style.left = '50%'; bar.style.right = 'auto';
+    bar.style.top = 'auto'; bar.style.bottom = '24px';
+    bar.style.transform = 'translateX(-50%)';
+    if (!grip || grip.dataset.bound === '1') return;
+    grip.dataset.bound = '1';
+    grip.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const rect = bar.getBoundingClientRect();
+        const offX = e.clientX - rect.left, offY = e.clientY - rect.top;
+        bar.style.transform = 'none'; bar.style.bottom = 'auto'; bar.style.right = 'auto';
+        const move = (ev) => {
+            const nx = Math.max(4, Math.min(ev.clientX - offX, window.innerWidth - rect.width - 4));
+            const ny = Math.max(4, Math.min(ev.clientY - offY, window.innerHeight - rect.height - 4));
+            bar.style.left = nx + 'px'; bar.style.top = ny + 'px';
+        };
+        const up = () => {
+            document.removeEventListener('pointermove', move);
+            document.removeEventListener('pointerup', up);
+        };
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+    });
+}
+window.initMuralToolbarDrag = initMuralToolbarDrag;
+
+/* ── Format panel (#4 text, #7 line/arrow, fill) — applies to the current selection ── */
+window.toggleMuralFormat = function (e) {
+    if (e) e.stopPropagation();
+    const p = document.getElementById('muralFormatPop');
+    if (p) p.classList.toggle('open');
+};
+function _muralSelectedEls() {
+    return (muralSelectedElementIds || []).map(id => muralElements.find(x => String(x.id) === String(id))).filter(Boolean);
+}
+function _muralPersistStyle() {
+    const p = document.getElementById('muralFormatPop'); if (p) p.classList.remove('open');
+    if (typeof manualMuralSync === 'function') manualMuralSync();
+}
+window.applyMuralFill = function (color) {
+    const els = _muralSelectedEls().filter(el => el.type !== 'connector');
+    if (!els.length) { if (typeof showToast === 'function') showToast('Select an item first'); return; }
+    els.forEach(el => {
+        el.color = color;
+        const dom = document.getElementById('mural-el-' + el.id);
+        if (dom) { if (el.type === 'icon') dom.style.color = color; else dom.style.backgroundColor = (color === 'transparent' ? 'transparent' : color); }
+    });
+    _muralPersistStyle();
+};
+// Adjustable corner radius for rectangle shapes (rect / rounded). 'inc'/'dec' step,
+// a number sets it directly (999 = pill, clamped to half the shorter side).
+window.applyMuralRadius = function (val) {
+    const els = _muralSelectedEls().filter(el => el.type === 'shape' && (el.shape === 'rect' || el.shape === 'rounded'));
+    if (!els.length) { if (typeof showToast === 'function') showToast('Select a rectangle first'); return; }
+    els.forEach(el => {
+        const cur = Number(el.border_radius) || 0;
+        let r;
+        if (val === 'inc') r = cur + 4;
+        else if (val === 'dec') r = cur - 4;
+        else if (val === 999) r = 9999;
+        else r = Number(val) || 0;
+        const maxR = Math.floor(Math.min(Number(el.w) || 120, Number(el.h) || 64) / 2);
+        r = Math.max(0, Math.min(r, maxR));
+        el.border_radius = r;
+        const dom = document.getElementById('mural-el-' + el.id);
+        if (dom) dom.style.borderRadius = r + 'px';
+    });
+    _muralPersistStyle();
+};
+window.applyMuralText = function (prop, value) {
+    const els = _muralSelectedEls().filter(el => el.type !== 'connector');
+    if (!els.length) { if (typeof showToast === 'function') showToast('Select an item first'); return; }
+    els.forEach(el => {
+        if (prop === 'font_size') { const cur = Number(el.font_size) || 15; el.font_size = Math.max(9, Math.min(64, cur + (value === 'inc' ? 3 : -3))); }
+        else if (prop === 'bold') { el.bold = !(el.bold === true || el.bold === 'true'); }
+        else el[prop] = value;
+        const dom = document.getElementById('mural-el-' + el.id);
+        const content = dom && dom.querySelector('.mural-element-content');
+        if (content) {
+            if (el.font_size) content.style.fontSize = el.font_size + 'px';
+            if (el.text_color) content.style.color = el.text_color;
+            content.style.fontWeight = (el.bold === true || el.bold === 'true') ? '700' : '';
+            if (el.text_align) content.style.textAlign = el.text_align;
+        }
+    });
+    _muralPersistStyle();
+};
+window.applyMuralLine = function (prop, value) {
+    let conns = [];
+    if (muralSelectedConnectorId) { const c = muralConnectors.find(x => x.id === muralSelectedConnectorId); if (c) conns = [c]; }
+    if (!conns.length) conns = _muralSelectedEls().filter(el => el.type === 'connector');
+    if (!conns.length) { if (typeof showToast === 'function') showToast('Select an arrow/line first'); return; }
+    conns.forEach(c => { c[prop] = value; renderSingleConnector(c); });
+    _muralPersistStyle();
+};
 
 /* ═══════════════════════════════════════
    KEYBOARD SHORTCUTS SYSTEM
@@ -1926,6 +2288,34 @@ window.openMuralShortcutsModal = function() {
 };
 function onMuralKeyDown(e) {
     if (!muralActiveProjectId) return;
+
+    // Arrow-key nudge for the current selection. Works regardless of the shortcut
+    // toggle, but is ignored while typing in a field or editing element text.
+    // 1px per press, 10px with Shift; held-key repeats coalesce into one undo step.
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const t = e.target;
+        if (t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+        if (!muralSelectedElementIds.length) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+        if (!e.repeat) { try { snapshotElementsForUndo(muralSelectedElementIds, 'move'); } catch (_) {} }
+        muralSelectedElementIds.forEach(id => {
+            const el = muralElements.find(it => String(it.id) === String(id));
+            if (!el) return;
+            el.x = (el.x || 0) + dx;
+            el.y = (el.y || 0) + dy;
+            const dom = document.getElementById('mural-el-' + id);
+            if (dom) { dom.style.left = el.x + 'px'; dom.style.top = el.y + 'px'; }
+            updateConnectorsForElement(id);
+            saveMuralElement(el);
+        });
+        updateSelectionBoundingBox();
+        showSaveIndicator('saving');
+        return;
+    }
+
     if (!isMuralShortcutsEnabled()) return; // Early return if shortcuts are disabled
     if (_muralRecordingAction) return; // Don't catch while recording
     if (e.target.contentEditable === 'true' || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -2014,12 +2404,16 @@ function onMuralKeyDown(e) {
    ELEMENT CREATION
    ═══════════════════════════════════════ */
 function getCanvasCenter() {
-    const cx = (window.innerWidth / 2 - muralTransform.x) / muralTransform.scale;
-    const cy = (window.innerHeight / 2 - muralTransform.y) / muralTransform.scale;
+    // Center new elements in the VISIBLE canvas. The page is offset from the
+    // viewport by the sidebar, so use its rect centre (not window centre).
+    const page = document.getElementById('muralPage');
+    const pr = page ? page.getBoundingClientRect()
+                    : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    const c = muralClientToWorld(pr.left + pr.width / 2, pr.top + pr.height / 2);
     // Add small random offset to avoid stacking
     return {
-        x: cx + (Math.random() - 0.5) * 40,
-        y: cy + (Math.random() - 0.5) * 40
+        x: c.x + (Math.random() - 0.5) * 40,
+        y: c.y + (Math.random() - 0.5) * 40
     };
 }
 
@@ -2055,17 +2449,20 @@ async function addMuralText() {
 
 async function addMuralShape(shape) {
     const center = getCanvasCenter();
+    const wide = ['rect', 'rounded', 'parallelogram', 'arrow'].includes(shape);
+    const w = 120, h = wide ? 64 : 120;
     const newEl = {
         project_id: muralActiveProjectId,
         type: 'shape',
         shape: shape,
-        x: center.x - 60,
-        y: center.y - (shape === 'rect' ? 30 : 60),
-        w: 120, h: shape === 'rect' ? 60 : 120,
+        x: center.x - w / 2,
+        y: center.y - h / 2,
+        w, h,
         content: '',
         color: 'rgba(99, 102, 241, 0.08)',
         z_index: muralElements.length + 1
     };
+    if (shape === 'rounded') newEl.border_radius = 16; // adjustable later in Format ▸ Corners
     await createMuralElement(newEl);
 }
 
@@ -2492,7 +2889,7 @@ async function manualMuralSync() {
         }
     } catch (err) {
         console.error('Manual sync failed:', err);
-        toast('Sync failed — check connection');
+        toast('Save failed: ' + (err && err.message ? err.message : 'unknown error'));
         showSaveIndicator('error');
     } finally {
         // Re-query button from DOM (original ref may be stale)
@@ -2786,40 +3183,66 @@ function getBestAnchorSide(fromId, toId) {
     }
 }
 
+// Resolve a connector endpoint to {x, y, side}. Priority:
+//   1. shape relative-anchor (id + rx/ry) → ANY point on the shape (#3)
+//   2. named side (legacy connectors) → side midpoint
+//   3. free point (x/y) → floats anywhere (powers the Line tool, #8)
+function _muralResolveEndpoint(conn, which) {
+    const id = conn[which + '_id'];
+    if (id) {
+        const el = muralElements.find(e => String(e.id) === String(id) && e.type !== 'connector');
+        if (el) {
+            const x = Number(el.x || 0), y = Number(el.y || 0), w = Number(el.w || 150), h = Number(el.h || 150);
+            const rx = conn[which + '_rx'], ry = conn[which + '_ry'];
+            if (rx != null && rx !== '' && ry != null && ry !== '') {
+                return { x: x + Number(rx) * w, y: y + Number(ry) * h, side: _muralSideFromRel(Number(rx), Number(ry)) };
+            }
+            const other = which === 'from' ? conn.to_id : conn.from_id;
+            const side = conn[which + '_side'] || (other ? getBestAnchorSide(id, other) : 'right');
+            const pt = getElementAnchorPoint(id, side);
+            if (pt) return { x: Number(pt.x), y: Number(pt.y), side };
+        }
+    }
+    const fx = conn[which + '_x'], fy = conn[which + '_y'];
+    if (fx != null && fx !== '' && fy != null && fy !== '') return { x: Number(fx), y: Number(fy), side: null };
+    return null;
+}
+function _muralSideFromRel(rx, ry) {
+    const dl = rx, dr = 1 - rx, dt = ry, db = 1 - ry;
+    const m = Math.min(dl, dr, dt, db);
+    if (m === dt) return 'top';
+    if (m === db) return 'bottom';
+    if (m === dl) return 'left';
+    return 'right';
+}
+function _muralDirSide(x, y, ox, oy) {
+    const dx = ox - x, dy = oy - y;
+    return Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'bottom' : 'top');
+}
+
 function getConnectorPath(conn) {
-    const fromCenter = getElementCenter(conn.from_id);
-    const toCenter = getElementCenter(conn.to_id);
-    if (!fromCenter || !toCenter) return null;
-
-    // Always use clean anchor midpoints (like diagrams.net)
-    const fromSide = conn.from_side || getBestAnchorSide(conn.from_id, conn.to_id);
-    const toSide = conn.to_side || getBestAnchorSide(conn.to_id, conn.from_id);
-
-    const fromPt = getElementAnchorPoint(conn.from_id, fromSide);
-    const toPt = getElementAnchorPoint(conn.to_id, toSide);
-
+    const fromPt = _muralResolveEndpoint(conn, 'from');
+    const toPt = _muralResolveEndpoint(conn, 'to');
     if (!fromPt || !toPt) return null;
 
-    const fx = Number(fromPt.x), fy = Number(fromPt.y);
-    const tx = Number(toPt.x), ty = Number(toPt.y);
+    const fx = fromPt.x, fy = fromPt.y, tx = toPt.x, ty = toPt.y;
     const style = conn.connector_style || 'bezier';
 
     if (style === 'straight') {
         return `M ${fx} ${fy} L ${tx} ${ty}`;
     }
 
+    const fromSide = fromPt.side || _muralDirSide(fx, fy, tx, ty);
+    const toSide = toPt.side || _muralDirSide(tx, ty, fx, fy);
+
     if (style === 'step') {
-        // Smart step routing based on anchor sides
         return getStepPath(fx, fy, fromSide, tx, ty, toSide);
     }
 
-    // Bezier — control points extend outward from the anchor side
     const dist = Math.hypot(tx - fx, ty - fy);
     const offset = Math.min(dist * 0.4, 150);
-
     const cp1 = getControlPointForSide(fx, fy, fromSide, offset);
     const cp2 = getControlPointForSide(tx, ty, toSide, offset);
-
     return `M ${fx} ${fy} C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${tx} ${ty}`;
 }
 
@@ -2891,6 +3314,14 @@ function renderSingleConnector(conn) {
         muralSelectedElementIds = [];
         document.querySelectorAll('.mural-element.selected').forEach(el => el.classList.remove('selected'));
         highlightMuralConnector(conn.id);
+        // A FREE line/arrow (both ends are loose points, not pinned to shapes) can be
+        // dragged to move it. Connectors bound to shapes follow their shapes instead.
+        const free = !conn.from_id && !conn.to_id;
+        if (free && muralActiveTool === 'select') {
+            muralDraggingConnector = conn;
+            muralConnDragStart = { x: e.clientX, y: e.clientY };
+            window._muralConnDragMoved = false;
+        }
     });
     hitPath.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -2906,7 +3337,8 @@ function renderSingleConnector(conn) {
     path.setAttribute('d', pathD);
     path.setAttribute('data-connector-id', conn.id);
     path.setAttribute('stroke', isSelected ? '#F59E0B' : (conn.color || '#6366F1'));
-    path.setAttribute('stroke-width', isSelected ? '3' : '2');
+    const _sw = Number(conn.stroke_width) || 2;
+    path.setAttribute('stroke-width', isSelected ? (_sw + 1) : _sw);
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke-linecap', 'round');
     path.style.transition = 'stroke 0.2s, stroke-width 0.2s';
@@ -3003,11 +3435,87 @@ function showConnectorAnchors(conn) {
         const a = toDom.querySelector(`.mural-anchor.${toSide}`);
         if (a) a.classList.add('connected');
     }
+    // Draggable endpoint handles → drag onto any point of a shape to re-attach (#3),
+    // or onto empty canvas to leave the end floating.
+    _muralRenderEndpointHandles(conn);
 }
 
 function hideConnectorAnchors() {
     document.querySelectorAll('.mural-element.show-anchors').forEach(el => el.classList.remove('show-anchors'));
     document.querySelectorAll('.mural-anchor.connected').forEach(el => el.classList.remove('connected'));
+    _muralRemoveEndpointHandles();
+}
+
+function _muralRemoveEndpointHandles() {
+    const svg = document.getElementById('muralConnectorSvg');
+    if (svg) svg.querySelectorAll('.mural-endpoint-handle').forEach(h => h.remove());
+}
+function _muralRenderEndpointHandles(conn) {
+    _muralRemoveEndpointHandles();
+    const svg = document.getElementById('muralConnectorSvg');
+    if (!svg) return;
+    ['from', 'to'].forEach(which => {
+        const pt = _muralResolveEndpoint(conn, which);
+        if (!pt) return;
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('class', 'mural-endpoint-handle');
+        c.setAttribute('data-endpoint', which);
+        c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y); c.setAttribute('r', '7');
+        c.setAttribute('fill', '#ffffff'); c.setAttribute('stroke', '#F59E0B'); c.setAttribute('stroke-width', '2.5');
+        c.style.cursor = 'grab';
+        _muralBindEndpointHandle(c, conn, which);
+        svg.appendChild(c);
+    });
+}
+function _muralPositionEndpointHandles(conn) {
+    const svg = document.getElementById('muralConnectorSvg');
+    if (!svg) return;
+    ['from', 'to'].forEach(which => {
+        const pt = _muralResolveEndpoint(conn, which);
+        const c = svg.querySelector(`.mural-endpoint-handle[data-endpoint="${which}"]`);
+        if (pt && c) { c.setAttribute('cx', pt.x); c.setAttribute('cy', pt.y); }
+    });
+}
+function _muralBindEndpointHandle(circle, conn, which) {
+    circle.addEventListener('pointerdown', (e) => {
+        e.stopPropagation(); e.preventDefault();
+        circle.style.cursor = 'grabbing';
+        const move = (ev) => {
+            // Find a shape under the cursor (skip the SVG + the handles themselves).
+            let shapeEl = null, dom = null;
+            const stack = (document.elementsFromPoint ? document.elementsFromPoint(ev.clientX, ev.clientY) : []);
+            for (const node of stack) {
+                const d = node.closest && node.closest('.mural-element');
+                if (d && d.id && d.id.indexOf('mural-el-') === 0) {
+                    const id = d.id.replace('mural-el-', '');
+                    const el = muralElements.find(x => String(x.id) === String(id) && x.type !== 'connector');
+                    if (el) { shapeEl = el; dom = d; break; }
+                }
+            }
+            if (shapeEl && dom) {
+                const r = dom.getBoundingClientRect();
+                let rx = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+                let ry = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height));
+                conn[which + '_id'] = shapeEl.id;
+                conn[which + '_rx'] = Math.round(rx * 1000) / 1000;
+                conn[which + '_ry'] = Math.round(ry * 1000) / 1000;
+                conn[which + '_x'] = null; conn[which + '_y'] = null; conn[which + '_side'] = null;
+            } else {
+                conn[which + '_id'] = null; conn[which + '_rx'] = null; conn[which + '_ry'] = null; conn[which + '_side'] = null;
+                { const w = muralClientToWorld(ev.clientX, ev.clientY); conn[which + '_x'] = w.x; conn[which + '_y'] = w.y; }
+            }
+            renderSingleConnector(conn);
+            _muralPositionEndpointHandles(conn);
+        };
+        const up = () => {
+            document.removeEventListener('pointermove', move);
+            document.removeEventListener('pointerup', up);
+            circle.style.cursor = 'grab';
+            if (typeof manualMuralSync === 'function') manualMuralSync();
+        };
+        document.addEventListener('pointermove', move);
+        document.addEventListener('pointerup', up);
+    });
 }
 
 /**
@@ -3023,57 +3531,48 @@ function showConnectorContextMenu(x, y, connId) {
     menu.className = 'mural-context-menu';
     menu.id = 'muralContextMenu';
 
-    const menuWidth = 180;
-    const menuHeight = 180;
+    const menuWidth = 240;
+    const menuHeight = 260;
     if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
-    if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
+    if (y + menuHeight > window.innerHeight) y = Math.max(8, window.innerHeight - menuHeight - 8);
 
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
+    menu.style.minWidth = '236px';
 
     const currentStyle = conn.connector_style || 'bezier';
     const currentLine = conn.line_style || 'solid';
     const currentArrow = conn.arrow_mode || 'arrow';
 
+    // Compact icon-button rows so the menu stays short (was a long vertical list
+    // that got clipped at the bottom of the screen). Tooltips name each option.
     menu.innerHTML = `
-        <div class="mural-context-section-label">Route</div>
-        <button class="mural-context-item ${currentStyle === 'bezier' ? 'active-style' : ''}" onclick="changeConnectorStyle('${connId}', 'bezier'); dismissMuralPopups();">
-            <i data-lucide="spline"></i> Curved
-        </button>
-        <button class="mural-context-item ${currentStyle === 'straight' ? 'active-style' : ''}" onclick="changeConnectorStyle('${connId}', 'straight'); dismissMuralPopups();">
-            <i data-lucide="minus"></i> Straight
-        </button>
-        <button class="mural-context-item ${currentStyle === 'step' ? 'active-style' : ''}" onclick="changeConnectorStyle('${connId}', 'step'); dismissMuralPopups();">
-            <i data-lucide="git-commit-horizontal"></i> Stepped
-        </button>
-        <div class="mural-context-divider"></div>
-        <div class="mural-context-section-label">Line</div>
-        <button class="mural-context-item ${currentLine === 'solid' ? 'active-style' : ''}" onclick="changeConnectorLine('${connId}', 'solid'); dismissMuralPopups();">
-            <i data-lucide="minus"></i> Solid
-        </button>
-        <button class="mural-context-item ${currentLine === 'dashed' ? 'active-style' : ''}" onclick="changeConnectorLine('${connId}', 'dashed'); dismissMuralPopups();">
-            <i data-lucide="grip-horizontal"></i> Dashed
-        </button>
-        <button class="mural-context-item ${currentLine === 'dotted' ? 'active-style' : ''}" onclick="changeConnectorLine('${connId}', 'dotted'); dismissMuralPopups();">
-            <i data-lucide="more-horizontal"></i> Dotted
-        </button>
-        <div class="mural-context-divider"></div>
-        <div class="mural-context-section-label">Arrows</div>
-        <button class="mural-context-item ${currentArrow === 'arrow' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'arrow'); dismissMuralPopups();">
-            <i data-lucide="arrow-right"></i> End Arrow
-        </button>
-        <button class="mural-context-item ${currentArrow === 'both' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'both'); dismissMuralPopups();">
-            <i data-lucide="move-horizontal"></i> Both Arrows
-        </button>
-        <button class="mural-context-item ${currentArrow === 'reverse' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'reverse'); dismissMuralPopups();">
-            <i data-lucide="arrow-left"></i> Start Arrow
-        </button>
-        <button class="mural-context-item ${currentArrow === 'none' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'none'); dismissMuralPopups();">
-            <i data-lucide="minus"></i> No Arrows
-        </button>
-        <button class="mural-context-item ${currentArrow === 'dot' ? 'active-style' : ''}" onclick="changeConnectorArrow('${connId}', 'dot'); dismissMuralPopups();">
-            <i data-lucide="circle-dot"></i> Dot Ends
-        </button>
+        <div class="mfp-sec">
+            <div class="mfp-label">Route</div>
+            <div class="mfp-row">
+                <button class="mfp-btn mfp-sq ${currentStyle === 'bezier' ? 'active' : ''}" title="Curved" onclick="changeConnectorStyle('${connId}','bezier'); dismissMuralPopups();"><i data-lucide="spline"></i></button>
+                <button class="mfp-btn mfp-sq ${currentStyle === 'straight' ? 'active' : ''}" title="Straight" onclick="changeConnectorStyle('${connId}','straight'); dismissMuralPopups();"><i data-lucide="minus"></i></button>
+                <button class="mfp-btn mfp-sq ${currentStyle === 'step' ? 'active' : ''}" title="Stepped" onclick="changeConnectorStyle('${connId}','step'); dismissMuralPopups();"><i data-lucide="git-commit-horizontal"></i></button>
+            </div>
+        </div>
+        <div class="mfp-sec">
+            <div class="mfp-label">Line</div>
+            <div class="mfp-row">
+                <button class="mfp-btn mfp-sq ${currentLine === 'solid' ? 'active' : ''}" title="Solid" onclick="changeConnectorLine('${connId}','solid'); dismissMuralPopups();"><i data-lucide="minus"></i></button>
+                <button class="mfp-btn mfp-sq ${currentLine === 'dashed' ? 'active' : ''}" title="Dashed" onclick="changeConnectorLine('${connId}','dashed'); dismissMuralPopups();"><i data-lucide="grip-horizontal"></i></button>
+                <button class="mfp-btn mfp-sq ${currentLine === 'dotted' ? 'active' : ''}" title="Dotted" onclick="changeConnectorLine('${connId}','dotted'); dismissMuralPopups();"><i data-lucide="more-horizontal"></i></button>
+            </div>
+        </div>
+        <div class="mfp-sec">
+            <div class="mfp-label">Arrows</div>
+            <div class="mfp-row">
+                <button class="mfp-btn mfp-sq ${currentArrow === 'arrow' ? 'active' : ''}" title="End arrow" onclick="changeConnectorArrow('${connId}','arrow'); dismissMuralPopups();"><i data-lucide="arrow-right"></i></button>
+                <button class="mfp-btn mfp-sq ${currentArrow === 'both' ? 'active' : ''}" title="Both arrows" onclick="changeConnectorArrow('${connId}','both'); dismissMuralPopups();"><i data-lucide="move-horizontal"></i></button>
+                <button class="mfp-btn mfp-sq ${currentArrow === 'reverse' ? 'active' : ''}" title="Start arrow" onclick="changeConnectorArrow('${connId}','reverse'); dismissMuralPopups();"><i data-lucide="arrow-left"></i></button>
+                <button class="mfp-btn mfp-sq ${currentArrow === 'none' ? 'active' : ''}" title="No arrows" onclick="changeConnectorArrow('${connId}','none'); dismissMuralPopups();"><i data-lucide="minus"></i></button>
+                <button class="mfp-btn mfp-sq ${currentArrow === 'dot' ? 'active' : ''}" title="Dot ends" onclick="changeConnectorArrow('${connId}','dot'); dismissMuralPopups();"><i data-lucide="circle-dot"></i></button>
+            </div>
+        </div>
         <div class="mural-context-divider"></div>
         <button class="mural-context-item danger" onclick="deleteMuralConnector('${connId}'); dismissMuralPopups();">
             <i data-lucide="trash-2"></i> Delete
@@ -3085,7 +3584,7 @@ function showConnectorContextMenu(x, y, connId) {
     if (window.lucide) lucide.createIcons();
 
     setTimeout(() => {
-        document.addEventListener('pointerdown', dismissMuralPopupsOnOutside, { once: true });
+        document.addEventListener('pointerdown', dismissMuralPopupsOnOutside);
     }, 10);
 }
 

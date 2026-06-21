@@ -3717,8 +3717,9 @@ window.quickCompleteTask = async function (id) {
   const t = state.data.tasks.find(x => String(x.id) === String(id));
   if (t) {
     t.status = 'completed';
+    t.completed_at = new Date().toISOString();
     renderDashboard();
-    await apiCall('update', 'tasks', { status: 'completed' }, id);
+    await apiCall('update', 'tasks', { status: 'completed', completed_at: t.completed_at }, id);
   }
 }
 

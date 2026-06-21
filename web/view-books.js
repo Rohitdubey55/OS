@@ -164,6 +164,10 @@ function booksShellHTML() {
       <button class="bl-icon-btn" onclick="booksToggleSearch()" title="Search">
         <i data-lucide="search" style="width:18px;height:18px"></i>
       </button>
+      <button class="bl-add-btn" onclick="openAddBookModal()">
+        <i data-lucide="plus" style="width:15px;height:15px"></i>
+        <span>Add book</span>
+      </button>
       <button class="bl-suggest-btn" onclick="openBookSuggestionModal()">
         <i data-lucide="sparkles" style="width:15px;height:15px"></i>
         <span>Suggest</span>
@@ -230,10 +234,15 @@ function booksRenderList() {
           <i data-lucide="book-open" style="width:40px;height:40px;opacity:0.3"></i>
         </div>
         <div class="bl-empty-title">${library.length === 0 ? 'Your library is empty' : 'No books match'}</div>
-        <div class="bl-empty-sub">${library.length === 0 ? 'Let AI suggest books based on your goals and habits' : 'Try a different filter or search term'}</div>
-        ${library.length === 0 ? `<button class="bl-suggest-btn mt-3" onclick="openBookSuggestionModal()">
-          <i data-lucide="sparkles" style="width:14px;height:14px"></i> Get AI Suggestions
-        </button>` : ''}
+        <div class="bl-empty-sub">${library.length === 0 ? 'Add a book you\'re reading and write your own summary — or let AI suggest books based on your goals' : 'Try a different filter or search term'}</div>
+        ${library.length === 0 ? `<div class="bl-empty-actions">
+          <button class="bl-add-btn mt-3" onclick="openAddBookModal()">
+            <i data-lucide="plus" style="width:14px;height:14px"></i> Add a book
+          </button>
+          <button class="bl-suggest-btn mt-3" onclick="openBookSuggestionModal()">
+            <i data-lucide="sparkles" style="width:14px;height:14px"></i> Get AI Suggestions
+          </button>
+        </div>` : ''}
       </div>
     `;
     if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -268,6 +277,7 @@ function getBookProgress(bookId) {
   const progress = JSON.parse(localStorage.getItem('bookReadingProgress') || '{}');
   const sum = (state.data.book_summaries || []).find(s => String(s.book_id) === String(bookId));
   if (!sum) return null;
+  if (isUserSummary(sum)) return null;   // free-form note — single page, no "progress"
   const totalPages = Number(sum.total_pages) || (() => { try { return JSON.parse(sum.summary_json || '[]').length; } catch(e) { return 0; } })();
   if (!totalPages) return null;
   const currentPage = progress[bookId] ?? 0;
@@ -303,8 +313,8 @@ function blCardHTML(book) {
         ? `<button class="bl-read-btn" onclick="event.stopPropagation(); openBookReader('${book.id}')">
              <i data-lucide="book-open" style="width:11px;height:11px"></i> ${prog && prog.currentPage > 0 ? 'Continue' : 'Read'}
            </button>`
-        : `<button class="bl-summarize-btn" onclick="event.stopPropagation(); generateSummary('${book.id}')">
-             <i data-lucide="zap" style="width:11px;height:11px"></i> Summarize
+        : `<button class="bl-summarize-btn" onclick="event.stopPropagation(); openWriteSummaryModal('${book.id}')">
+             <i data-lucide="pen-line" style="width:11px;height:11px"></i> Write summary
            </button>`
       }
     </div>
@@ -347,7 +357,9 @@ window.booksOnSearch = function(val) {
 window.openBookDetail = function(bookId) {
   const book = (state.data.book_library || []).find(b => String(b.id) === String(bookId));
   if (!book) return;
-  const hasSummary = (state.data.book_summaries || []).some(s => String(s.book_id) === String(book.id));
+  const sum = (state.data.book_summaries || []).find(s => String(s.book_id) === String(book.id));
+  const hasSummary = !!sum;
+  const userSum = isUserSummary(sum);
   const gradient = bookCoverGradient(book.title);
   const status = BOOK_STATUS[book.status] || BOOK_STATUS.wishlist;
 
@@ -395,17 +407,24 @@ window.openBookDetail = function(bookId) {
         </div>
 
         <div class="bld-actions">
-          ${hasSummary
-            ? `<button class="bld-primary-btn" onclick="openBookReader('${book.id}')">
-                 <i data-lucide="book-open" style="width:16px;height:16px"></i> Read Summary
-               </button>
-               <button class="bld-secondary-btn" onclick="closeBookDetail(); regenerateSummary('${book.id}')">
-                 <i data-lucide="zap" style="width:16px;height:16px"></i> Regenerate Summary
-               </button>`
-            : `<button class="bld-primary-btn" onclick="closeBookDetail(); generateSummary('${book.id}')">
-                 <i data-lucide="zap" style="width:16px;height:16px"></i> Generate AI Summary
-               </button>`
-          }
+          ${hasSummary ? `
+            <button class="bld-primary-btn" onclick="openBookReader('${book.id}')">
+              <i data-lucide="book-open" style="width:16px;height:16px"></i> Read Summary
+            </button>
+            <button class="bld-secondary-btn" onclick="openWriteSummaryModal('${book.id}')">
+              <i data-lucide="pen-line" style="width:16px;height:16px"></i> ${userSum ? 'Edit my summary' : 'Write my summary'}
+            </button>
+            ${!userSum ? `<button class="bld-secondary-btn" onclick="closeBookDetail(); regenerateSummary('${book.id}')">
+              <i data-lucide="zap" style="width:16px;height:16px"></i> Regenerate AI Summary
+            </button>` : ''}
+          ` : `
+            <button class="bld-primary-btn" onclick="openWriteSummaryModal('${book.id}')">
+              <i data-lucide="pen-line" style="width:16px;height:16px"></i> Write my summary
+            </button>
+            <button class="bld-secondary-btn" onclick="closeBookDetail(); generateSummary('${book.id}')">
+              <i data-lucide="zap" style="width:16px;height:16px"></i> Generate AI Summary
+            </button>
+          `}
           <button class="bld-secondary-btn" onclick="booksChangeStatus('${book.id}')">
             <i data-lucide="refresh-cw" style="width:14px;height:14px"></i> Change Status
           </button>
@@ -584,6 +603,86 @@ window.blAddSuggestedBook = async function(title, author, category) {
   }
 };
 
+/* ── Manual Add Book ── */
+window.openAddBookModal = function() {
+  openUniversalModal();
+  const box = document.querySelector('#universalModal .modal-box');
+  if (!box) return;
+
+  box.innerHTML = `
+    <div class="bl-modal-header">
+      <div class="bl-modal-title">
+        <i data-lucide="book-plus" style="width:20px;height:20px;color:#6366F1"></i>
+        <span>Add a book</span>
+      </div>
+      <button class="bl-icon-btn" onclick="closeUniversalModal()">
+        <i data-lucide="x" style="width:18px;height:18px"></i>
+      </button>
+    </div>
+    <div class="bl-modal-body">
+      <label class="bl-field-label">Title</label>
+      <input id="abTitle" class="bl-input" placeholder="e.g. Atomic Habits" autofocus
+             onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('abAuthor').focus();}">
+
+      <label class="bl-field-label" style="margin-top:12px">Author</label>
+      <input id="abAuthor" class="bl-input" placeholder="e.g. James Clear">
+
+      <div style="display:flex; gap:12px; margin-top:12px;">
+        <div style="flex:1">
+          <label class="bl-field-label">Status</label>
+          <select id="abStatus" class="bl-input">
+            <option value="reading">Reading</option>
+            <option value="wishlist">Wishlist</option>
+            <option value="completed">Completed</option>
+            <option value="paused">Paused</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label class="bl-field-label">Category <span style="opacity:.5;font-weight:400">(optional)</span></label>
+          <input id="abCategory" class="bl-input" placeholder="e.g. Productivity">
+        </div>
+      </div>
+
+      <button class="bld-primary-btn" style="width:100%; margin-top:18px;" onclick="blAddManualBook()">
+        <i data-lucide="plus" style="width:16px;height:16px"></i> Add to library
+      </button>
+    </div>
+  `;
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  setTimeout(() => document.getElementById('abTitle')?.focus(), 50);
+};
+
+window.blAddManualBook = async function() {
+  const title = (document.getElementById('abTitle')?.value || '').trim();
+  const author = (document.getElementById('abAuthor')?.value || '').trim();
+  const status = document.getElementById('abStatus')?.value || 'reading';
+  const category = (document.getElementById('abCategory')?.value || '').trim();
+  if (!title) { toast('Please enter a title'); document.getElementById('abTitle')?.focus(); return; }
+  try {
+    const payload = {
+      title, author, category, status,
+      date_added: new Date().toISOString().split('T')[0],
+    };
+    const res = await apiCall('create', 'book_library', payload);
+    toast(`"${title}" added!`);
+    closeUniversalModal();
+    const lib = await apiGet('book_library');
+    state.data.book_library = lib || [];
+    booksRenderList();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    // Find the new book, fetch its cover, and open its detail so the user can
+    // immediately write a summary.
+    const newBook = (state.data.book_library || []).find(b => String(b.id) === String(res && res.id))
+      || (state.data.book_library || []).find(b => b.title === title && b.author === author);
+    if (newBook) {
+      if (!newBook.cover_url) autoFetchCover(newBook.id, title, author);
+      openBookDetail(newBook.id);
+    }
+  } catch (e) {
+    toast('Failed to add book: ' + e.message);
+  }
+};
+
 /* ── Summary Generation ── */
 window.generateSummary = async function(bookId) {
   const book = (state.data.book_library || []).find(b => String(b.id) === String(bookId));
@@ -669,8 +768,118 @@ window.regenerateSummary = async function(bookId) {
 };
 
 /* ── Open Reader ── */
-window.openBookReader = function(bookId) {
+window.openBookReader = async function(bookId) {
   const sum = (state.data.book_summaries || []).find(s => String(s.book_id) === String(bookId));
   if (!sum) { toast('No summary found. Generate one first.'); return; }
-  renderReader(sum.id);
+  // view-reader.js is a lazily-loaded module — load it before calling renderReader
+  // (otherwise renderReader is undefined and the Read button silently does nothing).
+  if (typeof renderReader !== 'function' && typeof ensureViewLoaded === 'function') {
+    await ensureViewLoaded('reader');
+  }
+  if (typeof renderReader === 'function') renderReader(sum.id);
+  else toast('Could not open the reader');
+};
+
+/* ── My Summary (free-form, user-written) ──
+   Stored in book_summaries as a single page flagged user_written, so it opens in
+   the same full-screen Reader as AI summaries with zero reader changes. */
+function isUserSummary(sum) {
+  if (!sum) return false;
+  try {
+    const arr = JSON.parse(sum.summary_json || '[]');
+    return Array.isArray(arr) && arr[0] && arr[0].user_written === true;
+  } catch (e) { return false; }
+}
+
+window.openWriteSummaryModal = function(bookId) {
+  const book = (state.data.book_library || []).find(b => String(b.id) === String(bookId));
+  if (!book) return;
+  const existing = (state.data.book_summaries || []).find(s => String(s.book_id) === String(bookId));
+  // Only prefill when editing the user's OWN summary (don't dump a long AI summary
+  // into the editor).
+  let prefill = '';
+  if (existing && isUserSummary(existing)) {
+    try {
+      const arr = JSON.parse(existing.summary_json || '[]');
+      prefill = arr.map(p => (p && p.content) ? p.content : '').filter(Boolean).join('\n\n');
+    } catch (e) {}
+  }
+  const editing = existing && isUserSummary(existing);
+
+  openUniversalModal();
+  const box = document.querySelector('#universalModal .modal-box');
+  if (!box) return;
+  box.innerHTML = `
+    <div class="bl-modal-header">
+      <div class="bl-modal-title">
+        <i data-lucide="pen-line" style="width:20px;height:20px;color:#6366F1"></i>
+        <span>${editing ? 'Edit' : 'Write'} my summary</span>
+      </div>
+      <button class="bl-icon-btn" onclick="closeUniversalModal()">
+        <i data-lucide="x" style="width:18px;height:18px"></i>
+      </button>
+    </div>
+    <div class="bl-modal-body">
+      <p class="bl-modal-sub">${escapeHtml(book.title || '')}${book.author ? ' · ' + escapeHtml(book.author) : ''}</p>
+      <textarea id="usText" class="bl-input bl-summary-textarea"
+        placeholder="Write your summary, key ideas, notes, quotes… It's saved so you can read it back anytime.">${escapeHtml(prefill)}</textarea>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="bld-secondary-btn" style="flex:1" onclick="saveUserSummary('${bookId}', false)">
+          <i data-lucide="save" style="width:16px;height:16px"></i> Save
+        </button>
+        <button class="bld-primary-btn" style="flex:1" onclick="saveUserSummary('${bookId}', true)">
+          <i data-lucide="book-open" style="width:16px;height:16px"></i> Save &amp; Read
+        </button>
+      </div>
+    </div>
+  `;
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+  setTimeout(() => document.getElementById('usText')?.focus(), 50);
+};
+
+window.saveUserSummary = async function(bookId, thenRead) {
+  const book = (state.data.book_library || []).find(b => String(b.id) === String(bookId));
+  if (!book) return;
+  const text = (document.getElementById('usText')?.value || '').trim();
+  if (!text) { toast('Write something first'); document.getElementById('usText')?.focus(); return; }
+
+  const page = { page_number: 1, title: 'My Summary', content: text, user_written: true };
+  const payload = {
+    book_id: bookId,
+    book_title: book.title,
+    author: book.author,
+    summary_json: JSON.stringify([page]),
+    total_pages: 1,
+    key_takeaways: '[]',
+    memorable_quotes: '[]',
+    action_items: '[]',
+  };
+  try {
+    const existing = (state.data.book_summaries || []).find(s => String(s.book_id) === String(bookId));
+    const res = existing
+      ? await apiCall('update', 'book_summaries', payload, existing.id)
+      : await apiCall('create', 'book_summaries', payload);
+    // apiCall resolves to {success:false, message} on a DB error (it doesn't throw),
+    // so check explicitly instead of falsely reporting success.
+    if (res && res.success === false) { toast('Failed to save: ' + (res.message || 'unknown error')); return; }
+    toast('Summary saved');
+    closeUniversalModal();
+    const sums = await apiGet('book_summaries');
+    state.data.book_summaries = sums || [];
+    // Clear any stale reading position so a re-saved summary starts at the top.
+    try {
+      const prog = JSON.parse(localStorage.getItem('bookReadingProgress') || '{}');
+      delete prog[bookId]; localStorage.setItem('bookReadingProgress', JSON.stringify(prog));
+    } catch (e) {}
+    if (thenRead) {
+      await openBookReader(bookId);
+    } else {
+      booksRenderList();
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+      const ov = document.getElementById('blDetailOverlay');
+      if (ov && !ov.classList.contains('hidden')) openBookDetail(bookId);
+    }
+  } catch (e) {
+    toast('Failed to save: ' + e.message);
+  }
 };

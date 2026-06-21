@@ -209,3 +209,36 @@ body.spacious {
         height: 40px;
     }
 }
+
+/* ── Category Limits: compact single-line rows (name · limit · description · spent · X) ── */
+.cat-budget-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.cat-budget-row .input { padding: 8px 12px; font-size: 13.5px; }
+.cat-budget-row .cat-name { flex: 1 1 150px; min-width: 120px; }
+.cat-budget-row .cat-amt  { flex: 0 0 100px; width: 100px; }
+.cat-budget-row .cat-desc { flex: 2 1 200px; min-width: 150px; color: var(--text-2); }
+.cat-budget-row .cat-spent {
+    flex: 0 0 60px; width: 60px; text-align: right;
+    font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.cat-budget-row .btn.danger.small { flex: 0 0 auto; }
+/* Budget status colour coding: within (green) · about to breach (amber) · breached (red).
+   A left stripe (reserved with a transparent border so non-status rows stay aligned)
+   plus colour on the spent figure. */
+.cat-budget-row { padding-left: 8px; border-left: 3px solid transparent; border-radius: 6px; }
+.cat-budget-row.cat-row--ok   { border-left-color: var(--success, #16a34a); }
+.cat-budget-row.cat-row--warn { border-left-color: #f59e0b; }
+.cat-budget-row.cat-row--over { border-left-color: var(--danger, #dc2626); background: color-mix(in srgb, var(--danger, #dc2626) 5%, transparent); }
+.cat-spent--ok   { color: var(--success, #16a34a); font-weight: 700; }
+.cat-spent--warn { color: #b45309; font-weight: 700; }
+.cat-spent--over { color: var(--danger, #dc2626); font-weight: 700; }
+/* On phones, let the description drop to its own line but keep name+limit paired */
+@media (max-width: 560px) {
+    .cat-budget-row .cat-name { flex: 1 1 60%; }
+    .cat-budget-row .cat-desc { flex: 1 1 100%; order: 5; }
+}

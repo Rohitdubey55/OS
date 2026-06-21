@@ -544,6 +544,18 @@ function renderDiary() {
 
 }
 
+// Local YYYY-MM-DD (NEVER UTC). Using toISOString() shifts the date by a day for
+// any user not on UTC (e.g. an evening entry got tomorrow's date), which made
+// today's entry light up the NEXT day's dot. Pass a Date object or nothing (= now);
+// do NOT pass a "YYYY-MM-DD" string (that would re-parse as UTC and shift again).
+function diaryLocalDate(d) {
+  const dt = d ? new Date(d) : new Date();
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // Generate week dots (new dr- classes)
 function getWeekDots(entries) {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -555,9 +567,9 @@ function getWeekDots(entries) {
   for (let i = 0; i < 7; i++) {
     const day = new Date(startOfWeek);
     day.setDate(startOfWeek.getDate() + i);
-    const dateStr = day.toISOString().slice(0, 10);
+    const dateStr = diaryLocalDate(day);
     const entry = entries.find(e => e.date === dateStr);
-    const isToday = dateStr === today.toISOString().slice(0, 10);
+    const isToday = dateStr === diaryLocalDate(today);
 
     dots.push(`
       <div class="dr-week-dot ${entry ? 'has-entry' : ''} ${isToday ? 'today' : ''}"
@@ -666,8 +678,8 @@ function getRelativeDate(dateStr) {
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  if (dateStr === today.toISOString().slice(0, 10)) return 'Today';
-  if (dateStr === yesterday.toISOString().slice(0, 10)) return 'Yesterday';
+  if (dateStr === diaryLocalDate(today)) return 'Today';
+  if (dateStr === diaryLocalDate(yesterday)) return 'Yesterday';
 
   return date.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' });
 }
@@ -801,7 +813,7 @@ function renderCalendarView(entries) {
       date: i,
       isOtherMonth: false,
       entry,
-      isToday: dateStr === today.toISOString().slice(0, 10)
+      isToday: dateStr === diaryLocalDate(today)
     });
   }
 
@@ -871,7 +883,7 @@ function renderYearlyView(entries) {
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const entry = entryMap[dateStr];
-      const isToday = dateStr === today.toISOString().slice(0, 10);
+      const isToday = dateStr === diaryLocalDate(today);
       days.push({ day: d, entry, isToday });
     }
 
@@ -1162,16 +1174,16 @@ function calculateStreak(entries) {
   if (!dates.length) return 0;
 
   let streak = 0;
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const today = diaryLocalDate();
+  const yesterday = diaryLocalDate(new Date(Date.now() - 86400000));
 
   if (dates[0] !== today && dates[0] !== yesterday) return 0;
 
   let currentDate = dates[0] === today ? new Date() : new Date(Date.now() - 86400000);
 
   for (const dateStr of dates) {
-    const entryDate = new Date(dateStr).toISOString().slice(0, 10);
-    const checkDate = currentDate.toISOString().slice(0, 10);
+    const entryDate = dateStr; // already YYYY-MM-DD; don't re-parse (would shift via UTC)
+    const checkDate = diaryLocalDate(currentDate);
 
     if (entryDate === checkDate) {
       streak++;
@@ -1415,7 +1427,7 @@ window.filterByTag = function (tag) {
 window.openDiaryModal = function (dateStr, templateContent = '') {
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
-  const defaultDate = dateStr || new Date().toISOString().slice(0, 10);
+  const defaultDate = dateStr || diaryLocalDate();
 
   // Get settings
   const settings = state.data.settings?.[0] || {};
