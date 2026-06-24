@@ -372,6 +372,21 @@ CREATE TABLE IF NOT EXISTS public.meal_day (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- "Things I can eat" library — reusable foods picked from when planning meals.
+CREATE TABLE IF NOT EXISTS public.meal_items (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    name TEXT,
+    slots TEXT,                      -- CSV of 'breakfast,lunch,dinner'; empty = any meal
+    healthy TEXT,                    -- 'healthy' | 'ok' | 'treat'
+    favorite BOOLEAN DEFAULT false,
+    use_count INT DEFAULT 0,
+    notes TEXT,
+    sort_order INT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.pomodoro_settings (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,

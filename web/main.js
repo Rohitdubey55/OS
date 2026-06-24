@@ -384,7 +384,7 @@ const VIEW_MAP = {
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js',   render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
-    meals:         { src: 'view-meals.js?v=20260622d', render: 'renderMeals' }
+    meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' }
 };
 
 const _loadedScripts = new Set();

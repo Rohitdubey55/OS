@@ -209,7 +209,9 @@
         // Weekly food planner — one row per (date, slot); planned vs what was eaten.
         meal_plan: new Set(['id','user_id','date','slot','planned','eaten','status','created_at','updated_at']),
         // Daily check-in — mood/energy (1-5) + "ate healthy?" for food↔energy analysis.
-        meal_day: new Set(['id','user_id','date','mood','energy','ate_healthy','note','created_at','updated_at'])
+        meal_day: new Set(['id','user_id','date','mood','energy','ate_healthy','note','created_at','updated_at']),
+        // "Things I can eat" library — reusable foods you pick from when planning meals.
+        meal_items: new Set(['id','user_id','name','slots','healthy','favorite','use_count','notes','sort_order','created_at','updated_at'])
     };
 
     // If a write fails because a column doesn't exist yet (e.g. a column added in a
@@ -293,7 +295,7 @@
             'book_library','book_summaries','reader_settings','mural_projects',
             'mural_categories','mural_elements','vision_affirmations','ritual_logs',
             'english_sessions','english_messages','wishlist',
-            'meal_plan','meal_day'
+            'meal_plan','meal_day','meal_items'
         ];
     }
 })();

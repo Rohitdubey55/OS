@@ -30,6 +30,7 @@ const MEAL_ENERGY = [
 ];
 
 let _mealWeekOffset = 0;     // 0 = current week, -1 = last week, etc.
+let _mealTab = 'week';       // 'week' | 'foods'
 window._mealDraft = null;    // working copy while a modal is open
 
 /* ── Local-date helpers (never use toISOString → that shifts the day in non-UTC zones) ── */
@@ -93,6 +94,69 @@ async function _mdSave(date, fields) {
   }
   return row;
 }
+
+/* ── Food library ("Things I can eat") ── */
+const MEAL_HEALTH = [
+  { key: 'healthy', label: 'Healthy', emo: '🥗', color: '#16a34a' },
+  { key: 'ok', label: 'OK', emo: '🍽️', color: '#64748b' },
+  { key: 'treat', label: 'Treat', emo: '🍰', color: '#d97706' }
+];
+const _mealHealthMeta = k => MEAL_HEALTH.find(h => h.key === k) || MEAL_HEALTH[1];
+const _mealFav = it => !!(it && (it.favorite === true || it.favorite === 'true' || it.favorite === 1));
+
+function _miAll() { return (window.state && state.data && state.data.meal_items) || []; }
+function _miSlots(it) { const s = (it.slots || '').trim(); return s ? s.split(',').map(x => x.trim()).filter(Boolean) : []; }
+function _miSuitsSlot(it, slot) { const s = _miSlots(it); return s.length === 0 || s.includes(slot); }
+function _miRank(a, b) {
+  return (_mealFav(b) ? 1 : 0) - (_mealFav(a) ? 1 : 0)
+    || (Number(b.use_count) || 0) - (Number(a.use_count) || 0)
+    || (a.name || '').localeCompare(b.name || '');
+}
+function _miForSlot(slot) { return _miAll().filter(it => _miSuitsSlot(it, slot)).sort(_miRank); }
+function _miByName(name) { const n = (name || '').trim().toLowerCase(); return _miAll().find(i => (i.name || '').trim().toLowerCase() === n); }
+
+// Foods typed in the past that aren't in the library yet — history suggestions.
+function _miHistory(slot) {
+  const lib = new Set(_miAll().map(i => (i.name || '').trim().toLowerCase()));
+  const counts = {};
+  _mpAll().forEach(mp => {
+    if (slot && mp.slot !== slot) return;
+    [mp.planned, mp.eaten].forEach(t => {
+      t = (t || '').trim();
+      if (t && !lib.has(t.toLowerCase())) counts[t] = (counts[t] || 0) + 1;
+    });
+  });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(e => e[0]).slice(0, 8);
+}
+
+async function _miCreate(fields) {
+  if (!state.data.meal_items) state.data.meal_items = [];
+  const id = _mealId('mi');
+  const row = { id, favorite: false, use_count: 0, ...fields };
+  state.data.meal_items.push(row);
+  try { await apiCall('create', 'meal_items', row); } catch (e) { console.error('meal_items create', e); }
+  return row;
+}
+async function _miUpdate(id, fields) {
+  const it = _miAll().find(i => String(i.id) === String(id)); if (!it) return;
+  Object.assign(it, fields);
+  try { await apiCall('update', 'meal_items', fields, id); } catch (e) { console.error('meal_items update', e); }
+}
+function _miBumpUse(name) {
+  const it = _miByName(name); if (!it) return;
+  _miUpdate(it.id, { use_count: (Number(it.use_count) || 0) + 1 });
+}
+window.deleteMealItem = async function (id) {
+  if (typeof confirm === 'function' && !confirm('Remove this food from your list?')) return;
+  state.data.meal_items = _miAll().filter(i => String(i.id) !== String(id));
+  renderMeals();
+  try { await apiCall('delete', 'meal_items', {}, id); } catch (e) { console.error(e); }
+};
+window.toggleMealItemFav = async function (id) {
+  const it = _miAll().find(i => String(i.id) === String(id)); if (!it) return;
+  await _miUpdate(id, { favorite: !_mealFav(it) });
+  renderMeals();
+};
 
 /* ── Weekly stats + lifetime insight ── */
 function _mealWeekStats(dates) {
@@ -235,12 +299,87 @@ const MEALS_CSS = `<style>
   .ml-modal { max-width:520px; align-self:flex-end; border-bottom-left-radius:0; border-bottom-right-radius:0; }
   .ml-modal-ov { align-items:flex-end; padding:0; }
 }
+/* tabs + top actions */
+.ml-topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.ml-tabs { display:inline-flex; background:var(--surface-2); border:1px solid var(--border-color); border-radius:12px; padding:3px; gap:2px; }
+.ml-tab { border:none; background:transparent; color:var(--text-3); font-size:13.5px; font-weight:700; padding:8px 16px; border-radius:9px; cursor:pointer; }
+.ml-tab.on { background:var(--surface-1); color:var(--text-1); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.ml-top-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.ml-tbtn { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--text-2); background:var(--surface-1); border:1px solid var(--border-color); border-radius:10px; padding:8px 12px; cursor:pointer; }
+.ml-tbtn:hover { border-color:var(--text-3); color:var(--text-1); }
+.ml-tbtn.primary { background:var(--primary); color:#fff; border-color:transparent; }
+/* picker */
+.ml-pick { margin-top:10px; }
+.ml-pick-lbl { font-size:10.5px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--text-3); margin:10px 0 6px; }
+.ml-pick-lbl:first-child { margin-top:0; }
+.ml-chips { display:flex; flex-wrap:wrap; gap:7px; }
+.ml-chip { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--text-1); background:var(--surface-2); border:1px solid var(--border-color); border-radius:999px; padding:7px 12px; cursor:pointer; transition:all .12s; max-width:100%; }
+.ml-chip:hover { border-color:var(--primary); background:var(--surface-1); }
+.ml-chip .cd { width:8px; height:8px; border-radius:50%; flex:none; }
+.ml-chip .fv { color:#f59e0b; }
+.ml-chip.hist { color:var(--text-2); font-weight:500; border-style:dashed; }
+.ml-pick-empty { font-size:12.5px; color:var(--text-3); padding:6px 2px; }
+.ml-pick-add { display:inline-flex; align-items:center; gap:6px; margin-top:10px; font-size:13px; font-weight:700; color:var(--primary); background:color-mix(in srgb,var(--primary) 12%, transparent); border:1px dashed color-mix(in srgb,var(--primary) 40%, transparent); border-radius:11px; padding:9px 13px; cursor:pointer; }
+/* food editor segments */
+.ml-pickslot { flex:1; border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-2); font-size:13px; font-weight:700; padding:11px 6px; border-radius:11px; cursor:pointer; }
+.ml-pickslot.on { background:var(--primary); color:#fff; border-color:transparent; }
+.ml-pickhealth { flex:1; border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-2); font-size:13px; font-weight:700; padding:11px 4px; border-radius:11px; cursor:pointer; }
+.ml-pickhealth.on { background:var(--hc); color:#fff; border-color:transparent; }
+.ml-fav-row { display:flex; align-items:center; gap:9px; margin-top:16px; font-size:13.5px; font-weight:600; color:var(--text-2); cursor:pointer; }
+.ml-fav-row input { width:18px; height:18px; accent-color:var(--primary); }
+/* My foods manager */
+.ml-foods-head { font-size:12.5px; font-weight:700; color:var(--text-3); margin-bottom:10px; }
+.ml-foods-list { display:flex; flex-direction:column; gap:9px; }
+.ml-food { display:flex; align-items:center; gap:12px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; padding:11px 14px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+.ml-food-fav { border:none; background:transparent; font-size:19px; line-height:1; color:var(--text-3); cursor:pointer; flex:none; }
+.ml-food-fav.on { color:#f59e0b; }
+.ml-food-main { flex:1; min-width:0; }
+.ml-food-name { font-size:15px; font-weight:700; color:var(--text-1); }
+.ml-food-meta { display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-top:4px; }
+.ml-hb { font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; }
+.ml-ft { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-3); background:var(--surface-2); border:1px solid var(--border-color); padding:2px 7px; border-radius:6px; }
+.ml-uc { font-size:11px; color:var(--text-3); font-weight:600; }
+.ml-food-x { width:34px; height:34px; border:1px solid var(--border-color); background:var(--surface-2); color:var(--text-2); border-radius:9px; cursor:pointer; flex:none; display:flex; align-items:center; justify-content:center; }
+.ml-food-x:hover { color:var(--text-1); }
+.ml-food-x.danger:hover { color:#dc2626; border-color:#dc2626; }
+.ml-foods-empty { text-align:center; padding:40px 20px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+.ml-foods-empty .t { font-size:17px; font-weight:800; color:var(--text-1); }
+.ml-foods-empty .s { font-size:13px; color:var(--text-3); max-width:380px; }
+.ml-foods-starters { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:12px; }
+.ml-starter { font-size:13px; font-weight:600; color:var(--text-1); background:var(--surface-2); border:1px solid var(--border-color); border-radius:999px; padding:8px 14px; cursor:pointer; }
+.ml-starter:hover { border-color:var(--primary); }
+/* shopping list + hint */
+.ml-shop { display:flex; flex-direction:column; }
+.ml-shop-row { display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--border-color); font-size:14px; color:var(--text-1); cursor:pointer; }
+.ml-shop-row input { width:18px; height:18px; accent-color:var(--primary); }
+.ml-shop-row span { flex:1; }
+.ml-shop-c { font-size:12px; color:var(--text-3); font-weight:700; }
+.ml-hint { font-size:11.5px; color:var(--text-3); font-weight:600; margin-top:8px; text-align:center; }
 </style>`;
 
 /* ── Render ── */
+function _mealTabsBar() {
+  return `<div class="ml-topbar">
+      <div class="ml-tabs">
+        <button class="ml-tab ${_mealTab === 'week' ? 'on' : ''}" onclick="mealSetTab('week')">This week</button>
+        <button class="ml-tab ${_mealTab === 'foods' ? 'on' : ''}" onclick="mealSetTab('foods')">My foods</button>
+      </div>
+      ${_mealTab === 'week' ? `<div class="ml-top-actions">
+        <button class="ml-tbtn" onclick="mealRepeatLastWeek()" title="Copy last week's plan into empty slots">${renderIcon('refresh', null, 'style="width:14px"')} Repeat last week</button>
+        <button class="ml-tbtn" onclick="mealShoppingList()" title="Everything planned this week">🛒 Shopping list</button>
+      </div>` : `<button class="ml-tbtn primary" onclick="openFoodEditor()">${renderIcon('plus', null, 'style="width:15px"')} Add food</button>`}
+    </div>`;
+}
+window.mealSetTab = function (t) { _mealTab = t; renderMeals(); };
+
 function renderMeals() {
   const main = document.getElementById('main');
   if (!main) return;
+  if (_mealTab === 'foods') {
+    main.innerHTML = `${MEALS_CSS}<div class="ml-wrap">${_mealTabsBar()}${_renderFoodsManager()}</div>`;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
   const dates = _mealWeekDates(_mealWeekOffset);
   const today = _mealToday();
   const st = _mealWeekStats(dates);
@@ -306,6 +445,7 @@ function renderMeals() {
 
   main.innerHTML = `${MEALS_CSS}
     <div class="ml-wrap">
+      ${_mealTabsBar()}
       <div class="ml-hero">
         <div class="ml-hero-top">
           <div class="ml-week-nav">
@@ -330,6 +470,91 @@ function renderMeals() {
   if (window.lucide) lucide.createIcons();
 }
 window.renderMeals = renderMeals;
+
+/* ── "My foods" manager ── */
+function _renderFoodsManager() {
+  const items = _miAll().slice().sort(_miRank);
+  if (items.length === 0) {
+    const starters = ['Oats & fruit', 'Eggs & toast', 'Dal & rice', 'Salad bowl', 'Grilled chicken', 'Paneer & roti', 'Fruit & nuts', 'Veg stir-fry'];
+    return `<div class="ml-foods">
+      <div class="ml-foods-empty">
+        <div style="font-size:36px">🥗</div>
+        <div class="t">Build your “things I can eat” list</div>
+        <div class="s">Add foods once, then pick them in a tap when planning meals. Start with a few:</div>
+        <div class="ml-foods-starters">${starters.map(n => `<button class="ml-starter" onclick="mealAddStarter(${JSON.stringify(n)})">+ ${escapeHtml(n)}</button>`).join('')}</div>
+        <button class="ml-btn primary" style="margin-top:18px;max-width:240px" onclick="openFoodEditor()">Add your own food</button>
+      </div>
+    </div>`;
+  }
+  const rows = items.map(it => {
+    const hm = _mealHealthMeta(it.healthy);
+    const slots = _miSlots(it);
+    const slotTags = slots.length ? slots.map(s => `<span class="ml-ft">${(MEAL_SLOTS.find(x => x.key === s) || {}).label || s}</span>`).join('') : '<span class="ml-ft any">Any meal</span>';
+    return `<div class="ml-food">
+        <button class="ml-food-fav ${_mealFav(it) ? 'on' : ''}" title="Favorite" onclick="toggleMealItemFav('${it.id}')">${_mealFav(it) ? '★' : '☆'}</button>
+        <div class="ml-food-main">
+          <div class="ml-food-name">${escapeHtml(it.name || '')}</div>
+          <div class="ml-food-meta"><span class="ml-hb" style="color:${hm.color};background:${hm.color}1f">${hm.emo} ${hm.label}</span>${slotTags}${Number(it.use_count) ? `<span class="ml-uc">${it.use_count}× used</span>` : ''}</div>
+        </div>
+        <button class="ml-food-x" title="Edit" onclick="openFoodEditor('${it.id}')">${renderIcon('edit', null, 'style="width:15px"')}</button>
+        <button class="ml-food-x danger" title="Delete" onclick="deleteMealItem('${it.id}')">${renderIcon('trash', null, 'style="width:15px"')}</button>
+      </div>`;
+  }).join('');
+  const fav = items.filter(_mealFav).length;
+  return `<div class="ml-foods">
+      <div class="ml-foods-head"><span>${items.length} food${items.length > 1 ? 's' : ''}${fav ? ` · ${fav} favorite${fav > 1 ? 's' : ''}` : ''}</span></div>
+      <div class="ml-foods-list">${rows}</div>
+    </div>`;
+}
+window.mealAddStarter = async function (name) { await _miCreate({ name, slots: '', healthy: 'healthy', favorite: false }); renderMeals(); };
+
+window.openFoodEditor = function (id) {
+  const it = id ? _miAll().find(i => String(i.id) === String(id)) : null;
+  window._mealDraft = { _food: true, id: it ? it.id : null, name: it ? (it.name || '') : '', slots: it ? _miSlots(it) : [], healthy: it ? (it.healthy || 'ok') : 'healthy', favorite: it ? _mealFav(it) : false };
+  const d = window._mealDraft;
+  const slotBtns = MEAL_SLOTS.map(s => `<button class="ml-pickslot ${d.slots.includes(s.key) ? 'on' : ''}" data-s="${s.key}" onclick="foodToggleSlot('${s.key}')">${s.label}</button>`).join('');
+  const healthBtns = MEAL_HEALTH.map(h => `<button class="ml-pickhealth ${d.healthy === h.key ? 'on' : ''}" data-h="${h.key}" style="--hc:${h.color}" onclick="foodSetHealth('${h.key}')">${h.emo} ${h.label}</button>`).join('');
+  _mealMountModal(`
+    <div class="ml-modal">
+      <div class="ml-modal-h">
+        <div><div class="ml-modal-title">${it ? 'Edit food' : 'Add food'}</div><div class="ml-modal-sub">Things I can eat</div></div>
+        <button class="ml-modal-x" onclick="closeMealModal()">${renderIcon('x', null, 'style="width:18px"')}</button>
+      </div>
+      <div class="ml-modal-b">
+        <div class="ml-field-l">Food name</div>
+        <input class="ml-input" id="foodName" placeholder="e.g. Oats with fruit & nuts" value="${escapeHtml(d.name)}" oninput="window._mealDraft.name=this.value">
+        <div class="ml-field-l">Good for <span style="font-weight:500;text-transform:none;color:var(--text-3)">(leave all off = any meal)</span></div>
+        <div class="ml-seg" id="foodSlotSeg">${slotBtns}</div>
+        <div class="ml-field-l">How healthy is it?</div>
+        <div class="ml-seg" id="foodHealthSeg">${healthBtns}</div>
+        <label class="ml-fav-row"><input type="checkbox" id="foodFav" ${d.favorite ? 'checked' : ''} onchange="window._mealDraft.favorite=this.checked"> <span>⭐ Favorite — show first when picking</span></label>
+        <div class="ml-actions">
+          ${it ? `<button class="ml-btn ghost" onclick="deleteMealItem('${it.id}');closeMealModal()">Delete</button>` : ''}
+          <button class="ml-btn primary" onclick="saveFoodItem()">Save</button>
+        </div>
+      </div>
+    </div>`);
+  setTimeout(() => { const i = document.getElementById('foodName'); if (i && !d.name) i.focus(); }, 60);
+};
+window.foodToggleSlot = function (s) {
+  const d = window._mealDraft; if (!d) return;
+  const i = d.slots.indexOf(s); if (i >= 0) d.slots.splice(i, 1); else d.slots.push(s);
+  document.querySelectorAll('#foodSlotSeg .ml-pickslot').forEach(b => b.classList.toggle('on', d.slots.includes(b.dataset.s)));
+};
+window.foodSetHealth = function (h) {
+  window._mealDraft.healthy = h;
+  document.querySelectorAll('#foodHealthSeg .ml-pickhealth').forEach(b => b.classList.toggle('on', b.dataset.h === h));
+};
+window.saveFoodItem = async function () {
+  const d = window._mealDraft; if (!d) return;
+  const name = (d.name || '').trim();
+  if (!name) { if (typeof showToast === 'function') showToast('Name the food first', 'error'); return; }
+  const fields = { name, slots: (d.slots || []).join(','), healthy: d.healthy || 'ok', favorite: !!d.favorite };
+  _mealCloseModal();
+  if (d.id) await _miUpdate(d.id, fields); else await _miCreate(fields);
+  renderMeals();
+  if (typeof showToast === 'function') showToast('Saved to My foods');
+};
 
 /* ── Week navigation ── */
 window.mealNavWeek = function (dir) { _mealWeekOffset += dir; renderMeals(); };
@@ -364,7 +589,8 @@ window.openMealEditor = function (date, slot) {
       </div>
       <div class="ml-modal-b">
         <div class="ml-field-l">What's the plan?</div>
-        <input class="ml-input" id="mealPlanned" placeholder="e.g. Oats with fruit & nuts" value="${escapeHtml(window._mealDraft.planned)}" oninput="window._mealDraft.planned=this.value">
+        <input class="ml-input" id="mealPlanned" placeholder="Type, or pick from your foods…" value="${escapeHtml(window._mealDraft.planned)}" oninput="mealOnPlanInput(this.value)" autocomplete="off">
+        <div class="ml-pick" id="mealPick"></div>
         <div class="ml-field-l">Did you eat it?</div>
         <div class="ml-seg" id="mealStatusSeg">
           <button class="s-ok ${window._mealDraft.status === 'as_planned' ? 'on' : ''}" data-s="as_planned" onclick="mealSetStatus('as_planned')"><span class="em">✅</span>Ate it</button>
@@ -381,8 +607,60 @@ window.openMealEditor = function (date, slot) {
         </div>
       </div>
     </div>`);
+  mealRenderPick();
   setTimeout(() => { const i = document.getElementById('mealPlanned'); if (i && window._mealDraft && !window._mealDraft.planned) i.focus(); }, 60);
 };
+
+/* Picker: chips of your foods (slot-aware, favorites & most-used first) + live search
+   + "recently eaten" history + save-new-to-library. */
+function _mealChip(it) {
+  const hm = _mealHealthMeta(it.healthy);
+  return `<button class="ml-chip" data-food="${escapeHtml(it.name || '')}" onclick="mealPickFoodEl(this)" title="${hm.label}"><span class="cd" style="background:${hm.color}"></span>${escapeHtml(it.name || '')}${_mealFav(it) ? ' <span class="fv">★</span>' : ''}</button>`;
+}
+function _mealHistChip(n) {
+  return `<button class="ml-chip hist" data-food="${escapeHtml(n)}" onclick="mealPickFoodEl(this)">${escapeHtml(n)}</button>`;
+}
+window.mealRenderPick = function () {
+  const el = document.getElementById('mealPick'); if (!el) return;
+  const d = window._mealDraft; if (!d) return;
+  const q = (d.planned || '').trim().toLowerCase();
+  const lib = _miForSlot(d.slot);
+  let html = '';
+  if (!q) {
+    const top = lib.slice(0, 10);
+    if (top.length) html += `<div class="ml-pick-lbl">Your foods${lib.length > 10 ? ' · top picks' : ''}</div><div class="ml-chips">${top.map(_mealChip).join('')}</div>`;
+    const hist = _miHistory(d.slot);
+    if (hist.length) html += `<div class="ml-pick-lbl">Recently eaten</div><div class="ml-chips">${hist.map(_mealHistChip).join('')}</div>`;
+    if (!top.length && !hist.length) html += `<div class="ml-pick-empty">No saved foods yet — type one above, or add some in <b>My foods</b>.</div>`;
+  } else {
+    const matches = lib.filter(it => (it.name || '').toLowerCase().includes(q)).slice(0, 8);
+    const hist = _miHistory(d.slot).filter(n => n.toLowerCase().includes(q)).slice(0, 5);
+    if (matches.length) html += `<div class="ml-chips">${matches.map(_mealChip).join('')}</div>`;
+    if (hist.length) html += `<div class="ml-chips">${hist.map(_mealHistChip).join('')}</div>`;
+    if (!_miByName(d.planned) && (d.planned || '').trim()) {
+      html += `<button class="ml-pick-add" onclick="mealAddPlannedToLibrary()">${renderIcon('plus', null, 'style="width:14px"')} Save “${escapeHtml((d.planned || '').trim())}” to My foods</button>`;
+    }
+  }
+  el.innerHTML = html;
+  if (window.lucide) lucide.createIcons();
+};
+window.mealOnPlanInput = function (val) { if (window._mealDraft) window._mealDraft.planned = val; mealRenderPick(); };
+window.mealPickFood = function (name) {
+  const d = window._mealDraft; if (!d) return;
+  d.planned = name;
+  const inp = document.getElementById('mealPlanned'); if (inp) inp.value = name;
+  _miBumpUse(name);
+  mealRenderPick();
+};
+window.mealPickFoodEl = function (el) { if (el && el.dataset) mealPickFood(el.dataset.food || ''); };
+window.mealAddPlannedToLibrary = async function () {
+  const d = window._mealDraft; if (!d) return;
+  const name = (d.planned || '').trim(); if (!name) return;
+  await _miCreate({ name, slots: d.slot, healthy: 'ok', favorite: false });
+  mealRenderPick();
+  if (typeof showToast === 'function') showToast('Added to My foods');
+};
+
 window.mealSetStatus = function (s) {
   const d = window._mealDraft; if (!d) return;
   d.status = d.status === s ? '' : s;
@@ -411,6 +689,12 @@ window.clearMealEntry = async function () {
 window.openMealCheckin = function (date) {
   const md = _mdFor(date) || {};
   window._mealDraft = { date, mood: +md.mood || 0, energy: +md.energy || 0, ate_healthy: _mealHealthy(md) ? true : (md.ate_healthy === false ? false : null), note: md.note || '' };
+  // Smart: if not checked in yet, pre-fill the "ate healthy?" toggle from today's foods.
+  let healthHint = '';
+  if (window._mealDraft.ate_healthy === null) {
+    const hint = _mealDayHealthHint(date);
+    if (hint !== null) { window._mealDraft.ate_healthy = hint; healthHint = 'Suggested from today’s meals — tap to change'; }
+  }
   const d = _mealParse(date);
   const dateLbl = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   const moodBtns = MEAL_MOODS.map(m => `<button class="${window._mealDraft.mood === m.v ? 'on' : ''}" data-v="${m.v}" onclick="mealSetMood(${m.v})">${m.e}<span class="lb">${m.l}</span></button>`).join('');
@@ -431,6 +715,7 @@ window.openMealCheckin = function (date) {
           <button class="yes ${window._mealDraft.ate_healthy === true ? 'on' : ''}" onclick="mealSetHealthy(true)">Yes 🥗</button>
           <button class="no ${window._mealDraft.ate_healthy === false ? 'on' : ''}" onclick="mealSetHealthy(false)">Not really</button>
         </div>
+        ${healthHint ? `<div class="ml-hint">${healthHint}</div>` : ''}
         <div class="ml-actions">
           <button class="ml-btn primary" onclick="saveMealCheckin()">Save check-in</button>
         </div>
@@ -451,4 +736,53 @@ window.saveMealCheckin = async function () {
   await _mdSave(d.date, fields);
   renderMeals();
   if (typeof showToast === 'function') showToast('Check-in saved ✓');
+};
+
+// Does today's actual eating lean healthy? Looks up each meal's food in the library.
+// Returns true (lean healthy) / false (lean treat) / null (not enough tagged foods).
+function _mealDayHealthHint(date) {
+  let healthy = 0, treat = 0, n = 0;
+  MEAL_SLOTS.forEach(s => {
+    const mp = _mpFor(date, s.key); if (!mp) return;
+    const food = (mp.status === 'different' ? mp.eaten : mp.planned) || '';
+    const it = _miByName(food); if (!it || !it.healthy) return;
+    n++;
+    if (it.healthy === 'healthy') healthy++; else if (it.healthy === 'treat') treat++;
+  });
+  if (n === 0) return null;
+  return healthy >= treat && healthy > 0;
+}
+
+/* ── Extras: shopping list + repeat last week ── */
+window.mealShoppingList = function () {
+  const dates = _mealWeekDates(_mealWeekOffset);
+  const counts = {};
+  dates.forEach(dt => MEAL_SLOTS.forEach(s => { const mp = _mpFor(dt, s.key); const t = ((mp && mp.planned) || '').trim(); if (t) counts[t] = (counts[t] || 0) + 1; }));
+  const items = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  window._mealShopText = items.map(([n, c]) => `• ${n}${c > 1 ? ` (x${c})` : ''}`).join('\n');
+  const body = items.length
+    ? `<div class="ml-shop">${items.map(([n, c]) => `<label class="ml-shop-row"><input type="checkbox"><span>${escapeHtml(n)}</span>${c > 1 ? `<span class="ml-shop-c">×${c}</span>` : ''}</label>`).join('')}</div>`
+    : `<div class="ml-pick-empty" style="padding:24px 12px;text-align:center">Nothing planned this week yet — add some meals first.</div>`;
+  _mealMountModal(`<div class="ml-modal">
+      <div class="ml-modal-h"><div><div class="ml-modal-title">🛒 Shopping list</div><div class="ml-modal-sub">${items.length} item${items.length !== 1 ? 's' : ''} planned this week</div></div><button class="ml-modal-x" onclick="closeMealModal()">${renderIcon('x', null, 'style="width:18px"')}</button></div>
+      <div class="ml-modal-b">${body}${items.length ? `<div class="ml-actions"><button class="ml-btn primary" onclick="mealCopyShop()">Copy list</button></div>` : ''}</div>
+    </div>`);
+};
+window.mealCopyShop = function () { try { navigator.clipboard.writeText(window._mealShopText || ''); if (typeof showToast === 'function') showToast('List copied'); } catch (e) { } };
+
+window.mealRepeatLastWeek = async function () {
+  const cur = _mealWeekDates(_mealWeekOffset);
+  const prev = _mealWeekDates(_mealWeekOffset - 1);
+  let n = 0;
+  for (let i = 0; i < 7; i++) {
+    for (const s of MEAL_SLOTS) {
+      const curMp = _mpFor(cur[i], s.key);
+      if (curMp && curMp.planned && curMp.planned.trim()) continue; // never overwrite
+      const prevMp = _mpFor(prev[i], s.key);
+      const pv = prevMp && prevMp.planned ? prevMp.planned.trim() : '';
+      if (pv) { await _mpSave(cur[i], s.key, { planned: pv }); n++; }
+    }
+  }
+  renderMeals();
+  if (typeof showToast === 'function') showToast(n ? `Copied ${n} meal${n > 1 ? 's' : ''} from last week` : 'Nothing to copy from last week');
 };
