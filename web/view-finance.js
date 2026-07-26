@@ -262,10 +262,8 @@ function _finAddModalHTML(type) {
     const categories = getAllFinanceCategories();
     const catDesc = _finCatDescriptions();
     const escA = (s) => escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;');
-    body = `
-      <input type="hidden" id="mTxType" value="${type}">
-      <input type="date" class="input" id="mTxDate" value="${new Date().toISOString().slice(0, 10)}">
-      <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)" style="margin-top:10px">
+    // Categories only make sense for expenses; income just needs a source note.
+    const catPicker = type === 'expense' ? `
       <div class="fin-cat-select" id="finCatSelect">
         <input type="hidden" id="mTxCategory" value="">
         <button type="button" class="input fin-cat-trigger" onclick="_finToggleCatMenu()">
@@ -280,9 +278,14 @@ function _finAddModalHTML(type) {
             </button>`).join('') : '<div style="padding:10px; color:var(--text-muted); font-size:13px">No categories yet</div>'}
         </div>
       </div>
-      <div id="mTxCatDesc" style="display:none; margin-top:6px; font-size:12.5px; color:var(--text-muted); padding-left:2px; line-height:1.4;"></div>
+      <div id="mTxCatDesc" style="display:none; margin-top:6px; font-size:12.5px; color:var(--text-muted); padding-left:2px; line-height:1.4;"></div>` : '';
+    body = `
+      <input type="hidden" id="mTxType" value="${type}">
+      <input type="date" class="input" id="mTxDate" value="${new Date().toISOString().slice(0, 10)}">
+      <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)" style="margin-top:10px">
+      ${catPicker}
       ${type === 'expense' ? _finScopeRadioHTML('weekly') : ''}
-      <input class="input" id="mTxNote" placeholder="Note (optional — e.g. 'Birthday dinner')" style="margin-top:10px">`;
+      <input class="input" id="mTxNote" placeholder="${type === 'income' ? 'Source (e.g. Salary, Freelance client)' : "Note (optional — e.g. 'Birthday dinner')"}" style="margin-top:10px">`;
     save = `<button class="btn primary" data-action="save-tx-modal">Save ${labels[type]}</button>`;
   } else if (type === 'fund') {
     body = `
@@ -987,14 +990,12 @@ function renderFinIncome(container) {
   const allExpenses = state.data.expenses || [];
   const now = new Date();
 
+  // Income is monthly/yearly by nature — a "week" of salary makes no sense.
+  if (finRange === 'week') finRange = 'month';
+
   const filtered = allExpenses.filter(e => {
     const d = new Date(e.date);
-    if (finRange === 'week') {
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(now.getDate() - 7);
-      return d >= oneWeekAgo && d <= now;
-    }
-    else if (finRange === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    if (finRange === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     else if (finRange === 'year') return d.getFullYear() === now.getFullYear();
     return true;
   });
@@ -1008,7 +1009,6 @@ function renderFinIncome(container) {
   container.innerHTML = `
     <div style="display:flex; justify-content:center; margin-bottom:24px;">
         <div style="background:var(--surface-3); padding:4px; border-radius:10px; display:flex; gap:2px;">
-        <button class="range-btn ${finRange === 'week' ? 'active' : ''}" onclick="switchFinRange('week')">Week</button>
         <button class="range-btn ${finRange === 'month' ? 'active' : ''}" onclick="switchFinRange('month')">Month</button>
         <button class="range-btn ${finRange === 'year' ? 'active' : ''}" onclick="switchFinRange('year')">Year</button>
         </div>
@@ -1116,7 +1116,9 @@ function renderTransactionCard(tx) {
       <div class="transaction-date">${dateStr}</div>
       <div class="transaction-details">
         ${(tx.description || tx.notes) ? `<div class="transaction-notes" style="font-weight:600; margin-bottom:4px;">${tx.description || tx.notes}</div>` : ''}
-        <div class="transaction-category" style="font-size:12px; color:var(--text-muted)">${tx.category || 'Uncategorized'}</div>
+        ${isIncome
+          ? (tx.category ? `<div class="transaction-category" style="font-size:12px; color:var(--text-muted)">${tx.category}</div>` : '')
+          : `<div class="transaction-category" style="font-size:12px; color:var(--text-muted)">${tx.category || 'Uncategorized'}</div>`}
       </div>
       <div class="transaction-amount" style="color: ${isIncome ? 'var(--success)' : 'var(--danger)'}">
         ${isIncome ? '+' : '-'}₹${Number(tx.amount).toLocaleString()}
@@ -1292,12 +1294,12 @@ window.openEditTransaction = function (id) {
       <input type="date" class="input" id="mTxDate" value="${(tx.date || '').slice(0, 10)}" style="margin:0">
     </div>
     <input type="number" class="input" id="mTxAmount" placeholder="Amount (₹)" value="${tx.amount || ''}">
-    <select class="input" id="mTxCategory" style="margin-top:10px; width:100%">
+    ${isExpense ? `<select class="input" id="mTxCategory" style="margin-top:10px; width:100%">
         <option value="">Select Category</option>
         ${categories.map(c => `<option value="${c}" ${tx.category === c ? 'selected' : ''}>${c}</option>`).join('')}
-    </select>
+    </select>` : ''}
     ${isExpense ? _finScopeRadioHTML(tx.budget_scope === 'weekly' ? 'weekly' : 'monthly') : ''}
-    <input class="input" id="mTxNote" placeholder="Note (optional)" value="${(tx.description || tx.notes || '').replace(/"/g, '&quot;')}" style="margin-top:10px">
+    <input class="input" id="mTxNote" placeholder="${isExpense ? 'Note (optional)' : 'Source (e.g. Salary)'}" value="${(tx.description || tx.notes || '').replace(/"/g, '&quot;')}" style="margin-top:10px">
 
     <div style="display:flex; justify-content:space-between; gap:10px; margin-top:16px;">
       <button class="btn danger" onclick="deleteTransaction('${tx.id}')">Delete</button>

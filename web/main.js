@@ -1751,7 +1751,8 @@ document.addEventListener('click', async (e) => {
     else if (action === 'save-tx-modal') {
 
         const amt = document.getElementById('mTxAmount').value;
-        const cat = document.getElementById('mTxCategory').value;
+        // Income has no category picker — the element may be absent.
+        const cat = document.getElementById('mTxCategory')?.value || '';
         const type = document.getElementById('mTxType').value;
         const date = document.getElementById('mTxDate').value;
         const source = document.getElementById('mTxSource')?.value || '';
@@ -2147,7 +2148,8 @@ document.addEventListener('click', async (e) => {
     else if (action === 'update-tx-modal') {
         const editId = btn.dataset.editId;
         const amt = document.getElementById('mTxAmount').value;
-        const cat = document.getElementById('mTxCategory').value;
+        // Income has no category picker — the element may be absent.
+        const cat = document.getElementById('mTxCategory')?.value || '';
         const type = document.getElementById('mTxType').value;
         const date = document.getElementById('mTxDate').value;
         const source = document.getElementById('mTxSource')?.value || '';
