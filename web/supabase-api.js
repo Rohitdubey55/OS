@@ -27,6 +27,24 @@
     }
     install();
 
+    // PostgREST silently caps any single select at 1000 rows — enough to hide
+    // older expenses once the table grows. Page through with .range() so EVERY
+    // row comes back, no matter how many there are.
+    async function _fetchAllRows(sb, table) {
+        const PAGE = 1000;
+        let all = [];
+        for (let from = 0; ; from += PAGE) {
+            const { data, error } = await sb.from(table)
+                .select('*')
+                .order('created_at', { ascending: false })
+                .range(from, from + PAGE - 1);
+            if (error) throw error;
+            all = all.concat(data || []);
+            if (!data || data.length < PAGE) break;
+        }
+        return all;
+    }
+
     async function supabaseApiCall(action, sheet, payload = {}, id = null) {
         const sb = window.supabase;
         const user = window._currentUser;
@@ -36,9 +54,7 @@
                 // ─────────────────────────────────────────────────────
                 case 'get': {
                     // Fetch all rows for current user (RLS filters by user_id)
-                    const { data, error } = await sb.from(sheet).select('*').order('created_at', { ascending: false });
-                    if (error) throw error;
-                    return data || [];
+                    return await _fetchAllRows(sb, sheet);
                 }
 
                 // ─────────────────────────────────────────────────────
@@ -48,8 +64,7 @@
                     const tables = payload?.tables || _getAllTables();
                     const results = await Promise.all(tables.map(async (t) => {
                         try {
-                            const { data, error } = await sb.from(t).select('*');
-                            return [t, error ? [] : (data || [])];
+                            return [t, await _fetchAllRows(sb, t)];
                         } catch (e) { return [t, []]; }
                     }));
                     const dataMap = Object.fromEntries(results);

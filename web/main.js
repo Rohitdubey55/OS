@@ -727,6 +727,9 @@ async function initApp() {
             const url = event.url || '';
             console.log('[DeepLink] Opening:', url);
             if (!url.startsWith('personalos://')) return;
+            // Auth callbacks (email verification / Google OAuth) are handled by
+            // supabase-auth.js — never route them as a view.
+            if (url.startsWith('personalos://auth-callback')) return;
             const rest = url.replace('personalos://', '');
             const [path, query = ''] = rest.split('?');
             const params = Object.fromEntries(new URLSearchParams(query).entries());

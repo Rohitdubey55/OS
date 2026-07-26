@@ -3,6 +3,13 @@
 let finState = 'expenses'; // 'expenses', 'income', 'funds', 'assets'
 let finRange = 'week';    // 'week', 'month', 'year'
 
+// Transaction list controls: how many are visible (grows via "Load more"),
+// plus the current filter/sort. Reset when the tab or range changes.
+let finTxShown = 20;
+let finTxSort = 'date-desc';  // 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc'
+let finTxCat = '';            // '' = all categories
+let finTxSearch = '';
+
 /* Finance desktop refinement — scoped to .fin-pro (no double heading; Add New
    lives in the app header bar; KPI overview + two-pane with an insights rail). */
 const FINANCE_REFINE_CSS = `<style>
@@ -58,7 +65,33 @@ const FINANCE_REFINE_CSS = `<style>
 .fin-cat-opt:hover { background:var(--surface-2); }
 .fin-cat-opt-name { font-size:14px; font-weight:600; color:var(--text-1); }
 .fin-cat-opt-desc { font-size:12px; color:var(--text-muted); line-height:1.3; }
+/* Transactions toolbar (search / category filter / sort) + load-more */
+.fin-tx-count { font-size:12px; color:var(--text-3); font-weight:500; margin-left:auto; font-variant-numeric:tabular-nums; }
+.fin-tx-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0 12px; }
+.fin-tx-controls .fin-tx-search { flex:1; min-width:150px; padding:8px 11px; border:1px solid var(--border-color); border-radius:9px; background:var(--surface-1); color:var(--text-1); font-size:13px; }
+.fin-tx-controls .fin-tx-search:focus { outline:none; border-color:var(--primary); }
+.fin-tx-controls select { padding:8px 10px; border:1px solid var(--border-color); border-radius:9px; background:var(--surface-1); color:var(--text-1); font-size:13px; cursor:pointer; }
+.fin-loadmore { width:100%; margin-top:6px; padding:10px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:10px; font-size:13px; font-weight:600; color:var(--text-2); cursor:pointer; transition:border-color .14s ease, color .14s ease; }
+.fin-loadmore:hover { border-color:var(--border-strong); color:var(--text-1); }
+/* Month insights: stat tiles + charts */
+.fin-insights { display:flex; flex-direction:column; gap:14px; margin-bottom:18px; }
+.fin-ins-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.fin-ins-tile { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:12px 14px; }
+.fin-ins-tile .t-l { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); font-weight:600; }
+.fin-ins-tile .t-v { font-size:19px; font-weight:700; letter-spacing:-.01em; color:var(--text-1); margin-top:3px; }
+.fin-ins-tile .t-s { font-size:11.5px; color:var(--text-3); margin-top:2px; }
+.fin-ins-charts { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.fin-ins-charts .chart-box { position:relative; height:220px; }
+.fin-catrow { margin-bottom:12px; }
+.fin-catrow:last-child { margin-bottom:0; }
+.fin-catrow .cr-top { display:flex; align-items:baseline; gap:8px; font-size:12.5px; margin-bottom:5px; }
+.fin-catrow .cr-name { font-weight:600; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fin-catrow .cr-amt { margin-left:auto; font-weight:700; color:var(--text-1); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.fin-catrow .cr-share { color:var(--text-3); font-size:11.5px; white-space:nowrap; }
+.fin-catrow .cr-mom { font-size:11px; font-weight:700; white-space:nowrap; }
 @media (max-width:1099px){
+  .fin-ins-tiles { grid-template-columns:repeat(2,1fr); }
+  .fin-ins-charts { grid-template-columns:1fr; }
   .fin-pro { max-width:none; }
   .fin-kpis { grid-template-columns:repeat(2,1fr); }
   .fin-workspace { display:block; }
@@ -92,12 +125,21 @@ function renderFinance() {
 
 function switchFinTab(tab) {
   finState = tab;
+  _finResetTxControls();
   renderFinance();
 }
 
 function switchFinRange(range) {
   finRange = range;
+  _finResetTxControls();
   renderFinanceContent();
+}
+
+function _finResetTxControls() {
+  finTxShown = 20;
+  finTxSort = 'date-desc';
+  finTxCat = '';
+  finTxSearch = '';
 }
 
 function renderFinanceContent() {
@@ -438,6 +480,12 @@ function renderFinExpenses(container) {
     ? _finWeeklyStats(expenseItems, totalExp, weeklyBudget, weekBounds, now, allExpenses)
     : null;
 
+  // Month view gets a full analytics block: stat tiles, a daily-spend chart,
+  // cumulative spend vs budget pace, and a category breakdown with trends.
+  const mo = finRange === 'month'
+    ? _finMonthlyStats(expenseItems, allExpenses, now, monthlyBudget, catSpent)
+    : null;
+
   const kpisHTML = (finRange === 'week')
     ? `
       <div class="fin-kpi"><div class="k-l">Spent</div><div class="k-v" style="color:#B42318">₹${totalExp.toLocaleString()}</div></div>
@@ -470,16 +518,266 @@ function renderFinExpenses(container) {
     <div class="fin-workspace">
       <div class="fin-main">
         ${(finRange === 'month' || finRange === 'week') ? `<div style="margin-bottom:18px;">${finRange === 'month' ? renderMonthlyOverview(totalExp, monthlyBudget, catSpent, categoryBudgets) : renderWeeklyOverview(totalExp, weeklyBudget, catSpent, categoryBudgets)}</div>` : ''}
-        <div class="transactions-list">
-          <h3 class="fin-sec-h">Recent transactions</h3>
-          ${expenseItems.length === 0 ? '<div class="empty-state">No transactions in this period.</div>' : ''}
-          ${expenseItems.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 15).map(renderTransactionCard).join('')}
-        </div>
+        ${mo ? renderMonthlyInsights(mo) : ''}
+        ${_finTxListHTML(expenseItems)}
       </div>
       <aside class="fin-rail">${railHTML}</aside>
     </div>
   `;
+  if (mo) _finInitMonthCharts(mo);
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+// ── Month-view analytics ───────────────────────────────────────────────────
+// Everything derived from this month's expenses (all budget scopes): daily
+// totals, pace, comparisons against last month, and a category breakdown.
+function _finMonthlyStats(expenseItems, allExpenses, now, monthlyBudget, catSpent) {
+  const year = now.getFullYear(), month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = now.getDate();
+
+  const dayTotals = Array(daysInMonth).fill(0);
+  expenseItems.forEach(e => {
+    const dd = new Date(e.date).getDate();
+    if (dd >= 1 && dd <= daysInMonth) dayTotals[dd - 1] += Number(e.amount) || 0;
+  });
+
+  const totalExp = dayTotals.reduce((s, v) => s + v, 0);
+  const dailyAvg = today > 0 ? totalExp / today : 0;
+  const projected = Math.round(dailyAvg * daysInMonth);
+
+  // Cumulative actual (up to today; future days stay null so the line stops)
+  // and a straight-line budget pace across the whole month.
+  const cumulative = [];
+  let run = 0;
+  for (let i = 0; i < daysInMonth; i++) {
+    run += dayTotals[i];
+    cumulative.push(i < today ? Math.round(run) : null);
+  }
+  const pace = monthlyBudget > 0
+    ? Array.from({ length: daysInMonth }, (_, i) => Math.round(monthlyBudget * (i + 1) / daysInMonth))
+    : null;
+
+  let biggestIdx = -1, biggestVal = 0;
+  dayTotals.forEach((v, i) => { if (v > biggestVal) { biggestVal = v; biggestIdx = i; } });
+
+  const noSpendDays = dayTotals.slice(0, today).filter(v => v === 0).length;
+
+  // Weekday vs weekend daily averages (elapsed days only)
+  let wdSum = 0, wdN = 0, weSum = 0, weN = 0;
+  for (let i = 0; i < today; i++) {
+    const dow = new Date(year, month, i + 1).getDay();
+    if (dow === 0 || dow === 6) { weSum += dayTotals[i]; weN++; }
+    else { wdSum += dayTotals[i]; wdN++; }
+  }
+
+  // Last month: same-elapsed-days total (fair mid-month comparison), full
+  // total, and per-category totals for the trend arrows.
+  const lmDate = new Date(year, month - 1, 1);
+  const lmYear = lmDate.getFullYear(), lmMonth = lmDate.getMonth();
+  const lmDays = new Date(lmYear, lmMonth + 1, 0).getDate();
+  let lastMonthSame = 0, lastMonthFull = 0;
+  const lmCat = {};
+  (allExpenses || []).forEach(e => {
+    if (e.type !== 'expense') return;
+    const d = new Date(e.date);
+    if (d.getFullYear() !== lmYear || d.getMonth() !== lmMonth) return;
+    const amt = Number(e.amount) || 0;
+    lastMonthFull += amt;
+    if (d.getDate() <= Math.min(today, lmDays)) lastMonthSame += amt;
+    const c = String(e.category || 'Uncategorized').trim();
+    lmCat[c] = (lmCat[c] || 0) + amt;
+  });
+
+  // Category rows: top 6 + the rest folded into "Other" (never more hues/rows
+  // than a reader can hold), each with share-of-spend and a vs-last-month delta.
+  const entries = Object.entries(catSpent || {})
+    .map(([c, v]) => [String(c || 'Uncategorized').trim(), Number(v) || 0])
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1]);
+  const top = entries.slice(0, 6);
+  const restSum = entries.slice(6).reduce((s, [, v]) => s + v, 0);
+  const catRows = top.map(([c, v]) => ({ name: c, amount: v, share: totalExp > 0 ? v / totalExp : 0, last: lmCat[c] || 0 }));
+  if (restSum > 0) catRows.push({ name: 'Other', amount: restSum, share: totalExp > 0 ? restSum / totalExp : 0, last: null });
+
+  return {
+    year, month, daysInMonth, today, dayTotals, totalExp, dailyAvg, projected,
+    cumulative, pace, monthlyBudget,
+    biggestDay: biggestIdx >= 0 ? { date: new Date(year, month, biggestIdx + 1), amount: biggestVal } : null,
+    noSpendDays,
+    weekdayAvg: wdN ? wdSum / wdN : 0,
+    weekendAvg: weN ? weSum / weN : 0,
+    lastMonthSame, lastMonthFull, catRows
+  };
+}
+
+function renderMonthlyInsights(mo) {
+  const fmt = (n) => '₹' + Math.round(n).toLocaleString();
+  const monthName = new Date(mo.year, mo.month, 1).toLocaleDateString('default', { month: 'long' });
+
+  let momHTML = '<span style="color:var(--text-3)">—</span>', momSub = 'no spending last month';
+  if (mo.lastMonthSame > 0) {
+    const diff = mo.totalExp - mo.lastMonthSame;
+    const pct = Math.round(Math.abs(diff) / mo.lastMonthSame * 100);
+    const down = diff <= 0;
+    momHTML = `<span style="color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'} ${pct}%</span>`;
+    momSub = `${fmt(mo.totalExp)} vs ${fmt(mo.lastMonthSame)} · first ${mo.today} days`;
+  }
+
+  const projSub = mo.monthlyBudget > 0
+    ? (mo.projected <= mo.monthlyBudget
+      ? `<span style="color:var(--success)">on track</span> · budget ${fmt(mo.monthlyBudget)}`
+      : `<span style="color:var(--danger)">${fmt(mo.projected - mo.monthlyBudget)} over</span> · budget ${fmt(mo.monthlyBudget)}`)
+    : 'at current pace';
+
+  const tiles = `
+    <div class="fin-ins-tiles">
+      <div class="fin-ins-tile"><div class="t-l">Daily average</div><div class="t-v">${fmt(mo.dailyAvg)}</div><div class="t-s">over ${mo.today} day${mo.today > 1 ? 's' : ''}</div></div>
+      <div class="fin-ins-tile"><div class="t-l">Projected month-end</div><div class="t-v">${fmt(mo.projected)}</div><div class="t-s">${projSub}</div></div>
+      <div class="fin-ins-tile"><div class="t-l">vs last month</div><div class="t-v">${momHTML}</div><div class="t-s">${momSub}</div></div>
+      <div class="fin-ins-tile"><div class="t-l">Biggest day</div><div class="t-v">${mo.biggestDay ? fmt(mo.biggestDay.amount) : '—'}</div><div class="t-s">${mo.biggestDay ? mo.biggestDay.date.toLocaleDateString('default', { month: 'short', day: 'numeric' }) : 'no spending yet'}</div></div>
+      <div class="fin-ins-tile"><div class="t-l">No-spend days</div><div class="t-v">${mo.noSpendDays}</div><div class="t-s">of ${mo.today} so far</div></div>
+      <div class="fin-ins-tile"><div class="t-l">Weekday / weekend</div><div class="t-v">${fmt(mo.weekdayAvg)} / ${fmt(mo.weekendAvg)}</div><div class="t-s">avg spend per day</div></div>
+    </div>`;
+
+  const charts = `
+    <div class="fin-ins-charts">
+      <div class="dash-card"><div class="fin-sec-h">Daily spending — ${monthName}</div><div class="chart-box"><canvas id="finChDaily"></canvas></div></div>
+      <div class="dash-card"><div class="fin-sec-h">${mo.pace ? 'Spend vs budget pace' : 'Cumulative spend'}</div><div class="chart-box"><canvas id="finChCumulative"></canvas></div></div>
+    </div>`;
+
+  const maxCat = mo.catRows.length ? Math.max(...mo.catRows.map(r => r.amount)) : 1;
+  const rows = mo.catRows.map(r => {
+    let mom = '';
+    if (r.last != null) {
+      if (r.last === 0 && r.amount > 0) mom = `<span class="cr-mom" style="color:var(--text-3)">new</span>`;
+      else if (r.last > 0) {
+        const d = r.amount - r.last; const p = Math.round(Math.abs(d) / r.last * 100); const down = d <= 0;
+        mom = `<span class="cr-mom" style="color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'}${p}%</span>`;
+      }
+    }
+    return `<div class="fin-catrow" style="cursor:pointer" onclick="showCategoryExpenses('${escapeHtml(r.name).replace(/'/g, "\\'")}')">
+      <div class="cr-top"><span class="cr-name">${escapeHtml(r.name)}</span><span class="cr-share">${Math.round(r.share * 100)}%</span>${mom}<span class="cr-amt">${fmt(r.amount)}</span></div>
+      <div class="finr-bar"><i style="width:${Math.max(2, Math.round(r.amount / maxCat * 100))}%"></i></div>
+    </div>`;
+  }).join('');
+  const catCard = mo.catRows.length ? `
+    <div class="dash-card">
+      <div style="display:flex; align-items:baseline; gap:8px;"><div class="fin-sec-h">Where your money goes</div><span class="fin-tx-count">change vs all of last month</span></div>
+      ${rows}
+    </div>` : '';
+
+  return `<div class="fin-insights">${tiles}${charts}${catCard}</div>`;
+}
+
+// Build the two Chart.js charts. chart.js loads deferred from a CDN, so retry
+// briefly if it isn't ready yet; skip silently if it never arrives (offline).
+function _finInitMonthCharts(mo, attempt = 0) {
+  const daily = document.getElementById('finChDaily');
+  const cumu = document.getElementById('finChCumulative');
+  if (!daily || !cumu) return; // view already changed
+  if (typeof Chart === 'undefined') {
+    if (attempt < 20) setTimeout(() => _finInitMonthCharts(mo, attempt + 1), 250);
+    return;
+  }
+
+  const css = getComputedStyle(document.body);
+  const cssVar = (n, fb) => (css.getPropertyValue(n) || '').trim() || fb;
+  const primary = cssVar('--primary', '#818CF8');
+  const textMuted = cssVar('--text-muted', '#9097A1');
+  const grid = cssVar('--border-color', '#E5E7EB');
+  const surface = cssVar('--surface-1', '#FFFFFF');
+  const alpha = (hex, a) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+
+  window._finCharts = window._finCharts || {};
+  Object.keys(window._finCharts).forEach(k => { try { window._finCharts[k].destroy(); } catch (e) { } });
+
+  const labels = Array.from({ length: mo.daysInMonth }, (_, i) => i + 1);
+  const fmtC = (n) => '₹' + Math.round(n).toLocaleString();
+  const compact = (n) => n >= 1000 ? '₹' + (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k' : '₹' + n;
+  const monthShort = new Date(mo.year, mo.month, 1).toLocaleDateString('default', { month: 'short' });
+  const axis = {
+    x: {
+      grid: { display: false }, border: { color: grid },
+      ticks: { color: textMuted, font: { size: 10 }, maxRotation: 0, autoSkip: false, callback: (v, i) => (i === 0 || (i + 1) % 5 === 0) ? i + 1 : '' }
+    },
+    y: {
+      grid: { color: grid }, border: { display: false }, beginAtZero: true,
+      ticks: { color: textMuted, font: { size: 10 }, maxTicksLimit: 5, callback: (v) => compact(v) }
+    }
+  };
+
+  window._finCharts.daily = new Chart(daily.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: mo.dayTotals,
+        // Today's bar in the full accent; the rest in a quieter wash of the
+        // same hue — emphasis, not extra colors.
+        backgroundColor: mo.dayTotals.map((_, i) => i === mo.today - 1 ? primary : alpha(primary, 0.4)),
+        hoverBackgroundColor: primary,
+        borderRadius: { topLeft: 4, topRight: 4 },
+        borderSkipped: 'bottom',
+        maxBarThickness: 14
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          displayColors: false,
+          callbacks: {
+            title: (items) => `${monthShort} ${items[0].label}`,
+            label: (item) => fmtC(item.parsed.y)
+          }
+        }
+      },
+      scales: axis
+    }
+  });
+
+  const dsets = [{
+    label: 'Spent',
+    data: mo.cumulative,
+    borderColor: primary, backgroundColor: alpha(primary, 0.10),
+    fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+    pointHoverBackgroundColor: primary, pointHoverBorderColor: surface, pointHoverBorderWidth: 2,
+    tension: 0.25, spanGaps: false
+  }];
+  if (mo.pace) dsets.push({
+    label: 'Budget pace',
+    data: mo.pace,
+    borderColor: textMuted, borderDash: [5, 4], borderWidth: 1.5,
+    pointRadius: 0, pointHoverRadius: 0, fill: false
+  });
+
+  window._finCharts.cumulative = new Chart(cumu.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: dsets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: !!mo.pace, labels: { color: textMuted, boxWidth: 18, boxHeight: 2, font: { size: 11 } } },
+        tooltip: {
+          displayColors: false,
+          filter: (item) => item.parsed.y != null,
+          callbacks: {
+            title: (items) => items.length ? `${monthShort} ${items[0].label}` : '',
+            label: (item) => `${item.dataset.label}: ${fmtC(item.parsed.y)}`
+          }
+        }
+      },
+      scales: axis
+    }
+  });
 }
 
 function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
@@ -652,6 +950,74 @@ function renderFinIncome(container) {
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
+
+// ── Transactions list: filter + sort + load more ──────────────────────────
+// All expenses in the selected period are available; we render `finTxShown`
+// at a time and grow on demand so huge months stay fast.
+function _finTxListHTML(expenseItems) {
+  const esc = (s) => escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;');
+  const cats = [...new Set(expenseItems.map(e => String(e.category || 'Uncategorized').trim()))].sort((a, b) => a.localeCompare(b));
+
+  let list = expenseItems.slice();
+  if (finTxCat) list = list.filter(e => String(e.category || 'Uncategorized').trim() === finTxCat);
+  const q = finTxSearch.trim().toLowerCase();
+  if (q) list = list.filter(e =>
+    [e.description, e.notes, e.category, e.amount].some(v => v != null && String(v).toLowerCase().includes(q)));
+
+  const sorters = {
+    'date-desc': (a, b) => new Date(b.date) - new Date(a.date),
+    'date-asc': (a, b) => new Date(a.date) - new Date(b.date),
+    'amount-desc': (a, b) => Number(b.amount) - Number(a.amount),
+    'amount-asc': (a, b) => Number(a.amount) - Number(b.amount)
+  };
+  list.sort(sorters[finTxSort] || sorters['date-desc']);
+
+  const visible = list.slice(0, finTxShown);
+  const sortOpts = [
+    ['date-desc', 'Newest first'], ['date-asc', 'Oldest first'],
+    ['amount-desc', 'Amount: high → low'], ['amount-asc', 'Amount: low → high']
+  ];
+
+  return `
+        <div class="transactions-list">
+          <div style="display:flex; align-items:baseline; gap:10px;">
+            <h3 class="fin-sec-h">Transactions</h3>
+            <span class="fin-tx-count">Showing ${visible.length} of ${list.length}${(finTxCat || q) ? ` (filtered from ${expenseItems.length})` : ''}</span>
+          </div>
+          <div class="fin-tx-controls">
+            <input id="finTxSearch" class="fin-tx-search" type="search" placeholder="Search note, category, amount…"
+                   value="${esc(finTxSearch)}" oninput="_finTxSearchInput(this)">
+            <select onchange="_finTxSetCat(this.value)" title="Filter by category">
+              <option value="">All categories</option>
+              ${cats.map(c => `<option value="${esc(c)}" ${finTxCat === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+            </select>
+            <select onchange="_finTxSetSort(this.value)" title="Sort">
+              ${sortOpts.map(([v, l]) => `<option value="${v}" ${finTxSort === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          ${list.length === 0 ? `<div class="empty-state">${expenseItems.length === 0 ? 'No transactions in this period.' : 'Nothing matches your filter.'}</div>` : ''}
+          ${visible.map(renderTransactionCard).join('')}
+          ${list.length > finTxShown ? `<button class="fin-loadmore" onclick="finShowMoreTx()">Load ${Math.min(40, list.length - finTxShown)} more (${list.length - finTxShown} remaining)</button>` : ''}
+        </div>`;
+}
+
+window.finShowMoreTx = function () {
+  finTxShown += 40;
+  renderFinanceContent();
+};
+window._finTxSetSort = function (v) { finTxSort = v; renderFinanceContent(); };
+window._finTxSetCat = function (v) { finTxCat = v; finTxShown = 20; renderFinanceContent(); };
+window._finTxSearchInput = function (el) {
+  finTxSearch = el.value;
+  finTxShown = 20;
+  clearTimeout(window._finTxSearchT);
+  window._finTxSearchT = setTimeout(() => {
+    renderFinanceContent();
+    // Re-rendering replaces the input — put the cursor back so typing flows.
+    const inp = document.getElementById('finTxSearch');
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+  }, 250);
+};
 
 // Helper function to render transaction card
 function renderTransactionCard(tx) {

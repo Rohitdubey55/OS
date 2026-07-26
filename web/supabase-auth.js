@@ -17,6 +17,66 @@
         getUser: () => window._currentUser
     };
 
+    // ────────────────────────────────────────────────────────────
+    // Redirect helpers (native app vs web)
+    // ────────────────────────────────────────────────────────────
+    const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+
+    // Where Supabase should send the user back after email verification or
+    // Google OAuth. Native → deep link into the app; web → the current page.
+    // BOTH values must be whitelisted in Supabase → Auth → URL Configuration.
+    function getAuthRedirectUrl() {
+        if (isNative) return 'personalos://auth-callback';
+        return window.location.origin + window.location.pathname;
+    }
+
+    // Native only: the system browser bounces back to personalos://auth-callback
+    // with either ?code= (PKCE) or #access_token=…&refresh_token=… — turn that
+    // into a session. supabase-auth handles this BEFORE main.js's view router
+    // (main.js explicitly skips auth-callback URLs).
+    if (isNative && window.Capacitor?.Plugins?.App) {
+        window.Capacitor.Plugins.App.addListener('appUrlOpen', async (event) => {
+            const url = event.url || '';
+            if (!url.startsWith('personalos://auth-callback')) return;
+            console.log('[Auth] Handling auth callback deep link');
+            try {
+                // Wait for the client if the app was cold-started by the link
+                for (let i = 0; i < 50 && !(window.supabase && window.supabase.auth); i++) {
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                const qs = url.split('?')[1]?.split('#')[0] || '';
+                const code = new URLSearchParams(qs).get('code');
+                const hash = url.includes('#') ? url.slice(url.indexOf('#') + 1) : '';
+                const frag = new URLSearchParams(hash);
+                if (code) {
+                    const { error } = await window.supabase.auth.exchangeCodeForSession(code);
+                    if (error) throw error;
+                } else if (frag.get('access_token') && frag.get('refresh_token')) {
+                    const { error } = await window.supabase.auth.setSession({
+                        access_token: frag.get('access_token'),
+                        refresh_token: frag.get('refresh_token')
+                    });
+                    if (error) throw error;
+                } else if (frag.get('error_description') || new URLSearchParams(qs).get('error_description')) {
+                    throw new Error(frag.get('error_description') || new URLSearchParams(qs).get('error_description'));
+                } else {
+                    // Verification link with no tokens (e.g. already-used link):
+                    // if the email is now confirmed, password sign-in will work.
+                    console.log('[Auth] auth-callback had no code/tokens — email may already be verified');
+                    return;
+                }
+                // Success → onAuthStateChange fires SIGNED_IN and removes the gate.
+            } catch (err) {
+                console.error('[Auth] Deep-link auth failed:', err);
+                const errBox = document.getElementById('saError');
+                if (errBox) {
+                    errBox.style.color = '#DC2626';
+                    errBox.textContent = err.message || 'Sign-in link failed. Try signing in with your password.';
+                }
+            }
+        });
+    }
+
     // Bootstrap: check for existing session, show gate if not
     document.addEventListener('DOMContentLoaded', initAuthFlow);
     // Also fire immediately in case DOMContentLoaded already passed
@@ -227,7 +287,12 @@
                     const { error } = await window.supabase.auth.signInWithPassword({ email, password });
                     if (error) throw error;
                 } else {
-                    const { error } = await window.supabase.auth.signUp({ email, password });
+                    const { error } = await window.supabase.auth.signUp({
+                        email, password,
+                        // Where the "Confirm your email" link lands: back in the
+                        // app (native deep link) or on this page (web).
+                        options: { emailRedirectTo: getAuthRedirectUrl() }
+                    });
                     if (error) throw error;
                     errBox.style.color = '#059669';
                     errBox.textContent = 'Account created. Check your email if confirmation is required.';
@@ -245,11 +310,33 @@
             const errBox = overlay.querySelector('#saError');
             errBox.textContent = '';
             try {
-                const { error } = await window.supabase.auth.signInWithOAuth({
-                    provider: 'google',
-                    options: { redirectTo: window.location.origin }
-                });
-                if (error) throw error;
+                if (isNative) {
+                    // Native: Google blocks OAuth inside webviews, so we must run
+                    // the flow in the SYSTEM browser and deep-link back into the
+                    // app. skipBrowserRedirect gives us the URL to open ourselves.
+                    const { data, error } = await window.supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: {
+                            redirectTo: getAuthRedirectUrl(),   // personalos://auth-callback
+                            skipBrowserRedirect: true
+                        }
+                    });
+                    if (error) throw error;
+                    if (!data?.url) throw new Error('No OAuth URL returned.');
+                    // Prefer the Browser plugin if present; otherwise navigating an
+                    // external URL makes Capacitor hand it to the system browser.
+                    if (window.Capacitor?.Plugins?.Browser?.open) {
+                        await window.Capacitor.Plugins.Browser.open({ url: data.url });
+                    } else {
+                        window.open(data.url, '_blank') || (window.location.href = data.url);
+                    }
+                } else {
+                    const { error } = await window.supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: { redirectTo: getAuthRedirectUrl() }
+                    });
+                    if (error) throw error;
+                }
             } catch (err) {
                 errBox.style.color = '#DC2626';
                 errBox.textContent = err.message || 'Google sign-in failed.';

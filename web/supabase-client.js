@@ -27,6 +27,10 @@
             persistSession: true,
             autoRefreshToken: true,
             detectSessionInUrl: true,
+            // PKCE: auth redirects come back with a one-time ?code= that we
+            // exchange for a session. Required for the native-app deep-link
+            // flow (personalos://auth-callback) and safer on the web too.
+            flowType: 'pkce',
             storage: window.localStorage
         }
     });
