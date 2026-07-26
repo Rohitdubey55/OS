@@ -80,6 +80,10 @@ const FINANCE_REFINE_CSS = `<style>
 .fin-ins-charts .chart-box { position:relative; height:220px; }
 .fin-donut-wrap { display:flex; align-items:center; gap:22px; }
 .fin-donut-wrap.fin-donut-rail { flex-direction:column; gap:12px; }
+.fin-insight-row { display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--border-color); font-size:13px; line-height:1.5; color:var(--text-2); }
+.fin-insight-row:last-child { border-bottom:none; padding-bottom:2px; }
+.fin-insight-row b { color:var(--text-1); }
+.fin-insight-dot { flex:0 0 8px; width:8px; height:8px; border-radius:50%; margin-top:6px; }
 .fin-donut-box { position:relative; flex:0 0 190px; height:190px; }
 .fin-donut-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
 .fin-donut-center .dc-v { font-size:17px; font-weight:800; color:var(--text-1); letter-spacing:-.01em; }
@@ -1452,6 +1456,15 @@ function renderFinAssets(container) {
 
   const series = _finAssetSeries(assets, snaps);
 
+  // Compact INR for prose: ₹56.9L, ₹1.2Cr, ₹45k
+  const inr = (n) => {
+    const abs = Math.abs(n);
+    if (abs >= 10000000) return '₹' + (n / 10000000).toFixed(abs >= 100000000 ? 1 : 2).replace(/\.?0+$/, '') + 'Cr';
+    if (abs >= 100000) return '₹' + (n / 100000).toFixed(1).replace(/\.0$/, '') + 'L';
+    if (abs >= 1000) return '₹' + Math.round(n / 1000) + 'k';
+    return '₹' + Math.round(n).toLocaleString();
+  };
+
   // "This month" KPI: current net worth vs end of last month
   let deltaHTML = '<div class="k-v" style="color:var(--text-3)">—</div>';
   if (series && series.totals.length >= 2) {
@@ -1461,6 +1474,116 @@ function renderFinAssets(container) {
     const up = d >= 0;
     deltaHTML = `<div class="k-v" style="color:${up ? 'var(--success)' : 'var(--danger)'}">${up ? '▲' : '▼'} ₹${Math.abs(d).toLocaleString()}<span style="font-size:13px; font-weight:600"> · ${pct}%</span></div>`;
   }
+
+  // ── Finance-manager stats: cash flow, liquidity, concentration ───────────
+  // Average monthly income/expense over the last 3 full months (fallback:
+  // current month) — powers runway, savings pace, and milestone ETA.
+  const _now2 = new Date();
+  const monthAgg = {};
+  (state.data.expenses || []).forEach(e => {
+    const d = new Date(e.date);
+    const k = d.getFullYear() + '-' + d.getMonth();
+    if (!monthAgg[k]) monthAgg[k] = { inc: 0, exp: 0 };
+    const amt = Number(e.amount) || 0;
+    if (e.type === 'income') monthAgg[k].inc += amt;
+    else if (e.type === 'expense') monthAgg[k].exp += amt;
+  });
+  let incSum = 0, expSum = 0, monthsUsed = 0;
+  for (let k = 1; k <= 3; k++) {
+    const d = new Date(_now2.getFullYear(), _now2.getMonth() - k, 1);
+    const a = monthAgg[d.getFullYear() + '-' + d.getMonth()];
+    if (a && (a.inc > 0 || a.exp > 0)) { incSum += a.inc; expSum += a.exp; monthsUsed++; }
+  }
+  if (!monthsUsed) {
+    const a = monthAgg[_now2.getFullYear() + '-' + _now2.getMonth()];
+    if (a) { incSum = a.inc; expSum = a.exp; monthsUsed = 1; }
+  }
+  const avgInc = monthsUsed ? incSum / monthsUsed : 0;
+  const avgExp = monthsUsed ? expSum / monthsUsed : 0;
+  const avgSurplus = avgInc - avgExp;
+
+  const typedAssets = assets.filter(a => a.type && String(a.type).trim());
+  const liquid = assets.reduce((s, a) => s + (String(a.type || '').trim() === 'Cash' ? Number(a.value || 0) : 0), 0);
+  const runway = (liquid > 0 && avgExp > 0) ? liquid / avgExp : null;
+  const runwayLabel = runway == null ? null : runway < 1 ? '<1 month' : runway > 24 ? '24+ months' : Math.round(runway) + ' month' + (runway >= 2 ? 's' : '');
+  const topShare = total > 0 && top ? Number(top.value || 0) / total : 0;
+  const cashShare = total > 0 ? liquid / total : 0;
+
+  // Per-holding change vs end of last month (from snapshots)
+  const eolm = new Date(_now2.getFullYear(), _now2.getMonth(), 0, 23, 59, 59);
+  const assetDelta = {};
+  assets.forEach(a => {
+    const hist = (snaps || []).filter(s => String(s.asset_id) === String(a.id))
+      .sort((x, y) => new Date(x.date || x.created_at) - new Date(y.date || y.created_at));
+    let prev = null;
+    hist.forEach(s => { if (new Date(s.date || s.created_at) <= eolm) prev = Number(s.value) || 0; });
+    if (prev != null) assetDelta[a.id] = Number(a.value || 0) - prev;
+  });
+  let mover = null;
+  Object.entries(assetDelta).forEach(([aid, d]) => {
+    if (d !== 0 && (!mover || Math.abs(d) > Math.abs(mover.d))) {
+      const a = assets.find(x => String(x.id) === String(aid));
+      if (a) mover = { name: a.name || 'Untitled', d };
+    }
+  });
+
+  // Next milestone: ₹10L steps below ₹1Cr, ₹25L steps above.
+  const step = total < 10000000 ? 1000000 : 2500000;
+  const milestone = Math.max(step, Math.ceil((total + 1) / step) * step);
+  const etaMonths = avgSurplus > 0 ? Math.ceil((milestone - total) / avgSurplus) : null;
+  const etaLabel = etaMonths != null && etaMonths <= 120
+    ? new Date(_now2.getFullYear(), _now2.getMonth() + etaMonths, 1).toLocaleDateString('default', { month: 'short', year: 'numeric' })
+    : null;
+
+  // ── The insights themselves (rule-based, only what applies, max 6) ────────
+  const insights = [];
+  if (top && topShare >= 0.35) insights.push({ tone: 'warn', text: `<b>${escapeHtml(topName)}</b> alone is <b>${Math.round(topShare * 100)}%</b> of your net worth. That's concentration risk — if it's a single bank or stock position, consider spreading it.` });
+  else if (count >= 3 && top) insights.push({ tone: 'good', text: `Well diversified — your largest holding (<b>${escapeHtml(topName)}</b>) is only ${Math.round(topShare * 100)}% of net worth.` });
+
+  if (runway != null) {
+    if (runway >= 6) insights.push({ tone: 'good', text: `Your liquid cash (<b>${inr(liquid)}</b>) covers ≈ <b>${runwayLabel}</b> of expenses — a solid emergency cushion.` });
+    else if (runway >= 3) insights.push({ tone: 'info', text: `Liquid cash (<b>${inr(liquid)}</b>) covers ≈ <b>${runwayLabel}</b> of expenses. A 6-month cushion is the usual target.` });
+    else insights.push({ tone: 'warn', text: `Liquid cash covers only ≈ <b>${runwayLabel}</b> of expenses (${inr(liquid)}). Build the emergency cushion before chasing returns.` });
+  }
+  if (cashShare > 0.5 && runway != null && runway > 9) insights.push({ tone: 'info', text: `<b>${Math.round(cashShare * 100)}%</b> of your net worth sits in cash — beyond the emergency cushion, idle cash loses to inflation. Consider putting the excess to work.` });
+
+  if (avgSurplus > 0) {
+    const rate = avgInc > 0 ? Math.round(avgSurplus / avgInc * 100) : null;
+    insights.push({ tone: 'good', text: `You're adding ≈ <b>${inr(avgSurplus)}/month</b> to your wealth${rate != null ? ` (saving ${rate}% of income)` : ''}.${etaLabel ? ` At this pace you cross <b>${inr(milestone)}</b> around <b>${etaLabel}</b>.` : ''}` });
+  } else if (avgSurplus < 0 && monthsUsed) {
+    insights.push({ tone: 'warn', text: `You spent ≈ <b>${inr(Math.abs(avgSurplus))}/month more than you earned</b> over the last ${monthsUsed} month${monthsUsed > 1 ? 's' : ''} — your assets are funding the gap.` });
+  }
+
+  if (avgInc > 0 && total > 0) {
+    const mult = total / (avgInc * 12);
+    insights.push({ tone: 'info', text: `Net worth ≈ <b>${mult.toFixed(1)}×</b> your annual income${mult < 1 ? ' — early days, keep the savings rate up' : mult >= 3 ? ' — strong position' : ''}.` });
+  }
+  if (mover) insights.push({ tone: mover.d > 0 ? 'good' : 'warn', text: `Biggest mover this month: <b>${escapeHtml(mover.name)}</b> ${mover.d > 0 ? '+' : '−'}${inr(Math.abs(mover.d))}.` });
+  if (typedAssets.length < assets.length && assets.length > 0) insights.push({ tone: 'info', text: `${assets.length - typedAssets.length} holding${assets.length - typedAssets.length > 1 ? 's have' : ' has'} no type set. Edit each asset (Cash / Investment / Property) to sharpen the liquidity and allocation analysis.` });
+
+  const toneColor = { good: 'var(--success)', warn: 'var(--danger)', info: 'var(--text-3)' };
+  const insightsCard = insights.length ? `
+    <div class="dash-card" style="margin-bottom:18px">
+      <div class="fin-sec-h">What your money is telling you</div>
+      ${insights.slice(0, 6).map(i => `
+        <div class="fin-insight-row">
+          <span class="fin-insight-dot" style="background:${toneColor[i.tone]}"></span>
+          <span>${i.text}</span>
+        </div>`).join('')}
+    </div>` : '';
+
+  // Milestone card for the rail
+  const milestonePct = milestone > 0 ? Math.min(100, Math.round(total / milestone * 100)) : 0;
+  const milestoneCard = total > 0 ? `
+    <div class="finr-card">
+      <div class="finr-h">Next milestone</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px">
+        <span style="font-size:20px; font-weight:800; color:var(--text-1)">${inr(milestone)}</span>
+        <span style="font-size:12px; color:var(--text-muted)">${milestonePct}%</span>
+      </div>
+      <div class="finr-bar"><i style="width:${milestonePct}%"></i></div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:8px">${inr(milestone - total)} to go${etaLabel ? ` · ≈ ${etaLabel} at your current savings pace` : avgSurplus <= 0 ? ' · needs a positive monthly surplus' : ''}</div>
+    </div>` : '';
 
   // Allocation by type (only worth a chart with 2+ types)
   const typeSums = {};
@@ -1515,11 +1638,12 @@ function renderFinAssets(container) {
     <div class="fin-kpis">
       <div class="fin-kpi"><div class="k-l">Net worth</div><div class="k-v">₹${total.toLocaleString()}</div></div>
       <div class="fin-kpi"><div class="k-l">This month</div>${deltaHTML}</div>
-      <div class="fin-kpi"><div class="k-l">Largest · ${topShort}</div><div class="k-v">₹${Number(top ? top.value || 0 : 0).toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Holdings</div><div class="k-v">${count}</div></div>
+      <div class="fin-kpi"><div class="k-l">Liquid cash</div><div class="k-v">${liquid > 0 ? inr(liquid) : '—'}</div><div style="font-size:11.5px; color:var(--text-3); margin-top:2px">${runwayLabel != null ? `≈ ${runwayLabel} of expenses` : liquid > 0 ? 'no expense data yet' : 'tag assets as “Cash”'}</div></div>
+      <div class="fin-kpi"><div class="k-l">Largest · ${topShort}</div><div class="k-v" style="color:${topShare >= 0.35 ? 'var(--danger)' : 'var(--text-1)'}">${Math.round(topShare * 100)}%</div><div style="font-size:11.5px; color:var(--text-3); margin-top:2px">of net worth · ${inr(Number(top ? top.value || 0 : 0))}</div></div>
     </div>
     <div class="fin-workspace">
       <div class="fin-main">
+    ${insightsCard}
     ${chartsHTML}
     <div class="card" style="padding:0; overflow:hidden">
       ${count === 0
@@ -1533,7 +1657,10 @@ function renderFinAssets(container) {
             <div class="asset-type">${a.type || a.notes || ''}${a.type || a.notes ? ' · ' : ''}${share}% of net worth</div>
           </div>
           <div style="display:flex; align-items:center; gap:10px">
-             <div style="font-weight:700; font-variant-numeric:tabular-nums">₹${Number(a.value || 0).toLocaleString()}</div>
+             <div style="text-align:right">
+               <div style="font-weight:700; font-variant-numeric:tabular-nums">₹${Number(a.value || 0).toLocaleString()}</div>
+               ${assetDelta[a.id] != null && assetDelta[a.id] !== 0 ? `<div style="font-size:11.5px; font-weight:700; color:${assetDelta[a.id] > 0 ? 'var(--success)' : 'var(--danger)'}">${assetDelta[a.id] > 0 ? '+' : '−'}₹${Math.abs(assetDelta[a.id]).toLocaleString()} this mo</div>` : ''}
+             </div>
              <button class="btn" style="font-size:12px; font-weight:600; padding:6px 10px" onclick="openLogAssetValue('${a.id}')" title="Log a value for any date">Log value</button>
              <button class="btn icon" onclick="openEditAsset('${a.id}')" title="Edit">${renderIcon('edit', null, 'style="width:14px"')}</button>
              <button class="btn icon" data-action="delete" data-sheet="assets" data-id="${a.id}">${renderIcon('delete', null, 'style="width:14px"')}</button>
@@ -1542,7 +1669,7 @@ function renderFinAssets(container) {
           }).join('')}
         </div>
       </div>
-      <aside class="fin-rail">${allocCard}${highlightsCard}</aside>
+      <aside class="fin-rail">${milestoneCard}${allocCard}${highlightsCard}</aside>
     </div>
   `;
   _finInitAssetCharts(series, typeRows, total);
