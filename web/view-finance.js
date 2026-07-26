@@ -1126,26 +1126,50 @@ function renderTransactionCard(tx) {
 }
 
 /* --- TAB 2: FUNDS --- */
+// Legacy rows may only have name/balance (pre-migration); read both shapes.
+function _finFundName(f) { return f.fund_name || f.name || 'Untitled fund'; }
+function _finFundCurrent(f) { const v = Number(f.current_amount ?? f.balance ?? 0); return isNaN(v) ? 0 : v; }
+function _finFundTarget(f) { const v = Number(f.target_amount ?? 0); return isNaN(v) ? 0 : v; }
+
 function renderFinFunds(container) {
   const funds = state.data.funds || [];
+  const contribs = state.data.fund_contributions || [];
+
   container.innerHTML = `
     <div class="grid">
+      ${funds.length === 0 ? '<div class="empty-state" style="padding:36px 20px; text-align:center">No funds yet. Tap “Add new” to create a savings goal.</div>' : ''}
       ${funds.map(f => {
-    const pct = Math.min(100, Math.round((f.current_amount / f.target_amount) * 100));
+    const name = _finFundName(f);
+    const cur = _finFundCurrent(f);
+    const tgt = _finFundTarget(f);
+    const pct = tgt > 0 ? Math.min(100, Math.round((cur / tgt) * 100)) : 0;
+    const history = contribs
+      .filter(c => String(c.fund_id) === String(f.id))
+      .sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at))
+      .slice(0, 3);
+    const historyHTML = history.length ? `
+          <div style="margin-top:10px; border-top:1px solid var(--border-color); padding-top:8px;">
+            ${history.map(c => `<div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); padding:2px 0;">
+              <span>${new Date(c.date || c.created_at).toLocaleDateString('default', { month: 'short', day: 'numeric' })}${c.note ? ' · ' + escapeHtml(c.note) : ''}</span>
+              <b style="color:var(--success); font-variant-numeric:tabular-nums">+₹${Number(c.amount || 0).toLocaleString()}</b>
+            </div>`).join('')}
+          </div>` : '';
     return `
         <div class="fund-card">
           <div class="fund-header">
-            <span>${f.fund_name}</span>
-            <span>${pct}%</span>
+            <span>${escapeHtml(name)}</span>
+            <span>${tgt > 0 ? pct + '%' : ''}</span>
           </div>
           <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted)">
-            <span>₹${Number(f.current_amount).toLocaleString()} saved</span>
-            <span>Goal: ₹${Number(f.target_amount).toLocaleString()}</span>
+            <span>₹${cur.toLocaleString()} saved</span>
+            <span>${tgt > 0 ? 'Goal: ₹' + tgt.toLocaleString() : 'No goal set'}</span>
           </div>
           <div class="fund-progress-bg">
             <div class="fund-progress-fill" style="width:${pct}%"></div>
           </div>
-          <div style="margin-top:10px; display:flex; gap:6px; justify-content:flex-end">
+          ${historyHTML}
+          <div style="margin-top:10px; display:flex; gap:6px; justify-content:flex-end; align-items:center">
+            <button class="btn" style="margin-right:auto; font-size:12.5px; font-weight:600" onclick="openAddToFund('${f.id}')">+ Add money</button>
             <button class="btn icon" onclick="openEditFund('${f.id}')" title="Edit">${renderIcon('edit', null, 'style="width:14px"')}</button>
             <button class="btn icon" data-action="delete" data-sheet="funds" data-id="${f.id}">${renderIcon('delete', null, 'style="width:14px"')}</button>
           </div>
@@ -1155,6 +1179,57 @@ function renderFinFunds(container) {
   `;
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
+
+// ── Add money to a fund (custom amount + date, e.g. ₹1000 now, ₹1000 next month)
+window.openAddToFund = function (id) {
+  const f = (state.data.funds || []).find(x => String(x.id) === String(id));
+  if (!f) return;
+  const modal = document.getElementById('universalModal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <h3 style="margin-bottom:4px">Add to ${escapeHtml(_finFundName(f))}</h3>
+    <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:12px">₹${_finFundCurrent(f).toLocaleString()} saved${_finFundTarget(f) > 0 ? ' of ₹' + _finFundTarget(f).toLocaleString() : ''}</div>
+    <input type="number" class="input" id="mFcAmount" placeholder="Amount (₹)" min="0" autofocus>
+    <input type="date" class="input" id="mFcDate" value="${new Date().toISOString().slice(0, 10)}" style="margin-top:10px">
+    <input class="input" id="mFcNote" placeholder="Note (optional — e.g. 'July savings')" style="margin-top:10px">
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+      <button class="btn primary" onclick="_finSaveFundContribution('${f.id}')">Add money</button>
+    </div>`;
+  modal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('mFcAmount')?.focus(), 50);
+};
+
+window._finSaveFundContribution = async function (id) {
+  const f = (state.data.funds || []).find(x => String(x.id) === String(id));
+  if (!f) return;
+  const amount = Number(document.getElementById('mFcAmount')?.value);
+  const date = document.getElementById('mFcDate')?.value || new Date().toISOString().slice(0, 10);
+  const note = (document.getElementById('mFcNote')?.value || '').trim();
+  if (!amount || isNaN(amount) || amount <= 0) { showToast('Enter an amount'); return; }
+  document.getElementById('universalModal').classList.add('hidden');
+
+  const newTotal = _finFundCurrent(f) + amount;
+  try {
+    // 1. History row (needs the fund_contributions table — supabase/migration-funds.sql)
+    try {
+      const res = await apiCall('create', 'fund_contributions', { fund_id: String(f.id), amount, date, note });
+      if (!state.data.fund_contributions) state.data.fund_contributions = [];
+      state.data.fund_contributions.unshift(res?.data || { id: res?.id, fund_id: String(f.id), amount, date, note });
+    } catch (e) {
+      console.warn('[Funds] history not saved — run supabase/migration-funds.sql:', e?.message);
+      showToast('Saved, but history needs the funds DB migration');
+    }
+    // 2. Bump the fund total (balance mirrors current_amount for the legacy column)
+    await apiCall('update', 'funds', { current_amount: newTotal, balance: newTotal }, f.id);
+    f.current_amount = newTotal;
+    f.balance = newTotal;
+    renderFinanceContent();
+    showToast(`Added ₹${amount.toLocaleString()} to ${_finFundName(f)}`);
+  } catch (e) {
+    showToast('Failed to add: ' + (e.message || 'unknown error'));
+  }
+};
 
 /* --- TAB 3: ASSETS --- */
 function renderFinAssets(container) {
@@ -1259,9 +1334,9 @@ window.openEditFund = function (id) {
   const box = modal.querySelector('.modal-box');
   box.innerHTML = `
     <h3>Edit Fund Goal</h3>
-    <input class="input" id="mFundName" value="${(f.fund_name || '').replace(/"/g, '&quot;')}" placeholder="Fund Name">
-    <input type="number" class="input" id="mFundTarget" value="${f.target_amount || ''}" placeholder="Target Amount">
-    <input type="number" class="input" id="mFundCurrent" value="${f.current_amount || ''}" placeholder="Current Savings">
+    <input class="input" id="mFundName" value="${(f.fund_name || f.name || '').replace(/"/g, '&quot;')}" placeholder="Fund Name">
+    <input type="number" class="input" id="mFundTarget" value="${f.target_amount ?? ''}" placeholder="Target Amount">
+    <input type="number" class="input" id="mFundCurrent" value="${f.current_amount ?? f.balance ?? ''}" placeholder="Current Savings">
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
       <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
       <button class="btn primary" data-action="update-fund-modal" data-edit-id="${f.id}">Update</button>

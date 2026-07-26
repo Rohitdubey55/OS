@@ -1808,7 +1808,12 @@ document.addEventListener('click', async (e) => {
 
             target_amount: target,
 
-            current_amount: current
+            current_amount: current,
+
+            // legacy-column mirrors (pre-migration rows still save correctly)
+            name: name,
+
+            balance: current
 
         });
 
@@ -2168,7 +2173,9 @@ document.addEventListener('click', async (e) => {
         document.getElementById('universalModal').classList.add('hidden');
         if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating fund...");
-        await apiCall('update', 'funds', { fund_name: name, target_amount: target, current_amount: current }, editId);
+        // name/balance mirror the legacy funds columns so this works even
+        // before supabase/migration-funds.sql has been run.
+        await apiCall('update', 'funds', { fund_name: name, target_amount: target, current_amount: current, name: name, balance: current }, editId);
         await refreshData('finance');
     }
 
