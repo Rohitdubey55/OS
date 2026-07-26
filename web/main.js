@@ -1844,6 +1844,8 @@ document.addEventListener('click', async (e) => {
 
 
 
+        const _roi = document.getElementById('mAssetROI')?.value;
+
         const _newAsset = await apiCall('create', 'assets', {
 
             asset_name: name,
@@ -1852,7 +1854,9 @@ document.addEventListener('click', async (e) => {
 
             type: type,
 
-            value: value
+            value: value,
+
+            expected_return: _roi === '' || _roi == null ? null : Number(_roi)
 
         });
 
@@ -2198,7 +2202,8 @@ document.addEventListener('click', async (e) => {
         document.getElementById('universalModal').classList.add('hidden');
         if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating asset...");
-        await apiCall('update', 'assets', { asset_name: name, name: name, type: type, value: value }, editId);
+        const _roi = document.getElementById('mAssetROI')?.value;
+        await apiCall('update', 'assets', { asset_name: name, name: name, type: type, value: value, expected_return: _roi === '' || _roi == null ? null : Number(_roi) }, editId);
         // Auto-log a value snapshot so the Assets growth chart has history.
         try {
             await apiCall('create', 'asset_snapshots', { asset_id: String(editId), value: value, date: new Date().toISOString().slice(0, 10) });

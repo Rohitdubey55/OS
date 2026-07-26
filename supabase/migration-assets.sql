@@ -10,6 +10,16 @@
 -- column exists (older schemas dropped it silently).
 ALTER TABLE public.assets ADD COLUMN IF NOT EXISTS type TEXT;
 
+-- Expected annual return (%) per asset — powers return-aware projections.
+ALTER TABLE public.assets ADD COLUMN IF NOT EXISTS expected_return NUMERIC(6,2);
+
+-- Custom net-worth milestone for the Assets page (empty = automatic).
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS networth_milestone NUMERIC(14,2);
+
+-- Your real monthly expenses (for runway/projections when tracked expenses
+-- understate reality; empty = use the tracked 3-month average).
+ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS assumed_monthly_expense NUMERIC(14,2);
+
 CREATE TABLE IF NOT EXISTS public.asset_snapshots (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,

@@ -186,7 +186,7 @@
     // not in this list is silently dropped — prevents "schema doesn't have column X"
     // errors from view code that sends legacy fields like habit_summary_time.
     const ALLOWED_COLUMNS = {
-        settings: new Set(['id','user_id','name','dob','morning_message','afternoon_message','evening_message','weekly_budget','monthly_budget','category_budgets','theme_color','theme_mode','orientation_lock','ai_api_key','ai_model','nav_layout','dashboard_config','kpi_config','bento_config','dashboard_tiles','mobile_dashboard_tiles','notification_enabled','notification_sound','notification_method','quiet_hours_start','quiet_hours_end','diary_default_mood','diary_show_tasks','diary_show_habits','diary_show_expenses','task_default_view','task_categories','habit_routines','elevenlabs_api_key','elevenlabs_voice_id','tts_provider','tts_voice_id']),
+        settings: new Set(['id','user_id','name','dob','morning_message','afternoon_message','evening_message','weekly_budget','monthly_budget','category_budgets','theme_color','theme_mode','orientation_lock','ai_api_key','ai_model','nav_layout','dashboard_config','kpi_config','bento_config','dashboard_tiles','mobile_dashboard_tiles','notification_enabled','notification_sound','notification_method','quiet_hours_start','quiet_hours_end','diary_default_mood','diary_show_tasks','diary_show_habits','diary_show_expenses','task_default_view','task_categories','habit_routines','elevenlabs_api_key','elevenlabs_voice_id','tts_provider','tts_voice_id','networth_milestone','assumed_monthly_expense']),
         reader_settings: new Set(['id','user_id','background_color','font_color','font_family','font_size','line_spacing','fullscreen_mode','page_animation','auto_save_position']),
         pomodoro_settings: new Set(['id','user_id','work_duration','short_break','long_break','long_break_interval','sound_work','sound_break','auto_start_break','background_mode']),
         tasks: new Set(['id','user_id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','completed_at','duration','subtasks','pomodoro_estimate','pomodoro_length']),
@@ -198,7 +198,7 @@
         vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus','color','display_mode','horizon']),
         funds: new Set(['id','user_id','name','balance','type','currency','fund_name','target_amount','current_amount']),
         fund_contributions: new Set(['id','user_id','fund_id','amount','date','note']),
-        assets: new Set(['id','user_id','name','value','purchase_date','notes','type']),
+        assets: new Set(['id','user_id','name','value','purchase_date','notes','type','expected_return']),
         asset_snapshots: new Set(['id','user_id','asset_id','value','date']),
         people: new Set(['id','user_id','name','relationship','birthday','phone','email','instagram','last_contact','next_interaction','is_favorite','is_priority','notes','contact_frequency']),
         people_debts: new Set(['id','user_id','person_id','amount','type','date','notes']),

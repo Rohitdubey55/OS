@@ -306,7 +306,8 @@ function _finAddModalHTML(type) {
          <option value="Investment">Investment</option>
          <option value="Property">Property</option>
       </select>
-      <input type="number" class="input" id="mAssetValue" placeholder="Current Value (₹)" style="margin-top:10px">`;
+      <input type="number" class="input" id="mAssetValue" placeholder="Current Value (₹)" style="margin-top:10px">
+      <input type="number" step="0.1" class="input" id="mAssetROI" placeholder="Expected annual return % (e.g. 12 for stocks, 7 for FD)" style="margin-top:10px">`;
     save = `<button class="btn primary" data-action="save-asset-modal">Save Asset</button>`;
   }
 
@@ -1528,9 +1529,39 @@ function renderFinAssets(container) {
   const avgExp = monthsUsed ? expSum / monthsUsed : 0;
   const avgSurplus = avgInc - avgExp;
 
+  // User-set override (✎ on the Liquid cash KPI): your REAL monthly expenses —
+  // tracked spends often understate reality. Drives runway and all projections.
+  const _settings = state.data.settings?.[0] || {};
+  const assumedExp = Number(_settings.assumed_monthly_expense) || 0;
+  const effExp = assumedExp > 0 ? assumedExp : avgExp;
+  const effSurplus = avgInc - effExp;
+
+  // Blended expected annual return, weighted by value (unset rates count as 0%).
+  const ratedValue = assets.reduce((s, a) => s + (Number(a.expected_return) ? Number(a.value || 0) : 0), 0);
+  const blendedAnnualPct = total > 0
+    ? assets.reduce((s, a) => s + Number(a.value || 0) * (Number(a.expected_return) || 0), 0) / total
+    : 0;
+  const rMonthly = blendedAnnualPct / 100 / 12;
+  // Compound projection: returns on the whole pot + monthly surplus added.
+  const projectValue = (months) => {
+    let v = total;
+    for (let k = 0; k < months; k++) v = v * (1 + rMonthly) + effSurplus;
+    return Math.round(v);
+  };
+  const monthsToTarget = (target) => {
+    let v = total;
+    if (v >= target) return 0;
+    if (rMonthly <= 0 && effSurplus <= 0) return null;
+    for (let k = 1; k <= 120; k++) {
+      v = v * (1 + rMonthly) + effSurplus;
+      if (v >= target) return k;
+    }
+    return null;
+  };
+
   const typedAssets = assets.filter(a => a.type && String(a.type).trim());
   const liquid = assets.reduce((s, a) => s + (String(a.type || '').trim() === 'Cash' ? Number(a.value || 0) : 0), 0);
-  const runway = (liquid > 0 && avgExp > 0) ? liquid / avgExp : null;
+  const runway = (liquid > 0 && effExp > 0) ? liquid / effExp : null;
   const runwayLabel = runway == null ? null : runway < 1 ? '<1 month' : runway > 24 ? '24+ months' : Math.round(runway) + ' month' + (runway >= 2 ? 's' : '');
   const topShare = total > 0 && top ? Number(top.value || 0) / total : 0;
   const cashShare = total > 0 ? liquid / total : 0;
@@ -1553,13 +1584,30 @@ function renderFinAssets(container) {
     }
   });
 
-  // Next milestone: ₹10L steps below ₹1Cr, ₹25L steps above.
+  // Milestone: user-set target (Settings) if present, else automatic —
+  // ₹10L steps below ₹1Cr, ₹25L steps above. ETA uses the compound projection
+  // (savings pace + expected returns).
+  const customMilestone = Number(_settings.networth_milestone) || 0;
   const step = total < 10000000 ? 1000000 : 2500000;
-  const milestone = Math.max(step, Math.ceil((total + 1) / step) * step);
-  const etaMonths = avgSurplus > 0 ? Math.ceil((milestone - total) / avgSurplus) : null;
+  const autoMilestone = Math.max(step, Math.ceil((total + 1) / step) * step);
+  const milestone = customMilestone > 0 ? customMilestone : autoMilestone;
+  const milestoneReached = total >= milestone;
+  const etaMonths = milestoneReached ? null : monthsToTarget(milestone);
   const etaLabel = etaMonths != null && etaMonths <= 120
     ? new Date(_now2.getFullYear(), _now2.getMonth() + etaMonths, 1).toLocaleDateString('default', { month: 'short', year: 'numeric' })
     : null;
+
+  // Month-over-month trend: last full month vs the 3 months before it.
+  // These lines change as each month closes — the pulse of the page.
+  const _aggAt = (k) => {
+    const d = new Date(_now2.getFullYear(), _now2.getMonth() - k, 1);
+    return monthAgg[d.getFullYear() + '-' + d.getMonth()] || null;
+  };
+  const lastM = _aggAt(1);
+  let p3i = 0, p3e = 0, p3n = 0;
+  for (let k = 2; k <= 4; k++) { const a = _aggAt(k); if (a && (a.inc > 0 || a.exp > 0)) { p3i += a.inc; p3e += a.exp; p3n++; } }
+  const prevAvgExp = p3n ? p3e / p3n : 0;
+  const prevAvgInc = p3n ? p3i / p3n : 0;
 
   // ── The insights themselves (rule-based, only what applies, max 6) ────────
   const insights = [];
@@ -1573,16 +1621,37 @@ function renderFinAssets(container) {
   }
   if (cashShare > 0.5 && runway != null && runway > 9) insights.push({ tone: 'info', text: `<b>${Math.round(cashShare * 100)}%</b> of your net worth sits in cash — beyond the emergency cushion, idle cash loses to inflation. Consider putting the excess to work.` });
 
-  if (avgSurplus > 0) {
-    const rate = avgInc > 0 ? Math.round(avgSurplus / avgInc * 100) : null;
-    insights.push({ tone: 'good', text: `You're adding ≈ <b>${inr(avgSurplus)}/month</b> to your wealth${rate != null ? ` (saving ${rate}% of income)` : ''}.${etaLabel ? ` At this pace you cross <b>${inr(milestone)}</b> around <b>${etaLabel}</b>.` : ''}` });
-  } else if (avgSurplus < 0 && monthsUsed) {
-    insights.push({ tone: 'warn', text: `You spent ≈ <b>${inr(Math.abs(avgSurplus))}/month more than you earned</b> over the last ${monthsUsed} month${monthsUsed > 1 ? 's' : ''} — your assets are funding the gap.` });
+  if (effSurplus > 0) {
+    const rate = avgInc > 0 ? Math.round(effSurplus / avgInc * 100) : null;
+    const basis = assumedExp > 0 ? ` (income ${inr(avgInc)} − your set expenses ${inr(assumedExp)}/mo)` : (rate != null ? ` (saving ${rate}% of income)` : '');
+    insights.push({ tone: 'good', text: `You're adding ≈ <b>${inr(effSurplus)}/month</b> to your wealth${basis}.${etaLabel ? ` With ${blendedAnnualPct > 0 ? `expected returns of ${blendedAnnualPct.toFixed(1)}%/yr` : 'this pace'} you cross <b>${inr(milestone)}</b> around <b>${etaLabel}</b>.` : ''}` });
+  } else if (effSurplus < 0 && (monthsUsed || assumedExp > 0)) {
+    insights.push({ tone: 'warn', text: `Your expenses run ≈ <b>${inr(Math.abs(effSurplus))}/month above your income</b>${assumedExp > 0 ? ' (using your set monthly expenses)' : ` over the last ${monthsUsed} month${monthsUsed > 1 ? 's' : ''}`} — your assets are funding the gap.` });
+  }
+
+  // Expected returns: blended rate + a 12-month projection.
+  if (blendedAnnualPct > 0) {
+    const passive = Math.round(total * blendedAnnualPct / 100);
+    const coverage = total > 0 ? ratedValue / total : 0;
+    insights.push({ tone: 'info', text: `Blended expected return ≈ <b>${blendedAnnualPct.toFixed(1)}%/yr</b> (≈ ${inr(passive)}/yr of growth${coverage < 0.7 ? `; only ${Math.round(coverage * 100)}% of your portfolio has a rate set — edit the rest` : ''}). In 12 months that puts you at ≈ <b>${inr(projectValue(12))}</b>.` });
+  } else if (assets.length > 0) {
+    insights.push({ tone: 'info', text: `Set an <b>expected annual return %</b> on each holding (edit ✎) — projections will then include growth, not just savings.` });
   }
 
   if (avgInc > 0 && total > 0) {
     const mult = total / (avgInc * 12);
     insights.push({ tone: 'info', text: `Net worth ≈ <b>${mult.toFixed(1)}×</b> your annual income${mult < 1 ? ' — early days, keep the savings rate up' : mult >= 3 ? ' — strong position' : ''}.` });
+  }
+  // Month-over-month trends — these lines move as each month closes.
+  if (lastM && lastM.exp > 0 && prevAvgExp > 0) {
+    const chg = (lastM.exp - prevAvgExp) / prevAvgExp;
+    if (chg >= 0.15) insights.push({ tone: 'warn', text: `Spending last month (<b>${inr(lastM.exp)}</b>) ran <b>${Math.round(chg * 100)}% above</b> your prior 3-month average — that eats directly into your savings pace.` });
+    else if (chg <= -0.15) insights.push({ tone: 'good', text: `Spending last month (<b>${inr(lastM.exp)}</b>) was <b>${Math.round(-chg * 100)}% below</b> your prior 3-month average — the surplus compounds.` });
+  }
+  if (lastM && lastM.inc > 0 && prevAvgInc > 0) {
+    const chg = (lastM.inc - prevAvgInc) / prevAvgInc;
+    if (chg >= 0.15) insights.push({ tone: 'good', text: `Income last month (<b>${inr(lastM.inc)}</b>) came in <b>${Math.round(chg * 100)}% above</b> your prior 3-month average.` });
+    else if (chg <= -0.15) insights.push({ tone: 'warn', text: `Income last month (<b>${inr(lastM.inc)}</b>) was <b>${Math.round(-chg * 100)}% below</b> your prior 3-month average — watch the pipeline.` });
   }
   if (mover) insights.push({ tone: mover.d > 0 ? 'good' : 'warn', text: `Biggest mover this month: <b>${escapeHtml(mover.name)}</b> ${mover.d > 0 ? '+' : '−'}${inr(Math.abs(mover.d))}.` });
   if (typedAssets.length < assets.length && assets.length > 0) insights.push({ tone: 'info', text: `${assets.length - typedAssets.length} holding${assets.length - typedAssets.length > 1 ? 's have' : ' has'} no type set. Edit each asset (Cash / Investment / Property) to sharpen the liquidity and allocation analysis.` });
@@ -1591,24 +1660,29 @@ function renderFinAssets(container) {
   const insightsCard = insights.length ? `
     <div class="dash-card" style="margin-bottom:18px">
       <div class="fin-sec-h">What your money is telling you</div>
-      ${insights.slice(0, 6).map(i => `
+      ${insights.slice(0, 7).map(i => `
         <div class="fin-insight-row">
           <span class="fin-insight-dot" style="background:${toneColor[i.tone]}"></span>
           <span>${i.text}</span>
         </div>`).join('')}
     </div>` : '';
 
-  // Milestone card for the rail
+  // Milestone card for the rail (pencil → set your own target)
   const milestonePct = milestone > 0 ? Math.min(100, Math.round(total / milestone * 100)) : 0;
   const milestoneCard = total > 0 ? `
     <div class="finr-card">
-      <div class="finr-h">Next milestone</div>
-      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px">
-        <span style="font-size:20px; font-weight:800; color:var(--text-1)">${inr(milestone)}</span>
-        <span style="font-size:12px; color:var(--text-muted)">${milestonePct}%</span>
+      <div style="display:flex; align-items:center; justify-content:space-between;">
+        <div class="finr-h" style="margin:0">${customMilestone > 0 ? 'Your milestone' : 'Next milestone'}</div>
+        <button class="btn icon" style="padding:4px 8px; font-size:12px" onclick="openSetMilestone()" title="Set your own milestone">✎</button>
       </div>
-      <div class="finr-bar"><i style="width:${milestonePct}%"></i></div>
-      <div style="font-size:12px; color:var(--text-muted); margin-top:8px">${inr(milestone - total)} to go${etaLabel ? ` · ≈ ${etaLabel} at your current savings pace` : avgSurplus <= 0 ? ' · needs a positive monthly surplus' : ''}</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin:8px 0 6px">
+        <span style="font-size:20px; font-weight:800; color:var(--text-1)">${inr(milestone)}</span>
+        <span style="font-size:12px; color:${milestoneReached ? 'var(--success)' : 'var(--text-muted)'}; font-weight:${milestoneReached ? '700' : '400'}">${milestonePct}%</span>
+      </div>
+      <div class="finr-bar"><i style="width:${milestonePct}%; ${milestoneReached ? 'background:var(--success)' : ''}"></i></div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:8px">${milestoneReached
+        ? `<span style="color:var(--success); font-weight:700">Reached!</span> Set a higher target with ✎`
+        : `${inr(milestone - total)} to go${etaLabel ? ` · ≈ ${etaLabel} at your savings pace${blendedAnnualPct > 0 ? ` + ${blendedAnnualPct.toFixed(1)}%/yr returns` : ''}` : (effSurplus <= 0 && rMonthly <= 0) ? ' · needs a positive monthly surplus' : ''}`}</div>
     </div>` : '';
 
   // Allocation by type (only worth a chart with 2+ types)
@@ -1664,7 +1738,7 @@ function renderFinAssets(container) {
     <div class="fin-kpis">
       <div class="fin-kpi"><div class="k-l">Net worth</div><div class="k-v">₹${total.toLocaleString()}</div></div>
       <div class="fin-kpi"><div class="k-l">This month</div>${deltaHTML}</div>
-      <div class="fin-kpi"><div class="k-l">Liquid cash</div><div class="k-v">${liquid > 0 ? inr(liquid) : '—'}</div><div style="font-size:11.5px; color:var(--text-3); margin-top:2px">${runwayLabel != null ? `≈ ${runwayLabel} of expenses` : liquid > 0 ? 'no expense data yet' : 'tag assets as “Cash”'}</div></div>
+      <div class="fin-kpi"><div class="k-l">Liquid cash</div><div class="k-v">${liquid > 0 ? inr(liquid) : '—'}</div><div style="font-size:11.5px; color:var(--text-3); margin-top:2px; cursor:pointer" onclick="openSetMonthlyExpense()" title="Set your real monthly expenses">${runwayLabel != null ? `≈ ${runwayLabel} of expenses · <u>${assumedExp > 0 ? inr(assumedExp) : inr(effExp)}/mo ✎</u>` : liquid > 0 ? '<u>set your monthly expenses ✎</u>' : 'tag assets as “Cash”'}</div></div>
       <div class="fin-kpi"><div class="k-l">Largest · ${topShort}</div><div class="k-v" style="color:${topShare >= 0.35 ? 'var(--danger)' : 'var(--text-1)'}">${Math.round(topShare * 100)}%</div><div style="font-size:11.5px; color:var(--text-3); margin-top:2px">of net worth · ${inr(Number(top ? top.value || 0 : 0))}</div></div>
     </div>
     <div class="fin-workspace">
@@ -1680,7 +1754,7 @@ function renderFinAssets(container) {
         <div class="asset-item">
           <div style="min-width:0">
             <div style="font-weight:600">${a.name || 'Untitled'}</div>
-            <div class="asset-type">${a.type || a.notes || ''}${a.type || a.notes ? ' · ' : ''}${share}% of net worth</div>
+            <div class="asset-type">${a.type || a.notes || ''}${a.type || a.notes ? ' · ' : ''}${share}% of net worth${Number(a.expected_return) ? ` · ${Number(a.expected_return)}%/yr expected` : ''}</div>
           </div>
           <div style="display:flex; align-items:center; gap:10px">
              <div style="text-align:right">
@@ -1701,6 +1775,84 @@ function renderFinAssets(container) {
   _finInitAssetCharts(series, typeRows, total);
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
+
+// ── Real monthly expenses (drives runway & projections) ────────────────────
+window.openSetMonthlyExpense = function () {
+  const settings = state.data.settings?.[0] || {};
+  const current = Number(settings.assumed_monthly_expense) || '';
+  const modal = document.getElementById('universalModal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <h3 style="margin-bottom:4px">Your real monthly expenses</h3>
+    <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:12px">Used for the cash runway and wealth projections. Set this if you don't track every expense in the app. Leave empty to use your tracked 3-month average.</div>
+    <input type="number" class="input" id="mAssumedExp" placeholder="e.g. 60000" value="${current}">
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+      <button class="btn primary" onclick="_finSaveMonthlyExpense()">Save</button>
+    </div>`;
+  modal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('mAssumedExp')?.focus(), 50);
+};
+
+window._finSaveMonthlyExpense = async function () {
+  const raw = document.getElementById('mAssumedExp')?.value;
+  const value = raw === '' ? null : Number(raw);
+  if (value != null && (isNaN(value) || value < 0)) { showToast('Enter a valid amount'); return; }
+  document.getElementById('universalModal').classList.add('hidden');
+  const settings = state.data.settings?.[0] || {};
+  try {
+    if (settings.id) await apiCall('update', 'settings', { assumed_monthly_expense: value }, settings.id);
+    else {
+      const res = await apiCall('create', 'settings', { assumed_monthly_expense: value });
+      if (!state.data.settings) state.data.settings = [{}];
+      state.data.settings[0] = res?.data || { assumed_monthly_expense: value };
+    }
+    if (state.data.settings?.[0]) state.data.settings[0].assumed_monthly_expense = value;
+    renderFinanceContent();
+    showToast(value ? `Monthly expenses set: ₹${value.toLocaleString()}` : 'Back to tracked average');
+  } catch (e) {
+    showToast('Could not save — run supabase/migration-assets.sql (updated) first');
+  }
+};
+
+// ── Custom net-worth milestone ─────────────────────────────────────────────
+window.openSetMilestone = function () {
+  const settings = state.data.settings?.[0] || {};
+  const current = Number(settings.networth_milestone) || '';
+  const modal = document.getElementById('universalModal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <h3 style="margin-bottom:4px">Set net-worth milestone</h3>
+    <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:12px">Your target to aim for. Leave empty to go back to automatic milestones (next round number).</div>
+    <input type="number" class="input" id="mMilestone" placeholder="e.g. 10000000 for ₹1Cr" value="${current}">
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+      <button class="btn primary" onclick="_finSaveMilestone()">Save</button>
+    </div>`;
+  modal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('mMilestone')?.focus(), 50);
+};
+
+window._finSaveMilestone = async function () {
+  const raw = document.getElementById('mMilestone')?.value;
+  const value = raw === '' ? null : Number(raw);
+  if (value != null && (isNaN(value) || value < 0)) { showToast('Enter a valid amount'); return; }
+  document.getElementById('universalModal').classList.add('hidden');
+  const settings = state.data.settings?.[0] || {};
+  try {
+    if (settings.id) await apiCall('update', 'settings', { networth_milestone: value }, settings.id);
+    else {
+      const res = await apiCall('create', 'settings', { networth_milestone: value });
+      if (!state.data.settings) state.data.settings = [{}];
+      state.data.settings[0] = res?.data || { networth_milestone: value };
+    }
+    if (state.data.settings?.[0]) state.data.settings[0].networth_milestone = value;
+    renderFinanceContent();
+    showToast(value ? `Milestone set: ₹${value.toLocaleString()}` : 'Back to automatic milestones');
+  } catch (e) {
+    showToast('Could not save milestone — run supabase/migration-assets.sql (updated) first');
+  }
+};
 
 // ── Log an asset value for any date (builds the month-by-month history) ────
 window.openLogAssetValue = function (id) {
@@ -1952,6 +2104,7 @@ window.openEditAsset = function (id) {
       <option value="Property" ${a.type === 'Property' ? 'selected' : ''}>Property</option>
     </select>
     <input type="number" class="input" id="mAssetValue" value="${a.value || ''}" placeholder="Current Value">
+    <input type="number" step="0.1" class="input" id="mAssetROI" value="${a.expected_return ?? ''}" placeholder="Expected annual return % (e.g. 12)">
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
       <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
       <button class="btn primary" data-action="update-asset-modal" data-edit-id="${a.id}">Update</button>
