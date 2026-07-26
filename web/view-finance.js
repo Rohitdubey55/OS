@@ -79,6 +79,7 @@ const FINANCE_REFINE_CSS = `<style>
 .fin-ins-charts { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .fin-ins-charts .chart-box { position:relative; height:220px; }
 .fin-donut-wrap { display:flex; align-items:center; gap:22px; }
+.fin-donut-wrap.fin-donut-rail { flex-direction:column; gap:12px; }
 .fin-donut-box { position:relative; flex:0 0 190px; height:190px; }
 .fin-donut-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
 .fin-donut-center .dc-v { font-size:17px; font-weight:800; color:var(--text-1); letter-spacing:-.01em; }
@@ -430,6 +431,8 @@ function _finWeeklyRailHTML(s, totalExp, weeklyBudget) {
 }
 
 function renderFinExpenses(container) {
+  // 'fy' only exists on the Income tab — fall back to month here.
+  if (finRange === 'fy') finRange = 'month';
   const allExpenses = state.data.expenses || [];
   const settings = state.data.settings?.[0] || {};
   const now = new Date();
@@ -987,54 +990,211 @@ function renderWeeklyOverview(totalExp, limit, catSpent = {}, catLimits = {}) {
 
 /* --- TAB 2: INCOME --- */
 function renderFinIncome(container) {
-  const allExpenses = state.data.expenses || [];
+  const all = state.data.expenses || [];
   const now = new Date();
 
   // Income is monthly/yearly by nature — a "week" of salary makes no sense.
   if (finRange === 'week') finRange = 'month';
 
-  const filtered = allExpenses.filter(e => {
-    const d = new Date(e.date);
-    if (finRange === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    else if (finRange === 'year') return d.getFullYear() === now.getFullYear();
-    return true;
-  });
+  // Period bounds. 'fy' = Indian financial year (Apr 1 – Mar 31).
+  let start, end, periodLabel;
+  if (finRange === 'fy') {
+    const fyStart = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    start = new Date(fyStart, 3, 1);
+    end = new Date(fyStart + 1, 2, 31, 23, 59, 59);
+    periodLabel = `FY ${fyStart}–${String((fyStart + 1) % 100).padStart(2, '0')}`;
+  } else if (finRange === 'year') {
+    start = new Date(now.getFullYear(), 0, 1);
+    end = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+    periodLabel = String(now.getFullYear());
+  } else { // month
+    finRange = 'month';
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    periodLabel = now.toLocaleDateString('default', { month: 'long', year: 'numeric' });
+  }
 
-  const incomeItems = filtered.filter(e => e.type === 'income');
-  const expenseItems = filtered.filter(e => e.type === 'expense');
+  const inPeriod = all.filter(e => { const d = new Date(e.date); return d >= start && d <= end; });
+  const incomeItems = inPeriod.filter(e => e.type === 'income');
+  const expenseItems = inPeriod.filter(e => e.type === 'expense');
   const totalInc = incomeItems.reduce((s, e) => s + Number(e.amount), 0);
   const totalExp = expenseItems.reduce((s, e) => s + Number(e.amount), 0);
   const netBalance = totalInc - totalExp;
+
+  // Monthly slots for the chart: the FY/year months, or trailing 12 in month mode.
+  const slots = [];
+  if (finRange === 'month') {
+    for (let k = 11; k >= 0; k--) { const d = new Date(now.getFullYear(), now.getMonth() - k, 1); slots.push({ y: d.getFullYear(), m: d.getMonth() }); }
+  } else {
+    let d = new Date(start);
+    while (d <= end) { slots.push({ y: d.getFullYear(), m: d.getMonth() }); d = new Date(d.getFullYear(), d.getMonth() + 1, 1); }
+  }
+  const slotIdx = {};
+  slots.forEach((s, i) => { slotIdx[s.y + '-' + s.m] = i; });
+  const incByMonth = slots.map(() => 0);
+  all.forEach(e => {
+    if (e.type !== 'income') return;
+    const d = new Date(e.date);
+    const i = slotIdx[d.getFullYear() + '-' + d.getMonth()];
+    if (i != null) incByMonth[i] += Number(e.amount) || 0;
+  });
+  const slotLabels = slots.map(({ y, m }, i) => {
+    const lbl = new Date(y, m, 1).toLocaleDateString('default', { month: 'short' });
+    return (i === 0 || m === 0) ? `${lbl} '${String(y).slice(2)}` : lbl;
+  });
+  const chartTitle = finRange === 'month' ? 'Income by month — last 12 months' : `Income by month — ${periodLabel}`;
+
+  // KPIs
+  const monthsSoFar = finRange === 'month' ? 12 : Math.min(slots.length, (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth() + 1);
+  const avgPerMonth = finRange === 'month' ? totalInc : Math.round(totalInc / Math.max(1, monthsSoFar));
+  const biggest = [...incomeItems].sort((a, b) => Number(b.amount) - Number(a.amount))[0];
+  const biggestSrc = biggest ? String(biggest.description || biggest.notes || biggest.category || '').slice(0, 18) : '';
+  const savingsRate = totalInc > 0 ? Math.round(netBalance / totalInc * 100) : null;
+
+  // Income by source (description is the "source" note)
+  const srcSums = {};
+  incomeItems.forEach(e => {
+    const s = String(e.description || e.notes || e.category || 'Other').trim() || 'Other';
+    srcSums[s] = (srcSums[s] || 0) + (Number(e.amount) || 0);
+  });
+  const srcEntries = Object.entries(srcSums).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const srcTop = srcEntries.slice(0, 5);
+  const srcRest = srcEntries.slice(5).reduce((s, [, v]) => s + v, 0);
+  const srcRows = srcTop.map(([n, v]) => [n, v]);
+  if (srcRest > 0) srcRows.push(['Other', srcRest]);
+  const srcColors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
 
   container.innerHTML = `
     <div style="display:flex; justify-content:center; margin-bottom:24px;">
         <div style="background:var(--surface-3); padding:4px; border-radius:10px; display:flex; gap:2px;">
         <button class="range-btn ${finRange === 'month' ? 'active' : ''}" onclick="switchFinRange('month')">Month</button>
         <button class="range-btn ${finRange === 'year' ? 'active' : ''}" onclick="switchFinRange('year')">Year</button>
+        <button class="range-btn ${finRange === 'fy' ? 'active' : ''}" onclick="switchFinRange('fy')" title="Financial year (Apr–Mar)">FY (Apr–Mar)</button>
         </div>
     </div>
 
-    <!-- Summary Cards -->
-    <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: var(--space-6);">
-      <div class="dash-card">
-        <div class="stat-label">${renderIcon('chart', null, 'style="width:14px; display:inline-block; vertical-align:middle; margin-right:4px"')} Total Income</div>
-        <div class="stat-val" style="color:var(--success)">₹${totalInc.toLocaleString()}</div>
-      </div>
-      <div class="dash-card">
-        <div class="stat-label">${renderIcon('activity', null, 'style="width:14px; display:inline-block; vertical-align:middle; margin-right:4px"')} Net Balance</div>
-        <div class="stat-val" style="color:${netBalance >= 0 ? 'var(--success)' : 'var(--danger)'}">₹${Math.abs(netBalance).toLocaleString()}</div>
-        <div class="text-muted" style="font-size:12px; margin-top:8px">${netBalance >= 0 ? 'Surplus' : 'Deficit'}</div>
-      </div>
+    <div class="fin-kpis">
+      <div class="fin-kpi"><div class="k-l">Income · ${periodLabel}</div><div class="k-v" style="color:var(--success)">₹${totalInc.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">${finRange === 'month' ? 'This month' : 'Avg / month'}</div><div class="k-v">₹${avgPerMonth.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Biggest${biggestSrc ? ' · ' + escapeHtml(biggestSrc) : ''}</div><div class="k-v">${biggest ? '₹' + Number(biggest.amount).toLocaleString() : '—'}</div></div>
+      <div class="fin-kpi"><div class="k-l">Savings rate</div><div class="k-v" style="color:${savingsRate == null ? 'var(--text-3)' : (savingsRate >= 0 ? 'var(--success)' : 'var(--danger)')}">${savingsRate == null ? '—' : savingsRate + '%'}</div><div style="font-size:11.5px; color:var(--text-3); margin-top:2px">net ₹${Math.abs(netBalance).toLocaleString()} ${netBalance >= 0 ? 'kept' : 'deficit'}</div></div>
     </div>
 
-    <!-- Transactions List -->
-    <div class="transactions-list">
-      <h3 style="margin-bottom: var(--space-4);">Recent Income</h3>
-      ${incomeItems.length === 0 ? '<div class="empty-state">No income transactions found</div>' : ''}
-      ${incomeItems.map(renderTransactionCard).join('')}
+    <div class="fin-workspace">
+      <div class="fin-main">
+        <div class="dash-card" style="margin-bottom:18px"><div class="fin-sec-h">${chartTitle}</div><div class="chart-box"><canvas id="finChIncMonthly"></canvas></div></div>
+        ${_finTxListHTML(incomeItems)}
+      </div>
+      <aside class="fin-rail">
+        ${srcRows.length ? `
+        <div class="finr-card">
+          <div class="finr-h">Income by source · ${periodLabel}</div>
+          <div class="fin-donut-wrap fin-donut-rail">
+            <div class="fin-donut-box" style="flex-basis:auto; width:140px; height:140px; margin:0 auto"><canvas id="finChIncSrc"></canvas></div>
+            <div class="fin-donut-legend" style="width:100%">
+              ${srcRows.map(([n, v], i) => `<div class="fin-catrow"><div class="cr-top"><span class="cr-dot" style="background:${srcColors[Math.min(i, srcColors.length - 1)]}"></span><span class="cr-name">${escapeHtml(n)}</span><span class="cr-share">${totalInc > 0 ? Math.round(v / totalInc * 100) : 0}%</span><span class="cr-amt">₹${Math.round(v).toLocaleString()}</span></div></div>`).join('')}
+            </div>
+          </div>
+        </div>` : ''}
+        ${(() => {
+          const withData = incByMonth.map((v, i) => ({ v, label: slotLabels[i] })).filter(x => x.v > 0);
+          if (!withData.length) return '';
+          const best = withData.reduce((a, b) => (b.v > a.v ? b : a));
+          return `
+        <div class="finr-card">
+          <div class="finr-h">Best month</div>
+          <div style="font-size:22px; font-weight:800; color:var(--text-1); line-height:1">₹${best.v.toLocaleString()}</div>
+          <div style="font-size:12px; color:var(--text-muted); margin-top:2px">${best.label}</div>
+          <div style="margin-top:10px; font-size:12.5px; color:var(--text-muted)">${withData.length} month${withData.length > 1 ? 's' : ''} with income</div>
+        </div>`;
+        })()}
+      </aside>
     </div>
   `;
+  _finInitIncomeCharts(slotLabels, incByMonth, slots, now, srcRows, totalInc);
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+function _finInitIncomeCharts(labels, incByMonth, slots, now, srcRows, totalInc, attempt = 0) {
+  const bar = document.getElementById('finChIncMonthly');
+  if (!bar) return;
+  if (typeof Chart === 'undefined') {
+    if (attempt < 20) setTimeout(() => _finInitIncomeCharts(labels, incByMonth, slots, now, srcRows, totalInc, attempt + 1), 250);
+    return;
+  }
+  const css = getComputedStyle(document.body);
+  const cssVar = (n, fb) => (css.getPropertyValue(n) || '').trim() || fb;
+  const primary = cssVar('--primary', '#818CF8');
+  const textMuted = cssVar('--text-muted', '#9097A1');
+  const grid = cssVar('--border-color', '#E5E7EB');
+  const surface = cssVar('--surface-1', '#FFFFFF');
+  const alpha = (hex, a) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+  const fmtC = (n) => '₹' + Math.round(n).toLocaleString();
+  const compact = (n) => {
+    const abs = Math.abs(n);
+    if (abs >= 10000000) return '₹' + (n / 10000000).toFixed(1).replace(/\.0$/, '') + 'Cr';
+    if (abs >= 100000) return '₹' + (n / 100000).toFixed(1).replace(/\.0$/, '') + 'L';
+    if (abs >= 1000) return '₹' + (n / 1000).toFixed(abs >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k';
+    return '₹' + n;
+  };
+
+  window._finCharts = window._finCharts || {};
+  ['incMonthly', 'incSrc'].forEach(k => { try { window._finCharts[k]?.destroy(); } catch (e) { } });
+
+  const isCurrent = (i) => slots[i] && slots[i].y === now.getFullYear() && slots[i].m === now.getMonth();
+  window._finCharts.incMonthly = new Chart(bar.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: incByMonth,
+        backgroundColor: incByMonth.map((_, i) => isCurrent(i) ? primary : alpha(primary, 0.4)),
+        hoverBackgroundColor: primary,
+        borderRadius: { topLeft: 4, topRight: 4 },
+        borderSkipped: 'bottom',
+        maxBarThickness: 22
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { displayColors: false, callbacks: { label: (i) => fmtC(i.parsed.y) } }
+      },
+      scales: {
+        x: { grid: { display: false }, border: { color: grid }, ticks: { color: textMuted, font: { size: 10 }, maxRotation: 0 } },
+        y: { grid: { color: grid }, border: { display: false }, beginAtZero: true, ticks: { color: textMuted, font: { size: 10 }, maxTicksLimit: 5, callback: (v) => compact(v) } }
+      }
+    }
+  });
+
+  const donut = document.getElementById('finChIncSrc');
+  if (donut && srcRows.length) {
+    const colors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
+    window._finCharts.incSrc = new Chart(donut.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: srcRows.map(([n]) => n),
+        datasets: [{
+          data: srcRows.map(([, v]) => Math.round(v)),
+          backgroundColor: srcRows.map((_, i) => colors[Math.min(i, colors.length - 1)]),
+          borderColor: surface, borderWidth: 2, hoverOffset: 6
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false, cutout: '62%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { displayColors: false, callbacks: { label: (i) => `${fmtC(i.parsed)} · ${totalInc > 0 ? Math.round(i.parsed / totalInc * 100) : 0}%` } }
+        }
+      }
+    });
+  }
 }
 
 // ── Transactions list: filter + sort + load more ──────────────────────────
@@ -1073,10 +1233,10 @@ function _finTxListHTML(expenseItems) {
           <div class="fin-tx-controls">
             <input id="finTxSearch" class="fin-tx-search" type="search" placeholder="Search note, category, amount…"
                    value="${esc(finTxSearch)}" oninput="_finTxSearchInput(this)">
-            <select onchange="_finTxSetCat(this.value)" title="Filter by category">
+            ${cats.length > 1 ? `<select onchange="_finTxSetCat(this.value)" title="Filter by category">
               <option value="">All categories</option>
               ${cats.map(c => `<option value="${esc(c)}" ${finTxCat === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
-            </select>
+            </select>` : ''}
             <select onchange="_finTxSetSort(this.value)" title="Sort">
               ${sortOpts.map(([v, l]) => `<option value="${v}" ${finTxSort === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
@@ -1313,24 +1473,43 @@ function renderFinAssets(container) {
   const allocColors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
 
   const chartsHTML = series ? `
-    <div class="fin-ins-charts" style="margin-bottom:14px">
+    <div class="fin-ins-charts" style="margin-bottom:18px">
       <div class="dash-card"><div class="fin-sec-h">Net worth over time</div><div class="chart-box"><canvas id="finChNetWorth"></canvas></div></div>
       <div class="dash-card"><div class="fin-sec-h">Monthly growth</div><div class="chart-box"><canvas id="finChGrowth"></canvas></div></div>
     </div>` : (count > 0 ? `
-    <div class="dash-card" style="margin-bottom:14px; font-size:13px; color:var(--text-muted)">
+    <div class="dash-card" style="margin-bottom:18px; font-size:13px; color:var(--text-muted)">
       Growth charts appear once value history builds up. Run <b>supabase/migration-assets.sql</b> once (Supabase → SQL Editor) to start tracking — every value update is then logged automatically, and “Log value” lets you backfill past months.
     </div>` : '');
 
-  const allocHTML = showAlloc ? `
-    <div class="dash-card" style="margin-bottom:14px">
-      <div class="fin-sec-h">Allocation</div>
-      <div class="fin-donut-wrap">
-        <div class="fin-donut-box" style="flex-basis:150px; height:150px"><canvas id="finChAlloc"></canvas></div>
-        <div class="fin-donut-legend">
+  // Right rail: allocation donut (stacked vertically — the rail is narrow) + highlights.
+  const allocCard = showAlloc ? `
+    <div class="finr-card">
+      <div class="finr-h">Allocation</div>
+      <div class="fin-donut-wrap fin-donut-rail">
+        <div class="fin-donut-box" style="flex-basis:auto; width:140px; height:140px; margin:0 auto"><canvas id="finChAlloc"></canvas></div>
+        <div class="fin-donut-legend" style="width:100%">
           ${typeRows.map(([t, v], i) => `<div class="fin-catrow"><div class="cr-top"><span class="cr-dot" style="background:${allocColors[Math.min(i, allocColors.length - 1)]}"></span><span class="cr-name">${escapeHtml(t)}</span><span class="cr-share">${total > 0 ? Math.round(v / total * 100) : 0}%</span><span class="cr-amt">₹${Math.round(v).toLocaleString()}</span></div></div>`).join('')}
         </div>
       </div>
     </div>` : '';
+
+  let highlightsCard = '';
+  if (series) {
+    const named = series.growth.map((v, i) => ({ v, label: series.labels[i] })).filter(x => x.v != null);
+    if (named.length) {
+      const best = named.reduce((a, b) => (b.v > a.v ? b : a));
+      const worst = named.reduce((a, b) => (b.v < a.v ? b : a));
+      const avgGrowth = Math.round(named.reduce((s, x) => s + x.v, 0) / named.length);
+      const row = (l, x) => x == null ? '' : `<div style="display:flex; justify-content:space-between; align-items:baseline; font-size:13px; margin-bottom:8px"><span style="color:var(--text-muted)">${l}</span><span style="text-align:right"><b style="color:${x.v >= 0 ? 'var(--success)' : 'var(--danger)'}">${x.v >= 0 ? '+' : '−'}₹${Math.abs(x.v).toLocaleString()}</b><span style="color:var(--text-muted); font-size:11.5px"> ${x.label}</span></span></div>`;
+      highlightsCard = `
+    <div class="finr-card">
+      <div class="finr-h">Growth highlights</div>
+      ${row('Best month', best)}
+      ${row('Worst month', worst)}
+      <div style="display:flex; justify-content:space-between; align-items:baseline; font-size:13px"><span style="color:var(--text-muted)">Avg / month</span><b style="color:${avgGrowth >= 0 ? 'var(--success)' : 'var(--danger)'}">${avgGrowth >= 0 ? '+' : '−'}₹${Math.abs(avgGrowth).toLocaleString()}</b></div>
+    </div>`;
+    }
+  }
 
   container.innerHTML = `
     <div class="fin-kpis">
@@ -1339,8 +1518,9 @@ function renderFinAssets(container) {
       <div class="fin-kpi"><div class="k-l">Largest · ${topShort}</div><div class="k-v">₹${Number(top ? top.value || 0 : 0).toLocaleString()}</div></div>
       <div class="fin-kpi"><div class="k-l">Holdings</div><div class="k-v">${count}</div></div>
     </div>
+    <div class="fin-workspace">
+      <div class="fin-main">
     ${chartsHTML}
-    ${allocHTML}
     <div class="card" style="padding:0; overflow:hidden">
       ${count === 0
         ? '<div class="empty-state" style="padding:36px 20px; text-align:center; color:var(--text-2)">No assets yet. Tap “Add new” to add one.</div>'
@@ -1360,6 +1540,9 @@ function renderFinAssets(container) {
           </div>
         </div>`;
           }).join('')}
+        </div>
+      </div>
+      <aside class="fin-rail">${allocCard}${highlightsCard}</aside>
     </div>
   `;
   _finInitAssetCharts(series, typeRows, total);
