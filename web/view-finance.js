@@ -1234,23 +1234,113 @@ window._finSaveFundContribution = async function (id) {
 };
 
 /* --- TAB 3: ASSETS --- */
+
+// Build the month-by-month net-worth series from asset value snapshots.
+// For each month, each asset counts at its last logged value up to that month
+// (carry-forward); the latest month always reflects the live current values.
+function _finAssetSeries(assets, snaps) {
+  const valid = (snaps || []).filter(s => s.asset_id != null && s.value != null);
+  if (!valid.length) return null;
+  const sDate = (s) => new Date(s.date || s.created_at);
+
+  const first = new Date(Math.min(...valid.map(s => sDate(s).getTime())));
+  const now = new Date();
+  const months = [];
+  let y = first.getFullYear(), m = first.getMonth();
+  while (y < now.getFullYear() || (y === now.getFullYear() && m <= now.getMonth())) {
+    months.push({ y, m });
+    m++; if (m > 11) { m = 0; y++; }
+  }
+  const capped = months.slice(-12); // last 12 months max
+  if (capped.length < 2) return null; // nothing to chart yet
+
+  const perAsset = {};
+  valid.forEach(s => { (perAsset[s.asset_id] = perAsset[s.asset_id] || []).push(s); });
+  Object.values(perAsset).forEach(arr => arr.sort((a, b) => sDate(a) - sDate(b)));
+
+  const totals = capped.map(({ y, m }) => {
+    const end = new Date(y, m + 1, 0, 23, 59, 59);
+    let sum = 0;
+    Object.values(perAsset).forEach(arr => {
+      let v = null;
+      for (const s of arr) { if (sDate(s) <= end) v = Number(s.value) || 0; else break; }
+      if (v != null) sum += v;
+    });
+    return Math.round(sum);
+  });
+  // The latest month is "now" — use the live asset values, which are always
+  // at least as fresh as the newest snapshot.
+  totals[totals.length - 1] = Math.round(assets.reduce((s, a) => s + Number(a.value || 0), 0));
+
+  const labels = capped.map(({ y, m }, i) => {
+    const lbl = new Date(y, m, 1).toLocaleDateString('default', { month: 'short' });
+    return (i === 0 || m === 0) ? `${lbl} '${String(y).slice(2)}` : lbl;
+  });
+  const growth = totals.map((v, i) => i === 0 ? null : v - totals[i - 1]);
+  return { labels, totals, growth };
+}
+
 function renderFinAssets(container) {
   const assets = (state.data.assets || []).slice();
+  const snaps = state.data.asset_snapshots || [];
   const total = assets.reduce((s, a) => s + Number(a.value || 0), 0);
   const count = assets.length;
   const sorted = assets.sort((a, b) => Number(b.value || 0) - Number(a.value || 0));
   const top = sorted[0];
   const topName = top ? String(top.name || 'Untitled') : '—';
   const topShort = topName.length > 16 ? topName.slice(0, 15) + '…' : topName;
-  const avg = count ? Math.round(total / count) : 0;
+
+  const series = _finAssetSeries(assets, snaps);
+
+  // "This month" KPI: current net worth vs end of last month
+  let deltaHTML = '<div class="k-v" style="color:var(--text-3)">—</div>';
+  if (series && series.totals.length >= 2) {
+    const prev = series.totals[series.totals.length - 2];
+    const d = total - prev;
+    const pct = prev > 0 ? Math.round(Math.abs(d) / prev * 100) : 0;
+    const up = d >= 0;
+    deltaHTML = `<div class="k-v" style="color:${up ? 'var(--success)' : 'var(--danger)'}">${up ? '▲' : '▼'} ₹${Math.abs(d).toLocaleString()}<span style="font-size:13px; font-weight:600"> · ${pct}%</span></div>`;
+  }
+
+  // Allocation by type (only worth a chart with 2+ types)
+  const typeSums = {};
+  assets.forEach(a => {
+    const t = String(a.type || 'Other').trim() || 'Other';
+    typeSums[t] = (typeSums[t] || 0) + Number(a.value || 0);
+  });
+  const typeRows = Object.entries(typeSums).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const showAlloc = typeRows.length >= 2;
+  const allocColors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
+
+  const chartsHTML = series ? `
+    <div class="fin-ins-charts" style="margin-bottom:14px">
+      <div class="dash-card"><div class="fin-sec-h">Net worth over time</div><div class="chart-box"><canvas id="finChNetWorth"></canvas></div></div>
+      <div class="dash-card"><div class="fin-sec-h">Monthly growth</div><div class="chart-box"><canvas id="finChGrowth"></canvas></div></div>
+    </div>` : (count > 0 ? `
+    <div class="dash-card" style="margin-bottom:14px; font-size:13px; color:var(--text-muted)">
+      Growth charts appear once value history builds up. Run <b>supabase/migration-assets.sql</b> once (Supabase → SQL Editor) to start tracking — every value update is then logged automatically, and “Log value” lets you backfill past months.
+    </div>` : '');
+
+  const allocHTML = showAlloc ? `
+    <div class="dash-card" style="margin-bottom:14px">
+      <div class="fin-sec-h">Allocation</div>
+      <div class="fin-donut-wrap">
+        <div class="fin-donut-box" style="flex-basis:150px; height:150px"><canvas id="finChAlloc"></canvas></div>
+        <div class="fin-donut-legend">
+          ${typeRows.map(([t, v], i) => `<div class="fin-catrow"><div class="cr-top"><span class="cr-dot" style="background:${allocColors[Math.min(i, allocColors.length - 1)]}"></span><span class="cr-name">${escapeHtml(t)}</span><span class="cr-share">${total > 0 ? Math.round(v / total * 100) : 0}%</span><span class="cr-amt">₹${Math.round(v).toLocaleString()}</span></div></div>`).join('')}
+        </div>
+      </div>
+    </div>` : '';
 
   container.innerHTML = `
     <div class="fin-kpis">
       <div class="fin-kpi"><div class="k-l">Net worth</div><div class="k-v">₹${total.toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Holdings</div><div class="k-v">${count}</div></div>
+      <div class="fin-kpi"><div class="k-l">This month</div>${deltaHTML}</div>
       <div class="fin-kpi"><div class="k-l">Largest · ${topShort}</div><div class="k-v">₹${Number(top ? top.value || 0 : 0).toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Avg / holding</div><div class="k-v">₹${avg.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Holdings</div><div class="k-v">${count}</div></div>
     </div>
+    ${chartsHTML}
+    ${allocHTML}
     <div class="card" style="padding:0; overflow:hidden">
       ${count === 0
         ? '<div class="empty-state" style="padding:36px 20px; text-align:center; color:var(--text-2)">No assets yet. Tap “Add new” to add one.</div>'
@@ -1264,6 +1354,7 @@ function renderFinAssets(container) {
           </div>
           <div style="display:flex; align-items:center; gap:10px">
              <div style="font-weight:700; font-variant-numeric:tabular-nums">₹${Number(a.value || 0).toLocaleString()}</div>
+             <button class="btn" style="font-size:12px; font-weight:600; padding:6px 10px" onclick="openLogAssetValue('${a.id}')" title="Log a value for any date">Log value</button>
              <button class="btn icon" onclick="openEditAsset('${a.id}')" title="Edit">${renderIcon('edit', null, 'style="width:14px"')}</button>
              <button class="btn icon" data-action="delete" data-sheet="assets" data-id="${a.id}">${renderIcon('delete', null, 'style="width:14px"')}</button>
           </div>
@@ -1271,7 +1362,171 @@ function renderFinAssets(container) {
           }).join('')}
     </div>
   `;
+  _finInitAssetCharts(series, typeRows, total);
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+// ── Log an asset value for any date (builds the month-by-month history) ────
+window.openLogAssetValue = function (id) {
+  const a = (state.data.assets || []).find(x => String(x.id) === String(id));
+  if (!a) return;
+  const modal = document.getElementById('universalModal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <h3 style="margin-bottom:4px">Log value — ${escapeHtml(a.name || 'Untitled')}</h3>
+    <div style="font-size:12.5px; color:var(--text-muted); margin-bottom:12px">Current: ₹${Number(a.value || 0).toLocaleString()}. Pick a past date to backfill history.</div>
+    <input type="number" class="input" id="mAsValue" placeholder="Value (₹)" value="${a.value || ''}">
+    <input type="date" class="input" id="mAsDate" value="${new Date().toISOString().slice(0, 10)}" style="margin-top:10px">
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+      <button class="btn primary" onclick="_finSaveAssetSnapshot('${a.id}')">Log value</button>
+    </div>`;
+  modal.classList.remove('hidden');
+  setTimeout(() => document.getElementById('mAsValue')?.focus(), 50);
+};
+
+window._finSaveAssetSnapshot = async function (id) {
+  const a = (state.data.assets || []).find(x => String(x.id) === String(id));
+  if (!a) return;
+  const value = Number(document.getElementById('mAsValue')?.value);
+  const date = document.getElementById('mAsDate')?.value || new Date().toISOString().slice(0, 10);
+  if (isNaN(value) || value < 0) { showToast('Enter a value'); return; }
+  document.getElementById('universalModal').classList.add('hidden');
+  try {
+    const res = await apiCall('create', 'asset_snapshots', { asset_id: String(a.id), value, date });
+    if (!state.data.asset_snapshots) state.data.asset_snapshots = [];
+    state.data.asset_snapshots.push(res?.data || { id: res?.id, asset_id: String(a.id), value, date });
+  } catch (e) {
+    console.warn('[Assets] snapshot not saved — run supabase/migration-assets.sql:', e?.message);
+    showToast('History needs the assets DB migration (supabase/migration-assets.sql)');
+    return;
+  }
+  // If this log is the newest one, it IS the current value — keep the asset in sync.
+  const newest = (state.data.asset_snapshots || [])
+    .filter(s => String(s.asset_id) === String(a.id))
+    .every(s => new Date(s.date || s.created_at) <= new Date(date));
+  if (newest) {
+    try { await apiCall('update', 'assets', { value }, a.id); a.value = value; } catch (e) { }
+  }
+  renderFinanceContent();
+  showToast('Value logged');
+};
+
+// Net worth line + monthly growth bars + allocation doughnut.
+function _finInitAssetCharts(series, typeRows, total, attempt = 0) {
+  const needCharts = !!series || (typeRows && typeRows.length >= 2);
+  if (!needCharts) return;
+  if (typeof Chart === 'undefined') {
+    if (attempt < 20) setTimeout(() => _finInitAssetCharts(series, typeRows, total, attempt + 1), 250);
+    return;
+  }
+  const css = getComputedStyle(document.body);
+  const cssVar = (n, fb) => (css.getPropertyValue(n) || '').trim() || fb;
+  const primary = cssVar('--primary', '#818CF8');
+  const success = cssVar('--success', '#10B981');
+  const danger = cssVar('--danger', '#DC2626');
+  const textMuted = cssVar('--text-muted', '#9097A1');
+  const grid = cssVar('--border-color', '#E5E7EB');
+  const surface = cssVar('--surface-1', '#FFFFFF');
+  const alpha = (hex, a) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+  const fmtC = (n) => '₹' + Math.round(n).toLocaleString();
+  const compact = (n) => {
+    const abs = Math.abs(n);
+    if (abs >= 10000000) return '₹' + (n / 10000000).toFixed(1).replace(/\.0$/, '') + 'Cr';
+    if (abs >= 100000) return '₹' + (n / 100000).toFixed(1).replace(/\.0$/, '') + 'L';
+    if (abs >= 1000) return '₹' + (n / 1000).toFixed(abs >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k';
+    return '₹' + n;
+  };
+
+  window._finCharts = window._finCharts || {};
+  ['networth', 'growth', 'alloc'].forEach(k => { try { window._finCharts[k]?.destroy(); } catch (e) { } });
+
+  const axisBase = (yTicks) => ({
+    x: { grid: { display: false }, border: { color: grid }, ticks: { color: textMuted, font: { size: 10 }, maxRotation: 0 } },
+    y: { grid: { color: grid }, border: { display: false }, ticks: { color: textMuted, font: { size: 10 }, maxTicksLimit: 5, callback: yTicks } }
+  });
+
+  if (series) {
+    const nw = document.getElementById('finChNetWorth');
+    if (nw) window._finCharts.networth = new Chart(nw.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: series.labels,
+        datasets: [{
+          data: series.totals,
+          borderColor: primary, backgroundColor: alpha(primary, 0.10),
+          fill: true, borderWidth: 2, pointRadius: 3, pointBackgroundColor: primary,
+          pointBorderColor: surface, pointBorderWidth: 2, pointHoverRadius: 5, tension: 0.25
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { displayColors: false, callbacks: { label: (i) => fmtC(i.parsed.y) } }
+        },
+        scales: { ...axisBase((v) => compact(v)), y: { ...axisBase((v) => compact(v)).y, beginAtZero: true } }
+      }
+    });
+
+    const gr = document.getElementById('finChGrowth');
+    if (gr) window._finCharts.growth = new Chart(gr.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: series.labels,
+        datasets: [{
+          data: series.growth,
+          backgroundColor: series.growth.map(v => v == null ? 'transparent' : (v >= 0 ? alpha(success, 0.75) : alpha(danger, 0.75))),
+          hoverBackgroundColor: series.growth.map(v => v == null ? 'transparent' : (v >= 0 ? success : danger)),
+          borderRadius: 4, maxBarThickness: 18
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            displayColors: false,
+            filter: (i) => i.parsed.y != null,
+            callbacks: { label: (i) => (i.parsed.y >= 0 ? '+' : '−') + fmtC(Math.abs(i.parsed.y)) + ' vs previous month' }
+          }
+        },
+        scales: axisBase((v) => (v > 0 ? '+' : v < 0 ? '−' : '') + compact(Math.abs(v)))
+      }
+    });
+  }
+
+  const al = document.getElementById('finChAlloc');
+  if (al && typeRows && typeRows.length >= 2) {
+    const colors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
+    window._finCharts.alloc = new Chart(al.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: typeRows.map(([t]) => t),
+        datasets: [{
+          data: typeRows.map(([, v]) => Math.round(v)),
+          backgroundColor: typeRows.map((_, i) => colors[Math.min(i, colors.length - 1)]),
+          borderColor: surface, borderWidth: 2, hoverOffset: 6
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false, cutout: '62%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            displayColors: false,
+            callbacks: { label: (i) => `${fmtC(i.parsed)} · ${total > 0 ? Math.round(i.parsed / total * 100) : 0}%` }
+          }
+        }
+      }
+    });
+  }
 }
 
 // --- EDIT FUNCTIONS ---

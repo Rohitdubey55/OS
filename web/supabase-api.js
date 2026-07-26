@@ -198,7 +198,8 @@
         vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus','color','display_mode','horizon']),
         funds: new Set(['id','user_id','name','balance','type','currency','fund_name','target_amount','current_amount']),
         fund_contributions: new Set(['id','user_id','fund_id','amount','date','note']),
-        assets: new Set(['id','user_id','name','value','purchase_date','notes']),
+        assets: new Set(['id','user_id','name','value','purchase_date','notes','type']),
+        asset_snapshots: new Set(['id','user_id','asset_id','value','date']),
         people: new Set(['id','user_id','name','relationship','birthday','phone','email','instagram','last_contact','next_interaction','is_favorite','is_priority','notes','contact_frequency']),
         people_debts: new Set(['id','user_id','person_id','amount','type','date','notes']),
         notes: new Set(['id','user_id','title','content','category','is_pinned','tags']),
@@ -304,7 +305,7 @@
     function _getAllTables() {
         return [
             'planner_events','tasks','expenses','habits','habit_logs','diary',
-            'vision_board','settings','funds','fund_contributions','assets','people','people_debts',
+            'vision_board','settings','funds','fund_contributions','assets','asset_snapshots','people','people_debts',
             'reminders','diary_templates','diary_tags','diary_achievements',
             'gym_workouts','gym_exercises','notes','vision_images',
             'pomodoro_settings','pomodoro_sessions','pomodoro_badges','vision_tdp',

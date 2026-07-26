@@ -1844,15 +1844,23 @@ document.addEventListener('click', async (e) => {
 
 
 
-        await apiCall('create', 'assets', {
+        const _newAsset = await apiCall('create', 'assets', {
 
             asset_name: name,
+
+            name: name,
 
             type: type,
 
             value: value
 
         });
+
+        // Auto-log a value snapshot so the Assets growth chart has history.
+        try {
+            const _aid = _newAsset?.id || _newAsset?.data?.id;
+            if (_aid) await apiCall('create', 'asset_snapshots', { asset_id: String(_aid), value: value, date: new Date().toISOString().slice(0, 10) });
+        } catch (e) { console.warn('[Assets] snapshot skipped (run supabase/migration-assets.sql)'); }
 
         await refreshData('finance');
 
@@ -2190,7 +2198,11 @@ document.addEventListener('click', async (e) => {
         document.getElementById('universalModal').classList.add('hidden');
         if (typeof window.showSaveLock === 'function') window.showSaveLock();
         showToast("Updating asset...");
-        await apiCall('update', 'assets', { asset_name: name, type: type, value: value }, editId);
+        await apiCall('update', 'assets', { asset_name: name, name: name, type: type, value: value }, editId);
+        // Auto-log a value snapshot so the Assets growth chart has history.
+        try {
+            await apiCall('create', 'asset_snapshots', { asset_id: String(editId), value: value, date: new Date().toISOString().slice(0, 10) });
+        } catch (e) { console.warn('[Assets] snapshot skipped (run supabase/migration-assets.sql)'); }
         await refreshData('finance');
     }
 
