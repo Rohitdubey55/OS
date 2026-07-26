@@ -1035,12 +1035,37 @@ function renderFinIncome(container) {
   }
   const slotIdx = {};
   slots.forEach((s, i) => { slotIdx[s.y + '-' + s.m] = i; });
+
+  // Stacked by source: rank sources over the chart window, top 5 + "Other",
+  // then split each month's bar by source. One source = one color, everywhere.
+  const srcKeyOf = (e) => String(e.description || e.notes || e.category || 'Other').trim() || 'Other';
+  const windowSrcTotals = {};
+  all.forEach(e => {
+    if (e.type !== 'income') return;
+    const d = new Date(e.date);
+    if (slotIdx[d.getFullYear() + '-' + d.getMonth()] == null) return;
+    const k = srcKeyOf(e);
+    windowSrcTotals[k] = (windowSrcTotals[k] || 0) + (Number(e.amount) || 0);
+  });
+  const rankedSources = Object.entries(windowSrcTotals).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+  const topSources = rankedSources.filter(n => n !== 'Other').slice(0, 5);
+  const stackNames = rankedSources.length > topSources.length ? [...topSources, 'Other'] : topSources;
+  const srcOf = (e) => { const k = srcKeyOf(e); return topSources.includes(k) ? k : 'Other'; };
+  const srcColors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
+  const colorFor = (name) => name === 'Other' ? srcColors[5] : srcColors[Math.max(0, topSources.indexOf(name)) % 5];
+
+  const bySrc = {};
+  stackNames.forEach(n => { bySrc[n] = slots.map(() => 0); });
   const incByMonth = slots.map(() => 0);
   all.forEach(e => {
     if (e.type !== 'income') return;
     const d = new Date(e.date);
     const i = slotIdx[d.getFullYear() + '-' + d.getMonth()];
-    if (i != null) incByMonth[i] += Number(e.amount) || 0;
+    if (i == null) return;
+    const amt = Number(e.amount) || 0;
+    incByMonth[i] += amt;
+    const n = srcOf(e);
+    if (bySrc[n]) bySrc[n][i] += amt;
   });
   const slotLabels = slots.map(({ y, m }, i) => {
     const lbl = new Date(y, m, 1).toLocaleDateString('default', { month: 'short' });
@@ -1055,18 +1080,15 @@ function renderFinIncome(container) {
   const biggestSrc = biggest ? String(biggest.description || biggest.notes || biggest.category || '').slice(0, 18) : '';
   const savingsRate = totalInc > 0 ? Math.round(netBalance / totalInc * 100) : null;
 
-  // Income by source (description is the "source" note)
+  // Income by source for the selected period — grouped with the SAME top-5 +
+  // Other buckets as the stacked chart, so donut and bars share colors.
   const srcSums = {};
   incomeItems.forEach(e => {
-    const s = String(e.description || e.notes || e.category || 'Other').trim() || 'Other';
+    const s = srcOf(e);
     srcSums[s] = (srcSums[s] || 0) + (Number(e.amount) || 0);
   });
-  const srcEntries = Object.entries(srcSums).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  const srcTop = srcEntries.slice(0, 5);
-  const srcRest = srcEntries.slice(5).reduce((s, [, v]) => s + v, 0);
-  const srcRows = srcTop.map(([n, v]) => [n, v]);
-  if (srcRest > 0) srcRows.push(['Other', srcRest]);
-  const srcColors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
+  const srcRows = Object.entries(srcSums).filter(([, v]) => v > 0)
+    .sort((a, b) => (a[0] === 'Other') - (b[0] === 'Other') || b[1] - a[1]); // Other last
 
   container.innerHTML = `
     <div style="display:flex; justify-content:center; margin-bottom:24px;">
@@ -1096,7 +1118,7 @@ function renderFinIncome(container) {
           <div class="fin-donut-wrap fin-donut-rail">
             <div class="fin-donut-box" style="flex-basis:auto; width:140px; height:140px; margin:0 auto"><canvas id="finChIncSrc"></canvas></div>
             <div class="fin-donut-legend" style="width:100%">
-              ${srcRows.map(([n, v], i) => `<div class="fin-catrow"><div class="cr-top"><span class="cr-dot" style="background:${srcColors[Math.min(i, srcColors.length - 1)]}"></span><span class="cr-name">${escapeHtml(n)}</span><span class="cr-share">${totalInc > 0 ? Math.round(v / totalInc * 100) : 0}%</span><span class="cr-amt">₹${Math.round(v).toLocaleString()}</span></div></div>`).join('')}
+              ${srcRows.map(([n, v]) => `<div class="fin-catrow"><div class="cr-top"><span class="cr-dot" style="background:${colorFor(n)}"></span><span class="cr-name">${escapeHtml(n)}</span><span class="cr-share">${totalInc > 0 ? Math.round(v / totalInc * 100) : 0}%</span><span class="cr-amt">₹${Math.round(v).toLocaleString()}</span></div></div>`).join('')}
             </div>
           </div>
         </div>` : ''}
@@ -1115,29 +1137,22 @@ function renderFinIncome(container) {
       </aside>
     </div>
   `;
-  _finInitIncomeCharts(slotLabels, incByMonth, slots, now, srcRows, totalInc);
+  _finInitIncomeCharts(slotLabels, stackNames.map(n => ({ name: n, color: colorFor(n), data: bySrc[n] })), srcRows.map(([n, v]) => ({ name: n, value: v, color: colorFor(n) })), totalInc);
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
-function _finInitIncomeCharts(labels, incByMonth, slots, now, srcRows, totalInc, attempt = 0) {
+function _finInitIncomeCharts(labels, stacks, srcRows, totalInc, attempt = 0) {
   const bar = document.getElementById('finChIncMonthly');
   if (!bar) return;
   if (typeof Chart === 'undefined') {
-    if (attempt < 20) setTimeout(() => _finInitIncomeCharts(labels, incByMonth, slots, now, srcRows, totalInc, attempt + 1), 250);
+    if (attempt < 20) setTimeout(() => _finInitIncomeCharts(labels, stacks, srcRows, totalInc, attempt + 1), 250);
     return;
   }
   const css = getComputedStyle(document.body);
   const cssVar = (n, fb) => (css.getPropertyValue(n) || '').trim() || fb;
-  const primary = cssVar('--primary', '#818CF8');
   const textMuted = cssVar('--text-muted', '#9097A1');
   const grid = cssVar('--border-color', '#E5E7EB');
   const surface = cssVar('--surface-1', '#FFFFFF');
-  const alpha = (hex, a) => {
-    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-    if (!m) return hex;
-    const n = parseInt(m[1], 16);
-    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
-  };
   const fmtC = (n) => '₹' + Math.round(n).toLocaleString();
   const compact = (n) => {
     const abs = Math.abs(n);
@@ -1150,43 +1165,54 @@ function _finInitIncomeCharts(labels, incByMonth, slots, now, srcRows, totalInc,
   window._finCharts = window._finCharts || {};
   ['incMonthly', 'incSrc'].forEach(k => { try { window._finCharts[k]?.destroy(); } catch (e) { } });
 
-  const isCurrent = (i) => slots[i] && slots[i].y === now.getFullYear() && slots[i].m === now.getMonth();
+  // Stacked bar: each month split by source. A hairline surface border keeps
+  // touching segments legible; the legend + donut carry identity.
   window._finCharts.incMonthly = new Chart(bar.getContext('2d'), {
     type: 'bar',
     data: {
       labels,
-      datasets: [{
-        data: incByMonth,
-        backgroundColor: incByMonth.map((_, i) => isCurrent(i) ? primary : alpha(primary, 0.4)),
-        hoverBackgroundColor: primary,
-        borderRadius: { topLeft: 4, topRight: 4 },
-        borderSkipped: 'bottom',
-        maxBarThickness: 22
-      }]
+      datasets: stacks.map(st => ({
+        label: st.name,
+        data: st.data,
+        backgroundColor: st.color,
+        borderColor: surface,
+        borderWidth: 1,
+        maxBarThickness: 22,
+        stack: 'income'
+      }))
     },
     options: {
       responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
-        tooltip: { displayColors: false, callbacks: { label: (i) => fmtC(i.parsed.y) } }
+        legend: { display: stacks.length > 1, labels: { color: textMuted, boxWidth: 10, boxHeight: 10, borderRadius: 3, useBorderRadius: true, font: { size: 11 } } },
+        tooltip: {
+          filter: (item) => item.parsed.y > 0,
+          callbacks: {
+            label: (i) => `${i.dataset.label}: ${fmtC(i.parsed.y)}`,
+            footer: (items) => {
+              const t = items.reduce((s, i) => s + (i.parsed.y || 0), 0);
+              return items.length > 1 ? 'Total: ' + fmtC(t) : '';
+            }
+          }
+        }
       },
       scales: {
-        x: { grid: { display: false }, border: { color: grid }, ticks: { color: textMuted, font: { size: 10 }, maxRotation: 0 } },
-        y: { grid: { color: grid }, border: { display: false }, beginAtZero: true, ticks: { color: textMuted, font: { size: 10 }, maxTicksLimit: 5, callback: (v) => compact(v) } }
+        x: { stacked: true, grid: { display: false }, border: { color: grid }, ticks: { color: textMuted, font: { size: 10 }, maxRotation: 0 } },
+        y: { stacked: true, grid: { color: grid }, border: { display: false }, beginAtZero: true, ticks: { color: textMuted, font: { size: 10 }, maxTicksLimit: 5, callback: (v) => compact(v) } }
       }
     }
   });
 
   const donut = document.getElementById('finChIncSrc');
   if (donut && srcRows.length) {
-    const colors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
     window._finCharts.incSrc = new Chart(donut.getContext('2d'), {
       type: 'doughnut',
       data: {
-        labels: srcRows.map(([n]) => n),
+        labels: srcRows.map(r => r.name),
         datasets: [{
-          data: srcRows.map(([, v]) => Math.round(v)),
-          backgroundColor: srcRows.map((_, i) => colors[Math.min(i, colors.length - 1)]),
+          data: srcRows.map(r => Math.round(r.value)),
+          backgroundColor: srcRows.map(r => r.color),
           borderColor: surface, borderWidth: 2, hoverOffset: 6
         }]
       },
