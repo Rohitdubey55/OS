@@ -65,33 +65,37 @@ const FINANCE_REFINE_CSS = `<style>
 .fin-cat-opt:hover { background:var(--surface-2); }
 .fin-cat-opt-name { font-size:14px; font-weight:600; color:var(--text-1); }
 .fin-cat-opt-desc { font-size:12px; color:var(--text-muted); line-height:1.3; }
-/* Transactions toolbar (search / category filter / sort) + load-more */
+/* Transactions toolbar (search / category filter / sort) + load-more.
+   One single row — the app's global "select { width:100% }" is overridden here. */
 .fin-tx-count { font-size:12px; color:var(--text-3); font-weight:500; margin-left:auto; font-variant-numeric:tabular-nums; }
-.fin-tx-controls { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0 12px; }
-.fin-tx-controls .fin-tx-search { flex:1; min-width:150px; padding:8px 11px; border:1px solid var(--border-color); border-radius:9px; background:var(--surface-1); color:var(--text-1); font-size:13px; }
+.fin-tx-controls { display:flex; gap:8px; flex-wrap:nowrap; align-items:center; margin:10px 0 12px; }
+.fin-tx-controls .fin-tx-search { flex:1 1 auto; width:auto; min-width:0; margin:0; padding:8px 11px; border:1px solid var(--border-color); border-radius:9px; background:var(--surface-1); color:var(--text-1); font-size:13px; }
 .fin-tx-controls .fin-tx-search:focus { outline:none; border-color:var(--primary); }
-.fin-tx-controls select { padding:8px 10px; border:1px solid var(--border-color); border-radius:9px; background:var(--surface-1); color:var(--text-1); font-size:13px; cursor:pointer; }
+.fin-tx-controls select { flex:0 1 auto; width:auto; min-width:0; max-width:34%; margin:0; padding:8px 28px 8px 10px; border:1px solid var(--border-color); border-radius:9px; background:var(--surface-1); color:var(--text-1); font-size:13px; cursor:pointer; text-overflow:ellipsis; }
 .fin-loadmore { width:100%; margin-top:6px; padding:10px; border:1px solid var(--border-color); background:var(--surface-1); border-radius:10px; font-size:13px; font-weight:600; color:var(--text-2); cursor:pointer; transition:border-color .14s ease, color .14s ease; }
 .fin-loadmore:hover { border-color:var(--border-strong); color:var(--text-1); }
-/* Month insights: stat tiles + charts */
+/* Month insights: charts + doughnut */
 .fin-insights { display:flex; flex-direction:column; gap:14px; margin-bottom:18px; }
-.fin-ins-tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
-.fin-ins-tile { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:12px 14px; }
-.fin-ins-tile .t-l { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); font-weight:600; }
-.fin-ins-tile .t-v { font-size:19px; font-weight:700; letter-spacing:-.01em; color:var(--text-1); margin-top:3px; }
-.fin-ins-tile .t-s { font-size:11.5px; color:var(--text-3); margin-top:2px; }
 .fin-ins-charts { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 .fin-ins-charts .chart-box { position:relative; height:220px; }
-.fin-catrow { margin-bottom:12px; }
-.fin-catrow:last-child { margin-bottom:0; }
-.fin-catrow .cr-top { display:flex; align-items:baseline; gap:8px; font-size:12.5px; margin-bottom:5px; }
+.fin-donut-wrap { display:flex; align-items:center; gap:22px; }
+.fin-donut-box { position:relative; flex:0 0 190px; height:190px; }
+.fin-donut-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
+.fin-donut-center .dc-v { font-size:17px; font-weight:800; color:var(--text-1); letter-spacing:-.01em; }
+.fin-donut-center .dc-l { font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+.fin-donut-legend { flex:1; min-width:0; }
+.fin-catrow { padding:7px 0; border-bottom:1px solid var(--border-color); }
+.fin-catrow:last-child { border-bottom:none; }
+.fin-catrow .cr-top { display:flex; align-items:center; gap:8px; font-size:12.5px; }
+.fin-catrow .cr-dot { flex:0 0 10px; width:10px; height:10px; border-radius:3px; }
 .fin-catrow .cr-name { font-weight:600; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fin-catrow .cr-amt { margin-left:auto; font-weight:700; color:var(--text-1); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .fin-catrow .cr-share { color:var(--text-3); font-size:11.5px; white-space:nowrap; }
 .fin-catrow .cr-mom { font-size:11px; font-weight:700; white-space:nowrap; }
 @media (max-width:1099px){
-  .fin-ins-tiles { grid-template-columns:repeat(2,1fr); }
   .fin-ins-charts { grid-template-columns:1fr; }
+  .fin-donut-wrap { flex-direction:column; gap:12px; }
+  .fin-donut-legend { width:100%; }
   .fin-pro { max-width:none; }
   .fin-kpis { grid-template-columns:repeat(2,1fr); }
   .fin-workspace { display:block; }
@@ -498,10 +502,12 @@ function renderFinExpenses(container) {
       <div class="fin-kpi"><div class="k-l">Net</div><div class="k-v" style="color:${net >= 0 ? 'var(--success,#10B981)' : '#B42318'}">${net < 0 ? '-' : ''}₹${Math.abs(net).toLocaleString()}</div></div>
       <div class="fin-kpi"><div class="k-l">Savings</div><div class="k-v">₹${fundsTotal.toLocaleString()}</div></div>`;
 
+  const savingsCard = `<div class="finr-card"><div class="finr-h">Savings</div>${fundsRail || '<div class="finr-empty">No funds yet.</div>'}</div>`;
   const railHTML = (finRange === 'week')
     ? _finWeeklyRailHTML(wk, totalExp, weeklyBudget)
-    : `<div class="finr-card"><div class="finr-h">Top categories</div>${catBars || '<div class="finr-empty">No spending in this period.</div>'}</div>
-       <div class="finr-card"><div class="finr-h">Savings</div>${fundsRail || '<div class="finr-empty">No funds yet.</div>'}</div>`;
+    : (finRange === 'month')
+      ? _finMonthRailHTML(mo) + savingsCard
+      : `<div class="finr-card"><div class="finr-h">Top categories</div>${catBars || '<div class="finr-empty">No spending in this period.</div>'}</div>` + savingsCard;
 
   // Render
   container.innerHTML = `
@@ -589,14 +595,14 @@ function _finMonthlyStats(expenseItems, allExpenses, now, monthlyBudget, catSpen
     lmCat[c] = (lmCat[c] || 0) + amt;
   });
 
-  // Category rows: top 6 + the rest folded into "Other" (never more hues/rows
-  // than a reader can hold), each with share-of-spend and a vs-last-month delta.
+  // Category rows: top 5 + the rest folded into "Other" — a doughnut stays
+  // readable at ≤6 segments, each with share-of-spend and a vs-last-month delta.
   const entries = Object.entries(catSpent || {})
     .map(([c, v]) => [String(c || 'Uncategorized').trim(), Number(v) || 0])
     .filter(([, v]) => v > 0)
     .sort((a, b) => b[1] - a[1]);
-  const top = entries.slice(0, 6);
-  const restSum = entries.slice(6).reduce((s, [, v]) => s + v, 0);
+  const top = entries.slice(0, 5);
+  const restSum = entries.slice(5).reduce((s, [, v]) => s + v, 0);
   const catRows = top.map(([c, v]) => ({ name: c, amount: v, share: totalExp > 0 ? v / totalExp : 0, last: lmCat[c] || 0 }));
   if (restSum > 0) catRows.push({ name: 'Other', amount: restSum, share: totalExp > 0 ? restSum / totalExp : 0, last: null });
 
@@ -611,34 +617,27 @@ function _finMonthlyStats(expenseItems, allExpenses, now, monthlyBudget, catSpen
   };
 }
 
+// Doughnut segment colors: a CVD-validated categorical order (5 hues + a
+// de-emphasis gray for "Other"), stepped separately for light and dark surfaces.
+const FIN_CAT_COLORS = {
+  light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#7a786f'],
+  dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#5e5d56']
+};
+
+function _finIsDarkTheme() {
+  try {
+    const bg = getComputedStyle(document.body).getPropertyValue('--surface-1').trim();
+    const m = /^#?([0-9a-f]{6})$/i.exec(bg);
+    if (!m) return false;
+    const n = parseInt(m[1], 16);
+    const lum = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+    return lum < 128;
+  } catch (e) { return false; }
+}
+
 function renderMonthlyInsights(mo) {
   const fmt = (n) => '₹' + Math.round(n).toLocaleString();
   const monthName = new Date(mo.year, mo.month, 1).toLocaleDateString('default', { month: 'long' });
-
-  let momHTML = '<span style="color:var(--text-3)">—</span>', momSub = 'no spending last month';
-  if (mo.lastMonthSame > 0) {
-    const diff = mo.totalExp - mo.lastMonthSame;
-    const pct = Math.round(Math.abs(diff) / mo.lastMonthSame * 100);
-    const down = diff <= 0;
-    momHTML = `<span style="color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'} ${pct}%</span>`;
-    momSub = `${fmt(mo.totalExp)} vs ${fmt(mo.lastMonthSame)} · first ${mo.today} days`;
-  }
-
-  const projSub = mo.monthlyBudget > 0
-    ? (mo.projected <= mo.monthlyBudget
-      ? `<span style="color:var(--success)">on track</span> · budget ${fmt(mo.monthlyBudget)}`
-      : `<span style="color:var(--danger)">${fmt(mo.projected - mo.monthlyBudget)} over</span> · budget ${fmt(mo.monthlyBudget)}`)
-    : 'at current pace';
-
-  const tiles = `
-    <div class="fin-ins-tiles">
-      <div class="fin-ins-tile"><div class="t-l">Daily average</div><div class="t-v">${fmt(mo.dailyAvg)}</div><div class="t-s">over ${mo.today} day${mo.today > 1 ? 's' : ''}</div></div>
-      <div class="fin-ins-tile"><div class="t-l">Projected month-end</div><div class="t-v">${fmt(mo.projected)}</div><div class="t-s">${projSub}</div></div>
-      <div class="fin-ins-tile"><div class="t-l">vs last month</div><div class="t-v">${momHTML}</div><div class="t-s">${momSub}</div></div>
-      <div class="fin-ins-tile"><div class="t-l">Biggest day</div><div class="t-v">${mo.biggestDay ? fmt(mo.biggestDay.amount) : '—'}</div><div class="t-s">${mo.biggestDay ? mo.biggestDay.date.toLocaleDateString('default', { month: 'short', day: 'numeric' }) : 'no spending yet'}</div></div>
-      <div class="fin-ins-tile"><div class="t-l">No-spend days</div><div class="t-v">${mo.noSpendDays}</div><div class="t-s">of ${mo.today} so far</div></div>
-      <div class="fin-ins-tile"><div class="t-l">Weekday / weekend</div><div class="t-v">${fmt(mo.weekdayAvg)} / ${fmt(mo.weekendAvg)}</div><div class="t-s">avg spend per day</div></div>
-    </div>`;
 
   const charts = `
     <div class="fin-ins-charts">
@@ -646,8 +645,8 @@ function renderMonthlyInsights(mo) {
       <div class="dash-card"><div class="fin-sec-h">${mo.pace ? 'Spend vs budget pace' : 'Cumulative spend'}</div><div class="chart-box"><canvas id="finChCumulative"></canvas></div></div>
     </div>`;
 
-  const maxCat = mo.catRows.length ? Math.max(...mo.catRows.map(r => r.amount)) : 1;
-  const rows = mo.catRows.map(r => {
+  const colors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
+  const rows = mo.catRows.map((r, i) => {
     let mom = '';
     if (r.last != null) {
       if (r.last === 0 && r.amount > 0) mom = `<span class="cr-mom" style="color:var(--text-3)">new</span>`;
@@ -656,18 +655,67 @@ function renderMonthlyInsights(mo) {
         mom = `<span class="cr-mom" style="color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'}${p}%</span>`;
       }
     }
+    const swatch = colors[Math.min(i, colors.length - 1)];
     return `<div class="fin-catrow" style="cursor:pointer" onclick="showCategoryExpenses('${escapeHtml(r.name).replace(/'/g, "\\'")}')">
-      <div class="cr-top"><span class="cr-name">${escapeHtml(r.name)}</span><span class="cr-share">${Math.round(r.share * 100)}%</span>${mom}<span class="cr-amt">${fmt(r.amount)}</span></div>
-      <div class="finr-bar"><i style="width:${Math.max(2, Math.round(r.amount / maxCat * 100))}%"></i></div>
+      <div class="cr-top"><span class="cr-dot" style="background:${swatch}"></span><span class="cr-name">${escapeHtml(r.name)}</span><span class="cr-share">${Math.round(r.share * 100)}%</span>${mom}<span class="cr-amt">${fmt(r.amount)}</span></div>
     </div>`;
   }).join('');
   const catCard = mo.catRows.length ? `
     <div class="dash-card">
       <div style="display:flex; align-items:baseline; gap:8px;"><div class="fin-sec-h">Where your money goes</div><span class="fin-tx-count">change vs all of last month</span></div>
-      ${rows}
+      <div class="fin-donut-wrap">
+        <div class="fin-donut-box"><canvas id="finChCat"></canvas><div class="fin-donut-center"><div class="dc-v">${fmt(mo.totalExp)}</div><div class="dc-l">spent</div></div></div>
+        <div class="fin-donut-legend">${rows}</div>
+      </div>
     </div>` : '';
 
-  return `<div class="fin-insights">${tiles}${charts}${catCard}</div>`;
+  return `<div class="fin-insights">${charts}${catCard}</div>`;
+}
+
+// Month stat cards for the right-hand rail (mirrors the weekly rail style).
+function _finMonthRailHTML(mo) {
+  const fmt = (n) => '₹' + Math.round(n).toLocaleString();
+  const onTrack = mo.monthlyBudget <= 0 || mo.projected <= mo.monthlyBudget;
+  const daysLeft = mo.daysInMonth - mo.today;
+
+  const paceCard = `
+    <div class="finr-card">
+      <div class="finr-h">Pace</div>
+      <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px">Day ${mo.today} of ${mo.daysInMonth}</div>
+      <div style="font-size:22px; font-weight:800; color:var(--text-1); line-height:1">${fmt(mo.dailyAvg)}<span style="font-size:12px; font-weight:600; color:var(--text-muted)"> /day</span></div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:2px">daily average${daysLeft > 0 ? ` · ${daysLeft} day${daysLeft > 1 ? 's' : ''} left` : ''}</div>
+      <div style="margin-top:10px; font-size:12.5px; color:var(--text-muted)">Projected: <b style="color:${onTrack ? 'var(--success)' : 'var(--danger)'}">${fmt(mo.projected)}</b>${mo.monthlyBudget > 0 ? ` / ${fmt(mo.monthlyBudget)}` : ''}</div>
+      ${mo.monthlyBudget > 0 ? `<div style="margin-top:8px"><span style="display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:${onTrack ? 'color-mix(in srgb, var(--success) 16%, transparent)' : 'color-mix(in srgb, var(--danger) 16%, transparent)'}; color:${onTrack ? 'var(--success)' : 'var(--danger)'}">${onTrack ? 'On track' : 'Over pace'}</span></div>` : ''}
+    </div>`;
+
+  let trendLine;
+  if (mo.lastMonthSame > 0) {
+    const diff = mo.totalExp - mo.lastMonthSame;
+    const pct = Math.round(Math.abs(diff) / mo.lastMonthSame * 100);
+    const down = diff <= 0;
+    trendLine = `<div style="margin-top:8px; font-size:13px; font-weight:700; color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'} ${pct}% ${down ? 'less' : 'more'} than last month</div>`;
+  } else {
+    trendLine = `<div style="margin-top:8px; font-size:12px; color:var(--text-muted)">No data last month</div>`;
+  }
+  const trendCard = `
+    <div class="finr-card">
+      <div class="finr-h">vs last month · first ${mo.today} days</div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px"><span style="color:var(--text-muted)">This month</span><b>${fmt(mo.totalExp)}</b></div>
+      <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted)">Last month</span><b>${fmt(mo.lastMonthSame)}</b></div>
+      ${trendLine}
+    </div>`;
+
+  const hlRow = (l, v, s) => `<div style="display:flex; justify-content:space-between; align-items:baseline; font-size:13px; margin-bottom:8px"><span style="color:var(--text-muted)">${l}</span><span style="text-align:right"><b>${v}</b>${s ? `<span style="color:var(--text-muted); font-size:11.5px"> ${s}</span>` : ''}</span></div>`;
+  const highlightsCard = `
+    <div class="finr-card">
+      <div class="finr-h">Highlights</div>
+      ${hlRow('Biggest day', mo.biggestDay ? fmt(mo.biggestDay.amount) : '—', mo.biggestDay ? mo.biggestDay.date.toLocaleDateString('default', { month: 'short', day: 'numeric' }) : '')}
+      ${hlRow('No-spend days', mo.noSpendDays, `of ${mo.today}`)}
+      ${hlRow('Weekday avg', fmt(mo.weekdayAvg), '/day')}
+      ${hlRow('Weekend avg', fmt(mo.weekendAvg), '/day')}
+    </div>`;
+
+  return paceCard + trendCard + highlightsCard;
 }
 
 // Build the two Chart.js charts. chart.js loads deferred from a CDN, so retry
@@ -778,6 +826,44 @@ function _finInitMonthCharts(mo, attempt = 0) {
       scales: axis
     }
   });
+
+  // Doughnut: where the money goes. Colors match the legend swatches;
+  // a 2px surface-colored border keeps segments separated.
+  const donut = document.getElementById('finChCat');
+  if (donut && mo.catRows.length) {
+    const colors = FIN_CAT_COLORS[_finIsDarkTheme() ? 'dark' : 'light'];
+    window._finCharts.donut = new Chart(donut.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: mo.catRows.map(r => r.name),
+        datasets: [{
+          data: mo.catRows.map(r => Math.round(r.amount)),
+          backgroundColor: mo.catRows.map((_, i) => colors[Math.min(i, colors.length - 1)]),
+          borderColor: surface,
+          borderWidth: 2,
+          hoverOffset: 6
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        cutout: '64%',
+        layout: { padding: 6 },
+        plugins: {
+          legend: { display: false }, // the row list beside the chart is the legend
+          tooltip: {
+            displayColors: false,
+            callbacks: {
+              title: (items) => items[0].label,
+              label: (item) => {
+                const share = mo.totalExp > 0 ? Math.round(item.parsed / mo.totalExp * 100) : 0;
+                return `${fmtC(item.parsed)} · ${share}%`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
 }
 
 function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
