@@ -1737,6 +1737,51 @@ body:has(.mural-page) .fab-menu {
     display: none !important;
     pointer-events: none !important;
 }
+
+/* ══════════════════════════════════════
+   FULL-BLEED CANVAS
+   #main is normally capped at max-width:1280px and centred, AND it runs a
+   pageEnter animation with `both` fill-mode whose final `transform` value
+   makes it a containing block for position:fixed descendants. Together those
+   trapped .mural-page inside a 1280px column, leaving dead gutters left and
+   right. When the canvas is open, un-cap #main and drop the transform so the
+   fixed canvas resolves against the viewport again.
+   ══════════════════════════════════════ */
+body:has(.mural-page) #main,
+#main:has(.mural-page) {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+    perspective: none !important;
+    will-change: auto !important;
+    contain: none !important;
+}
+
+body:has(.mural-page) .main-content,
+.main-content:has(.mural-page) {
+    padding: 0 !important;
+    overflow: hidden !important;
+    transform: none !important;
+    filter: none !important;
+    will-change: auto !important;
+    contain: none !important;
+}
+
+body:has(.mural-page) .main-header-bar {
+    display: none !important;
+}
+
+/* Explicit viewport sizing so the canvas fills edge to edge regardless of
+   whatever box it happens to be nested in. */
+.mural-page {
+    width: 100vw;
+    width: 100dvw;
+    max-width: 100vw;
+}
 /* --- Project Actions --- */
 .mural-project-footer {
     display: flex;
