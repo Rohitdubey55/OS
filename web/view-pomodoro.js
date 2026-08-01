@@ -1438,7 +1438,9 @@ function _pomoEnsureMiniStyle() {
 window._pomoRenderMini = function () {
     const onPomoPage = (typeof state !== 'undefined' && state.view === 'pomodoro');
     let mini = document.getElementById('pomoMini');
-    if (!pomodoroState.isRunning || onPomoPage) {
+    // The floating Pomodoro widget (pomodoro-widget.js) shows the same timer in
+    // more detail, so the little bubble would just be a duplicate.
+    if (!pomodoroState.isRunning || onPomoPage || window._pomoWidgetOpen) {
         if (mini) mini.remove();
         return;
     }
@@ -1880,6 +1882,16 @@ window.savePomodoroSettings = savePomodoroSettings;
 window.updatePomodoroSetting = updatePomodoroSetting;
 window.togglePomodoroFullscreen = togglePomodoroFullscreen;
 window.quickStartPomodoro = quickStartPomodoro;
+
+/* Handles for the floating Pomodoro widget (pomodoro-widget.js). It drives this
+   same engine so sessions logged from the widget and from this page are one and
+   the same. pomodoroSettings is REASSIGNED in renderPomodoro(), so it has to be
+   read through a getter rather than captured once on window. */
+window._pomoGetState = () => pomodoroState;
+window._pomoGetSettings = () => pomodoroSettings;
+window._pomoStartTimerInterval = startTimerInterval;
+window.requestPomodoroWakeLock = requestPomodoroWakeLock;
+window.releasePomodoroWakeLock = releasePomodoroWakeLock;
 
 // Screen Wake Lock API Functions
 async function requestPomodoroWakeLock() {
