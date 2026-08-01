@@ -14,7 +14,7 @@
 
     const LS_POS = 'pomoWidgetPos';
     const LS_MIN = 'pomoWidgetMins';
-    const PRESETS = [5, 15, 25, 45, 60];
+    const MIN_MIN = 1, MAX_MIN = 180;
 
     let raf = null;
     let lastDigits = '';
@@ -67,21 +67,31 @@
 
 .pw-body{padding:16px 16px 18px}
 
-/* ══ duration picker ══ */
-.pw-label{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--text-3,#94a3b8);margin-bottom:9px}
-.pw-chips{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px}
-.pw-chip{padding:9px 0;border-radius:10px;border:1px solid var(--border-color,#e2e8f0);
-  background:var(--surface-2,#f8fafc);color:var(--text-2,#475569);
-  font-size:12.5px;font-weight:700;cursor:pointer;transition:.14s;font-family:inherit}
-.pw-chip:hover{border-color:#c7d2fe}
-.pw-chip.on{background:var(--primary,#5b5bd6);border-color:var(--primary,#5b5bd6);color:#fff}
-.pw-custom{display:flex;align-items:center;gap:8px;margin-bottom:16px}
-.pw-custom input{flex:1;width:100%;padding:9px 11px;border-radius:10px;font-family:inherit;
+/* ══ duration stepper ══ */
+.pw-stepper{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:4px 2px 2px}
+.pw-step{width:46px;height:46px;flex:0 0 auto;border-radius:50%;cursor:pointer;
   border:1px solid var(--border-color,#e2e8f0);background:var(--surface-2,#f8fafc);
-  color:var(--text-1,#0f172a);font-size:13px;font-weight:600;outline:none}
-.pw-custom input:focus{border-color:var(--primary,#5b5bd6)}
-.pw-custom span{font-size:11.5px;font-weight:600;color:var(--text-3,#94a3b8)}
+  color:var(--text-1,#0f172a);display:flex;align-items:center;justify-content:center;
+  transition:transform .12s,background .14s,opacity .14s;-webkit-tap-highlight-color:transparent}
+.pw-step svg{width:19px;height:19px}
+.pw-step:hover:not(:disabled){background:var(--surface-3,#e9eef5)}
+.pw-step:active:not(:disabled){transform:scale(.9)}
+.pw-step:disabled{opacity:.3;cursor:default}
+.pw-num{flex:1;display:flex;flex-direction:column;align-items:center;line-height:1;
+  font-variant-numeric:tabular-nums}
+.pw-num span{font-size:46px;font-weight:800;letter-spacing:-.03em;display:inline-block}
+.pw-num span.pw-pop{animation:pwPop .17s ease-out}
+@keyframes pwPop{0%{transform:scale(.86);opacity:.5}100%{transform:scale(1);opacity:1}}
+.pw-num small{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--text-3,#94a3b8);margin-top:7px}
+.pw-play{display:block;margin:20px auto 4px;width:64px;height:64px;border-radius:50%;border:none;
+  cursor:pointer;background:var(--primary,#5b5bd6);color:#fff;
+  box-shadow:0 8px 22px rgba(91,91,214,.42);transition:transform .13s,filter .13s;
+  display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.pw-play svg{width:27px;height:27px;margin-left:3px}
+.pw-play:hover{filter:brightness(1.08);transform:scale(1.05)}
+.pw-play:active{transform:scale(.95)}
 
 .pw-btn{width:100%;padding:12px;border:none;border-radius:12px;cursor:pointer;font-family:inherit;
   background:var(--primary,#5b5bd6);color:#fff;font-size:13.5px;font-weight:700;
@@ -185,6 +195,8 @@
         stop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
         expand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>',
         close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+        plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+        minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></svg>',
         page: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>'
     };
 
@@ -263,21 +275,20 @@
 
     function chosenMins() {
         const v = parseInt(localStorage.getItem(LS_MIN) || '25', 10);
-        return (Number.isFinite(v) && v > 0 && v <= 600) ? v : 25;
+        return (Number.isFinite(v) && v >= MIN_MIN && v <= MAX_MIN) ? v : 25;
     }
 
     function idleHTML() {
-        const m = chosenMins();
         return `
-<div class="pw-label">Session length</div>
-<div class="pw-chips">
-  ${PRESETS.map(p => `<button class="pw-chip${p === m ? ' on' : ''}" data-min="${p}">${p}</button>`).join('')}
+<div class="pw-stepper">
+  <button class="pw-step" id="pwMinus" aria-label="Less time">${I.minus}</button>
+  <div class="pw-num">
+    <span id="pwVal">${chosenMins()}</span>
+    <small>min</small>
+  </div>
+  <button class="pw-step" id="pwPlus" aria-label="More time">${I.plus}</button>
 </div>
-<div class="pw-custom">
-  <input id="pwMins" type="number" min="1" max="600" value="${m}" aria-label="Minutes">
-  <span>minutes</span>
-</div>
-<button class="pw-btn" id="pwStart">${I.play}<span>Start focus</span></button>`;
+<button class="pw-play" id="pwStart" aria-label="Start">${I.play}</button>`;
     }
 
     function runHTML() {
@@ -292,6 +303,51 @@
   <button class="pw-btn pw-ghost" id="pwReset" title="Reset">${I.stop}</button>
   <button class="pw-btn" id="pwFull" title="Fullscreen">${I.expand}</button>
 </div>`;
+    }
+
+    // Steps 1 min below 5, then 5-min increments — fine control at the short end
+    // without forcing 40 clicks to reach an hour.
+    function step(v, dir) {
+        if (dir > 0) return v < 5 ? v + 1 : v + 5;
+        return v <= 5 ? v - 1 : v - 5;
+    }
+
+    function bump(dir) {
+        const v = Math.min(MAX_MIN, Math.max(MIN_MIN, step(chosenMins(), dir)));
+        localStorage.setItem(LS_MIN, String(v));
+        const el = document.getElementById('pwVal');
+        if (el) {
+            el.textContent = v;
+            el.classList.remove('pw-pop');
+            void el.offsetWidth;
+            el.classList.add('pw-pop');
+        }
+        const p = panel();
+        if (p) {
+            const mi = p.querySelector('#pwMinus'), pl = p.querySelector('#pwPlus');
+            if (mi) mi.disabled = v <= MIN_MIN;
+            if (pl) pl.disabled = v >= MAX_MIN;
+        }
+    }
+
+    // Tap once to nudge; hold to run, accelerating after the first few repeats.
+    function holdRepeat(btn, fn) {
+        let t = null, iv = null;
+        const stop = () => { clearTimeout(t); clearInterval(iv); t = iv = null; };
+        btn.addEventListener('pointerdown', (e) => {
+            if (btn.disabled) return;
+            e.preventDefault();
+            fn();
+            let n = 0;
+            t = setTimeout(() => {
+                iv = setInterval(() => {
+                    if (btn.disabled) return stop();
+                    fn();
+                    if (++n === 6) { clearInterval(iv); iv = setInterval(fn, 70); }
+                }, 140);
+            }, 420);
+        });
+        ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
     }
 
     function paintBody() {
@@ -313,20 +369,15 @@
         const p = panel();
         if (!p) return;
 
-        p.querySelectorAll('.pw-chip').forEach(c => c.addEventListener('click', () => {
-            const v = parseInt(c.dataset.min, 10);
-            localStorage.setItem(LS_MIN, String(v));
-            p.querySelectorAll('.pw-chip').forEach(x => x.classList.toggle('on', x === c));
-            const inp = p.querySelector('#pwMins');
-            if (inp) inp.value = v;
-        }));
-
-        const inp = p.querySelector('#pwMins');
-        if (inp) inp.addEventListener('input', () => {
-            const v = parseInt(inp.value, 10);
-            if (Number.isFinite(v) && v > 0) localStorage.setItem(LS_MIN, String(v));
-            p.querySelectorAll('.pw-chip').forEach(x => x.classList.toggle('on', parseInt(x.dataset.min, 10) === v));
-        });
+        const minus = p.querySelector('#pwMinus');
+        const plus = p.querySelector('#pwPlus');
+        if (minus && plus) {
+            const v0 = chosenMins();
+            minus.disabled = v0 <= MIN_MIN;
+            plus.disabled = v0 >= MAX_MIN;
+            holdRepeat(minus, () => bump(-1));
+            holdRepeat(plus, () => bump(+1));
+        }
 
         const go = p.querySelector('#pwStart');
         if (go) go.addEventListener('click', start);
