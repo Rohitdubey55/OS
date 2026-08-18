@@ -4245,3 +4245,241 @@ body.tiles-editing .lumia-tile.sortable-chosen {
     .tool-tile__icon { width: 40px !important; height: 40px !important; }
     .tool-tile__icon svg { width: 22px !important; height: 22px !important; }
 }
+
+/* Habit chooser rows in the tile picker — habit names are longer than the
+   catalog labels, so keep them on one line instead of pushing "+ Add" out. */
+.lumia-picker-opt--habit .lumia-picker-opt__label {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ============================================================================
+   HABIT — MONTH TILE (.hmc-*)
+   One dashboard tile per habit: the viewed month laid out as 7 columns of
+   date checkboxes. Tapping a date marks/unmarks that day.
+   Reuses the .hg-check hook (so _tileHabitToggle can flip it) but styles it
+   here — the .habits-grid-widget rules are scoped and don't reach this tile.
+   ============================================================================ */
+.hmc-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    height: 100%;
+    min-height: 0;
+    padding: 12px 12px 10px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* ----- Header: habit icon + name, month pager on the right ----- */
+.hmc-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex-shrink: 0;
+}
+.hmc-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    background: var(--saas-accent-soft, rgba(79, 70, 229, 0.10));
+    color: var(--saas-accent, var(--primary, #4F46E5));
+}
+.hmc-icon svg { width: 15px; height: 15px; display: block; }
+.hmc-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--saas-text, #0F172A);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1;
+}
+.hmc-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.hmc-navbtn {
+    width: 20px;
+    height: 20px;
+    line-height: 1;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--saas-text-muted, #5B6470);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+.hmc-navbtn:hover { background: var(--saas-accent-soft, rgba(79, 70, 229, 0.10)); color: var(--saas-accent, var(--primary)); }
+.hmc-month {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--saas-text-dim, #7A8493);
+    min-width: 74px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* ----- Weekday header + day grid ----- */
+.hmc-dows,
+.hmc-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+}
+.hmc-dows { flex-shrink: 0; }
+.hmc-dow {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--saas-text-dim, #7A8493);
+    text-align: center;
+}
+.hmc-dow--we { color: var(--saas-text-muted, #9AA3B0); }
+.hmc-grid {
+    flex: 1;
+    min-height: 0;
+    align-content: start;
+    overflow-y: auto;
+    padding-bottom: 2px;
+}
+
+/* ----- One day ----- */
+.hmc-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    padding: 1px 0;
+    border-radius: 6px;
+    min-width: 0;
+}
+.hmc-cell--pad { visibility: hidden; }
+.hmc-cell--clickable { cursor: pointer; }
+.hmc-cell--clickable:hover { background: var(--saas-accent-soft, rgba(79, 70, 229, 0.08)); }
+.hmc-cell--today { box-shadow: inset 0 0 0 1.5px var(--saas-accent, var(--primary, #4F46E5)); }
+.hmc-cell--future { opacity: 0.4; cursor: default; }
+.hmc-cell--off { opacity: 0.35; cursor: default; }
+
+.hmc-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 1.5px solid var(--saas-border-strong, #cbd5e1);
+    background: var(--saas-surface, #fff);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    flex-shrink: 0;
+    transition: background var(--dur-fast, .14s) var(--ease, ease), border-color var(--dur-fast, .14s) var(--ease, ease), box-shadow .14s;
+}
+.hmc-cell--clickable:hover .hmc-check {
+    border-color: var(--saas-accent, var(--primary));
+    box-shadow: 0 0 0 3px var(--saas-accent-soft, rgba(79, 70, 229, 0.18));
+}
+.hmc-check.is-done {
+    background: var(--saas-accent, var(--primary, #4F46E5));
+    border-color: var(--saas-accent, var(--primary, #4F46E5));
+}
+.hmc-check svg { display: block; stroke: currentColor; }
+.hmc-num {
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--saas-text-dim, #7A8493);
+}
+.hmc-cell--today .hmc-num { color: var(--saas-accent, var(--primary)); }
+
+/* ----- Footer ----- */
+.hmc-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--saas-text-muted, #5B6470);
+    padding-top: 5px;
+    border-top: 1px solid var(--saas-border, rgba(0, 0, 0, 0.06));
+}
+.hmc-foot b { color: var(--saas-text, #0F172A); font-weight: 800; }
+.hmc-streak { white-space: nowrap; }
+
+/* ----- Empty state (no habit chosen for this tile) ----- */
+.hmc-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--saas-text-muted, #5B6470);
+    padding: 12px;
+}
+.hmc-pickbtn {
+    border: 1px solid var(--saas-accent, var(--primary));
+    background: var(--saas-accent-soft, rgba(79, 70, 229, 0.10));
+    color: var(--saas-accent, var(--primary));
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* Colored tiles: the tile background is the accent, so invert the calendar.
+   The generic `.lumia-tile__body *:not(...)` white-text rule outranks plain
+   class selectors here, so these overrides need !important. */
+.lumia-tile--colored .lumia-tile__body .hmc-card { background: transparent !important; border: none !important; box-shadow: none !important; color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-name,
+.lumia-tile--colored .lumia-tile__body .hmc-foot b { color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-month,
+.lumia-tile--colored .lumia-tile__body .hmc-dow,
+.lumia-tile--colored .lumia-tile__body .hmc-num,
+.lumia-tile--colored .lumia-tile__body .hmc-foot,
+.lumia-tile--colored .lumia-tile__body .hmc-empty { color: rgba(255, 255, 255, 0.80) !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-cell--today .hmc-num { color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-icon { background: rgba(255, 255, 255, 0.18) !important; color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-navbtn { color: rgba(255, 255, 255, 0.85) !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-navbtn:hover { background: rgba(255, 255, 255, 0.18) !important; color: #FFFFFF !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-foot { border-top-color: rgba(255, 255, 255, 0.22) !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-check { background: rgba(255, 255, 255, 0.14) !important; border-color: rgba(255, 255, 255, 0.55) !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-check.is-done { background: #FFFFFF !important; border-color: #FFFFFF !important; }
+/* The generic white-text rule also hits the <polyline> inside the tick, so the
+   colour has to be forced on the SVG's children, not just the box. */
+.lumia-tile--colored .lumia-tile__body .hmc-check.is-done,
+.lumia-tile--colored .lumia-tile__body .hmc-check.is-done svg,
+.lumia-tile--colored .lumia-tile__body .hmc-check.is-done svg * { color: var(--saas-ink, #0B0F17) !important; stroke: currentColor !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-cell--clickable:hover { background: rgba(255, 255, 255, 0.14) !important; }
+.lumia-tile--colored .lumia-tile__body .hmc-cell--today { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.9); }
+.lumia-tile--colored .lumia-tile__body .hmc-pickbtn { background: rgba(255, 255, 255, 0.18) !important; border-color: rgba(255, 255, 255, 0.55) !important; color: #FFFFFF !important; }
+
+/* Phone: tighter cells so a 4×3 tile still fits the whole month */
+@media (max-width: 767px) {
+    .hmc-card { padding: 9px 9px 7px; gap: 4px; }
+    .hmc-check { width: 16px; height: 16px; border-radius: 5px; }
+    .hmc-month { min-width: 66px; font-size: 10px; }
+    .hmc-name { font-size: 12px; }
+}

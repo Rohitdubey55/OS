@@ -357,6 +357,13 @@ const LUMIA_TILE_CATALOG = [
     { id: 'widget-meals',        kind: 'widget', widget: 'meals',        icon: 'sprout',     label: 'Food Planner',   category: 'Widgets', minW: 2, minH: 2, route: 'meals' },
 
     // ─────────────────────────────────────────────────────────────────
+    // HABITS — one tile per habit: a month calendar of date checkboxes.
+    //   multi: true   → can be added many times (one tile per habit)
+    //   needsHabit    → picker/editor asks WHICH habit this tile tracks
+    // ─────────────────────────────────────────────────────────────────
+    { id: 'habit-month', kind: 'habit', icon: 'habits', label: 'Habit — Month', category: 'Habits', minW: 2, minH: 2, multi: true, needsHabit: true },
+
+    // ─────────────────────────────────────────────────────────────────
     // QUICK ADD — tap the tile to open the existing form modal
     // ─────────────────────────────────────────────────────────────────
     { id: 'add-task',     kind: 'add', icon: 'priority', label: 'Add Task',    category: 'Quick Add', minW: 1, minH: 1, action: 'openTaskModal' },
@@ -916,7 +923,129 @@ const WIDGET_RENDERERS = {
                 <span class="lw-row__amt"><span class="lw-streak-pill">${streak}d</span></span>
             </div>`).join('');
         return _listShell(c, ranked.length, rows);
+    },
+
+    // ─────── HABIT — MONTH (kind: 'habit') ───────
+    // One tile = one habit. Renders the viewed month as a 7-column calendar of
+    // date checkboxes; tapping a date marks/unmarks that day (past + today only).
+    'habit-month': (t, c) => {
+        const allHabits = (state.data.habits || []).filter(h => h && (h.habit_name || h.name));
+        const habit = allHabits.find(h => String(h.id) === String(t.habitId));
+
+        // No habit chosen (or the chosen habit was deleted) → prompt.
+        if (!habit) {
+            const hasHabits = allHabits.length > 0;
+            return `
+                <div class="lw-card hmc-card">
+                    <div class="lw-card__head">
+                        <div><div class="lw-card__label">${escapeHtml(t.customLabel || c.label)}</div></div>
+                        <div class="lw-card__icon">${renderIcon(c.icon || 'habits', null, 'style="width:18px"')}</div>
+                    </div>
+                    <div class="hmc-empty">
+                        <span>${hasHabits ? 'No habit picked for this tile yet.' : 'You have no habits yet.'}</span>
+                        <button class="hmc-pickbtn" onclick="event.stopPropagation();${hasHabits
+                            ? `openLumiaTileEditor('${t.uid}')`
+                            : `_dashOpenModal('habits','openHabitModal')`}">${hasHabits ? 'Choose habit' : '+ New habit'}</button>
+                    </div>
+                </div>`;
+        }
+
+        const name = t.customLabel || habit.habit_name || habit.name || 'Habit';
+        const iconHTML = (typeof habitIconHTML === 'function') ? habitIconHTML(habit.emoji, 15) : '';
+
+        // Which month is on screen (per-tile, in-memory only — resets on reload)
+        const off = Number((window._hmcOffsets || {})[t.uid] || 0);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const view = new Date(today.getFullYear(), today.getMonth() + off, 1);
+        const year = view.getFullYear(), month = view.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const firstDow = (new Date(year, month, 1).getDay() + 6) % 7;   // Monday-first
+
+        const logs = state.data.habit_logs || [];
+        const doneSet = new Set(
+            logs.filter(l => String(l.habit_id) === String(habit.id) && l.date)
+                .map(l => String(l.date).slice(0, 10))
+        );
+        const sched = (d) => (typeof window.habitScheduledOn === 'function')
+            ? window.habitScheduledOn(habit, d) : true;
+
+        const CHECK_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+        let doneCount = 0, dueCount = 0;
+        const cells = [];
+        for (let i = 0; i < firstDow; i++) cells.push('<div class="hmc-cell hmc-cell--pad"></div>');
+        for (let day = 1; day <= daysInMonth; day++) {
+            const d = new Date(year, month, day);
+            const iso = _hmcIso(d);
+            const done = doneSet.has(iso);
+            const future = d > today;
+            const isToday = d.getTime() === today.getTime();
+            const onSched = sched(d);
+            if (done) doneCount++;
+            if (onSched && !future) dueCount++;
+            const clickable = onSched && !future;
+            const cls = ['hmc-cell',
+                clickable ? 'hmc-cell--clickable' : '',
+                onSched ? '' : 'hmc-cell--off',
+                future ? 'hmc-cell--future' : '',
+                isToday ? 'hmc-cell--today' : ''].filter(Boolean).join(' ');
+            cells.push(`
+                <div class="${cls}" title="${iso}${onSched ? '' : ' · not scheduled'}"
+                     ${clickable ? `onclick="event.stopPropagation();_tileHabitToggle(this,'${habit.id}','${iso}')"` : ''}>
+                    <span class="hg-check hmc-check ${done ? 'is-done' : ''}">${done ? CHECK_SVG : ''}</span>
+                    <span class="hmc-num">${day}</span>
+                </div>`);
+        }
+
+        // Current streak — consecutive completed days ending today (or yesterday).
+        let streak = 0;
+        {
+            const cur = new Date(today);
+            for (let i = 0; i < 400; i++) {
+                const iso = _hmcIso(cur);
+                if (doneSet.has(iso)) { streak++; cur.setDate(cur.getDate() - 1); }
+                else if (i === 0) { cur.setDate(cur.getDate() - 1); }
+                else break;
+            }
+        }
+
+        const monthLabel = view.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const dows = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+            .map((d, i) => `<span class="hmc-dow ${i >= 5 ? 'hmc-dow--we' : ''}">${d}</span>`).join('');
+
+        return `
+            <div class="lw-card hmc-card">
+                <div class="hmc-head">
+                    <span class="hmc-icon">${iconHTML}</span>
+                    <span class="hmc-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+                    <span class="hmc-nav">
+                        <button class="hmc-navbtn" title="Previous month" onclick="event.stopPropagation();_hmcNav('${t.uid}',-1)">‹</button>
+                        <span class="hmc-month">${monthLabel}</span>
+                        <button class="hmc-navbtn" title="Next month" onclick="event.stopPropagation();_hmcNav('${t.uid}',1)">›</button>
+                    </span>
+                </div>
+                <div class="hmc-dows">${dows}</div>
+                <div class="hmc-grid">${cells.join('')}</div>
+                <div class="hmc-foot">
+                    <span><b>${doneCount}</b>/${dueCount || daysInMonth} done</span>
+                    ${streak > 0 ? `<span class="hmc-streak">🔥 ${streak}d streak</span>` : ''}
+                </div>
+            </div>`;
     }
+};
+
+// ── HABIT — MONTH helpers ────────────────────────────────────────────────────
+// Local (not UTC) YYYY-MM-DD, so a tap near midnight marks the right day.
+function _hmcIso(d) {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+// Which month each habit tile is showing. In-memory only (resets on reload)
+// so the tile always opens on the current month.
+window._hmcOffsets = window._hmcOffsets || {};
+window._hmcNav = function (uid, delta) {
+    window._hmcOffsets[uid] = (window._hmcOffsets[uid] || 0) + Number(delta);
+    if (typeof renderDashboard === 'function') renderDashboard();
 };
 
 // Quick-Add tile template
@@ -1042,6 +1171,8 @@ function _normalizeTile(t) {
     if (ty >= 1) out.y = Math.max(1, Math.round(ty));
     if (t.color && /^#[0-9A-Fa-f]{6}$/.test(t.color)) out.color = t.color.toUpperCase();
     if (t.customLabel) out.customLabel = String(t.customLabel).slice(0, 60);
+    // Which habit a per-habit tile (e.g. 'habit-month') tracks.
+    if (t.habitId) out.habitId = String(t.habitId);
     return out;
 }
 
@@ -1233,7 +1364,7 @@ function renderLumiaTile(tile, sectionRenderers, isMobile) {
     //   add/list/status/visual    → custom WIDGET_RENDERERS entry
     const colored = !!tile.color;
     const isWidget = cat.kind === 'widget';
-    const NEW_KINDS = new Set(['add', 'list', 'status', 'visual']);
+    const NEW_KINDS = new Set(['add', 'list', 'status', 'visual', 'habit']);
 
     let innerHTML;
     if (NEW_KINDS.has(cat.kind) && WIDGET_RENDERERS[cat.id]) {
@@ -1254,7 +1385,7 @@ function renderLumiaTile(tile, sectionRenderers, isMobile) {
     //  - widget compact  → outer click routes to its page
     //  - list/status/visual → NO outer click — only inner row clicks
     //  - In edit mode, the click shield catches all events and opens the editor.
-    const NO_OUTER_CLICK_KINDS = new Set(['list', 'status', 'visual']);
+    const NO_OUTER_CLICK_KINDS = new Set(['list', 'status', 'visual', 'habit']);
     const tileHasOuterClick = !NO_OUTER_CLICK_KINDS.has(cat.kind)
         && !(isWidget && fitsFull && !colored);
     const onclickAttr = tileHasOuterClick
@@ -1493,7 +1624,24 @@ window.openLumiaTileEditor = function (uid) {
     if (!cat) return;
     const modal = document.getElementById('universalModal');
     const box = modal.querySelector('.modal-box');
-    const currentLabel = tile.customLabel ?? cat.label;
+
+    // Per-habit tiles: a habit picker, and the Name field defaults to the habit's name.
+    const habitList = cat.needsHabit
+        ? (state.data.habits || []).filter(h => h && (h.habit_name || h.name))
+        : [];
+    const boundHabit = habitList.find(h => String(h.id) === String(tile.habitId));
+    const habitBlock = cat.needsHabit ? `
+        <div style="margin-bottom:18px">
+            <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px;display:block">Habit</label>
+            <select id="lumiaEditHabit" class="input" onchange="_lumiaHabitSelChanged(this)" style="width:100%;padding:10px 12px;border:1px solid var(--saas-border, #ddd);border-radius:8px;font-size:14px">
+                <option value="">— Choose a habit —</option>
+                ${habitList.map(h => `<option value="${h.id}" ${String(tile.habitId) === String(h.id) ? 'selected' : ''}>${escapeHtml(h.habit_name || h.name)}</option>`).join('')}
+            </select>
+            ${habitList.length === 0 ? `<div style="margin-top:6px;font-size:11px;color:var(--text-muted)">No habits yet — add one on the Habits page first.</div>` : ''}
+        </div>` : '';
+
+    const currentLabel = tile.customLabel
+        ?? (boundHabit ? (boundHabit.habit_name || boundHabit.name) : cat.label);
 
     // Build W×H grid picker — clicking a cell sets w=col, h=row
     const sizeCells = [];
@@ -1521,6 +1669,8 @@ window.openLumiaTileEditor = function (uid) {
     box.innerHTML = `
         <h3 style="margin:0 0 4px 0;font-weight:700">Edit tile</h3>
         <p style="font-size:13px;color:var(--text-muted);margin:0 0 18px 0">${cat.label} · ${cat.category}</p>
+
+        ${habitBlock}
 
         <div style="margin-bottom:18px">
             <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px;display:block">Name</label>
@@ -1564,6 +1714,21 @@ window.openLumiaTileEditor = function (uid) {
     window._lumiaEditDraft = { w: tile.w, h: tile.h, color: tile.color || null };
     modal.classList.remove('hidden');
     if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+};
+
+// Switching the habit in the tile editor: follow along with the Name field
+// unless the user has typed a genuinely custom name there.
+window._lumiaHabitSelChanged = function (sel) {
+    const input = document.getElementById('lumiaEditLabel');
+    if (!input || !sel) return;
+    const habits = state.data.habits || [];
+    const cur = input.value.trim();
+    const isAuto = !cur
+        || cur === 'Habit — Month'
+        || habits.some(h => (h.habit_name || h.name) === cur);
+    if (!isAuto) return;                       // user typed their own label — leave it
+    const h = habits.find(x => String(x.id) === String(sel.value));
+    input.value = h ? (h.habit_name || h.name || '') : '';
 };
 
 // Highlight a W×H rectangle on hover in the size picker
@@ -1618,7 +1783,19 @@ window._lumiaSaveTileEdits = async function (uid) {
     if (draft.color === null) delete tile.color;
     else if (draft.color) tile.color = draft.color;
     const cat = getCatalogEntry(tile.catalogId);
-    if (newLabel && cat && newLabel !== cat.label) tile.customLabel = newLabel;
+    // Per-habit tiles: remember which habit this tile tracks.
+    const habitSel = document.getElementById('lumiaEditHabit');
+    if (habitSel) {
+        if (habitSel.value) tile.habitId = String(habitSel.value);
+        else delete tile.habitId;
+    }
+    // The tile already shows the habit's own name, so only keep a custom label
+    // when it differs from both the catalog label and the habit's name.
+    const boundHabit = (cat && cat.needsHabit)
+        ? (state.data.habits || []).find(h => String(h.id) === String(tile.habitId))
+        : null;
+    const defaultLabel = boundHabit ? (boundHabit.habit_name || boundHabit.name) : (cat ? cat.label : '');
+    if (newLabel && newLabel !== defaultLabel && newLabel !== (cat ? cat.label : '')) tile.customLabel = newLabel;
     else delete tile.customLabel;
     await saveLumiaConfig(tiles);
     document.getElementById('universalModal').classList.add('hidden');
@@ -1651,7 +1828,8 @@ window.openLumiaTilePicker = function () {
                 <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px">${cat}</div>
                 <div class="lumia-picker-grid">
                     ${LUMIA_TILE_CATALOG.filter(c => c.category === cat).map(c => {
-                        const usedUid = usedMap.get(c.id);
+                        // `multi` entries (e.g. one tile per habit) can always be added again.
+                        const usedUid = c.multi ? null : usedMap.get(c.id);
                         if (usedUid) {
                             // Already on dashboard → show row with Remove button
                             return `
@@ -1667,8 +1845,12 @@ window.openLumiaTilePicker = function () {
                                 </button>
                             </div>`;
                         }
+                        // Tiles bound to one habit ask WHICH habit before being added.
+                        const addJS = c.needsHabit
+                            ? `_lumiaPickHabitForNewTile('${c.id}')`
+                            : `_lumiaAddTile('${c.id}')`;
                         return `
-                        <button class="lumia-picker-opt" onclick="_lumiaAddTile('${c.id}')">
+                        <button class="lumia-picker-opt" onclick="${addJS}">
                             <span class="lumia-picker-opt__icon">
                                 ${renderIcon(c.icon || 'sparkle', null, 'style="width:18px"')}
                             </span>
@@ -1698,6 +1880,49 @@ window._lumiaRemoveFromPicker = async function (uid) {
     setTimeout(() => window.openLumiaTilePicker(), 0);
 };
 
+// Step 2 of adding a per-habit tile: pick which habit it tracks.
+// Keeps window._lumiaAddAt intact so the tile still lands in the chosen cell.
+window._lumiaPickHabitForNewTile = function (catalogId) {
+    const habits = (state.data.habits || []).filter(h => h && (h.habit_name || h.name));
+    const modal = document.getElementById('universalModal');
+    const box = modal.querySelector('.modal-box');
+    // openLumiaTilePicker() clears the target cell, so restore it on the way back.
+    const at = window._lumiaAddAt;
+    const backBtn = `<button class="btn" onclick="openLumiaTilePicker();window._lumiaAddAt=${at ? `{x:${at.x},y:${at.y}}` : 'null'}">Back</button>`;
+
+    if (habits.length === 0) {
+        box.innerHTML = `
+            <h3 style="margin:0 0 4px 0;font-weight:700">Pick a habit</h3>
+            <p style="font-size:13px;color:var(--text-muted);margin:0 0 16px 0">You don't have any habits yet. Create one first, then add the tile.</p>
+            <div style="display:flex;justify-content:flex-end;gap:10px">
+                ${backBtn}
+                <button class="btn primary" onclick="document.getElementById('universalModal').classList.add('hidden');_dashOpenModal('habits','openHabitModal')">+ New habit</button>
+            </div>`;
+        modal.classList.remove('hidden');
+        return;
+    }
+
+    box.innerHTML = `
+        <h3 style="margin:0 0 4px 0;font-weight:700">Pick a habit</h3>
+        <p style="font-size:13px;color:var(--text-muted);margin:0 0 16px 0">This tile shows one habit's month at a time. Add a tile per habit you want on the dashboard.</p>
+        <div style="max-height:56vh;overflow-y:auto;margin:0 -4px;padding:0 4px">
+            <div class="lumia-picker-grid">
+                ${habits.map(h => `
+                    <button class="lumia-picker-opt lumia-picker-opt--habit" onclick="_lumiaAddTile('${catalogId}','${h.id}')">
+                        <span class="lumia-picker-opt__icon">${(typeof habitIconHTML === 'function') ? habitIconHTML(h.emoji, 18) : renderIcon('habits', null, 'style="width:18px"')}</span>
+                        <span class="lumia-picker-opt__label">${escapeHtml(h.habit_name || h.name)}</span>
+                        <span class="lumia-picker-opt__add-hint">+ Add</span>
+                    </button>`).join('')}
+            </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
+            ${backBtn}
+            <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Close</button>
+        </div>`;
+    modal.classList.remove('hidden');
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+};
+
 // Open the tile picker targeting a specific empty cell (desktop free-placement).
 // openLumiaTilePicker() resets the target first, so we set it afterwards.
 window.openLumiaTilePickerAt = function (x, y) {
@@ -1705,7 +1930,7 @@ window.openLumiaTilePickerAt = function (x, y) {
     window._lumiaAddAt = { x: Number(x), y: Number(y) };
 };
 
-window._lumiaAddTile = async function (catalogId) {
+window._lumiaAddTile = async function (catalogId, habitId) {
     const cat = getCatalogEntry(catalogId);
     if (!cat) return;
     const tiles = getLumiaConfig();
@@ -1714,8 +1939,10 @@ window._lumiaAddTile = async function (catalogId) {
     let w = 2, h = 2;
     if (cat.kind === 'widget') { w = 4; h = 2; }
     else if (cat.kind === 'kpi') { w = 2; h = 2; }
+    else if (cat.kind === 'habit') { w = 4; h = 3; }   // a month grid needs room
     else { w = 1; h = 1; }
     const newTile = { uid, catalogId, w, h };
+    if (habitId) newTile.habitId = String(habitId);
     // Give the tile explicit coordinates (desktop + phone) so it lands in the
     // chosen gap (or the first free spot) instead of reflowing the whole grid.
     {
@@ -1796,6 +2023,12 @@ window._tileHabitToggle = async function (cellEl, habitId, iso) {
             scoreEl.classList.remove('is-zero', 'is-low', 'is-mid', 'is-high');
             scoreEl.classList.add(cls);
         }
+    }
+    // Habit — Month tile: keep the "n/m done" footer in sync without re-rendering.
+    const hmcCard = cellEl.closest('.hmc-card');
+    if (hmcCard) {
+        const doneEl = hmcCard.querySelector('.hmc-foot b');
+        if (doneEl) doneEl.textContent = hmcCard.querySelectorAll('.hmc-check.is-done').length;
     }
     // Do the data write DIRECTLY (not via view-habits.js's toggleHabitOptimistic).
     try {
