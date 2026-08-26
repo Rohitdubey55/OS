@@ -626,7 +626,8 @@ function renderTabTogglesOrdered(layoutStr, fallbackHiddenStr) {
     { id: 'vision', label: 'Vision' },
     { id: 'people', label: 'People' },
     { id: 'books', label: 'Books' },
-    { id: 'mural', label: 'Mural' }
+    { id: 'mural', label: 'Mural' },
+    { id: 'meals', label: 'Food Planner' }
   ];
 
   let layoutData = [];
