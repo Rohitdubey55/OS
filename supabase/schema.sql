@@ -352,7 +352,7 @@ CREATE TABLE IF NOT EXISTS public.meal_plan (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     date DATE,
-    slot TEXT,                       -- 'breakfast' | 'lunch' | 'dinner'
+    slot TEXT,                       -- 'breakfast' | 'lunch' | 'snacks' | 'dinner'
     planned TEXT,
     eaten TEXT,
     status TEXT,                     -- 'as_planned' | 'different' | 'skipped'
@@ -377,7 +377,7 @@ CREATE TABLE IF NOT EXISTS public.meal_items (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT,
-    slots TEXT,                      -- CSV of 'breakfast,lunch,dinner'; empty = any meal
+    slots TEXT,                      -- CSV of 'breakfast,lunch,snacks,dinner'; empty = any meal
     healthy TEXT,                    -- 'healthy' | 'ok' | 'treat'
     favorite BOOLEAN DEFAULT false,
     use_count INT DEFAULT 0,
@@ -393,7 +393,7 @@ CREATE TABLE IF NOT EXISTS public.meal_template (
     id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     weekday INT,                     -- 0=Mon .. 6=Sun (matches the Monday-based week grid)
-    slot TEXT,                       -- 'breakfast' | 'lunch' | 'dinner'
+    slot TEXT,                       -- 'breakfast' | 'lunch' | 'snacks' | 'dinner'
     planned TEXT,                    -- the usual meal for that weekday+slot
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()

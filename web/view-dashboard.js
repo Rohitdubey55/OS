@@ -467,8 +467,15 @@ function _computeWidgetCompact(cat) {
         }
         case 'meals': {
             const today = (() => { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
-            const planned = (data.meal_plan || []).filter(r => r.date === today && r.planned && String(r.planned).trim()).length;
-            return { value: planned + '/3', sub: 'planned today' };
+            const SL = ['breakfast', 'lunch', 'snacks', 'dinner'];
+            const wd = (() => { const dow = new Date().getDay(); return dow === 0 ? 6 : dow - 1; })();
+            const planned = SL.filter(sl => {
+                const mp = (data.meal_plan || []).find(r => r.date === today && r.slot === sl);
+                if (mp && mp.planned && String(mp.planned).trim()) return true;
+                const t = (data.meal_template || []).find(r => +r.weekday === wd && r.slot === sl);
+                return !!(t && t.planned && String(t.planned).trim());
+            }).length;
+            return { value: planned + '/' + SL.length, sub: 'planned today' };
         }
         case 'mealsWeek': {
             const p = n => String(n).padStart(2, '0');
@@ -476,7 +483,7 @@ function _computeWidgetCompact(cat) {
             const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i - 2); return ld(d); });
             const tmpl = data.meal_template || [], plans = data.meal_plan || [];
             const wdIdx = ds => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ds); const dow = new Date(+m[1], +m[2] - 1, +m[3]).getDay(); return dow === 0 ? 6 : dow - 1; };
-            const covered = days.filter(dt => ['breakfast', 'lunch', 'dinner'].some(sl => {
+            const covered = days.filter(dt => ['breakfast', 'lunch', 'snacks', 'dinner'].some(sl => {
                 const mp = plans.find(r => r.date === dt && r.slot === sl);
                 if (mp && mp.planned && String(mp.planned).trim()) return true;
                 const t = tmpl.find(r => +r.weekday === wdIdx(dt) && r.slot === sl);
@@ -3180,7 +3187,7 @@ function renderDashboard() {
       const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(ws); d.setDate(ws.getDate() + i); return ld(d); });
       const isH = r => r && (r.ate_healthy === true || r.ate_healthy === 'true' || r.ate_healthy === 1);
       const healthy = (data.meal_day || []).filter(r => week.includes(r.date) && isH(r)).length;
-      const slots = [['breakfast', '🌅', 'breakfast'], ['lunch', '☀️', 'lunch'], ['dinner', '🌙', 'dinner']];
+      const slots = [['breakfast', '🌅', 'breakfast'], ['lunch', '☀️', 'lunch'], ['snacks', '🍎', 'snacks'], ['dinner', '🌙', 'dinner']];
       const ICON = `<span style="width:32px;height:32px;border-radius:10px;background:linear-gradient(135deg,#34D399,#16A34A);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2M5 2v20M19 2v7c0 1.5-1 2.5-2.5 2.5S14 10.5 14 9V2M19 2v20"/></svg></span>`;
       const rows = slots.map(([k, emo, lbl]) => {
         const mp = (data.meal_plan || []).find(r => r.date === today && r.slot === k);
@@ -3229,7 +3236,7 @@ function renderDashboard() {
         const tt = t && t.planned ? String(t.planned).trim() : '';
         return { text: tt, fromTemplate: !!tt, mp };
       };
-      const slots = [['breakfast', '🌅'], ['lunch', '☀️'], ['dinner', '🌙']];
+      const slots = [['breakfast', '🌅'], ['lunch', '☀️'], ['snacks', '🍎'], ['dinner', '🌙']];
       const isH = r => r && (r.ate_healthy === true || r.ate_healthy === 'true' || r.ate_healthy === 1);
       const healthy = (data.meal_day || []).filter(r => days.includes(r.date) && isH(r)).length;
       const ICON = `<span style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#34D399,#16A34A);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2M5 2v20M19 2v7c0 1.5-1 2.5-2.5 2.5S14 10.5 14 9V2M19 2v20"/></svg></span>`;

@@ -19,6 +19,7 @@
 const MEAL_SLOTS = [
   { key: 'breakfast', label: 'Breakfast', cls: 'm-breakfast', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M5.6 8.6 4.2 7.2M18.4 8.6l1.4-1.4M2 16h3M19 16h3M22 20H2M16 16a4 4 0 0 0-8 0"/></svg>' },
   { key: 'lunch', label: 'Lunch', cls: 'm-lunch', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>' },
+  { key: 'snacks', label: 'Snacks', cls: 'm-snacks', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a6 6 0 0 0 6-6c0-3-2-5-6-5s-6 2-6 5a6 6 0 0 0 6 6z"/><path d="M12 9V5M12 5c0-1.7 1.3-3 3-3"/></svg>' },
   { key: 'dinner', label: 'Dinner', cls: 'm-dinner', svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6.5 6.5 0 1 0 9 9 8 8 0 1 1-9-9z"/></svg>' }
 ];
 const MEAL_MOODS = [
@@ -247,7 +248,7 @@ function _mealInsight() {
 
 /* ── Styling ── */
 const MEALS_CSS = `<style>
-.ml-wrap { max-width:1180px; margin:0 auto; padding-bottom:40px; }
+.ml-wrap { max-width:1300px; margin:0 auto; padding-bottom:40px; }
 .ml-hero { background:var(--surface-1); border:1px solid var(--border-color); border-radius:20px; box-shadow:var(--shadow-card,0 4px 15px rgba(0,0,0,.05)); padding:18px 20px; margin-bottom:18px; }
 .ml-hero-top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
 .ml-week-nav { display:flex; align-items:center; gap:8px; }
@@ -266,10 +267,10 @@ const MEALS_CSS = `<style>
 .ml-insight .tx { font-size:13px; color:var(--text-1); font-weight:600; line-height:1.4; }
 .ml-insight .tx b { color:#15803d; }
 
-.ml-thead { display:grid; grid-template-columns:148px 1fr 1fr 1fr 150px; gap:14px; padding:2px 18px 7px; }
+.ml-thead { display:grid; grid-template-columns:140px repeat(4,minmax(0,1fr)) 132px; gap:10px; padding:2px 18px 7px; }
 .ml-thead span { font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--text-3); }
 .ml-table { display:flex; flex-direction:column; gap:10px; }
-.ml-row { display:grid; grid-template-columns:148px 1fr 1fr 1fr 150px; gap:14px; align-items:center; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; padding:11px 18px; box-shadow:0 1px 2px rgba(0,0,0,.03); transition:box-shadow .16s; }
+.ml-row { display:grid; grid-template-columns:140px repeat(4,minmax(0,1fr)) 132px; gap:10px; align-items:center; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; padding:11px 18px; box-shadow:0 1px 2px rgba(0,0,0,.03); transition:box-shadow .16s; }
 .ml-row:hover { box-shadow:0 8px 22px rgba(0,0,0,.07); }
 .ml-row.today { border-color:rgba(22,163,74,.42); background:linear-gradient(90deg, rgba(22,163,74,.06), var(--surface-1) 26%); }
 .ml-rd .d-wd { display:flex; align-items:center; gap:7px; font-size:16px; font-weight:800; color:var(--text-1); }
@@ -419,9 +420,9 @@ const MEALS_CSS = `<style>
 .ml-tintro .ic { width:34px; height:34px; border-radius:10px; background:#16a34a; color:#fff; display:flex; align-items:center; justify-content:center; flex:none; font-size:17px; }
 .ml-tintro .tx { font-size:13px; color:var(--text-2); font-weight:600; line-height:1.45; flex:1; }
 .ml-tintro .tx b { color:var(--text-1); }
-.ml-thead.tmpl, .ml-tgrid-row { grid-template-columns:148px 1fr 1fr 1fr; }
+.ml-thead.tmpl, .ml-tgrid-row { grid-template-columns:140px repeat(4,minmax(0,1fr)); }
 .ml-tgrid { display:flex; flex-direction:column; gap:10px; }
-.ml-tgrid-row { display:grid; gap:14px; align-items:center; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; padding:11px 18px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+.ml-tgrid-row { display:grid; gap:10px; align-items:center; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; padding:11px 18px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
 .ml-tgrid-row .d-wd { font-size:16px; font-weight:800; color:var(--text-1); }
 @media (max-width:920px){
   .ml-tgrid-row { grid-template-columns:1fr; gap:9px; padding:14px; }
@@ -554,7 +555,7 @@ function renderMeals() {
         </div>
         ${insightHtml}
       </div>
-      <div class="ml-thead"><span>Day</span><span>Breakfast</span><span>Lunch</span><span>Dinner</span><span>Mood / Energy</span></div>
+      <div class="ml-thead"><span>Day</span>${MEAL_SLOTS.map(s => `<span>${s.label}</span>`).join('')}<span>Mood / Energy</span></div>
       <div class="ml-table">${rowsHtml}</div>
       ${_mtCount() === 0 ? `<div class="ml-hint" style="margin-top:16px">Eat roughly the same things each week? Set them once in <b style="color:var(--primary);cursor:pointer" onclick="mealSetTab('template')">My week</b> and every week fills in automatically.</div>` : ''}
     </div>`;
@@ -583,9 +584,9 @@ function _renderTemplate() {
   return `
     <div class="ml-tintro">
       <div class="ic">🔁</div>
-      <div class="tx">Set the meals you <b>usually</b> eat on each day. Every week fills in from this automatically — you just mark what you actually ate.${n ? ` <b>${n}</b> of 21 set.` : ''}</div>
+      <div class="tx">Set the meals you <b>usually</b> eat on each day. Every week fills in from this automatically — you just mark what you actually ate.${n ? ` <b>${n}</b> of ${MEAL_WEEKDAYS.length * MEAL_SLOTS.length} set.` : ''}</div>
     </div>
-    <div class="ml-thead tmpl"><span>Day</span><span>Breakfast</span><span>Lunch</span><span>Dinner</span></div>
+    <div class="ml-thead tmpl"><span>Day</span>${MEAL_SLOTS.map(s => `<span>${s.label}</span>`).join('')}</div>
     <div class="ml-tgrid">${rows}</div>`;
 }
 
