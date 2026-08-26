@@ -355,6 +355,7 @@ const LUMIA_TILE_CATALOG = [
     { id: 'widget-image',        kind: 'widget', widget: 'image',        icon: 'image',      label: 'Image',          category: 'Widgets', minW: 2, minH: 2 },
     { id: 'widget-tdp',          kind: 'widget', widget: 'tdp',          icon: 'goals',      label: '10-Day Plan',    category: 'Widgets', minW: 2, minH: 2, route: 'vision' },
     { id: 'widget-meals',        kind: 'widget', widget: 'meals',        icon: 'sprout',     label: 'Food Planner',   category: 'Widgets', minW: 2, minH: 2, route: 'meals' },
+    { id: 'widget-mealsWeek',    kind: 'widget', widget: 'mealsWeek',    icon: 'cake',       label: 'Food — 7 Days',  category: 'Widgets', minW: 4, minH: 3, route: 'meals' },
 
     // ─────────────────────────────────────────────────────────────────
     // HABITS — one tile per habit: a month calendar of date checkboxes.
@@ -468,6 +469,20 @@ function _computeWidgetCompact(cat) {
             const today = (() => { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
             const planned = (data.meal_plan || []).filter(r => r.date === today && r.planned && String(r.planned).trim()).length;
             return { value: planned + '/3', sub: 'planned today' };
+        }
+        case 'mealsWeek': {
+            const p = n => String(n).padStart(2, '0');
+            const ld = d => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+            const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i - 2); return ld(d); });
+            const tmpl = data.meal_template || [], plans = data.meal_plan || [];
+            const wdIdx = ds => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ds); const dow = new Date(+m[1], +m[2] - 1, +m[3]).getDay(); return dow === 0 ? 6 : dow - 1; };
+            const covered = days.filter(dt => ['breakfast', 'lunch', 'dinner'].some(sl => {
+                const mp = plans.find(r => r.date === dt && r.slot === sl);
+                if (mp && mp.planned && String(mp.planned).trim()) return true;
+                const t = tmpl.find(r => +r.weekday === wdIdx(dt) && r.slot === sl);
+                return !!(t && t.planned && String(t.planned).trim());
+            })).length;
+            return { value: covered + '/7', sub: 'days planned' };
         }
         default:
             return { value: cat.label, sub: '' };
@@ -3189,6 +3204,76 @@ function renderDashboard() {
         </div>
         <div style="flex:1;padding:2px 16px 8px;">${rows}</div>
         <div style="padding:9px 16px 14px;border-top:1px solid var(--border-color);font-size:12px;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center;">${checkin}<span style="color:var(--text-3);">this week</span></div>
+      </div>`;
+    },
+
+    // ─── FOOD — 7 DAYS ───
+    // A week strip of the food plan: two days back, today, four days ahead.
+    // Reads the same fallback the Food Planner uses — an explicit meal_plan row if
+    // there is one, otherwise the repeatable weekly template.
+    mealsWeek: () => {
+      const data = state.data || {};
+      const p = n => String(n).padStart(2, '0');
+      const ld = d => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      const parse = str => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(str || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(NaN); };
+      const today = ld(new Date());
+      // −2 … +4 relative to today.
+      const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i - 2); return ld(d); });
+      const wdIdx = ds => { const dow = parse(ds).getDay(); return dow === 0 ? 6 : dow - 1; };
+      const plans = data.meal_plan || [], tmpl = data.meal_template || [];
+      const effective = (date, slot) => {
+        const mp = plans.find(r => r.date === date && r.slot === slot);
+        const explicit = mp && mp.planned ? String(mp.planned).trim() : '';
+        if (explicit) return { text: explicit, fromTemplate: false, mp };
+        const t = tmpl.find(r => +r.weekday === wdIdx(date) && r.slot === slot);
+        const tt = t && t.planned ? String(t.planned).trim() : '';
+        return { text: tt, fromTemplate: !!tt, mp };
+      };
+      const slots = [['breakfast', '🌅'], ['lunch', '☀️'], ['dinner', '🌙']];
+      const isH = r => r && (r.ate_healthy === true || r.ate_healthy === 'true' || r.ate_healthy === 1);
+      const healthy = (data.meal_day || []).filter(r => days.includes(r.date) && isH(r)).length;
+      const ICON = `<span style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#34D399,#16A34A);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2M5 2v20M19 2v7c0 1.5-1 2.5-2.5 2.5S14 10.5 14 9V2M19 2v20"/></svg></span>`;
+
+      const head = days.map(dt => {
+        const d = parse(dt);
+        const isToday = dt === today, past = dt < today;
+        return `<div style="text-align:center;padding:0 1px;${past ? 'opacity:.55;' : ''}">
+            <div style="font-size:9.5px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:${isToday ? '#16a34a' : 'var(--text-3)'};">${d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+            <div style="font-size:12.5px;font-weight:${isToday ? '850' : '700'};color:${isToday ? '#16a34a' : 'var(--text-2)'};line-height:1.3;">${d.getDate()}</div>
+          </div>`;
+      }).join('');
+
+      const body = slots.map(([slot, emo]) => {
+        const cells = days.map(dt => {
+          const eff = effective(dt, slot);
+          const st = (eff.mp && eff.mp.status) || '';
+          const past = dt < today, isToday = dt === today;
+          let bg = 'transparent', bd = '1px dashed var(--border-color)', col = 'var(--text-3)', txt = eff.text, mark = '', deco = '';
+          if (st === 'as_planned') { bg = 'rgba(22,163,74,.14)'; bd = '1px solid rgba(22,163,74,.34)'; col = '#15803d'; mark = '✓ '; }
+          else if (st === 'different') { bg = 'rgba(217,119,6,.13)'; bd = '1px solid rgba(217,119,6,.32)'; col = '#b45309'; txt = (eff.mp.eaten && String(eff.mp.eaten).trim()) || 'Ate other'; mark = '↺ '; }
+          else if (st === 'skipped') { bd = '1px dashed var(--border-color)'; col = 'var(--text-3)'; deco = 'text-decoration:line-through;'; }
+          else if (eff.text && !eff.fromTemplate) { bg = 'var(--surface-2)'; bd = '1px solid var(--border-color)'; col = 'var(--text-1)'; }
+          else if (eff.text) { bd = '1px dashed rgba(22,163,74,.34)'; col = '#16a34a'; }
+          if (!eff.text) txt = '·';
+          return `<div title="${escapeHtml(eff.text || 'Nothing planned')}" style="min-width:0;height:26px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:${bd};border-radius:7px;background:${bg};${past ? 'opacity:.6;' : ''}${isToday ? 'box-shadow:0 0 0 1.5px rgba(22,163,74,.18);' : ''}">
+              <span style="font-size:10px;font-weight:650;color:${col};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${deco}">${mark}${escapeHtml(txt)}</span>
+            </div>`;
+        }).join('');
+        return `<div style="display:contents"><div style="display:flex;align-items:center;justify-content:center;font-size:11px;">${emo}</div>${cells}</div>`;
+      }).join('');
+
+      return `
+      <div class="widget-card" onclick="routeTo('meals')" style="height:100%;cursor:pointer;display:flex;flex-direction:column;background:var(--surface-1);border:1px solid var(--border-color);border-radius:18px;box-shadow:0 4px 15px rgba(0,0,0,.05);overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px 8px;">
+          <div style="display:flex;align-items:center;gap:9px;font-weight:800;color:var(--text-1);font-size:15px;min-width:0;">${ICON}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Food — 7 Days</span></div>
+          <span style="font-size:11.5px;font-weight:800;color:#16a34a;white-space:nowrap;">${healthy}/7 healthy</span>
+        </div>
+        <div style="flex:1;min-height:0;overflow:auto;padding:0 14px 12px;">
+          <div style="display:grid;grid-template-columns:18px repeat(7,minmax(0,1fr));gap:5px;align-items:center;">
+            <div></div>${head}
+            ${body}
+          </div>
+        </div>
       </div>`;
     },
 

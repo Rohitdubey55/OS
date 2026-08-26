@@ -95,6 +95,51 @@ async function _mdSave(date, fields) {
   return row;
 }
 
+/* ── Weekly template ("My week") ──────────────────────────────────────────────
+   One row per (weekday 0=Mon..6=Sun, slot): the meal you normally eat that day.
+   The week grid falls back to this whenever a date+slot has no explicit
+   meal_plan row, so every week starts fully planned and only needs marking.
+   ────────────────────────────────────────────────────────────────────────── */
+const MEAL_WEEKDAYS = [
+  { i: 0, short: 'Mon', long: 'Monday' }, { i: 1, short: 'Tue', long: 'Tuesday' },
+  { i: 2, short: 'Wed', long: 'Wednesday' }, { i: 3, short: 'Thu', long: 'Thursday' },
+  { i: 4, short: 'Fri', long: 'Friday' }, { i: 5, short: 'Sat', long: 'Saturday' },
+  { i: 6, short: 'Sun', long: 'Sunday' }
+];
+function _mtAll() { return (window.state && state.data && state.data.meal_template) || []; }
+function _mtFor(weekday, slot) { return _mtAll().find(r => +r.weekday === +weekday && r.slot === slot); }
+function _mtPlanned(weekday, slot) { const r = _mtFor(weekday, slot); return r && r.planned ? String(r.planned).trim() : ''; }
+function _mtCount() { return _mtAll().filter(r => r.planned && String(r.planned).trim()).length; }
+// Monday-based weekday index for a 'YYYY-MM-DD' string (0=Mon .. 6=Sun).
+function _mealWeekdayIdx(dateStr) { const dow = _mealParse(dateStr).getDay(); return dow === 0 ? 6 : dow - 1; }
+
+async function _mtSave(weekday, slot, planned) {
+  if (!state.data.meal_template) state.data.meal_template = [];
+  const fields = { planned: (planned || '').trim() };
+  let row = _mtFor(weekday, slot);
+  if (row) {
+    Object.assign(row, fields);
+    try { await apiCall('update', 'meal_template', fields, row.id); } catch (e) { console.error('meal_template update', e); }
+  } else {
+    const id = _mealId('mt');
+    row = { id, weekday: +weekday, slot, ...fields };
+    state.data.meal_template.push(row);
+    try { await apiCall('create', 'meal_template', { id, weekday: +weekday, slot, ...fields }); } catch (e) { console.error('meal_template create', e); }
+  }
+  return row;
+}
+
+/* The meal that actually applies to a date+slot: an explicit plan if one exists,
+   otherwise the weekly template. `fromTemplate` marks the auto-filled case, which
+   renders as a soft "suggested" pill until the user marks or edits it. */
+function _mealEffective(date, slot) {
+  const mp = _mpFor(date, slot);
+  const explicit = mp && mp.planned ? String(mp.planned).trim() : '';
+  if (explicit) return { text: explicit, fromTemplate: false, mp };
+  const t = _mtPlanned(_mealWeekdayIdx(date), slot);
+  return { text: t, fromTemplate: !!t, mp };
+}
+
 /* ── Food library ("Things I can eat") ── */
 const MEAL_HEALTH = [
   { key: 'healthy', label: 'Healthy', emo: '🥗', color: '#16a34a' },
@@ -164,10 +209,10 @@ function _mealWeekStats(dates) {
   let plannedSlots = 0, followed = 0, healthyDays = 0, checkedDays = 0, energySum = 0, energyN = 0, moodSum = 0, moodN = 0;
   dates.forEach(dt => {
     MEAL_SLOTS.forEach(s => {
-      const mp = _mpFor(dt, s.key);
-      if (mp && mp.planned && mp.planned.trim()) {
+      const eff = _mealEffective(dt, s.key);
+      if (eff.text) {
         plannedSlots++;
-        if (mp.status === 'as_planned') followed++;
+        if (eff.mp && eff.mp.status === 'as_planned') followed++;
       }
     });
     const md = _mdFor(dt);
@@ -355,6 +400,33 @@ const MEALS_CSS = `<style>
 .ml-shop-row span { flex:1; }
 .ml-shop-c { font-size:12px; color:var(--text-3); font-weight:700; }
 .ml-hint { font-size:11.5px; color:var(--text-3); font-weight:600; margin-top:8px; text-align:center; }
+
+/* ── Meal cell: tap the pill to mark, tap the pencil to edit ── */
+.ml-cell { display:flex; align-items:center; gap:6px; }
+.ml-cell .ml-pill { flex:1; min-width:0; }
+.ml-edit { flex:none; width:30px; height:42px; border:1px solid transparent; background:transparent; color:var(--text-3); border-radius:9px; cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .14s, color .14s, border-color .14s; }
+.ml-row:hover .ml-edit, .ml-tgrid-row:hover .ml-edit { opacity:1; }
+.ml-edit:hover { color:var(--text-1); border-color:var(--border-color); background:var(--surface-2); }
+.ml-edit:focus-visible { opacity:1; outline:2px solid var(--primary); }
+@media (hover:none){ .ml-edit { opacity:1; } }
+/* Auto-filled from the weekly template — planned, but not yet committed. */
+.ml-pill.tmpl { background:transparent; border-style:dashed; border-color:rgba(22,163,74,.38); color:#15803d; font-weight:600; }
+.ml-pill.tmpl .dot { background:rgba(22,163,74,.5); }
+.ml-pill.tmpl .tm { font-size:10px; font-weight:800; letter-spacing:.04em; color:var(--text-3); flex:none; margin-left:auto; }
+
+/* ── "My week" template tab ── */
+.ml-tintro { display:flex; align-items:center; gap:12px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; padding:14px 16px; margin-bottom:14px; }
+.ml-tintro .ic { width:34px; height:34px; border-radius:10px; background:#16a34a; color:#fff; display:flex; align-items:center; justify-content:center; flex:none; font-size:17px; }
+.ml-tintro .tx { font-size:13px; color:var(--text-2); font-weight:600; line-height:1.45; flex:1; }
+.ml-tintro .tx b { color:var(--text-1); }
+.ml-thead.tmpl, .ml-tgrid-row { grid-template-columns:148px 1fr 1fr 1fr; }
+.ml-tgrid { display:flex; flex-direction:column; gap:10px; }
+.ml-tgrid-row { display:grid; gap:14px; align-items:center; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; padding:11px 18px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+.ml-tgrid-row .d-wd { font-size:16px; font-weight:800; color:var(--text-1); }
+@media (max-width:920px){
+  .ml-tgrid-row { grid-template-columns:1fr; gap:9px; padding:14px; }
+  .ml-tgrid-row .d-wd { margin-bottom:3px; }
+}
 </style>`;
 
 /* ── Render ── */
@@ -362,12 +434,18 @@ function _mealTabsBar() {
   return `<div class="ml-topbar">
       <div class="ml-tabs">
         <button class="ml-tab ${_mealTab === 'week' ? 'on' : ''}" onclick="mealSetTab('week')">This week</button>
+        <button class="ml-tab ${_mealTab === 'template' ? 'on' : ''}" onclick="mealSetTab('template')">My week</button>
         <button class="ml-tab ${_mealTab === 'foods' ? 'on' : ''}" onclick="mealSetTab('foods')">My foods</button>
       </div>
       ${_mealTab === 'week' ? `<div class="ml-top-actions">
         <button class="ml-tbtn" onclick="mealRepeatLastWeek()" title="Copy last week's plan into empty slots">${renderIcon('refresh', null, 'style="width:14px"')} Repeat last week</button>
         <button class="ml-tbtn" onclick="mealShoppingList()" title="Everything planned this week">🛒 Shopping list</button>
-      </div>` : `<button class="ml-tbtn primary" onclick="openFoodEditor()">${renderIcon('plus', null, 'style="width:15px"')} Add food</button>`}
+      </div>`
+      : _mealTab === 'template' ? `<div class="ml-top-actions">
+        <button class="ml-tbtn" onclick="mealTemplateFromWeek()" title="Use the week you're looking at as your usual week">${renderIcon('refresh', null, 'style="width:14px"')} Copy from this week</button>
+        ${_mtCount() ? `<button class="ml-tbtn" onclick="mealTemplateClear()" title="Clear the whole template">Clear all</button>` : ''}
+      </div>`
+      : `<button class="ml-tbtn primary" onclick="openFoodEditor()">${renderIcon('plus', null, 'style="width:15px"')} Add food</button>`}
     </div>`;
 }
 window.mealSetTab = function (t) { _mealTab = t; renderMeals(); };
@@ -377,6 +455,11 @@ function renderMeals() {
   if (!main) return;
   if (_mealTab === 'foods') {
     main.innerHTML = `${MEALS_CSS}<div class="ml-wrap">${_mealTabsBar()}${_renderFoodsManager()}</div>`;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
+  if (_mealTab === 'template') {
+    main.innerHTML = `${MEALS_CSS}<div class="ml-wrap">${_mealTabsBar()}${_renderTemplate()}</div>`;
     if (window.lucide) lucide.createIcons();
     return;
   }
@@ -412,18 +495,25 @@ function renderMeals() {
     const dsub = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     const mealCells = MEAL_SLOTS.map(s => {
-      const mp = _mpFor(dt, s.key);
-      const planned = mp && mp.planned ? mp.planned.trim() : '';
+      const eff = _mealEffective(dt, s.key);
+      const mp = eff.mp;
+      const planned = eff.text;
       const status = mp && mp.status;
-      let cls, txt, lead = '<span class="dot"></span>';
+      let cls, txt, lead = '<span class="dot"></span>', tail = '';
       if (status === 'as_planned') { cls = 'ok'; txt = planned || 'Eaten'; lead = '<span class="ck">✓</span>'; }
       else if (status === 'different') { cls = 'off'; txt = (mp.eaten && mp.eaten.trim()) || 'Ate something else'; }
       else if (status === 'skipped') { cls = 'skip'; txt = planned || 'Skipped'; lead = ''; }
+      else if (planned && eff.fromTemplate) { cls = 'tmpl'; txt = planned; tail = '<span class="tm">USUAL</span>'; }
       else if (planned) { cls = 'planned'; txt = planned; }
       else { cls = 'empty'; txt = '+ Add meal'; lead = ''; }
+      const act = planned ? `mealCycleStatus('${dt}','${s.key}')` : `openMealEditor('${dt}','${s.key}')`;
+      const tip = planned ? `${escapeHtml(txt)} — tap to mark, pencil to edit` : 'Add a meal';
       return `<div class="ml-row-meal">
           <span class="ml-mlabel">${s.label}</span>
-          <button class="ml-pill ${cls}" title="${escapeHtml(txt)}" onclick="openMealEditor('${dt}','${s.key}')">${lead}<span class="tx">${escapeHtml(txt)}</span></button>
+          <div class="ml-cell">
+            <button class="ml-pill ${cls}" title="${tip}" onclick="${act}">${lead}<span class="tx">${escapeHtml(txt)}</span>${tail}</button>
+            ${planned ? `<button class="ml-edit" title="Edit ${s.label.toLowerCase()}" aria-label="Edit ${s.label.toLowerCase()} for ${dsub}" onclick="openMealEditor('${dt}','${s.key}')">${renderIcon('edit', null, 'style="width:14px"')}</button>` : ''}
+          </div>
         </div>`;
     }).join('');
 
@@ -466,10 +556,101 @@ function renderMeals() {
       </div>
       <div class="ml-thead"><span>Day</span><span>Breakfast</span><span>Lunch</span><span>Dinner</span><span>Mood / Energy</span></div>
       <div class="ml-table">${rowsHtml}</div>
+      ${_mtCount() === 0 ? `<div class="ml-hint" style="margin-top:16px">Eat roughly the same things each week? Set them once in <b style="color:var(--primary);cursor:pointer" onclick="mealSetTab('template')">My week</b> and every week fills in automatically.</div>` : ''}
     </div>`;
   if (window.lucide) lucide.createIcons();
 }
 window.renderMeals = renderMeals;
+
+/* ── "My week" template grid ── */
+function _renderTemplate() {
+  const n = _mtCount();
+  const rows = MEAL_WEEKDAYS.map(wd => {
+    const cells = MEAL_SLOTS.map(sl => {
+      const txt = _mtPlanned(wd.i, sl.key);
+      return `<div class="ml-row-meal">
+          <span class="ml-mlabel">${sl.label}</span>
+          <div class="ml-cell">
+            <button class="ml-pill ${txt ? 'planned' : 'empty'}" title="${escapeHtml(txt || 'Set your usual ' + sl.label.toLowerCase())}" onclick="openTemplateEditor(${wd.i},'${sl.key}')">
+              ${txt ? '<span class="dot"></span>' : ''}<span class="tx">${escapeHtml(txt || '+ Set usual ' + sl.label.toLowerCase())}</span>
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+    return `<div class="ml-tgrid-row"><div class="ml-rd"><div class="d-wd">${wd.short}</div></div>${cells}</div>`;
+  }).join('');
+
+  return `
+    <div class="ml-tintro">
+      <div class="ic">🔁</div>
+      <div class="tx">Set the meals you <b>usually</b> eat on each day. Every week fills in from this automatically — you just mark what you actually ate.${n ? ` <b>${n}</b> of 21 set.` : ''}</div>
+    </div>
+    <div class="ml-thead tmpl"><span>Day</span><span>Breakfast</span><span>Lunch</span><span>Dinner</span></div>
+    <div class="ml-tgrid">${rows}</div>`;
+}
+
+window.openTemplateEditor = function (weekday, slot) {
+  const slotDef = MEAL_SLOTS.find(s => s.key === slot) || MEAL_SLOTS[0];
+  const wd = MEAL_WEEKDAYS.find(w => w.i === +weekday) || MEAL_WEEKDAYS[0];
+  const cur = _mtPlanned(weekday, slot);
+  window._mealDraft = { _tmpl: true, weekday: +weekday, slot, planned: cur };
+  _mealMountModal(`
+    <div class="ml-modal">
+      <div class="ml-modal-h">
+        <div><div class="ml-modal-title">${slotDef.label}</div><div class="ml-modal-sub">Every ${wd.long}</div></div>
+        <button class="ml-modal-x" onclick="closeMealModal()">${renderIcon('x', null, 'style="width:18px"')}</button>
+      </div>
+      <div class="ml-modal-b">
+        <div class="ml-field-l">What do you usually eat?</div>
+        <input class="ml-input" id="mealPlanned" placeholder="Type, or pick from your foods…" value="${escapeHtml(cur)}" oninput="mealOnPlanInput(this.value)" autocomplete="off">
+        <div class="ml-pick" id="mealPick"></div>
+        <div class="ml-hint" style="margin-top:14px">This fills in every ${wd.long} automatically.</div>
+        <div class="ml-actions">
+          ${cur ? `<button class="ml-btn ghost" onclick="clearTemplateEntry()">Clear</button>` : ''}
+          <button class="ml-btn primary" onclick="saveTemplateEntry()">Save</button>
+        </div>
+      </div>
+    </div>`);
+  mealRenderPick();
+  setTimeout(() => { const i = document.getElementById('mealPlanned'); if (i && !cur) i.focus(); }, 60);
+};
+window.saveTemplateEntry = async function () {
+  const d = window._mealDraft; if (!d) return;
+  const { weekday, slot, planned } = d;
+  _mealCloseModal();
+  await _mtSave(weekday, slot, planned);
+  renderMeals();
+  if (typeof showToast === 'function') showToast('Saved to your usual week');
+};
+window.clearTemplateEntry = async function () {
+  const d = window._mealDraft; if (!d) return;
+  const { weekday, slot } = d;
+  _mealCloseModal();
+  await _mtSave(weekday, slot, '');
+  renderMeals();
+};
+
+// Seed the template from the week currently on screen — the fastest way to make
+// a week you already like repeatable.
+window.mealTemplateFromWeek = async function () {
+  const dates = _mealWeekDates(_mealWeekOffset);
+  let n = 0;
+  for (let i = 0; i < 7; i++) {
+    for (const s of MEAL_SLOTS) {
+      const mp = _mpFor(dates[i], s.key);
+      const pv = mp && mp.planned ? String(mp.planned).trim() : '';
+      if (pv && pv !== _mtPlanned(i, s.key)) { await _mtSave(i, s.key, pv); n++; }
+    }
+  }
+  renderMeals();
+  if (typeof showToast === 'function') showToast(n ? `Set ${n} usual meal${n > 1 ? 's' : ''} from that week` : 'Nothing planned that week to copy');
+};
+window.mealTemplateClear = async function () {
+  if (typeof confirm === 'function' && !confirm('Clear every meal in your usual week?')) return;
+  for (const wd of MEAL_WEEKDAYS) for (const s of MEAL_SLOTS) if (_mtPlanned(wd.i, s.key)) await _mtSave(wd.i, s.key, '');
+  renderMeals();
+  if (typeof showToast === 'function') showToast('Template cleared');
+};
 
 /* ── "My foods" manager ── */
 function _renderFoodsManager() {
@@ -661,6 +842,31 @@ window.mealAddPlannedToLibrary = async function () {
   if (typeof showToast === 'function') showToast('Added to My foods');
 };
 
+/* Inline marking: one tap on a meal cell walks it through the states, so a normal
+   day is three taps and never opens a modal. A template-filled cell is committed
+   to a real plan row on the first tap; walking it back to unmarked drops that copy
+   again so the cell keeps tracking the template. */
+window.mealCycleStatus = async function (date, slot) {
+  const eff = _mealEffective(date, slot);
+  const text = eff.text;
+  if (!text) { openMealEditor(date, slot); return; }
+  const cur = (eff.mp && eff.mp.status) || '';
+  const next = cur === '' ? 'as_planned'
+    : cur === 'as_planned' ? 'different'
+      : cur === 'different' ? 'skipped' : '';
+  if (!next) {
+    const tmpl = _mtPlanned(_mealWeekdayIdx(date), slot);
+    if (tmpl && text === tmpl) await _mpSave(date, slot, { planned: '', eaten: '', status: null });
+    else await _mpSave(date, slot, { status: null, eaten: '' });
+  } else if (next === 'as_planned') {
+    await _mpSave(date, slot, { planned: text, eaten: text, status: 'as_planned' });
+    _miBumpUse(text);
+  } else {
+    await _mpSave(date, slot, { planned: text, eaten: '', status: next });
+  }
+  renderMeals();
+};
+
 window.mealSetStatus = function (s) {
   const d = window._mealDraft; if (!d) return;
   d.status = d.status === s ? '' : s;
@@ -743,8 +949,9 @@ window.saveMealCheckin = async function () {
 function _mealDayHealthHint(date) {
   let healthy = 0, treat = 0, n = 0;
   MEAL_SLOTS.forEach(s => {
-    const mp = _mpFor(date, s.key); if (!mp) return;
-    const food = (mp.status === 'different' ? mp.eaten : mp.planned) || '';
+    const eff = _mealEffective(date, s.key);
+    const mp = eff.mp;
+    const food = ((mp && mp.status === 'different') ? mp.eaten : eff.text) || '';
     const it = _miByName(food); if (!it || !it.healthy) return;
     n++;
     if (it.healthy === 'healthy') healthy++; else if (it.healthy === 'treat') treat++;
@@ -757,7 +964,7 @@ function _mealDayHealthHint(date) {
 window.mealShoppingList = function () {
   const dates = _mealWeekDates(_mealWeekOffset);
   const counts = {};
-  dates.forEach(dt => MEAL_SLOTS.forEach(s => { const mp = _mpFor(dt, s.key); const t = ((mp && mp.planned) || '').trim(); if (t) counts[t] = (counts[t] || 0) + 1; }));
+  dates.forEach(dt => MEAL_SLOTS.forEach(s => { const t = _mealEffective(dt, s.key).text; if (t) counts[t] = (counts[t] || 0) + 1; }));
   const items = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   window._mealShopText = items.map(([n, c]) => `• ${n}${c > 1 ? ` (x${c})` : ''}`).join('\n');
   const body = items.length
