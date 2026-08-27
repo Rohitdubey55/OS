@@ -355,7 +355,7 @@ const LUMIA_TILE_CATALOG = [
     { id: 'widget-image',        kind: 'widget', widget: 'image',        icon: 'image',      label: 'Image',          category: 'Widgets', minW: 2, minH: 2 },
     { id: 'widget-tdp',          kind: 'widget', widget: 'tdp',          icon: 'goals',      label: '10-Day Plan',    category: 'Widgets', minW: 2, minH: 2, route: 'vision' },
     { id: 'widget-meals',        kind: 'widget', widget: 'meals',        icon: 'sprout',     label: 'Food Planner',   category: 'Widgets', minW: 2, minH: 2, route: 'meals' },
-    { id: 'widget-mealsWeek',    kind: 'widget', widget: 'mealsWeek',    icon: 'cake',       label: 'Food — 7 Days',  category: 'Widgets', minW: 4, minH: 3, route: 'meals' },
+    { id: 'widget-mealsWeek',    kind: 'widget', widget: 'mealsWeek',    icon: 'cake',       label: 'Food — 7 Days',  category: 'Widgets', minW: 4, minH: 2, route: 'meals' },
 
     // ─────────────────────────────────────────────────────────────────
     // HABITS — one tile per habit: a month calendar of date checkboxes.
@@ -3239,7 +3239,7 @@ function renderDashboard() {
       const slots = [['breakfast', '🌅'], ['lunch', '☀️'], ['snacks', '🍎'], ['dinner', '🌙']];
       const isH = r => r && (r.ate_healthy === true || r.ate_healthy === 'true' || r.ate_healthy === 1);
       const healthy = (data.meal_day || []).filter(r => days.includes(r.date) && isH(r)).length;
-      const ICON = `<span style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#34D399,#16A34A);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2M5 2v20M19 2v7c0 1.5-1 2.5-2.5 2.5S14 10.5 14 9V2M19 2v20"/></svg></span>`;
+      const ICON = `<span style="width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#34D399,#16A34A);display:flex;align-items:center;justify-content:center;flex:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2s2-.9 2-2V2M5 2v20M19 2v7c0 1.5-1 2.5-2.5 2.5S14 10.5 14 9V2M19 2v20"/></svg></span>`;
 
       const head = days.map(dt => {
         const d = parse(dt);
@@ -3262,8 +3262,8 @@ function renderDashboard() {
           else if (eff.text && !eff.fromTemplate) { bg = 'var(--surface-2)'; bd = '1px solid var(--border-color)'; col = 'var(--text-1)'; }
           else if (eff.text) { bd = '1px dashed rgba(22,163,74,.34)'; col = '#16a34a'; }
           if (!eff.text) txt = '·';
-          return `<div title="${escapeHtml(eff.text || 'Nothing planned')}" style="min-width:0;height:26px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:${bd};border-radius:7px;background:${bg};${past ? 'opacity:.6;' : ''}${isToday ? 'box-shadow:0 0 0 1.5px rgba(22,163,74,.18);' : ''}">
-              <span style="font-size:10px;font-weight:650;color:${col};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${deco}">${mark}${escapeHtml(txt)}</span>
+          return `<div title="${escapeHtml(eff.text || 'Nothing planned')}" style="min-width:0;height:22px;display:flex;align-items:center;justify-content:center;padding:0 3px;border:${bd};border-radius:7px;background:${bg};${past ? 'opacity:.6;' : ''}${isToday ? 'box-shadow:0 0 0 1.5px rgba(22,163,74,.18);' : ''}">
+              <span style="font-size:9.5px;font-weight:650;color:${col};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${deco}">${mark}${escapeHtml(txt)}</span>
             </div>`;
         }).join('');
         return `<div style="display:contents"><div style="display:flex;align-items:center;justify-content:center;font-size:11px;">${emo}</div>${cells}</div>`;
@@ -3271,12 +3271,12 @@ function renderDashboard() {
 
       return `
       <div class="widget-card" onclick="routeTo('meals')" style="height:100%;cursor:pointer;display:flex;flex-direction:column;background:var(--surface-1);border:1px solid var(--border-color);border-radius:18px;box-shadow:0 4px 15px rgba(0,0,0,.05);overflow:hidden;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px 8px;">
-          <div style="display:flex;align-items:center;gap:9px;font-weight:800;color:var(--text-1);font-size:15px;min-width:0;">${ICON}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Food — 7 Days</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px 6px;">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:800;color:var(--text-1);font-size:14px;min-width:0;">${ICON}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Food — 7 Days</span></div>
           <span style="font-size:11.5px;font-weight:800;color:#16a34a;white-space:nowrap;">${healthy}/7 healthy</span>
         </div>
-        <div style="flex:1;min-height:0;overflow:auto;padding:0 14px 12px;">
-          <div style="display:grid;grid-template-columns:18px repeat(7,minmax(0,1fr));gap:5px;align-items:center;">
+        <div style="flex:1;min-height:0;overflow:auto;padding:0 12px 10px;">
+          <div style="display:grid;grid-template-columns:16px repeat(7,minmax(0,1fr));gap:4px;align-items:center;">
             <div></div>${head}
             ${body}
           </div>
