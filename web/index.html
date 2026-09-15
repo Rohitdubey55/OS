@@ -225,10 +225,30 @@
                     <span class="nav-label">Daily Tools</span>
                 </div>
 
+                <div class="nav-item" onclick="routeTo('gym')" data-target="gym">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5v11"/><path d="M17.5 6.5v11"/><path d="M3.5 9v6"/><path d="M20.5 9v6"/><path d="M6.5 12h11"/></svg></span>
+                    <span class="nav-label">Gym</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('notes')" data-target="notes">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
+                    <span class="nav-label">Notes</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('chimes')" data-target="chimes">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>
+                    <span class="nav-label">Chimes</span>
+                </div>
+
+                <div class="nav-item" onclick="routeTo('wishlist')" data-target="wishlist">
+                    <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></span>
+                    <span class="nav-label">Wishlist</span>
+                </div>
+
             </nav>
 
             <div class="sidebar-footer">
-                <div class="nav-item" id="navPomodoro" onclick="togglePomoWidget()" title="Floating Pomodoro timer">
+                <div class="nav-item" id="navPomodoro" onclick="routeTo('timeTracker')" data-target="pomodoro" title="Time spent on — category stopwatches">
                     <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/><path d="m19.5 5.5-1.6 1.6"/></svg></span>
                     <span class="nav-label">Pomodoro</span>
                 </div>
@@ -534,7 +554,7 @@
          has set localStorage.biometricLock = '1'. -->
     <script src="biometric-lock.js"></script>
 
-    <script src="main.js?v=20260622a"></script>
+    <script src="main.js?v=20260915d"></script>
 
     <!-- supabase-api MUST load AFTER main.js because it replaces window.apiCall.
          If SUPABASE_CONFIG.enabled is false, this script no-ops. -->

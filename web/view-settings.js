@@ -1016,9 +1016,28 @@ window.updateTabVisibility = function () {
     });
   };
 
+  // Visibility only (no reordering) for items outside the main nav list — the
+  // sidebar footer holds Pomodoro and Settings, which must keep their position.
+  const applyVisibilityOnly = (containerSelector, itemSelector) => {
+    const container = document.querySelector(containerSelector);
+    if (!container) return;
+    container.querySelectorAll(itemSelector).forEach(item => {
+      const target = item.dataset.target;
+      if (!target || target === 'dashboard' || target === 'settings') return;
+      if (hiddenList.includes(target)) {
+        item.classList.add('tab-hidden');
+        item.style.display = 'none';
+      } else {
+        item.classList.remove('tab-hidden');
+        item.style.removeProperty('display');
+      }
+    });
+  };
+
   // Run the reordering and visibility updates on both navigation menus
   reorderNodes('.sidebar nav', '.nav-item');
   reorderNodes('.mobile-nav', '.mob-item');
+  applyVisibilityOnly('.sidebar-footer', '.nav-item');
   console.log('[Tab Visibility] hiding:', hiddenList, 'order:', orderList);
 }
 

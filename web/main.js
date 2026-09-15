@@ -370,7 +370,7 @@ const VIEW_MAP = {
     habits:        { src: 'view-habits.js?v=20260621b', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20260621k', render: 'renderVision' },
-    settings:      { src: 'view-settings.js?v=20260915c', render: 'renderSettings' },
+    settings:      { src: 'view-settings.js?v=20260915d', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
     gym:           { src: 'view-gym.js?v=20260915c', render: 'renderGym' },
     notes:         { src: 'view-notes.js',         render: 'renderNotes' },
@@ -2544,6 +2544,22 @@ if (typeof window.updateTabVisibility !== 'function') {
         };
         apply('.sidebar nav', '.nav-item');
         apply('.mobile-nav', '.mob-item');
+        // The sidebar footer (Pomodoro, Settings) sits outside the nav list: apply
+        // visibility there too, but never reorder it.
+        const footer = document.querySelector('.sidebar-footer');
+        if (footer) {
+            footer.querySelectorAll('.nav-item').forEach(item => {
+                const target = item.dataset.target;
+                if (!target || target === 'dashboard' || target === 'settings') return;
+                if (hiddenList.includes(target)) {
+                    item.classList.add('tab-hidden');
+                    item.style.display = 'none';
+                } else {
+                    item.classList.remove('tab-hidden');
+                    item.style.removeProperty('display');
+                }
+            });
+        }
         console.log('[Tab Visibility/main.js] hiding:', hiddenList);
     };
 }
