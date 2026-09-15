@@ -565,6 +565,9 @@ function ttSharedCSS() {
 
 async function renderTimeTracker() {
     const main = document.getElementById('main');
+    // Drop a sheet hoisted onto <body> on a previous visit, so ids stay unique.
+    const staleSheet = document.getElementById('ttLogModal');
+    if (staleSheet && staleSheet.parentElement === document.body) staleSheet.remove();
     main.innerHTML = `<div class="tt-wrap" style="padding:60px 20px;text-align:center;color:var(--text-3);font-size:13.5px">Loading your stopwatches…</div>`;
     try {
         await ttLoadCategories();
@@ -867,6 +870,10 @@ function ttRenderTodoItem(slotIndex, t) {
 async function ttOpenLogModal() {
     const modal = document.getElementById('ttLogModal');
     if (!modal) return;
+    // #main carries the page-transition transform, and a transformed ancestor becomes
+    // the containing block for position:fixed children — so the sheet has to sit on
+    // <body> to cover the viewport instead of being clipped to the content column.
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
     modal.classList.remove('hidden');
     const body = document.getElementById('ttLogModalBody');
     if (body) body.innerHTML = '<div class="tt-log-empty">Loading…</div>';
