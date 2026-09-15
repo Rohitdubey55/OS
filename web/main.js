@@ -457,6 +457,15 @@ async function routeTo(viewName) {
     // the Pomodoro page itself while a session is running.
     if (typeof window._pomoRenderMini === 'function') window._pomoRenderMini();
 
+    // Time Tracker: a running stopwatch stays visible (and keeps counting) on every
+    // page. Lazy-load the view module if a category is running but it isn't loaded yet.
+    if (typeof window.ttRenderMini === 'function') window.ttRenderMini();
+    else if (Array.isArray(state.data.time_categories) && state.data.time_categories.some(c => c.running)) {
+        ensureViewLoaded('timeTracker').then(() => {
+            if (typeof window.ttRenderMini === 'function') window.ttRenderMini();
+        });
+    }
+
     // Publish the view change so any subscribers (analytics, breadcrumb,
     // future per-view stores) react without us calling them by name.
     if (window.personalStore) window.personalStore.notify('view');

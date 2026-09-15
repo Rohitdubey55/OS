@@ -86,7 +86,9 @@ const TT_ICON = {
     chart: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="13"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="18" y1="20" x2="18" y2="10"/></svg>',
     log: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>',
     close: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>',
-    trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>'
+    trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>',
+    check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -156,12 +158,55 @@ function ttPersistCategory(cat, fields) {
 function ttScheduleSave(cat, fields, delay = 700) {
     Object.assign(cat, fields);
     ttPendingFields[cat.id] = Object.assign(ttPendingFields[cat.id] || {}, fields);
+    ttSetSaveState(cat, 'dirty');
     clearTimeout(ttSaveTimers[cat.id]);
     ttSaveTimers[cat.id] = setTimeout(() => {
         const toSave = ttPendingFields[cat.id];
         delete ttPendingFields[cat.id];
         ttPersistCategory(cat, toSave);
+        ttFlashSaved(cat);
     }, delay);
+}
+
+// The Save button doubles as the save indicator: muted "Saved" when everything is
+// stored, accent "Save" the moment something is edited, green tick right after a write.
+function ttSetSaveState(cat, stateName) {
+    const btn = document.getElementById('ttSave_' + cat.slot_index);
+    if (!btn) return;
+    const label = btn.querySelector('span');
+    btn.classList.remove('dirty', 'done');
+    if (stateName === 'dirty') { btn.classList.add('dirty'); if (label) label.textContent = 'Save'; }
+    else if (stateName === 'saving') { if (label) label.textContent = 'Saving…'; }
+    else if (stateName === 'done') { btn.classList.add('done'); if (label) label.textContent = 'Saved'; }
+    else if (label) label.textContent = 'Saved';
+}
+
+function ttFlashSaved(cat) {
+    ttSetSaveState(cat, 'done');
+    clearTimeout(ttSaveTimers['flash_' + cat.id]);
+    ttSaveTimers['flash_' + cat.id] = setTimeout(() => ttSetSaveState(cat, 'clean'), 1800);
+}
+
+// Explicit Save: flush this card's pending name / goal / to-do edits right now
+// instead of waiting for the debounce.
+async function ttSaveCard(slotIndex) {
+    const cat = ttFindCat(slotIndex);
+    if (!cat) return;
+    clearTimeout(ttSaveTimers[cat.id]);
+    const pending = ttPendingFields[cat.id];
+    delete ttPendingFields[cat.id];
+    if (!pending || !Object.keys(pending).length) { ttFlashSaved(cat); return; }
+
+    ttSetSaveState(cat, 'saving');
+    try {
+        await apiPost({ action: 'update', sheet: 'time_categories', id: cat.id, payload: pending });
+        ttFlashSaved(cat);
+    } catch (e) {
+        console.error('ttSaveCard failed:', e);
+        ttPendingFields[cat.id] = Object.assign(pending, ttPendingFields[cat.id] || {});
+        ttSetSaveState(cat, 'dirty');
+        if (typeof toast === 'function') toast('Save failed — try again');
+    }
 }
 
 async function ttCreateLog(cat, startedAt, endedAt, durationSeconds) {
@@ -292,15 +337,123 @@ function ttTick() {
     const totalEl = document.getElementById('ttTodayTotal');
     if (totalEl) totalEl.textContent = ttFormatDuration(todayTotal);
 
+    // Overview: today's total against the sum of every category's daily goal.
+    const goalTotalSec = ttCategories.reduce((s, c) => s + (c.goal_minutes || 0) * 60, 0);
+    const spentEl = document.getElementById('ttTotalSpent');
+    if (spentEl) spentEl.textContent = ttFormatDuration(todayTotal);
+    const goalEl = document.getElementById('ttTotalGoal');
+    if (goalEl) goalEl.textContent = goalTotalSec ? ttFormatDuration(goalTotalSec) : '—';
+    const ovBar = document.getElementById('ttTotalBar');
+    const ovCap = document.getElementById('ttTotalCap');
+    if (ovBar && ovCap) {
+        if (goalTotalSec > 0) {
+            const pct = Math.min(100, Math.round((todayTotal / goalTotalSec) * 100));
+            ovBar.style.width = pct + '%';
+            ovBar.parentElement.classList.toggle('hit', pct >= 100);
+            ovCap.innerHTML = `<span>${pct}% of today's goal</span><span>${ttFormatDuration(Math.max(0, goalTotalSec - todayTotal))} left</span>`;
+        } else {
+            ovBar.style.width = '0%';
+            ovCap.innerHTML = `<span>Set a goal on a card to track progress</span><span></span>`;
+        }
+    }
+
     if (!anyRunning) ttStopTicker();
 }
 
 // Called by routeTo() (main.js) whenever the user navigates away from any view —
-// stops the interval so it doesn't keep ticking (and doesn't leak) in the background.
+// stops the grid's interval. The background chip keeps its own ticker, and elapsed
+// time is derived from running_since, so a stopwatch keeps accruing even while the
+// app is closed.
 function ttStopAllTimers() {
     ttStopTicker();
 }
 window.ttStopAllTimers = ttStopAllTimers;
+
+/* ── Background chip: shows the running stopwatch on every other page ── */
+
+let ttMiniTimer = null;
+
+function ttMiniCSS() {
+    if (document.getElementById('ttMiniStyles')) return;
+    const st = document.createElement('style');
+    st.id = 'ttMiniStyles';
+    st.textContent = `
+    .tt-mini {
+        position: fixed; left: 20px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 1400;
+        display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px 14px;
+        border: 1px solid var(--border-color, #e2e8f0); border-radius: 999px;
+        background: var(--surface-1, #fff); cursor: pointer; max-width: 260px;
+        box-shadow: 0 8px 28px rgba(15,23,42,.16), 0 2px 8px rgba(15,23,42,.08);
+        animation: ttMiniIn .25s cubic-bezier(.34,1.56,.64,1);
+    }
+    @keyframes ttMiniIn { from { opacity: 0; transform: translateY(8px) scale(.94); } to { opacity: 1; transform: none; } }
+    .tt-mini:hover { box-shadow: 0 10px 32px rgba(15,23,42,.2); }
+    .tt-mini-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary, #4F46E5); flex: none; animation: ttPulseMini 1.6s ease-in-out infinite; }
+    @keyframes ttPulseMini { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    .tt-mini-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .tt-mini-name { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3, #64748b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tt-mini-time { font-size: 14.5px; font-weight: 850; color: var(--text-1, #0f172a); font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .tt-mini-pause { width: 30px; height: 30px; flex: none; border: none; border-radius: 50%; background: var(--surface-3, #e2e8f0); color: var(--text-1, #0f172a); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+    .tt-mini-pause:hover { background: var(--primary, #4F46E5); color: #fff; }
+    @media (max-width: 640px) { .tt-mini { left: 12px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
+    `;
+    document.head.appendChild(st);
+}
+
+// Rendered from routeTo() on every page: a running stopwatch stays visible (and
+// keeps counting) no matter where you are in the app.
+function ttRenderMini() {
+    if (!ttCategories.length && Array.isArray(state.data.time_categories)) {
+        ttCategories = state.data.time_categories;
+    }
+    const running = ttCategories.find(c => c.running);
+    const onTrackerPage = state.view === 'timeTracker';
+    let mini = document.getElementById('ttMini');
+
+    if (!running || onTrackerPage) {
+        if (mini) mini.remove();
+        if (ttMiniTimer) { clearInterval(ttMiniTimer); ttMiniTimer = null; }
+        return;
+    }
+
+    ttMiniCSS();
+    if (!mini) {
+        mini = document.createElement('div');
+        mini.id = 'ttMini';
+        mini.className = 'tt-mini';
+        mini.title = 'Open Time Spent On';
+        mini.onclick = () => routeTo('timeTracker');
+        mini.innerHTML = `
+            <span class="tt-mini-dot"></span>
+            <span class="tt-mini-text">
+                <span class="tt-mini-name" id="ttMiniName"></span>
+                <span class="tt-mini-time" id="ttMiniTime">00:00:00</span>
+            </span>
+            <button class="tt-mini-pause" id="ttMiniPause" title="Pause">${TT_ICON.pause}</button>`;
+        document.body.appendChild(mini);
+        document.getElementById('ttMiniPause').onclick = (e) => { e.stopPropagation(); ttMiniPause(); };
+    }
+
+    ttMiniPaint();
+    if (!ttMiniTimer) ttMiniTimer = setInterval(ttMiniPaint, 1000);
+}
+window.ttRenderMini = ttRenderMini;
+
+function ttMiniPaint() {
+    const running = ttCategories.find(c => c.running);
+    if (!running) { ttRenderMini(); return; }
+    const nameEl = document.getElementById('ttMiniName');
+    const timeEl = document.getElementById('ttMiniTime');
+    if (nameEl) nameEl.textContent = running.name || 'Tracking';
+    if (timeEl) timeEl.textContent = ttFormatHMS(ttLiveElapsed(running));
+}
+
+async function ttMiniPause() {
+    const running = ttCategories.find(c => c.running);
+    if (!running) return;
+    await ttToggle(Number(running.slot_index));
+    ttRenderMini();
+}
 
 /* ═══════════════════════════════════════════════════════
    NAME / GOAL EDITING
@@ -429,6 +582,21 @@ function ttPageHTML() {
     const todayLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
     return `
     <style>${ttSharedCSS()}
+        .tt-overview {
+            display: flex; align-items: center; gap: 22px; flex-wrap: wrap;
+            background: var(--surface-1); border: 1px solid var(--border-color); border-radius: 18px;
+            padding: 16px 20px; margin-bottom: 16px; box-shadow: var(--shadow-card, 0 4px 15px rgba(15,23,42,.05));
+        }
+        .tt-ov-stat { display: flex; flex-direction: column; gap: 3px; flex: none; }
+        .tt-ov-stat b { font-size: 21px; font-weight: 850; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1.1; }
+        .tt-ov-stat span { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+        .tt-ov-stat.goal b { color: var(--text-2); }
+        .tt-ov-bar { flex: 1 1 200px; min-width: 160px; }
+        .tt-ov-track { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+        .tt-ov-track i { display: block; height: 100%; width: 0; border-radius: 999px; background: var(--primary); transition: width .5s cubic-bezier(.4,0,.2,1); }
+        .tt-ov-track.hit i { background: var(--success, #10B981); }
+        .tt-ov-cap { display: flex; justify-content: space-between; margin-top: 7px; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
         .tt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
         @media (max-width: 1150px) { .tt-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (max-width: 700px)  { .tt-grid { grid-template-columns: 1fr; } }
@@ -443,37 +611,63 @@ function ttPageHTML() {
         .tt-card:hover { box-shadow: 0 8px 22px rgba(15,23,42,.08); }
         .tt-card.running { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft, rgba(99,102,241,.14)), 0 8px 22px rgba(15,23,42,.06); }
 
-        .tt-head { display: flex; align-items: center; gap: 8px; }
+        .tt-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; row-gap: 8px; }
         .tt-live { width: 7px; height: 7px; border-radius: 50%; background: var(--border-color); flex: none; transition: background .2s ease; }
         .tt-card.running .tt-live { background: var(--primary); animation: ttPulse 1.6s ease-in-out infinite; }
         @keyframes ttPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.82); } }
 
-        .tt-name {
-            flex: 1; min-width: 0; height: 32px; padding: 0 8px;
-            border: 1px solid transparent; border-radius: 9px; background: transparent;
-            color: var(--text-1); font-size: 15px; font-weight: 800; font-family: inherit;
-            text-overflow: ellipsis; transition: background .15s ease, border-color .15s ease;
+        /* styles/saas.css sets border/background/padding/font-size with !important on
+           every input[type=...]. These two live inside their own chrome, so they need
+           a more specific selector to strip that decoration back off. */
+        .tt-card input.tt-name,
+        .tt-card input.tt-name:hover,
+        .tt-card input.tt-name:focus {
+            flex: 1 1 130px; min-width: 0; height: 34px; padding: 0 9px !important; margin: 0;
+            border: 1px solid transparent !important; border-radius: 9px !important;
+            background: transparent !important; box-shadow: none !important; outline: none !important;
+            color: var(--text-1) !important; font-size: 15px !important; font-weight: 800;
+            font-family: inherit !important; line-height: 34px; text-overflow: ellipsis;
+            transition: background .15s ease, border-color .15s ease;
         }
-        .tt-name::placeholder { color: var(--text-3); font-weight: 700; }
-        .tt-name:hover { background: var(--surface-2); }
-        .tt-name:focus { outline: none; background: var(--surface-1); border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft, rgba(99,102,241,.14)); }
+        .tt-card input.tt-name::placeholder { color: var(--text-3) !important; font-weight: 700; }
+        .tt-card input.tt-name:hover { background: var(--surface-2) !important; }
+        .tt-card input.tt-name:focus { background: var(--surface-1) !important; border-color: var(--primary) !important; box-shadow: 0 0 0 3px var(--primary-soft, rgba(99,102,241,.14)) !important; }
 
         .tt-goal {
-            display: inline-flex; align-items: center; gap: 5px; flex: none; height: 30px; padding: 0 10px;
+            display: inline-flex; align-items: center; gap: 6px; flex: none; height: 34px; padding: 0 12px;
             border: 1px solid var(--border-color); border-radius: 999px; background: var(--surface-2);
-            transition: border-color .15s ease, background .15s ease;
+            transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
         }
-        .tt-goal:focus-within { border-color: var(--primary); background: var(--surface-1); }
+        .tt-goal:focus-within { border-color: var(--primary); background: var(--surface-1); box-shadow: 0 0 0 3px var(--primary-soft, rgba(99,102,241,.14)); }
         .tt-goal > svg { color: var(--text-3); flex: none; }
-        .tt-goal input {
-            width: 30px; border: none; background: transparent; padding: 0; text-align: right;
-            color: var(--text-1); font-size: 12.5px; font-weight: 800; font-family: inherit;
-            font-variant-numeric: tabular-nums; -moz-appearance: textfield;
+        .tt-card .tt-goal input[type="number"],
+        .tt-card .tt-goal input[type="number"]:hover,
+        .tt-card .tt-goal input[type="number"]:focus {
+            width: 58px; height: 26px; line-height: 26px; padding: 0 !important; margin: 0; flex: none;
+            border: none !important; border-radius: 0 !important;
+            background: transparent !important; box-shadow: none !important; outline: none !important;
+            text-align: right; color: var(--text-1) !important; font-size: 13.5px !important; font-weight: 800;
+            font-family: inherit !important; font-variant-numeric: tabular-nums;
+            -moz-appearance: textfield; appearance: textfield;
         }
-        .tt-goal input::-webkit-outer-spin-button, .tt-goal input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .tt-goal input:focus { outline: none; }
-        .tt-goal input::placeholder { color: var(--text-3); font-weight: 700; }
-        .tt-goal em { font-style: normal; font-size: 11px; font-weight: 700; color: var(--text-3); }
+        .tt-card .tt-goal input[type="number"]::-webkit-outer-spin-button,
+        .tt-card .tt-goal input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .tt-card .tt-goal input::placeholder { color: var(--text-3) !important; font-weight: 700; }
+        .tt-goal em { font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--text-3); }
+
+        .tt-save {
+            display: inline-flex; align-items: center; gap: 5px; flex: none; height: 30px; padding: 0 11px;
+            border: 1px solid var(--border-color); border-radius: 999px; background: var(--surface-2);
+            color: var(--text-3); font-size: 11.5px; font-weight: 800; font-family: inherit; cursor: pointer;
+            transition: background .15s ease, color .15s ease, border-color .15s ease;
+        }
+        .tt-save svg { opacity: .7; }
+        .tt-save:hover { background: var(--surface-3); color: var(--text-2); }
+        .tt-save.dirty { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .tt-save.dirty svg { opacity: 1; }
+        .tt-save.dirty:hover { filter: brightness(1.07); background: var(--primary); color: #fff; }
+        .tt-save.done { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); color: var(--success, #059669); }
+        .tt-save.done svg { opacity: 1; }
 
         .tt-time {
             text-align: center; margin: 16px 0 12px; font-size: 36px; font-weight: 800;
@@ -520,16 +714,20 @@ function ttPageHTML() {
         .tt-empty { padding: 12px 0 14px; text-align: center; font-size: 12.5px; color: var(--text-3); }
 
         .tt-add { display: flex; gap: 6px; margin-top: auto; padding-top: 4px; }
-        .tt-add input {
-            flex: 1; min-width: 0; height: 36px; padding: 0 12px;
-            border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-2);
-            color: var(--text-1); font-size: 13px; font-family: inherit;
+        .tt-card .tt-add input[type="text"],
+        .tt-card .tt-add input[type="text"]:focus {
+            flex: 1; min-width: 0; height: 36px; padding: 0 12px !important; margin: 0;
+            border: 1px solid var(--border-color) !important; border-radius: 10px !important;
+            background: var(--surface-2) !important; color: var(--text-1) !important;
+            font-size: 13px !important; font-family: inherit !important;
+            box-shadow: none !important; outline: none !important;
         }
-        .tt-add input:focus { outline: none; border-color: var(--primary); background: var(--surface-1); }
+        .tt-card .tt-add input[type="text"]:focus { border-color: var(--primary) !important; background: var(--surface-1) !important; box-shadow: 0 0 0 3px var(--primary-soft, rgba(99,102,241,.14)) !important; }
         .tt-add button {
-            width: 36px; height: 36px; flex: none; border: none; border-radius: 10px;
-            background: var(--surface-3); color: var(--text-2); font-size: 19px; font-weight: 600; line-height: 1;
-            cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s ease, color .15s ease;
+            display: inline-flex; align-items: center; gap: 5px; flex: none; height: 36px; padding: 0 13px;
+            border: none; border-radius: 10px; background: var(--surface-3); color: var(--text-2);
+            font-size: 12.5px; font-weight: 800; font-family: inherit; cursor: pointer;
+            transition: background .15s ease, color .15s ease;
         }
         .tt-add button:hover { background: var(--primary); color: #fff; }
 
@@ -567,6 +765,15 @@ function ttPageHTML() {
             </div>
         </div>
 
+        <div class="tt-overview">
+            <div class="tt-ov-stat"><b id="ttTotalSpent">0s</b><span>Total spent today</span></div>
+            <div class="tt-ov-stat goal"><b id="ttTotalGoal">—</b><span>Total daily goal</span></div>
+            <div class="tt-ov-bar">
+                <div class="tt-ov-track" id="ttTotalTrack"><i id="ttTotalBar"></i></div>
+                <div class="tt-ov-cap" id="ttTotalCap"></div>
+            </div>
+        </div>
+
         <div class="tt-grid">
             ${ttCategories.slice(0, TT_SLOT_COUNT).map(cat => ttRenderCard(cat)).join('')}
         </div>
@@ -598,13 +805,18 @@ function ttRenderCard(cat) {
         <div class="tt-head">
             <span class="tt-live"></span>
             <input class="tt-name" type="text" maxlength="60" placeholder="Name this category"
-                   value="${ttEscape(cat.name || '')}" oninput="ttUpdateName(${slot}, this.value)" />
+                   value="${ttEscape(cat.name || '')}" oninput="ttUpdateName(${slot}, this.value)"
+                   onkeydown="if(event.key==='Enter'){this.blur(); ttSaveCard(${slot});}" />
             <label class="tt-goal" title="Daily goal for this category, in minutes">
                 ${TT_ICON.target}
                 <input type="number" min="0" max="1440" placeholder="0" value="${cat.goal_minutes || ''}"
-                       onchange="ttUpdateGoal(${slot}, this.value)" />
+                       oninput="ttUpdateGoal(${slot}, this.value)"
+                       onkeydown="if(event.key==='Enter'){this.blur(); ttSaveCard(${slot});}" />
                 <em>min</em>
             </label>
+            <button class="tt-save" id="ttSave_${slot}" onclick="ttSaveCard(${slot})" title="Save this card's name, goal and to-dos">
+                ${TT_ICON.check}<span>Saved</span>
+            </button>
         </div>
 
         <div class="tt-time" id="ttTime_${slot}">${ttTimeHTML(elapsed)}</div>
@@ -631,7 +843,7 @@ function ttRenderCard(cat) {
             <div class="tt-add">
                 <input type="text" maxlength="200" placeholder="Add a to-do…" id="ttTodoInput_${slot}"
                        onkeydown="if(event.key==='Enter'){ttAddTodo(${slot}); event.preventDefault();}" />
-                <button onclick="ttAddTodo(${slot})" title="Add to-do">+</button>
+                <button onclick="ttAddTodo(${slot})" title="Add to-do">${TT_ICON.plus} Add</button>
             </div>
         </div>
     </div>
