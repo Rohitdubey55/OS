@@ -109,6 +109,30 @@ const GYM_CATEGORY_ICONS = {
   hiit: '⚡',
 };
 
+// #main carries the page-transition transform, and a transformed ancestor becomes the
+// containing block for position:fixed children — so any overlay rendered inside the view
+// gets clipped to the content column instead of covering the screen (that's what broke
+// the plan builder). Hoisting these hosts onto <body> restores true viewport overlays.
+function gymPortal(id, className) {
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = id;
+    if (className) el.className = className;
+  }
+  if (el.parentElement !== document.body) document.body.appendChild(el);
+  return el;
+}
+
+// Drop overlays hoisted onto <body> by a previous visit, so re-rendering the view
+// never leaves two elements sharing an id.
+function gymClearPortals() {
+  ['gymBuilderOverlay', 'gymExPickerOverlay', 'gymCustomModal', 'gymHistoryModal'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el.parentElement === document.body) el.remove();
+  });
+}
+
 // Stroke icons, matching the rest of the app's icon language.
 const GYM_SVG = {
   dumbbell: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5v11"/><path d="M17.5 6.5v11"/><path d="M3.5 9v6"/><path d="M20.5 9v6"/><path d="M6.5 12h11"/></svg>',
@@ -197,6 +221,7 @@ let gymElapsedInterval = null;   // interval id for elapsed timer
 
 async function renderGym() {
   const main = document.getElementById('main');
+  gymClearPortals();
 
   main.innerHTML = `
     <div class="gym-shell" id="gymShell">
@@ -462,18 +487,14 @@ function gymRenderActiveWorkout(container) {
   gymStartElapsedTimer();
 }
 
-function gymRenderExerciseCard(ex, ei) {
-  const color = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
-  const icon = GYM_CATEGORY_ICONS[ex.category || 'strength'] || '💪';
-  const sets = ex.sets || [];
-
-  const prevSession = gymLastSets(ex.name);
-  const prevSets = prevSession ? prevSession.sets : [];
-
-  const setRows = sets.map((set, si) => `
+// One set row — shared by the initial render and by "Add set", so a row added
+// mid-workout matches the table it lands in.
+function gymSetRowHTML(ei, si, set, prev) {
+  set = set || {};
+  return `
     <div class="gym-set-row ${set.done ? 'done' : ''}" id="gymSetRow-${ei}-${si}">
       <span class="gym-set-num">${si + 1}</span>
-      <span class="gym-set-prev">${prevSets[si] ? `${prevSets[si].reps || 0} × ${prevSets[si].weight || 0}kg` : '—'}</span>
+      <span class="gym-set-prev">${prev ? `${prev.reps || 0} × ${prev.weight || 0}kg` : '—'}</span>
       <div class="gym-set-field">
         <input type="number" class="gym-set-input" value="${set.reps || ''}" placeholder="0"
                min="0" onchange="gymUpdateSet(${ei}, ${si}, 'reps', this.value)" aria-label="Reps">
@@ -485,7 +506,18 @@ function gymRenderExerciseCard(ex, ei) {
       </div>
       <button class="gym-set-check ${set.done ? 'done' : ''}" onclick="gymToggleSet(${ei}, ${si})" title="Mark set done">${GYM_SVG.check}</button>
     </div>
-  `).join('');
+  `;
+}
+
+function gymRenderExerciseCard(ex, ei) {
+  const color = GYM_MUSCLE_COLORS[ex.muscle_group] || '#6366F1';
+  const icon = GYM_CATEGORY_ICONS[ex.category || 'strength'] || '💪';
+  const sets = ex.sets || [];
+
+  const prevSession = gymLastSets(ex.name);
+  const prevSets = prevSession ? prevSession.sets : [];
+
+  const setRows = sets.map((set, si) => gymSetRowHTML(ei, si, set, prevSets[si])).join('');
 
   const last = gymLastPerformance(ex.name);
   const lastLine = last
@@ -565,19 +597,10 @@ function gymAddSet(ei) {
   const list = document.getElementById(`gymSetsList-${ei}`);
   if (!list) return;
   const si = ex.sets.length - 1;
+  const prevSession = gymLastSets(ex.name);
+  const prev = prevSession ? prevSession.sets[si] : null;
   const frag = document.createElement('div');
-  frag.innerHTML = `
-    <div class="gym-set-row" id="gymSetRow-${ei}-${si}">
-      <span class="gym-set-num">Set ${si + 1}</span>
-      <input type="number" class="gym-set-input" value="" placeholder="0"
-             min="0" onchange="gymUpdateSet(${ei}, ${si}, 'reps', this.value)" title="Reps">
-      <span class="gym-set-x">×</span>
-      <input type="number" class="gym-set-input" value="" placeholder="0"
-             min="0" step="0.5" onchange="gymUpdateSet(${ei}, ${si}, 'weight', this.value)" title="Weight">
-      <span class="gym-set-unit">kg</span>
-      <button class="gym-set-check" onclick="gymToggleSet(${ei}, ${si})" title="Mark done">✓</button>
-    </div>
-  `;
+  frag.innerHTML = gymSetRowHTML(ei, si, ex.sets[si], prev);
   list.appendChild(frag.firstElementChild);
   gymRefreshProgress();
 }
@@ -597,7 +620,7 @@ function gymRemoveExercise(ei) {
 /* ── Exercise picker overlay ── */
 function gymOpenExPicker(callback) {
   gymExPickerCallback = callback || null;
-  const overlay = document.getElementById('gymExPickerOverlay');
+  const overlay = gymPortal('gymExPickerOverlay');
   if (!overlay) return;
 
   const allExercises = [
@@ -876,7 +899,7 @@ function gymOpenBuilder(planId) {
 }
 
 function gymRenderBuilder() {
-  const overlay = document.getElementById('gymBuilderOverlay');
+  const overlay = gymPortal('gymBuilderOverlay');
   if (!overlay) return;
 
   const { name, exercises } = gymPlanBuilder;
@@ -1154,7 +1177,11 @@ async function gymEditSession(sessionId) {
 
 function gymOpenHistoryModal(d) {
   gymSelectedHistoryDate = d;
-  const modal = document.getElementById('gymHistoryModal');
+  const modal = gymPortal('gymHistoryModal', 'gym-history-modal hidden');
+  if (!modal.querySelector('#gymHistoryModalInner')) {
+    modal.onclick = gymCloseHistoryModal;
+    modal.innerHTML = '<div class="gym-history-modal-inner" id="gymHistoryModalInner"></div>';
+  }
   const inner = document.getElementById('gymHistoryModalInner');
   if (!modal || !inner) return;
 
@@ -1393,7 +1420,7 @@ function gymSetLibrarySearch(q) {
 
 /* ── Custom exercise modal ── */
 function gymOpenAddCustom() {
-  const modal = document.getElementById('gymCustomModal');
+  const modal = gymPortal('gymCustomModal');
   if (!modal) return;
 
   const muscleOptions = Object.keys(GYM_MUSCLE_COLORS).map(m =>
