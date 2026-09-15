@@ -617,6 +617,10 @@ function renderSettings() {
 
 // Helpers
 function renderTabTogglesOrdered(layoutStr, fallbackHiddenStr) {
+  // Sidebar tabs, then everything reachable from the Daily Tools hub — so every
+  // tool in the app can be switched on or off from one place. Tools that have no
+  // sidebar entry of their own (Gym, Notes, Pomodoro, Chimes, Wishlist) are hidden
+  // from / shown in the Daily Tools grid by the same toggle.
   const allTabs = [
     { id: 'calendar', label: 'Calendar' },
     { id: 'tasks', label: 'Tasks' },
@@ -627,7 +631,13 @@ function renderTabTogglesOrdered(layoutStr, fallbackHiddenStr) {
     { id: 'people', label: 'People' },
     { id: 'books', label: 'Books' },
     { id: 'mural', label: 'Mural' },
-    { id: 'meals', label: 'Food Planner' }
+    { id: 'meals', label: 'Food Planner' },
+    { id: 'dailyTools', label: 'Daily Tools' },
+    { id: 'gym', label: 'Gym' },
+    { id: 'notes', label: 'Notes' },
+    { id: 'pomodoro', label: 'Pomodoro' },
+    { id: 'chimes', label: 'Chimes' },
+    { id: 'wishlist', label: 'Wishlist' }
   ];
 
   let layoutData = [];

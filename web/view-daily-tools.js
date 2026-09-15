@@ -62,10 +62,46 @@ const DAILY_TOOLS_CSS = `<style>
 .dlt-name { font-size:16px; font-weight:700; letter-spacing:-.01em; }
 .dlt-sub { font-size:12.5px; color:var(--text-3); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .dlt-go { color:var(--text-3); flex-shrink:0; }
+.dlt-empty { text-align:center; padding:60px 20px; color:var(--text-3); }
+.dlt-empty p { font-size:14px; margin:0 0 16px; }
+.dlt-empty-btn {
+    height:40px; padding:0 18px; border:1px solid var(--border-color); border-radius:11px;
+    background:var(--surface-1); color:var(--text-1); font-size:13px; font-weight:700;
+    font-family:inherit; cursor:pointer;
+}
+.dlt-empty-btn:hover { background:var(--surface-2); }
 </style>`;
 
+// Settings → Tab Visibility decides which tools appear here. Anything absent from
+// nav_layout is treated as visible, so a new tool shows up until it's switched off.
+function dailyToolsVisible() {
+    const layoutStr = state.data?.settings?.[0]?.nav_layout || '';
+    if (!layoutStr) return DAILY_TOOLS;
+    let layout = [];
+    try {
+        layout = typeof layoutStr === 'string' ? JSON.parse(layoutStr) : layoutStr;
+    } catch (e) { return DAILY_TOOLS; }
+    if (!Array.isArray(layout)) return DAILY_TOOLS;
+    const hidden = new Set(layout.filter(i => i && i.visible === false).map(i => i.id));
+    return DAILY_TOOLS.filter(t => !hidden.has(t.view));
+}
+
 function renderDailyTools() {
-    const cards = DAILY_TOOLS.map(t => `
+    const tools = dailyToolsVisible();
+
+    if (!tools.length) {
+        document.getElementById('main').innerHTML = `
+        ${DAILY_TOOLS_CSS}
+        <div class="dlt-wrap">
+            <div class="dlt-empty">
+                <p>Every tool is switched off right now.</p>
+                <button class="dlt-empty-btn" onclick="routeTo('settings')">Open Settings → Tab Visibility</button>
+            </div>
+        </div>`;
+        return;
+    }
+
+    const cards = tools.map(t => `
         <button class="dlt-card" style="--dlt-accent:${t.accent}" onclick="routeTo('${t.view}')">
             <span class="dlt-ic">${t.icon}</span>
             <span class="dlt-meta">
@@ -78,7 +114,7 @@ function renderDailyTools() {
     document.getElementById('main').innerHTML = `
         ${DAILY_TOOLS_CSS}
         <div class="dlt-wrap">
-            <p class="dlt-intro">Everyday tools, all in one place.</p>
+            <p class="dlt-intro">Everyday tools, all in one place. Choose which appear in Settings → Tab Visibility.</p>
             <div class="dlt-grid">${cards}</div>
         </div>`;
 }

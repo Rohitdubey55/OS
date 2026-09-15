@@ -370,9 +370,9 @@ const VIEW_MAP = {
     habits:        { src: 'view-habits.js?v=20260621b', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20260621k', render: 'renderVision' },
-    settings:      { src: 'view-settings.js?v=20260619d', render: 'renderSettings' },
+    settings:      { src: 'view-settings.js?v=20260915c', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
-    gym:           { src: 'view-gym.js',           render: 'renderGym' },
+    gym:           { src: 'view-gym.js?v=20260915c', render: 'renderGym' },
     notes:         { src: 'view-notes.js',         render: 'renderNotes' },
     chimes:        { src: 'view-chimes.js',        render: 'renderChimesView' },
     lifeCalendar:  { src: 'view-life-calendar.js', render: 'renderLifeCalendar' },
@@ -382,11 +382,11 @@ const VIEW_MAP = {
     mural:         { src: 'view-mural.js?v=20260621c', render: 'renderMural' },
     tutor:         { src: 'view-tutor.js',         render: 'renderTutor' },
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
-    dailyTools:    { src: 'view-daily-tools.js',   render: 'renderDailyTools' },
+    dailyTools:    { src: 'view-daily-tools.js?v=20260915c', render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
     meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
-    timeTracker:   { src: 'view-time-tracker.js?v=20260915a', render: 'renderTimeTracker' },
-    timeAnalysis:  { src: 'view-time-tracker.js?v=20260915a', render: 'renderTimeAnalysis' }
+    timeTracker:   { src: 'view-time-tracker.js?v=20260915c', render: 'renderTimeTracker' },
+    timeAnalysis:  { src: 'view-time-tracker.js?v=20260915c', render: 'renderTimeAnalysis' }
 };
 
 const _loadedScripts = new Set();
