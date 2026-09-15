@@ -92,6 +92,69 @@ const TT_ICON = {
 };
 
 /* ═══════════════════════════════════════════════════════
+   TASKS BRIDGE — each card is linked to one of the Tasks app's categories and
+   shows that category's live tasks, rather than keeping a private to-do list.
+═══════════════════════════════════════════════════════ */
+
+const TT_DEFAULT_TASK_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
+let ttShowUndated = {};   // slot_index -> include tasks with no due date
+
+// Mirrors getTaskCategories() in view-tasks.js, which isn't loaded on this page.
+function ttTaskCategories() {
+    const settings = state.data.settings && state.data.settings[0] || {};
+    let list = [];
+    if (settings.task_categories) {
+        let raw = settings.task_categories;
+        if (String(raw).startsWith('VIEW:')) raw = String(raw).split('|')[1] || '';
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) list = parsed;
+        } catch (e) { }
+        if (!list.length) list = String(raw).split(',').map(c => c.trim()).filter(Boolean);
+    }
+    if (!list.length) list = [...TT_DEFAULT_TASK_CATEGORIES];
+    // Include any category already in use on a task, so nothing is unreachable.
+    (state.data.tasks || []).forEach(t => {
+        if (t.category && !list.includes(t.category)) list.push(t.category);
+    });
+    return list;
+}
+
+function ttTaskIsOpen(t) {
+    return t && t.status !== 'completed';
+}
+
+// Open tasks in this card's category that are due today or overdue. Undated tasks
+// are held back (they'd swamp a day view) but counted, so they can be revealed.
+function ttTasksFor(cat) {
+    const linked = cat.task_category;
+    if (!linked) return { tasks: [], undated: 0 };
+    const today = ttTodayStr();
+    const all = (state.data.tasks || []).filter(t => ttTaskIsOpen(t) && String(t.category || '') === String(linked));
+    const dated = all.filter(t => t.due_date && String(t.due_date).slice(0, 10) <= today);
+    const undated = all.filter(t => !t.due_date);
+    const show = ttShowUndated[cat.slot_index] ? dated.concat(undated) : dated;
+    show.sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999')));
+    return { tasks: show, undated: undated.length };
+}
+
+// Time tracked against one task today, including the interval currently running.
+function ttTaskTracked(taskId) {
+    const today = ttTodayStr();
+    let sec = (ttLogs || []).reduce((s, l) =>
+        s + (String(l.task_id || '') === String(taskId) && l.date === today ? (l.duration_seconds || 0) : 0), 0);
+    const live = ttCategories.find(c => c.running && String(c.active_task_id || '') === String(taskId));
+    if (live && live.running_since) {
+        sec += Math.max(0, Math.floor((Date.now() - new Date(live.running_since).getTime()) / 1000));
+    }
+    return sec;
+}
+
+function ttFindTask(taskId) {
+    return (state.data.tasks || []).find(t => String(t.id) === String(taskId));
+}
+
+/* ═══════════════════════════════════════════════════════
    DATA LOADING
 ═══════════════════════════════════════════════════════ */
 
@@ -209,16 +272,21 @@ async function ttSaveCard(slotIndex) {
     }
 }
 
-async function ttCreateLog(cat, startedAt, endedAt, durationSeconds) {
+async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId) {
+    const task = taskId ? ttFindTask(taskId) : null;
+    const payload = {
+        category_id: cat.id, category_name: cat.name, date: ttTodayStr(),
+        duration_seconds: durationSeconds, started_at: startedAt, ended_at: endedAt
+    };
+    if (taskId) {
+        payload.task_id = String(taskId);
+        payload.task_title = task ? task.title : '';
+    }
+    // Keep the local list in step so per-task totals update without a refetch.
+    ttLogs.unshift({ id: 'local-' + Date.now(), ...payload });
     try {
-        await apiPost({
-            action: 'create', sheet: 'time_logs',
-            payload: {
-                category_id: cat.id, category_name: cat.name, date: ttTodayStr(),
-                duration_seconds: durationSeconds, started_at: startedAt, ended_at: endedAt
-            }
-        });
-        ttLogsLoaded = false; // invalidate the cached log list so Log/Analysis refetch
+        await apiPost({ action: 'create', sheet: 'time_logs', payload });
+        ttLogsLoaded = false; // refetch next time the Log or Analysis opens
     } catch (e) { console.error('ttCreateLog failed:', e); }
 }
 
@@ -238,6 +306,18 @@ function ttFindCat(slotIndex) {
     return ttCategories.find(c => Number(c.slot_index) === Number(slotIndex));
 }
 
+// Bank the interval that's running: add it to today's total and log it against
+// whichever task was active. Shared by pause, task switching and reset.
+function ttCloseInterval(cat) {
+    if (!cat.running || !cat.running_since) return 0;
+    const startedAt = cat.running_since;
+    const endedAt = new Date();
+    const deltaSec = Math.max(0, Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 1000));
+    cat.elapsed_seconds = (cat.elapsed_seconds || 0) + deltaSec;
+    if (deltaSec >= 1) ttCreateLog(cat, startedAt, endedAt.toISOString(), deltaSec, cat.active_task_id);
+    return deltaSec;
+}
+
 async function ttToggle(slotIndex) {
     const cat = ttFindCat(slotIndex);
     if (!cat) return;
@@ -245,20 +325,52 @@ async function ttToggle(slotIndex) {
     if (!cat.running) {
         cat.running = true;
         cat.running_since = new Date().toISOString();
-        ttPersistCategory(cat, { running: true, running_since: cat.running_since });
+        cat.active_task_id = null;
+        ttPersistCategory(cat, { running: true, running_since: cat.running_since, active_task_id: null });
         ttStartTicker();
     } else {
-        const startedAt = cat.running_since;
-        const endedAtDate = new Date();
-        const deltaSec = Math.max(0, Math.floor((endedAtDate.getTime() - new Date(startedAt).getTime()) / 1000));
-        cat.elapsed_seconds = (cat.elapsed_seconds || 0) + deltaSec;
+        ttCloseInterval(cat);
         cat.running = false;
         cat.running_since = null;
-        ttPersistCategory(cat, { running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds });
-        if (deltaSec >= 1) ttCreateLog(cat, startedAt, endedAtDate.toISOString(), deltaSec);
+        cat.active_task_id = null;
+        ttPersistCategory(cat, { running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds, active_task_id: null });
     }
 
     ttSyncCardState(cat);
+    ttRenderTasksInto(cat);
+    ttTick();
+}
+
+// Play on a task: the category's stopwatch runs, with this task as the thing
+// being worked on. Pressing play on another task hands the clock over without
+// stopping it; pressing it on the running task pauses everything.
+async function ttToggleTask(slotIndex, taskId) {
+    const cat = ttFindCat(slotIndex);
+    if (!cat) return;
+
+    const isActive = cat.running && String(cat.active_task_id || '') === String(taskId);
+    ttCloseInterval(cat);
+
+    if (isActive) {
+        cat.running = false;
+        cat.running_since = null;
+        cat.active_task_id = null;
+    } else {
+        cat.running = true;
+        cat.running_since = new Date().toISOString();
+        cat.active_task_id = String(taskId);
+        ttStartTicker();
+    }
+
+    ttPersistCategory(cat, {
+        running: cat.running,
+        running_since: cat.running_since,
+        elapsed_seconds: cat.elapsed_seconds,
+        active_task_id: cat.active_task_id
+    });
+
+    ttSyncCardState(cat);
+    ttRenderTasksInto(cat);
     ttTick();
 }
 
@@ -269,17 +381,14 @@ async function ttResetTimer(slotIndex) {
     if (!cat) return;
     if (!confirm(`Reset "${cat.name}" back to 00:00:00 for today?\n\nAlready-logged time stays in your Log and Analysis.`)) return;
 
-    if (cat.running && cat.running_since) {
-        const startedAt = cat.running_since;
-        const endedAtDate = new Date();
-        const deltaSec = Math.max(0, Math.floor((endedAtDate.getTime() - new Date(startedAt).getTime()) / 1000));
-        if (deltaSec >= 1) ttCreateLog(cat, startedAt, endedAtDate.toISOString(), deltaSec);
-    }
+    ttCloseInterval(cat);
     cat.elapsed_seconds = 0;
     cat.running = false;
     cat.running_since = null;
-    ttPersistCategory(cat, { elapsed_seconds: 0, running: false, running_since: null });
+    cat.active_task_id = null;
+    ttPersistCategory(cat, { elapsed_seconds: 0, running: false, running_since: null, active_task_id: null });
     ttSyncCardState(cat);
+    ttRenderTasksInto(cat);
     ttTick();
 }
 
@@ -332,6 +441,25 @@ function ttTick() {
                 lbl.innerHTML = `<span>No daily goal set</span><span></span>`;
             }
         }
+    });
+
+    // Task rows: live tracked time, and the card's planned-vs-tracked summary.
+    ttCategories.forEach(cat => {
+        const sumEl = document.getElementById('ttTaskSum_' + cat.slot_index);
+        if (!sumEl) return;
+        if (!cat.task_category) { sumEl.innerHTML = ''; return; }
+        const { tasks } = ttTasksFor(cat);
+        let planned = 0, tracked = 0;
+        tasks.forEach(t => {
+            planned += (Number(t.duration) || 0) * 60;
+            const sec = ttTaskTracked(t.id);
+            tracked += sec;
+            const el = document.getElementById(`ttTaskTracked_${cat.slot_index}_${t.id}`);
+            if (el) el.textContent = sec ? ttFormatDuration(sec) : '—';
+        });
+        sumEl.innerHTML = tasks.length
+            ? `<span>Tasks planned <b>${ttFormatDuration(planned)}</b></span><span>tracked <b>${ttFormatDuration(tracked)}</b></span>`
+            : '';
     });
 
     const totalEl = document.getElementById('ttTodayTotal');
@@ -444,7 +572,8 @@ function ttMiniPaint() {
     if (!running) { ttRenderMini(); return; }
     const nameEl = document.getElementById('ttMiniName');
     const timeEl = document.getElementById('ttMiniTime');
-    if (nameEl) nameEl.textContent = running.name || 'Tracking';
+    const activeTask = running.active_task_id ? ttFindTask(running.active_task_id) : null;
+    if (nameEl) nameEl.textContent = activeTask ? `${running.name} · ${activeTask.title}` : (running.name || 'Tracking');
     if (timeEl) timeEl.textContent = ttFormatHMS(ttLiveElapsed(running));
 }
 
@@ -571,6 +700,7 @@ async function renderTimeTracker() {
     main.innerHTML = `<div class="tt-wrap" style="padding:60px 20px;text-align:center;color:var(--text-3);font-size:13.5px">Loading your stopwatches…</div>`;
     try {
         await ttLoadCategories();
+        await ttLoadLogs(true);   // per-task tracked time comes from today's logs
     } catch (e) {
         console.error('renderTimeTracker: load failed', e);
     }
@@ -704,6 +834,58 @@ function ttPageHTML() {
         .tt-todos { display: flex; flex-direction: column; flex: 1; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--border-color); }
         .tt-todos-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
         .tt-todos-head b { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+
+        .tt-task-sum { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+        .tt-task-sum b { color: var(--text-1); font-variant-numeric: tabular-nums; }
+
+        .tt-card select.tt-cat-picker {
+            max-width: 130px; height: 26px; padding: 0 22px 0 9px !important; margin: 0;
+            border: 1px solid var(--border-color) !important; border-radius: 999px !important;
+            background: var(--surface-2) !important; color: var(--text-2) !important;
+            font-size: 11.5px !important; font-weight: 700; font-family: inherit !important;
+            box-shadow: none !important; outline: none !important; cursor: pointer;
+            appearance: none; -webkit-appearance: none;
+            background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%) !important;
+            background-position: calc(100% - 12px) 11px, calc(100% - 8px) 11px !important;
+            background-size: 4px 4px, 4px 4px !important; background-repeat: no-repeat !important;
+        }
+        .tt-card select.tt-cat-picker:focus { border-color: var(--primary) !important; color: var(--text-1) !important; }
+
+        .tt-task { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 9px; transition: background .12s ease; }
+        .tt-task:hover { background: var(--surface-2); }
+        .tt-task.active { background: var(--primary-soft, rgba(99,102,241,.1)); }
+        .tt-card .tt-task input[type=checkbox] { width: 15px; height: 15px; flex: none; margin: 0; cursor: pointer; accent-color: var(--primary); }
+        .tt-task-title { flex: 1; min-width: 0; font-size: 13px; line-height: 1.3; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tt-task-time { display: inline-flex; align-items: center; gap: 3px; flex: none; font-size: 11.5px; font-weight: 700; color: var(--text-3); font-variant-numeric: tabular-nums; }
+        .tt-task-time b { color: var(--text-2); font-weight: 800; }
+        .tt-task-time i { font-style: normal; opacity: .5; }
+        .tt-task-est { display: inline-flex; align-items: center; color: var(--text-3); }
+        .tt-card .tt-task-est input[type="number"] {
+            width: 30px; height: 22px; padding: 0 !important; margin: 0; text-align: right;
+            border: none !important; border-radius: 0 !important; background: transparent !important;
+            box-shadow: none !important; outline: none !important;
+            color: var(--text-2) !important; font-size: 11.5px !important; font-weight: 800;
+            font-family: inherit !important; font-variant-numeric: tabular-nums;
+            -moz-appearance: textfield; appearance: textfield;
+        }
+        .tt-card .tt-task-est input[type="number"]::-webkit-outer-spin-button,
+        .tt-card .tt-task-est input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .tt-card .tt-task-est input[type="number"]:focus { color: var(--text-1) !important; }
+        .tt-task-play {
+            width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--border-color); border-radius: 50%; background: var(--surface-1);
+            color: var(--text-2); cursor: pointer; padding: 0;
+            transition: background .15s ease, color .15s ease, border-color .15s ease;
+        }
+        .tt-task-play svg { width: 11px; height: 11px; }
+        .tt-task-play:hover { border-color: var(--primary); color: var(--primary); }
+        .tt-task-play.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+        .tt-undated {
+            width: 100%; margin-bottom: 8px; padding: 6px; border: none; border-radius: 8px;
+            background: transparent; color: var(--text-3); font-size: 11.5px; font-weight: 700;
+            font-family: inherit; cursor: pointer;
+        }
+        .tt-undated:hover { background: var(--surface-2); color: var(--text-1); }
         .tt-todos-head span { font-size: 11px; font-weight: 800; color: var(--text-3); font-variant-numeric: tabular-nums; }
         .tt-todo-list { display: flex; flex-direction: column; gap: 1px; max-height: 136px; overflow-y: auto; margin-bottom: 9px; }
         .tt-todo { display: flex; align-items: center; gap: 9px; padding: 5px 6px; border-radius: 9px; transition: background .12s ease; }
@@ -799,8 +981,6 @@ function ttPageHTML() {
 
 function ttRenderCard(cat) {
     const elapsed = ttLiveElapsed(cat);
-    const todos = ttParseTodos(cat.todos_json);
-    const doneCount = todos.filter(t => t.done).length;
     const slot = cat.slot_index;
 
     return `
@@ -826,6 +1006,7 @@ function ttRenderCard(cat) {
 
         <div class="tt-track" id="ttTrack_${slot}"><i id="ttProg_${slot}"></i></div>
         <div class="tt-prog-label" id="ttProgLabel_${slot}"></div>
+        <div class="tt-task-sum" id="ttTaskSum_${slot}"></div>
 
         <div class="tt-controls">
             <button class="tt-play" id="ttPlayBtn_${slot}" onclick="ttToggle(${slot})"
@@ -835,22 +1016,146 @@ function ttRenderCard(cat) {
             <button class="tt-reset" onclick="ttResetTimer(${slot})" title="Reset today's time">${TT_ICON.reset}</button>
         </div>
 
-        <div class="tt-todos">
-            <div class="tt-todos-head">
-                <b>To-dos</b>
-                <span id="ttTodoCount_${slot}">${todos.length ? `${doneCount}/${todos.length}` : ''}</span>
-            </div>
-            <div class="tt-todo-list" id="ttTodoList_${slot}">
-                ${todos.length ? todos.map(t => ttRenderTodoItem(slot, t)).join('') : '<div class="tt-empty">Nothing planned yet</div>'}
-            </div>
-            <div class="tt-add">
-                <input type="text" maxlength="200" placeholder="Add a to-do…" id="ttTodoInput_${slot}"
-                       onkeydown="if(event.key==='Enter'){ttAddTodo(${slot}); event.preventDefault();}" />
-                <button onclick="ttAddTodo(${slot})" title="Add to-do">${TT_ICON.plus} Add</button>
-            </div>
+        <div class="tt-todos" id="ttTasksWrap_${slot}">
+            ${ttRenderTasksSection(cat)}
         </div>
     </div>
     `;
+}
+
+// The lower half of a card: which task category feeds it, that category's live
+// tasks (each with an estimate, time tracked today and its own play button), and
+// a box that adds a new task straight into the Tasks app.
+function ttRenderTasksSection(cat) {
+    const slot = cat.slot_index;
+    const cats = ttTaskCategories();
+    const linked = cat.task_category || '';
+    const picker = `
+        <select class="tt-cat-picker" onchange="ttSetCardCategory(${slot}, this.value)" title="Which task category feeds this card">
+            <option value="" ${linked ? '' : 'selected'}>Link tasks…</option>
+            ${cats.map(c => `<option value="${ttEscape(c)}" ${String(c) === String(linked) ? 'selected' : ''}>${ttEscape(c)}</option>`).join('')}
+        </select>`;
+
+    if (!linked) {
+        return `
+            <div class="tt-todos-head"><b>Tasks</b>${picker}</div>
+            <div class="tt-empty">Link a task category to pull its tasks in here.</div>`;
+    }
+
+    const { tasks, undated } = ttTasksFor(cat);
+    const rows = tasks.length
+        ? tasks.map(t => ttRenderTaskRow(slot, t, cat)).join('')
+        : '<div class="tt-empty">Nothing due today in this category.</div>';
+
+    const undatedLine = undated
+        ? `<button class="tt-undated" onclick="ttToggleUndated(${slot})">${ttShowUndated[slot] ? 'Hide' : 'Show'} ${undated} undated task${undated !== 1 ? 's' : ''}</button>`
+        : '';
+
+    return `
+        <div class="tt-todos-head"><b>Tasks</b>${picker}</div>
+        <div class="tt-todo-list" id="ttTaskList_${slot}">${rows}</div>
+        ${undatedLine}
+        <div class="tt-add">
+            <input type="text" maxlength="200" placeholder="Add a task…" id="ttTaskInput_${slot}"
+                   onkeydown="if(event.key==='Enter'){ttAddTask(${slot}); event.preventDefault();}" />
+            <button onclick="ttAddTask(${slot})" title="Add to ${ttEscape(linked)}">${TT_ICON.plus} Add</button>
+        </div>`;
+}
+
+function ttRenderTaskRow(slot, task, cat) {
+    const isActive = cat.running && String(cat.active_task_id || '') === String(task.id);
+    const tracked = ttTaskTracked(task.id);
+    return `
+    <div class="tt-task ${isActive ? 'active' : ''}" id="ttTask_${slot}_${task.id}">
+        <input type="checkbox" title="Mark complete" onchange="ttToggleTaskDone(${slot}, '${task.id}')" />
+        <span class="tt-task-title" title="${ttEscape(task.title || '')}">${ttEscape(task.title || 'Untitled')}</span>
+        <span class="tt-task-time">
+            <b id="ttTaskTracked_${slot}_${task.id}">${tracked ? ttFormatDuration(tracked) : '—'}</b>
+            <i>/</i>
+            <label class="tt-task-est" title="Planned minutes for this task">
+                <input type="number" min="0" max="1440" placeholder="0" value="${task.duration || ''}"
+                       onchange="ttUpdateTaskEstimate(${slot}, '${task.id}', this.value)" />m
+            </label>
+        </span>
+        <button class="tt-task-play ${isActive ? 'on' : ''}" onclick="ttToggleTask(${slot}, '${task.id}')"
+                title="${isActive ? 'Pause' : 'Start this task'}">${isActive ? TT_ICON.pause : TT_ICON.play}</button>
+    </div>`;
+}
+
+// Re-render one card's task area only, so other cards keep their state and focus.
+function ttRenderTasksInto(cat) {
+    const wrap = document.getElementById('ttTasksWrap_' + cat.slot_index);
+    if (wrap) wrap.innerHTML = ttRenderTasksSection(cat);
+}
+
+function ttSetCardCategory(slot, value) {
+    const cat = ttFindCat(slot);
+    if (!cat) return;
+    cat.task_category = value || null;
+    ttScheduleSave(cat, { task_category: cat.task_category }, 0);
+    ttRenderTasksInto(cat);
+    ttTick();
+}
+
+function ttToggleUndated(slot) {
+    ttShowUndated[slot] = !ttShowUndated[slot];
+    const cat = ttFindCat(slot);
+    if (cat) { ttRenderTasksInto(cat); ttTick(); }
+}
+
+async function ttAddTask(slot) {
+    const cat = ttFindCat(slot);
+    if (!cat || !cat.task_category) return;
+    const input = document.getElementById('ttTaskInput_' + slot);
+    const title = input ? input.value.trim() : '';
+    if (!title) return;
+    if (input) input.value = '';
+
+    const payload = {
+        title: title.slice(0, 200), priority: 'P2', status: 'pending',
+        category: cat.task_category, due_date: ttTodayStr(), subtasks: '[]'
+    };
+    try {
+        const res = await apiPost({ action: 'create', sheet: 'tasks', payload });
+        if (res && res.success) {
+            if (!Array.isArray(state.data.tasks)) state.data.tasks = [];
+            state.data.tasks.push({ id: res.id, ...payload });
+            ttRenderTasksInto(cat);
+            ttTick();
+        }
+    } catch (e) {
+        console.error('ttAddTask failed:', e);
+        if (typeof toast === 'function') toast('Could not add task');
+    }
+}
+
+async function ttToggleTaskDone(slot, taskId) {
+    const cat = ttFindCat(slot);
+    const task = ttFindTask(taskId);
+    if (!cat || !task) return;
+    const newStatus = task.status === 'completed' ? 'pending' : 'completed';
+    task.status = newStatus;
+    task.completed_at = newStatus === 'completed' ? new Date().toISOString() : null;
+    ttRenderTasksInto(cat);
+    ttTick();
+    try {
+        await apiPost({ action: 'update', sheet: 'tasks', id: taskId, payload: { status: newStatus, completed_at: task.completed_at } });
+    } catch (e) {
+        console.error('ttToggleTaskDone failed:', e);
+        task.status = newStatus === 'completed' ? 'pending' : 'completed';
+        ttRenderTasksInto(cat);
+        if (typeof toast === 'function') toast('Could not update task');
+    }
+}
+
+function ttUpdateTaskEstimate(slot, taskId, value) {
+    const task = ttFindTask(taskId);
+    if (!task) return;
+    const mins = Math.max(0, Math.min(1440, parseInt(value, 10) || 0));
+    task.duration = mins;
+    ttTick();
+    apiPost({ action: 'update', sheet: 'tasks', id: taskId, payload: { duration: mins } })
+        .catch(e => console.error('ttUpdateTaskEstimate failed:', e));
 }
 
 function ttRenderTodoItem(slotIndex, t) {
