@@ -211,6 +211,8 @@
         ritual_logs: new Set(['id','user_id','date','duration_seconds','affirmation_count','mood_after','completed']),
         gym_workouts: new Set(['id','user_id','date','exercise_name','workout_type','duration_minutes','sets','reps','weight','notes']),
         gym_exercises: new Set(['id','user_id','name','muscle_group','equipment','description']),
+        gym_plans: new Set(['id','user_id','name','exercises_json']),
+        gym_sessions: new Set(['id','user_id','date','plan_id','plan_name','workout_json','completed']),
         pomodoro_sessions: new Set(['id','user_id','date','type','duration','habit_id','task_id','completed']),
         pomodoro_badges: new Set(['id','user_id','badge_type','unlocked_at','total_sessions']),
         diary_templates: new Set(['id','user_id','title','content','category','is_default','sort_order']),
@@ -230,7 +232,10 @@
         // "Things I can eat" library — reusable foods you pick from when planning meals.
         meal_items: new Set(['id','user_id','name','slots','healthy','favorite','use_count','notes','sort_order','created_at','updated_at']),
         // Repeatable weekly template — one row per (weekday 0=Mon..6=Sun, slot).
-        meal_template: new Set(['id','user_id','weekday','slot','planned','created_at','updated_at'])
+        meal_template: new Set(['id','user_id','weekday','slot','planned','created_at','updated_at']),
+        // Time Tracker — 6-slot stopwatch grid linked from the Pomodoro page.
+        time_categories: new Set(['id','user_id','slot_index','name','goal_minutes','elapsed_seconds','running','running_since','day','todos_json']),
+        time_logs: new Set(['id','user_id','category_id','category_name','date','duration_seconds','started_at','ended_at'])
     };
 
     // If a write fails because a column doesn't exist yet (e.g. a column added in a
@@ -309,12 +314,13 @@
             'planner_events','tasks','expenses','habits','habit_logs','diary',
             'vision_board','settings','funds','fund_contributions','assets','asset_snapshots','people','people_debts',
             'reminders','diary_templates','diary_tags','diary_achievements',
-            'gym_workouts','gym_exercises','notes','vision_images',
+            'gym_workouts','gym_exercises','gym_plans','gym_sessions','notes','vision_images',
             'pomodoro_settings','pomodoro_sessions','pomodoro_badges','vision_tdp',
             'book_library','book_summaries','reader_settings','mural_projects',
             'mural_categories','mural_elements','vision_affirmations','ritual_logs',
             'english_sessions','english_messages','wishlist',
-            'meal_plan','meal_day','meal_items','meal_template'
+            'meal_plan','meal_day','meal_items','meal_template',
+            'time_categories','time_logs'
         ];
     }
 })();

@@ -384,7 +384,9 @@ const VIEW_MAP = {
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js',   render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
-    meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' }
+    meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
+    timeTracker:   { src: 'view-time-tracker.js?v=20260915a', render: 'renderTimeTracker' },
+    timeAnalysis:  { src: 'view-time-tracker.js?v=20260915a', render: 'renderTimeAnalysis' }
 };
 
 const _loadedScripts = new Set();
@@ -418,6 +420,7 @@ window.ensureViewLoaded = ensureViewLoaded;
 async function routeTo(viewName) {
     // Cleanup any active intervals from specialized views
     if (typeof clearLifeTimer === 'function') clearLifeTimer();
+    if (typeof ttStopAllTimers === 'function') ttStopAllTimers();
 
     // Leaving/entering a view resets the Habits "manage" mode so Habits opens on the
     // tracker by default (the manager is opened explicitly via its button).
@@ -466,7 +469,8 @@ async function routeTo(viewName) {
         mural: 'Mural', settings: 'Settings', pomodoro: 'Pomodoro',
         notes: 'Notes', gym: 'Gym', chimes: 'Chimes', tutor: 'Tutor',
         meditation: 'Meditate', reader: 'Reader', lifeCalendar: 'Life',
-        dailyTools: 'Daily Life Tools', wishlist: 'Wishlist', meals: 'Food Planner'
+        dailyTools: 'Daily Life Tools', wishlist: 'Wishlist', meals: 'Food Planner',
+        timeTracker: 'Time Spent On', timeAnalysis: 'Time Analysis'
     };
     const headerBar = document.querySelector('.main-header-bar');
     if (headerBar) headerBar.setAttribute('data-page-title', PAGE_TITLES[viewName] || '');

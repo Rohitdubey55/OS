@@ -894,6 +894,10 @@ function renderPomodoroHTML() {
         <div class="pomo-header">
             <h1 class="pomo-title">Pomodoro Timer</h1>
             <div class="pomo-actions">
+                <button class="pomo-action-btn" onclick="routeTo('timeTracker')" title="Time spent on…" style="width:auto; padding:0 12px; gap:6px; display:inline-flex; align-items:center; font-size:12.5px; font-weight:700;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>
+                    Time spent on
+                </button>
                 <button class="pomo-action-btn" onclick="openPomodoroSettings()" title="Settings">
                     <i data-icon="settings" style="width:18px"></i>
                 </button>
