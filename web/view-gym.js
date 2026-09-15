@@ -109,6 +109,70 @@ const GYM_CATEGORY_ICONS = {
   hiit: '⚡',
 };
 
+// Stroke icons, matching the rest of the app's icon language.
+const GYM_SVG = {
+  dumbbell: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5v11"/><path d="M17.5 6.5v11"/><path d="M3.5 9v6"/><path d="M20.5 9v6"/><path d="M6.5 12h11"/></svg>',
+  check: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  plus: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  close: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>',
+  play: '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="7,4 20,12 7,20"/></svg>',
+  edit: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>',
+  clock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>'
+};
+
+// What you did on this exercise last time — the number to beat, shown under its name.
+function gymLastPerformance(exName) {
+  const todayStr = gymTodayStr();
+  const target = String(exName || '').toLowerCase();
+  const past = (gymSessions || [])
+    .filter(s => s.date && s.date !== todayStr)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  for (const s of past) {
+    let w;
+    try { w = JSON.parse(s.workout_json || '{}'); } catch (e) { continue; }
+    const ex = (w.exercises || []).find(e => String(e.name || '').toLowerCase() === target);
+    if (!ex) continue;
+    const doneSets = (ex.sets || []).filter(st => st.done);
+    const use = doneSets.length ? doneSets : (ex.sets || []);
+    if (!use.length) continue;
+    const best = use.reduce((a, b) => (Number(b.weight) || 0) > (Number(a.weight) || 0) ? b : a);
+    return { date: s.date, setCount: use.length, reps: best.reps || 0, weight: best.weight || 0 };
+  }
+  return null;
+}
+
+// The set-by-set record of the last time this exercise was trained, so each row
+// can show the number to beat (the "Previous" column).
+function gymLastSets(exName) {
+  const todayStr = gymTodayStr();
+  const target = String(exName || '').toLowerCase();
+  const past = (gymSessions || [])
+    .filter(s => s.date && s.date !== todayStr)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  for (const s of past) {
+    let w;
+    try { w = JSON.parse(s.workout_json || '{}'); } catch (e) { continue; }
+    const ex = (w.exercises || []).find(e => String(e.name || '').toLowerCase() === target);
+    if (ex && (ex.sets || []).length) return { date: s.date, sets: ex.sets };
+  }
+  return null;
+}
+
+function gymShortDate(dateStr) {
+  const d = new Date(String(dateStr) + 'T00:00:00');
+  if (isNaN(d.getTime())) return dateStr || '';
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+// Total weight moved in the completed sets — the honest measure of a session.
+function gymSessionVolume() {
+  if (!gymTodaySession) return 0;
+  return (gymTodaySession.exercises || []).reduce((total, ex) =>
+    total + (ex.sets || []).reduce((s, st) =>
+      s + (st.done ? (Number(st.reps) || 0) * (Number(st.weight) || 0) : 0), 0), 0);
+}
+
 /* ═══════════════════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════════════════ */
@@ -363,24 +427,32 @@ function gymRenderActiveWorkout(container) {
 
   const exCards = exercises.map((ex, ei) => gymRenderExerciseCard(ex, ei)).join('');
 
+  const volume = Math.round(gymSessionVolume());
+
   container.innerHTML = `
     <div class="gym-workout-header">
       <div class="gym-workout-header-top">
-        <div class="gym-workout-plan-name">${escapeHtml(planName)}</div>
-        <div class="gym-elapsed-timer" id="gymElapsedTimer">--:--</div>
+        <div>
+          <div class="gym-workout-plan-name">${escapeHtml(planName)}</div>
+          <div class="gym-workout-sub">${exercises.length} exercise${exercises.length !== 1 ? 's' : ''} · in progress</div>
+        </div>
+        <div class="gym-elapsed-timer" id="gymElapsedTimer">${GYM_SVG.clock}<span>--:--</span></div>
       </div>
       <div class="gym-progress-bar-wrap">
         <div class="gym-progress-bar" id="gymProgressBar" style="width:${pct}%"></div>
       </div>
-      <div class="gym-progress-label" id="gymProgressLabel">${doneSets} / ${totalSets} sets done</div>
+      <div class="gym-workout-stats">
+        <span id="gymProgressLabel">${doneSets} / ${totalSets} sets done</span>
+        <span id="gymVolumeLabel">${volume.toLocaleString()} kg lifted</span>
+      </div>
     </div>
 
     <div id="gymExerciseList">
       ${exCards}
     </div>
 
-    <button class="gym-add-ex-btn" onclick="gymOpenExPicker()">＋ Add Exercise</button>
-    <button class="gym-complete-btn" onclick="gymCompleteWorkout()">Complete Workout ✓</button>
+    <button class="gym-add-ex-btn" onclick="gymOpenExPicker()">${GYM_SVG.plus} Add exercise</button>
+    <button class="gym-complete-btn" onclick="gymCompleteWorkout()">${GYM_SVG.check} Complete workout</button>
 
     <!-- Exercise picker overlay (rendered inside content area) -->
     <div id="gymExPickerOverlay" style="display:none"></div>
@@ -395,33 +467,49 @@ function gymRenderExerciseCard(ex, ei) {
   const icon = GYM_CATEGORY_ICONS[ex.category || 'strength'] || '💪';
   const sets = ex.sets || [];
 
+  const prevSession = gymLastSets(ex.name);
+  const prevSets = prevSession ? prevSession.sets : [];
+
   const setRows = sets.map((set, si) => `
     <div class="gym-set-row ${set.done ? 'done' : ''}" id="gymSetRow-${ei}-${si}">
-      <span class="gym-set-num">Set ${si + 1}</span>
-      <input type="number" class="gym-set-input" value="${set.reps || ''}" placeholder="0"
-             min="0" onchange="gymUpdateSet(${ei}, ${si}, 'reps', this.value)" title="Reps">
-      <span class="gym-set-x">×</span>
-      <input type="number" class="gym-set-input" value="${set.weight || ''}" placeholder="0"
-             min="0" step="0.5" onchange="gymUpdateSet(${ei}, ${si}, 'weight', this.value)" title="Weight">
-      <span class="gym-set-unit">kg</span>
-      <button class="gym-set-check ${set.done ? 'done' : ''}" onclick="gymToggleSet(${ei}, ${si})" title="Mark done">✓</button>
+      <span class="gym-set-num">${si + 1}</span>
+      <span class="gym-set-prev">${prevSets[si] ? `${prevSets[si].reps || 0} × ${prevSets[si].weight || 0}kg` : '—'}</span>
+      <div class="gym-set-field">
+        <input type="number" class="gym-set-input" value="${set.reps || ''}" placeholder="0"
+               min="0" onchange="gymUpdateSet(${ei}, ${si}, 'reps', this.value)" aria-label="Reps">
+      </div>
+      <div class="gym-set-field">
+        <input type="number" class="gym-set-input" value="${set.weight || ''}" placeholder="0"
+               min="0" step="0.5" onchange="gymUpdateSet(${ei}, ${si}, 'weight', this.value)" aria-label="Weight">
+        <em>kg</em>
+      </div>
+      <button class="gym-set-check ${set.done ? 'done' : ''}" onclick="gymToggleSet(${ei}, ${si})" title="Mark set done">${GYM_SVG.check}</button>
     </div>
   `).join('');
+
+  const last = gymLastPerformance(ex.name);
+  const lastLine = last
+    ? `Last session ${gymShortDate(last.date)} · best ${last.reps} × ${last.weight}kg`
+    : 'First time — today sets the baseline';
 
   return `
     <div class="gym-exercise-card" id="gymExCard-${ei}">
       <div class="gym-ex-header">
         <div class="gym-ex-title">
-          <span class="gym-ex-icon">${icon}</span>
-          <span class="gym-ex-name">${escapeHtml(ex.name)}</span>
+          <span class="gym-ex-icon" style="--chip-color:${color}">${GYM_SVG.dumbbell}</span>
+          <span class="gym-ex-heading">
+            <span class="gym-ex-name">${escapeHtml(ex.name)}</span>
+            <span class="gym-ex-last">${escapeHtml(lastLine)}</span>
+          </span>
           <span class="gym-muscle-chip" style="--chip-color:${color}">${escapeHtml(ex.muscle_group || '')}</span>
         </div>
-        <button class="gym-ex-remove-btn" onclick="gymRemoveExercise(${ei})" title="Remove exercise">×</button>
+        <button class="gym-ex-remove-btn" onclick="gymRemoveExercise(${ei})" title="Remove exercise">${GYM_SVG.close}</button>
       </div>
+      <div class="gym-set-head"><span>Set</span><span>Previous</span><span>Reps</span><span>Weight</span><span></span></div>
       <div class="gym-sets-list" id="gymSetsList-${ei}">
         ${setRows}
       </div>
-      <button class="gym-add-set-btn" onclick="gymAddSet(${ei})">＋ Set</button>
+      <button class="gym-add-set-btn" onclick="gymAddSet(${ei})">${GYM_SVG.plus} Add set</button>
     </div>
   `;
 }
@@ -463,6 +551,8 @@ function gymRefreshProgress() {
   const label = document.getElementById('gymProgressLabel');
   if (bar) bar.style.width = pct + '%';
   if (label) label.textContent = `${doneSets} / ${totalSets} sets done`;
+  const vol = document.getElementById('gymVolumeLabel');
+  if (vol) vol.textContent = `${Math.round(gymSessionVolume()).toLocaleString()} kg lifted`;
 }
 
 /* ── Add / Remove exercise / set ── */
@@ -738,9 +828,9 @@ function gymRenderPlans(container) {
         <div class="gym-plan-card-meta">${exercises.length} exercise${exercises.length !== 1 ? 's' : ''}</div>
         <div class="gym-plan-card-muscles">${chips}</div>
         <div class="gym-plan-card-actions">
-          <button class="gym-plan-action-btn gym-plan-start-btn" onclick="gymStartFromPlan('${p.id}');gymSwitchTab('today')" title="Start today">▶ Start</button>
-          <button class="gym-plan-action-btn" onclick="gymOpenBuilder('${p.id}')" title="Edit plan">✎ Edit</button>
-          <button class="gym-plan-action-btn gym-plan-delete-btn" onclick="gymDeletePlan('${p.id}')" title="Delete plan">✕</button>
+          <button class="gym-plan-action-btn gym-plan-start-btn" onclick="gymStartFromPlan('${p.id}');gymSwitchTab('today')" title="Start today">${GYM_SVG.play} Start</button>
+          <button class="gym-plan-action-btn" onclick="gymOpenBuilder('${p.id}')" title="Edit plan">${GYM_SVG.edit} Edit</button>
+          <button class="gym-plan-action-btn gym-plan-delete-btn" onclick="gymDeletePlan('${p.id}')" title="Delete plan">${GYM_SVG.trash}</button>
         </div>
       </div>
     `;
@@ -750,7 +840,7 @@ function gymRenderPlans(container) {
     <div class="gym-plans-grid" id="gymPlansGrid">
       ${cards}
       <div class="gym-plan-card gym-plan-card-new" onclick="gymOpenBuilder(null)">
-        <div class="gym-plan-new-icon">＋</div>
+        <div class="gym-plan-new-icon">${GYM_SVG.plus}</div>
         <div class="gym-plan-new-label">New Plan</div>
       </div>
     </div>
