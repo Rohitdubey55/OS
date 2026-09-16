@@ -88,7 +88,8 @@ const TT_ICON = {
     close: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>',
     trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>',
     check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-    plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+    plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    plusClock: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 0-8.5 8.5"/><polyline points="12 7 12 12 15 13.5"/><line x1="18.5" y1="16" x2="18.5" y2="23"/><line x1="15" y1="19.5" x2="22" y2="19.5"/></svg>'
 };
 
 /* ═══════════════════════════════════════════════════════
@@ -99,8 +100,10 @@ const TT_ICON = {
 const TT_DEFAULT_TASK_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
 let ttShowUndated = {};   // slot_index -> include tasks with no due date
 
-// Mirrors getTaskCategories() in view-tasks.js, which isn't loaded on this page.
+// The one category vocabulary Tasks, Habits and this page share. main.js owns
+// it; this is the standalone fallback for when that hasn't loaded.
 function ttTaskCategories() {
+    if (typeof window.appCategories === 'function') return window.appCategories();
     const settings = state.data.settings && state.data.settings[0] || {};
     let list = [];
     if (settings.task_categories) {
@@ -113,9 +116,12 @@ function ttTaskCategories() {
         if (!list.length) list = String(raw).split(',').map(c => c.trim()).filter(Boolean);
     }
     if (!list.length) list = [...TT_DEFAULT_TASK_CATEGORIES];
-    // Include any category already in use on a task, so nothing is unreachable.
+    // Include any category already in use, so nothing is unreachable.
     (state.data.tasks || []).forEach(t => {
         if (t.category && !list.includes(t.category)) list.push(t.category);
+    });
+    (state.data.habits || []).forEach(h => {
+        if (h.category && !list.includes(h.category)) list.push(h.category);
     });
     return list;
 }
@@ -146,22 +152,9 @@ function ttFindTask(taskId) {
     return (state.data.tasks || []).find(t => String(t.id) === String(taskId));
 }
 
-/* ── Habits ── Habits have no category; the app groups them by routine
-   (Morning / Work / Evening …), so that's what a card links to. */
-
-const TT_DEFAULT_ROUTINES = ['Morning', 'Work', 'Evening'];
-const TT_ALL_ROUTINES = '*all*';
-
-function ttHabitRoutines() {
-    const settings = state.data.settings && state.data.settings[0] || {};
-    let list = String(settings.habit_routines || TT_DEFAULT_ROUTINES.join(','))
-        .split(',').map(r => r.trim()).filter(Boolean);
-    (state.data.habits || []).forEach(h => {
-        const r = h.routine || 'General';
-        if (!list.includes(r)) list.push(r);
-    });
-    return list;
-}
+/* ── Habits ── A habit carries the SAME category as a task (set on the habit's
+   edit form), so one picker per card pulls in both. A habit's "routine" is a
+   different axis — where in the day it sits — and stays on the Habits page. */
 
 function ttHabitDoneToday(habitId) {
     const today = ttTodayStr();
@@ -176,16 +169,20 @@ function ttHabitScheduledToday(h) {
     return true;
 }
 
-// Habits in this card's routine that are due today and not yet ticked off.
+// Habits filed under this card's category that are due today. Completed ones
+// drop to the bottom rather than vanishing mid-session.
 function ttHabitsFor(cat) {
-    const linked = cat.habit_routine;
+    const linked = cat.task_category;
     if (!linked) return [];
-    const all = (state.data.habits || []).filter(h => {
-        if (linked !== TT_ALL_ROUTINES && String(h.routine || 'General') !== String(linked)) return false;
-        return ttHabitScheduledToday(h);
-    });
-    // Completed ones drop to the bottom rather than vanishing mid-session.
+    const all = (state.data.habits || []).filter(h =>
+        String(h.category || '') === String(linked) && ttHabitScheduledToday(h));
     return all.sort((a, b) => (ttHabitDoneToday(a.id) ? 1 : 0) - (ttHabitDoneToday(b.id) ? 1 : 0));
+}
+
+// Habits due today that have no category yet. They'd be invisible here, so the
+// card says so once rather than leaving you wondering where they went.
+function ttUncategorisedHabitCount() {
+    return (state.data.habits || []).filter(h => !h.category && ttHabitScheduledToday(h)).length;
 }
 
 function ttFindHabit(habitId) {
@@ -330,11 +327,11 @@ async function ttSaveCard(slotIndex) {
     }
 }
 
-async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId, habitId) {
+async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId, habitId, dateStr) {
     const task = taskId ? ttFindTask(taskId) : null;
     const habit = habitId ? ttFindHabit(habitId) : null;
     const payload = {
-        category_id: cat.id, category_name: cat.name, date: ttTodayStr(),
+        category_id: cat.id, category_name: cat.name, date: dateStr || ttTodayStr(),
         duration_seconds: durationSeconds, started_at: startedAt, ended_at: endedAt
     };
     if (taskId) {
@@ -521,8 +518,8 @@ function ttTick() {
     ttCategories.forEach(cat => {
         const sumEl = document.getElementById('ttTaskSum_' + cat.slot_index);
         if (!sumEl) return;
-        if (!cat.task_category && !cat.habit_routine) { sumEl.innerHTML = ''; return; }
-        const { tasks } = cat.task_category ? ttTasksFor(cat) : { tasks: [] };
+        if (!cat.task_category) { sumEl.innerHTML = ''; return; }
+        const { tasks } = ttTasksFor(cat);
         const habits = ttHabitsFor(cat);
         let planned = 0, tracked = 0;
         tasks.forEach(t => {
@@ -578,7 +575,7 @@ function ttTick() {
 ═══════════════════════════════════════════════════════ */
 
 const TT_SYNC_FIELDS = ['name', 'goal_minutes', 'elapsed_seconds', 'running', 'running_since',
-    'day', 'todos_json', 'task_category', 'habit_routine', 'active_task_id', 'active_habit_id'];
+    'day', 'todos_json', 'task_category', 'active_task_id', 'active_habit_id'];
 const TT_TOUCH_GRACE_MS = 6000;
 let ttSyncTimer = null;
 let ttRealtimeChannel = null;
@@ -876,8 +873,10 @@ function ttSharedCSS() {
 async function renderTimeTracker() {
     const main = document.getElementById('main');
     // Drop a sheet hoisted onto <body> on a previous visit, so ids stay unique.
-    const staleSheet = document.getElementById('ttLogModal');
-    if (staleSheet && staleSheet.parentElement === document.body) staleSheet.remove();
+    ['ttLogModal', 'ttManualModal'].forEach(id => {
+        const stale = document.getElementById(id);
+        if (stale && stale.parentElement === document.body) stale.remove();
+    });
     main.innerHTML = `<div class="tt-wrap" style="padding:60px 20px;text-align:center;color:var(--text-3);font-size:13.5px">Loading your stopwatches…</div>`;
     try {
         await ttLoadCategories();
@@ -1012,6 +1011,34 @@ function ttPageHTML() {
             display: flex; align-items: center; justify-content: center; transition: color .15s ease, background .15s ease;
         }
         .tt-reset:hover { color: var(--danger, #EF4444); background: var(--surface-3); }
+        .tt-manual {
+            width: 42px; flex: none; border: 1px solid var(--border-color); border-radius: 12px;
+            background: var(--surface-2); color: var(--text-3); cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: color .15s ease, background .15s ease;
+        }
+        .tt-manual:hover { color: var(--primary); background: var(--surface-3); }
+
+        .tt-man-form { display: flex; flex-direction: column; gap: 14px; padding-top: 14px; }
+        .tt-man-row { display: flex; flex-direction: column; gap: 6px; }
+        .tt-man-row > span { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+        .tt-man-form select, .tt-man-form input[type="number"], .tt-man-form input[type="date"] {
+            height: 42px; width: 100%; border: 1px solid var(--border-color) !important; border-radius: 12px !important;
+            background: var(--surface-2) !important; color: var(--text-1); font-family: inherit; font-size: 14px !important;
+            font-weight: 600; padding: 0 12px !important; box-sizing: border-box;
+        }
+        .tt-man-quick { display: flex; gap: 8px; flex-wrap: wrap; }
+        .tt-man-quick button {
+            height: 32px; padding: 0 12px; border: 1px solid var(--border-color); border-radius: 10px;
+            background: var(--surface-2); color: var(--text-2); font-family: inherit; font-size: 12.5px;
+            font-weight: 700; cursor: pointer;
+        }
+        .tt-man-quick button:hover { background: var(--surface-3); color: var(--text-1); }
+        .tt-man-save {
+            height: 44px; border: none; border-radius: 12px; background: var(--primary); color: #fff;
+            font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer; margin-top: 2px;
+        }
+        .tt-man-save:hover { filter: brightness(1.07); }
+        .tt-man-note { font-size: 12px; color: var(--text-3); font-weight: 600; line-height: 1.5; margin: 0; }
 
         .tt-todos { display: flex; flex-direction: column; flex: 1; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--border-color); }
         .tt-todos-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -1158,6 +1185,19 @@ function ttPageHTML() {
         </div>
     </div>
 
+    <div class="tt-sheet hidden" id="ttManualModal" onclick="ttCloseManualBg(event)">
+        <div class="tt-sheet-inner">
+            <div class="tt-sheet-head">
+                <div>
+                    <h3>Add time</h3>
+                    <p id="ttManualSub">Log a stretch you didn't run the stopwatch for</p>
+                </div>
+                <button class="tt-sheet-close" onclick="ttCloseManual()">${TT_ICON.close}</button>
+            </div>
+            <div id="ttManualBody" class="tt-sheet-body"></div>
+        </div>
+    </div>
+
     <div class="tt-sheet hidden" id="ttLogModal" onclick="ttCloseLogModalBg(event)">
         <div class="tt-sheet-inner">
             <div class="tt-sheet-head">
@@ -1207,6 +1247,7 @@ function ttRenderCard(cat) {
                     title="${cat.running ? 'Pause this stopwatch' : 'Start this stopwatch'}">
                 ${cat.running ? TT_ICON.pause : TT_ICON.play}<span>${cat.running ? 'Pause' : 'Start'}</span>
             </button>
+            <button class="tt-manual" onclick="ttOpenManual(${slot})" title="Log time you forgot to run the stopwatch for">${TT_ICON.plusClock}</button>
             <button class="tt-reset" onclick="ttResetTimer(${slot})" title="Reset today's time">${TT_ICON.reset}</button>
         </div>
 
@@ -1224,27 +1265,20 @@ function ttRenderTasksSection(cat) {
     const slot = cat.slot_index;
     const cats = ttTaskCategories();
     const linked = cat.task_category || '';
-    const routines = ttHabitRoutines();
-    const linkedRoutine = cat.habit_routine || '';
 
     const picker = `
-        <select class="tt-cat-picker" onchange="ttSetCardCategory(${slot}, this.value)" title="Which task category feeds this card">
-            <option value="" ${linked ? '' : 'selected'}>Tasks…</option>
+        <select class="tt-cat-picker" onchange="ttSetCardCategory(${slot}, this.value)" title="Which category feeds this card — its tasks and its habits">
+            <option value="" ${linked ? '' : 'selected'}>Pick a category…</option>
             ${cats.map(c => `<option value="${ttEscape(c)}" ${String(c) === String(linked) ? 'selected' : ''}>${ttEscape(c)}</option>`).join('')}
-        </select>
-        <select class="tt-cat-picker" onchange="ttSetCardRoutine(${slot}, this.value)" title="Which habit routine feeds this card">
-            <option value="" ${linkedRoutine ? '' : 'selected'}>Habits…</option>
-            <option value="${TT_ALL_ROUTINES}" ${linkedRoutine === TT_ALL_ROUTINES ? 'selected' : ''}>All habits</option>
-            ${routines.map(r => `<option value="${ttEscape(r)}" ${String(r) === String(linkedRoutine) ? 'selected' : ''}>${ttEscape(r)}</option>`).join('')}
         </select>`;
 
     const head = `<div class="tt-todos-head"><b>Tasks &amp; habits</b><span class="tt-pickers">${picker}</span></div>`;
 
-    if (!linked && !linkedRoutine) {
-        return head + '<div class="tt-empty">Link a task category or a habit routine to pull them in here.</div>';
+    if (!linked) {
+        return head + '<div class="tt-empty">Pick a category to pull in its tasks and habits.</div>';
     }
 
-    const { tasks, undated } = linked ? ttTasksFor(cat) : { tasks: [], undated: 0 };
+    const { tasks, undated } = ttTasksFor(cat);
     const habits = ttHabitsFor(cat);
 
     let rows = tasks.map(t => ttRenderTaskRow(slot, t, cat)).join('');
@@ -1252,8 +1286,14 @@ function ttRenderTasksSection(cat) {
         rows += `<div class="tt-row-label">Habits</div>` + habits.map(h => ttRenderHabitRow(slot, h, cat)).join('');
     }
     if (!rows) {
-        rows = `<div class="tt-empty">${linked ? 'Nothing due today here.' : 'No habits due today in this routine.'}</div>`;
+        rows = `<div class="tt-empty">Nothing due today in ${ttEscape(linked)}.</div>`;
     }
+
+    // Habits predate the shared category, so say where the missing ones are.
+    const orphanHabits = habits.length ? 0 : ttUncategorisedHabitCount();
+    const orphanLine = orphanHabits
+        ? `<button class="tt-undated" onclick="routeTo('habits')" title="Open Habits to file them">${orphanHabits} habit${orphanHabits !== 1 ? 's have' : ' has'} no category yet — set one in Habits</button>`
+        : '';
 
     const undatedLine = undated
         ? `<button class="tt-undated" onclick="ttToggleUndated(${slot})">${ttShowUndated[slot] ? 'Hide' : 'Show'} ${undated} undated task${undated !== 1 ? 's' : ''}</button>`
@@ -1268,6 +1308,7 @@ function ttRenderTasksSection(cat) {
 
     return `${head}
         <div class="tt-todo-list" id="ttTaskList_${slot}">${rows}</div>
+        ${orphanLine}
         ${undatedLine}
         ${addBox}`;
 }
@@ -1291,15 +1332,6 @@ function ttRenderHabitRow(slot, habit, cat) {
         <button class="tt-task-play ${isActive ? 'on' : ''}" onclick="ttToggleHabit(${slot}, '${habit.id}')"
                 title="${isActive ? 'Pause' : 'Start this habit'}">${isActive ? TT_ICON.pause : TT_ICON.play}</button>
     </div>`;
-}
-
-function ttSetCardRoutine(slot, value) {
-    const cat = ttFindCat(slot);
-    if (!cat) return;
-    cat.habit_routine = value || null;
-    ttScheduleSave(cat, { habit_routine: cat.habit_routine }, 0);
-    ttRenderTasksInto(cat);
-    ttTick();
 }
 
 // Ticking a habit writes the same habit_logs row the Habits page uses.
@@ -1452,6 +1484,130 @@ function ttRenderTodoItem(slotIndex, t) {
 /* ═══════════════════════════════════════════════════════
    LOG SHEET
 ═══════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════
+   MANUAL TIME — for the stretch you did away from the app, or the hour you
+   forgot to start the clock on. It writes the same time_logs row a tracked
+   interval does, so the card, the per-item totals and Analysis all pick it up.
+═══════════════════════════════════════════════════════ */
+
+let ttManualSlot = null;
+
+function ttOpenManual(slot) {
+    const cat = ttFindCat(slot);
+    if (!cat) return;
+    ttManualSlot = slot;
+    const modal = document.getElementById('ttManualModal');
+    if (!modal) return;
+    // Same containing-block trap as the log sheet: #main is transformed.
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
+
+    const sub = document.getElementById('ttManualSub');
+    if (sub) sub.textContent = `Into ${cat.name || 'this category'}`;
+
+    const { tasks } = cat.task_category ? ttTasksFor(cat) : { tasks: [] };
+    const habits = ttHabitsFor(cat);
+    const itemOptions = [
+        '<option value="">The category itself</option>',
+        ...tasks.map(t => `<option value="task:${ttEscape(t.id)}">${ttEscape(t.title || 'Task')}</option>`),
+        ...habits.map(h => `<option value="habit:${ttEscape(h.id)}">${ttEscape(h.habit_name || 'Habit')}</option>`)
+    ].join('');
+
+    const body = document.getElementById('ttManualBody');
+    if (body) body.innerHTML = `
+        <div class="tt-man-form">
+            <div class="tt-man-row">
+                <span>How long</span>
+                <input type="number" id="ttManualMins" min="1" max="1440" step="5" placeholder="Minutes"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault(); ttSubmitManual();}" />
+                <div class="tt-man-quick">
+                    <button type="button" onclick="ttManualQuick(15)">+15m</button>
+                    <button type="button" onclick="ttManualQuick(30)">+30m</button>
+                    <button type="button" onclick="ttManualQuick(45)">+45m</button>
+                    <button type="button" onclick="ttManualQuick(60)">+1h</button>
+                    <button type="button" onclick="ttManualQuick(120)">+2h</button>
+                </div>
+            </div>
+            <div class="tt-man-row">
+                <span>Against</span>
+                <select id="ttManualItem">${itemOptions}</select>
+            </div>
+            <div class="tt-man-row">
+                <span>Day</span>
+                <input type="date" id="ttManualDate" value="${ttTodayStr()}" max="${ttTodayStr()}" />
+            </div>
+            <button class="tt-man-save" onclick="ttSubmitManual()">Add to ${ttEscape(cat.name || 'category')}</button>
+            <p class="tt-man-note">Time added for today counts toward the card's clock and its goal. An earlier day only shows up in the Log and Analysis.</p>
+        </div>`;
+
+    modal.classList.remove('hidden');
+    setTimeout(() => document.getElementById('ttManualMins')?.focus(), 50);
+}
+
+function ttManualQuick(mins) {
+    const el = document.getElementById('ttManualMins');
+    if (!el) return;
+    el.value = (parseInt(el.value, 10) || 0) + mins;
+    el.focus();
+}
+
+function ttCloseManual() {
+    document.getElementById('ttManualModal')?.classList.add('hidden');
+    ttManualSlot = null;
+}
+
+function ttCloseManualBg(e) {
+    if (e.target && e.target.id === 'ttManualModal') ttCloseManual();
+}
+
+async function ttSubmitManual() {
+    const cat = ttFindCat(ttManualSlot);
+    if (!cat) return;
+
+    const mins = parseInt(document.getElementById('ttManualMins')?.value, 10);
+    if (!mins || mins <= 0) {
+        if (typeof showToast === 'function') showToast('Enter how many minutes to add');
+        return;
+    }
+    const seconds = Math.min(mins, 1440) * 60;
+
+    const raw = document.getElementById('ttManualItem')?.value || '';
+    const [kind, id] = raw ? raw.split(':') : [null, null];
+    const dateStr = document.getElementById('ttManualDate')?.value || ttTodayStr();
+    const today = ttTodayStr();
+
+    // The log row wants a plausible window; back-date it from the end of the day
+    // it belongs to, so the Log reads sensibly and the ordering holds.
+    const endedAt = dateStr === today ? new Date() : new Date(dateStr + 'T18:00:00');
+    const startedAt = new Date(endedAt.getTime() - seconds * 1000);
+
+    ttCloseManual();
+
+    if (dateStr === today) {
+        cat.elapsed_seconds = (cat.elapsed_seconds || 0) + seconds;
+        // Restart the running interval from now, so the banked time isn't
+        // double-counted against running_since.
+        if (cat.running) {
+            ttCloseInterval(cat);                       // bank what's on the clock first
+            cat.running_since = new Date().toISOString();
+            ttPersistCategory(cat, {
+                elapsed_seconds: cat.elapsed_seconds, running_since: cat.running_since
+            });
+        } else {
+            ttPersistCategory(cat, { elapsed_seconds: cat.elapsed_seconds });
+        }
+    }
+
+    await ttCreateLog(cat, startedAt.toISOString(), endedAt.toISOString(), seconds,
+        kind === 'task' ? id : null, kind === 'habit' ? id : null, dateStr);
+
+    ttSyncCardState(cat);
+    ttRenderTasksInto(cat);
+    ttTick();
+    if (typeof showToast === 'function') {
+        showToast(`Added ${ttFormatDuration(seconds)} to ${cat.name || 'this category'}`);
+    }
+}
 
 async function ttOpenLogModal() {
     const modal = document.getElementById('ttLogModal');

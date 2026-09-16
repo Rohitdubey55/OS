@@ -362,12 +362,40 @@ function addLongPressListener(selector, callback) {
 // --- LAZY VIEW LOADING ---
 // Each view's JS is loaded on demand the first time the user navigates to it.
 // This drops the cold-start payload from ~2.7 MB to ~200 KB.
+/* ── Shared categories ─────────────────────────────────────────────────────
+   Tasks, Habits and the Time Tracker all label work with the SAME set of
+   categories, so a "Time spent on" card can pull in a category's tasks and its
+   habits together. The canonical list lives in settings.task_categories (the
+   Tasks app's category manager writes it); anything already in use on a task
+   or a habit is folded in so nothing is unreachable. A habit's "routine" is a
+   different axis — when in the day it happens — and stays out of this.        */
+
+const APP_DEFAULT_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
+
+window.appCategories = function appCategories() {
+    const settings = (state.data.settings && state.data.settings[0]) || {};
+    let list = [];
+    if (settings.task_categories) {
+        let raw = settings.task_categories;
+        if (String(raw).startsWith('VIEW:')) raw = String(raw).split('|')[1] || '';
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) list = parsed.slice();
+        } catch (e) { }
+        if (!list.length) list = String(raw).split(',').map(c => c.trim()).filter(Boolean);
+    }
+    if (!list.length) list = APP_DEFAULT_CATEGORIES.slice();
+    (state.data.tasks || []).forEach(t => { if (t.category && !list.includes(t.category)) list.push(t.category); });
+    (state.data.habits || []).forEach(h => { if (h.category && !list.includes(h.category)) list.push(h.category); });
+    return list;
+};
+
 const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js?v=20260622', render: 'renderDashboard' },
     calendar:      { src: 'view-calendar.js?v=20260621', render: 'renderCalendar' },
-    tasks:         { src: 'view-tasks.js?v=20260619', render: 'renderTasks' },
+    tasks:         { src: 'view-tasks.js?v=20260916c', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
-    habits:        { src: 'view-habits.js?v=20260621b', render: 'renderHabits' },
+    habits:        { src: 'view-habits.js?v=20260916c', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20260621k', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260915d', render: 'renderSettings' },
@@ -385,8 +413,8 @@ const VIEW_MAP = {
     dailyTools:    { src: 'view-daily-tools.js?v=20260915c', render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
     meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
-    timeTracker:   { src: 'view-time-tracker.js?v=20260916b', render: 'renderTimeTracker' },
-    timeAnalysis:  { src: 'view-time-tracker.js?v=20260916b', render: 'renderTimeAnalysis' }
+    timeTracker:   { src: 'view-time-tracker.js?v=20260916c', render: 'renderTimeTracker' },
+    timeAnalysis:  { src: 'view-time-tracker.js?v=20260916c', render: 'renderTimeAnalysis' }
 };
 
 const _loadedScripts = new Set();
@@ -2025,6 +2053,10 @@ document.addEventListener('click', async (e) => {
         const pomoLength = pomoLenEl ? parseInt(pomoLenEl.value, 10) || 25 : 25;
         const routineEl = document.getElementById('mHabitRoutine');
         const routine = routineEl ? routineEl.value.trim() : '';
+        // Category is the shared label Tasks and the Time Tracker use; routine is
+        // only about when in the day the habit sits.
+        const habitCatEl = document.getElementById('mHabitCategory');
+        const habitCategory = habitCatEl ? habitCatEl.value.trim() : '';
 
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
@@ -2038,6 +2070,7 @@ document.addEventListener('click', async (e) => {
             pomodoro_sessions: pomoSessions,
             pomodoro_length: pomoLength,
             routine: routine,
+            category: habitCategory,
             created_at: new Date().toISOString()
         };
         console.log('[Habit Save] Final payload:', habitPayload);
@@ -2278,6 +2311,10 @@ document.addEventListener('click', async (e) => {
         const pomoLength = pomoLenEl ? parseInt(pomoLenEl.value, 10) || 25 : 25;
         const routineEl = document.getElementById('mHabitRoutine');
         const routine = routineEl ? routineEl.value.trim() : '';
+        // Category is the shared label Tasks and the Time Tracker use; routine is
+        // only about when in the day the habit sits.
+        const habitCatEl = document.getElementById('mHabitCategory');
+        const habitCategory = habitCatEl ? habitCatEl.value.trim() : '';
 
         if (!name) return;
         document.getElementById('universalModal').classList.add('hidden');
@@ -2290,7 +2327,8 @@ document.addEventListener('click', async (e) => {
             emoji: emoji,
             pomodoro_sessions: pomoSessions,
             pomodoro_length: pomoLength,
-            routine: routine
+            routine: routine,
+            category: habitCategory
         };
         console.log('[Habit Update] Final payload:', updatePayload);
         await apiCall('update', 'habits', updatePayload, editId);
