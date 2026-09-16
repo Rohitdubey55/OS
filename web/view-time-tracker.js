@@ -138,20 +138,72 @@ function ttTasksFor(cat) {
     return { tasks: show, undated: undated.length };
 }
 
-// Time tracked against one task today, including the interval currently running.
 function ttTaskTracked(taskId) {
-    const today = ttTodayStr();
-    let sec = (ttLogs || []).reduce((s, l) =>
-        s + (String(l.task_id || '') === String(taskId) && l.date === today ? (l.duration_seconds || 0) : 0), 0);
-    const live = ttCategories.find(c => c.running && String(c.active_task_id || '') === String(taskId));
-    if (live && live.running_since) {
-        sec += Math.max(0, Math.floor((Date.now() - new Date(live.running_since).getTime()) / 1000));
-    }
-    return sec;
+    return ttItemTracked('task', taskId);
 }
 
 function ttFindTask(taskId) {
     return (state.data.tasks || []).find(t => String(t.id) === String(taskId));
+}
+
+/* ── Habits ── Habits have no category; the app groups them by routine
+   (Morning / Work / Evening …), so that's what a card links to. */
+
+const TT_DEFAULT_ROUTINES = ['Morning', 'Work', 'Evening'];
+const TT_ALL_ROUTINES = '*all*';
+
+function ttHabitRoutines() {
+    const settings = state.data.settings && state.data.settings[0] || {};
+    let list = String(settings.habit_routines || TT_DEFAULT_ROUTINES.join(','))
+        .split(',').map(r => r.trim()).filter(Boolean);
+    (state.data.habits || []).forEach(h => {
+        const r = h.routine || 'General';
+        if (!list.includes(r)) list.push(r);
+    });
+    return list;
+}
+
+function ttHabitDoneToday(habitId) {
+    const today = ttTodayStr();
+    return (state.data.habit_logs || []).some(l =>
+        String(l.habit_id) === String(habitId) && String(l.date || '').slice(0, 10) === today);
+}
+
+function ttHabitScheduledToday(h) {
+    if (typeof window.habitScheduledToday === 'function') {
+        try { return window.habitScheduledToday(h); } catch (e) { return true; }
+    }
+    return true;
+}
+
+// Habits in this card's routine that are due today and not yet ticked off.
+function ttHabitsFor(cat) {
+    const linked = cat.habit_routine;
+    if (!linked) return [];
+    const all = (state.data.habits || []).filter(h => {
+        if (linked !== TT_ALL_ROUTINES && String(h.routine || 'General') !== String(linked)) return false;
+        return ttHabitScheduledToday(h);
+    });
+    // Completed ones drop to the bottom rather than vanishing mid-session.
+    return all.sort((a, b) => (ttHabitDoneToday(a.id) ? 1 : 0) - (ttHabitDoneToday(b.id) ? 1 : 0));
+}
+
+function ttFindHabit(habitId) {
+    return (state.data.habits || []).find(h => String(h.id) === String(habitId));
+}
+
+// Time tracked today against one task or habit, including the running interval.
+function ttItemTracked(kind, id) {
+    const today = ttTodayStr();
+    const key = kind === 'habit' ? 'habit_id' : 'task_id';
+    let sec = (ttLogs || []).reduce((s, l) =>
+        s + (String(l[key] || '') === String(id) && l.date === today ? (l.duration_seconds || 0) : 0), 0);
+    const activeKey = kind === 'habit' ? 'active_habit_id' : 'active_task_id';
+    const live = ttCategories.find(c => c.running && String(c[activeKey] || '') === String(id));
+    if (live && live.running_since) {
+        sec += Math.max(0, Math.floor((Date.now() - new Date(live.running_since).getTime()) / 1000));
+    }
+    return sec;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -213,13 +265,19 @@ function ttHandleDayRollover() {
    PERSISTENCE (debounced for text fields, immediate for play/pause)
 ═══════════════════════════════════════════════════════ */
 
+// Anything written here is the freshest truth for a few seconds, so a poll that
+// was already in flight can't roll it back.
+let ttLocalTouch = {};
+
 function ttPersistCategory(cat, fields) {
+    ttLocalTouch[cat.id] = Date.now();
     apiPost({ action: 'update', sheet: 'time_categories', id: cat.id, payload: fields })
         .catch(e => console.error('ttPersistCategory failed:', e));
 }
 
 function ttScheduleSave(cat, fields, delay = 700) {
     Object.assign(cat, fields);
+    ttLocalTouch[cat.id] = Date.now();
     ttPendingFields[cat.id] = Object.assign(ttPendingFields[cat.id] || {}, fields);
     ttSetSaveState(cat, 'dirty');
     clearTimeout(ttSaveTimers[cat.id]);
@@ -272,8 +330,9 @@ async function ttSaveCard(slotIndex) {
     }
 }
 
-async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId) {
+async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId, habitId) {
     const task = taskId ? ttFindTask(taskId) : null;
+    const habit = habitId ? ttFindHabit(habitId) : null;
     const payload = {
         category_id: cat.id, category_name: cat.name, date: ttTodayStr(),
         duration_seconds: durationSeconds, started_at: startedAt, ended_at: endedAt
@@ -281,6 +340,10 @@ async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId) {
     if (taskId) {
         payload.task_id = String(taskId);
         payload.task_title = task ? task.title : '';
+    }
+    if (habitId) {
+        payload.habit_id = String(habitId);
+        payload.task_title = habit ? (habit.habit_name || '') : '';   // shared label column
     }
     // Keep the local list in step so per-task totals update without a refetch.
     ttLogs.unshift({ id: 'local-' + Date.now(), ...payload });
@@ -314,7 +377,7 @@ function ttCloseInterval(cat) {
     const endedAt = new Date();
     const deltaSec = Math.max(0, Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 1000));
     cat.elapsed_seconds = (cat.elapsed_seconds || 0) + deltaSec;
-    if (deltaSec >= 1) ttCreateLog(cat, startedAt, endedAt.toISOString(), deltaSec, cat.active_task_id);
+    if (deltaSec >= 1) ttCreateLog(cat, startedAt, endedAt.toISOString(), deltaSec, cat.active_task_id, cat.active_habit_id);
     return deltaSec;
 }
 
@@ -326,14 +389,16 @@ async function ttToggle(slotIndex) {
         cat.running = true;
         cat.running_since = new Date().toISOString();
         cat.active_task_id = null;
-        ttPersistCategory(cat, { running: true, running_since: cat.running_since, active_task_id: null });
+        cat.active_habit_id = null;
+        ttPersistCategory(cat, { running: true, running_since: cat.running_since, active_task_id: null, active_habit_id: null });
         ttStartTicker();
     } else {
         ttCloseInterval(cat);
         cat.running = false;
         cat.running_since = null;
         cat.active_task_id = null;
-        ttPersistCategory(cat, { running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds, active_task_id: null });
+        cat.active_habit_id = null;
+        ttPersistCategory(cat, { running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds, active_task_id: null, active_habit_id: null });
     }
 
     ttSyncCardState(cat);
@@ -341,24 +406,28 @@ async function ttToggle(slotIndex) {
     ttTick();
 }
 
-// Play on a task: the category's stopwatch runs, with this task as the thing
-// being worked on. Pressing play on another task hands the clock over without
-// stopping it; pressing it on the running task pauses everything.
-async function ttToggleTask(slotIndex, taskId) {
+// Play on a task or habit: the category's stopwatch runs with that item as the
+// thing being worked on. Pressing play on another item hands the clock over
+// without stopping it; pressing it on the running item pauses everything.
+async function ttToggleItem(slotIndex, kind, id) {
     const cat = ttFindCat(slotIndex);
     if (!cat) return;
 
-    const isActive = cat.running && String(cat.active_task_id || '') === String(taskId);
+    const activeKey = kind === 'habit' ? 'active_habit_id' : 'active_task_id';
+    const otherKey = kind === 'habit' ? 'active_task_id' : 'active_habit_id';
+    const isActive = cat.running && String(cat[activeKey] || '') === String(id);
     ttCloseInterval(cat);
 
     if (isActive) {
         cat.running = false;
         cat.running_since = null;
-        cat.active_task_id = null;
+        cat[activeKey] = null;
+        cat[otherKey] = null;
     } else {
         cat.running = true;
         cat.running_since = new Date().toISOString();
-        cat.active_task_id = String(taskId);
+        cat[activeKey] = String(id);
+        cat[otherKey] = null;
         ttStartTicker();
     }
 
@@ -366,13 +435,17 @@ async function ttToggleTask(slotIndex, taskId) {
         running: cat.running,
         running_since: cat.running_since,
         elapsed_seconds: cat.elapsed_seconds,
-        active_task_id: cat.active_task_id
+        active_task_id: cat.active_task_id || null,
+        active_habit_id: cat.active_habit_id || null
     });
 
     ttSyncCardState(cat);
     ttRenderTasksInto(cat);
     ttTick();
 }
+
+function ttToggleTask(slotIndex, taskId) { return ttToggleItem(slotIndex, 'task', taskId); }
+function ttToggleHabit(slotIndex, habitId) { return ttToggleItem(slotIndex, 'habit', habitId); }
 
 // Zero today's accumulated time for one stopwatch. Logged intervals are
 // untouched — the Log and Analysis keep everything already recorded.
@@ -386,7 +459,8 @@ async function ttResetTimer(slotIndex) {
     cat.running = false;
     cat.running_since = null;
     cat.active_task_id = null;
-    ttPersistCategory(cat, { elapsed_seconds: 0, running: false, running_since: null, active_task_id: null });
+    cat.active_habit_id = null;
+    ttPersistCategory(cat, { elapsed_seconds: 0, running: false, running_since: null, active_task_id: null, active_habit_id: null });
     ttSyncCardState(cat);
     ttRenderTasksInto(cat);
     ttTick();
@@ -447,18 +521,26 @@ function ttTick() {
     ttCategories.forEach(cat => {
         const sumEl = document.getElementById('ttTaskSum_' + cat.slot_index);
         if (!sumEl) return;
-        if (!cat.task_category) { sumEl.innerHTML = ''; return; }
-        const { tasks } = ttTasksFor(cat);
+        if (!cat.task_category && !cat.habit_routine) { sumEl.innerHTML = ''; return; }
+        const { tasks } = cat.task_category ? ttTasksFor(cat) : { tasks: [] };
+        const habits = ttHabitsFor(cat);
         let planned = 0, tracked = 0;
         tasks.forEach(t => {
             planned += (Number(t.duration) || 0) * 60;
-            const sec = ttTaskTracked(t.id);
+            const sec = ttItemTracked('task', t.id);
             tracked += sec;
             const el = document.getElementById(`ttTaskTracked_${cat.slot_index}_${t.id}`);
             if (el) el.textContent = sec ? ttFormatDuration(sec) : '—';
         });
-        sumEl.innerHTML = tasks.length
-            ? `<span>Tasks planned <b>${ttFormatDuration(planned)}</b></span><span>tracked <b>${ttFormatDuration(tracked)}</b></span>`
+        habits.forEach(h => {
+            planned += (Number(h.duration) || 0) * 60;
+            const sec = ttItemTracked('habit', h.id);
+            tracked += sec;
+            const el = document.getElementById(`ttHabitTracked_${cat.slot_index}_${h.id}`);
+            if (el) el.textContent = sec ? ttFormatDuration(sec) : '—';
+        });
+        sumEl.innerHTML = (tasks.length + habits.length)
+            ? `<span>Planned <b>${ttFormatDuration(planned)}</b></span><span>tracked <b>${ttFormatDuration(tracked)}</b></span>`
             : '';
     });
 
@@ -488,12 +570,109 @@ function ttTick() {
     if (!anyRunning) ttStopTicker();
 }
 
+/* ═══════════════════════════════════════════════════════
+   CROSS-DEVICE SYNC — a stopwatch lives on the server, not in this tab. Elapsed
+   time is derived from running_since, so it stays correct while the app is shut;
+   these pull the *state* across too, so starting on a laptop and pausing on a
+   phone agree both ways.
+═══════════════════════════════════════════════════════ */
+
+const TT_SYNC_FIELDS = ['name', 'goal_minutes', 'elapsed_seconds', 'running', 'running_since',
+    'day', 'todos_json', 'task_category', 'habit_routine', 'active_task_id', 'active_habit_id'];
+const TT_TOUCH_GRACE_MS = 6000;
+let ttSyncTimer = null;
+let ttRealtimeChannel = null;
+let ttSyncing = false;
+
+// Pull the server's copy and fold in anything this device didn't just change.
+async function ttSyncFromCloud() {
+    if (ttSyncing || !ttCategories.length) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    ttSyncing = true;
+    try {
+        const rows = await apiGet('time_categories');
+        if (!Array.isArray(rows) || !rows.length) return;
+        let changed = false;
+        rows.forEach(row => {
+            const local = ttCategories.find(c => String(c.id) === String(row.id));
+            if (!local) return;
+            if (Date.now() - (ttLocalTouch[local.id] || 0) < TT_TOUCH_GRACE_MS) return;
+            TT_SYNC_FIELDS.forEach(k => {
+                const incoming = row[k] === undefined ? null : row[k];
+                const current = local[k] === undefined ? null : local[k];
+                if (String(incoming === null ? '' : incoming) !== String(current === null ? '' : current)) {
+                    local[k] = incoming;
+                    changed = true;
+                }
+            });
+        });
+        if (changed) ttApplyRemoteChange();
+    } catch (e) {
+        console.warn('ttSyncFromCloud failed:', e && e.message);
+    } finally {
+        ttSyncing = false;
+    }
+}
+
+// Repaint what a remote change can affect, without stealing focus from a field
+// this device is typing in.
+function ttApplyRemoteChange() {
+    const active = document.activeElement;
+    ttCategories.forEach(cat => {
+        ttSyncCardState(cat);
+        const nameEl = document.querySelector(`#ttCard_${cat.slot_index} .tt-name`);
+        if (nameEl && nameEl !== active && nameEl.value !== (cat.name || '')) nameEl.value = cat.name || '';
+        const goalEl = document.querySelector(`#ttCard_${cat.slot_index} .tt-goal input`);
+        if (goalEl && goalEl !== active) goalEl.value = cat.goal_minutes || '';
+        const wrap = document.getElementById('ttTasksWrap_' + cat.slot_index);
+        if (wrap && !wrap.contains(active)) ttRenderTasksInto(cat);
+    });
+    ttTick();
+    if (ttCategories.some(c => c.running)) ttStartTicker();
+    if (typeof ttRenderMini === 'function') ttRenderMini();
+}
+
+// Poll while the page is in use, and catch up the moment it regains focus —
+// that's the common case (phone in pocket, laptop reopened).
+function ttStartSync(intervalMs) {
+    ttStopSync();
+    ttSyncTimer = setInterval(ttSyncFromCloud, intervalMs || 20000);
+    if (!window._ttSyncHooked) {
+        window._ttSyncHooked = true;
+        window.addEventListener('focus', () => ttSyncFromCloud());
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) ttSyncFromCloud(); });
+    }
+    ttSubscribeRealtime();
+}
+
+function ttStopSync() {
+    if (ttSyncTimer) clearInterval(ttSyncTimer);
+    ttSyncTimer = null;
+}
+
+// Instant updates when Realtime is enabled for the table; harmless no-op if not.
+function ttSubscribeRealtime() {
+    if (ttRealtimeChannel || !window.supabase || typeof window.supabase.channel !== 'function') return;
+    try {
+        ttRealtimeChannel = window.supabase
+            .channel('tt-time-categories')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'time_categories' }, () => ttSyncFromCloud())
+            .subscribe();
+    } catch (e) {
+        ttRealtimeChannel = null;
+    }
+}
+
 // Called by routeTo() (main.js) whenever the user navigates away from any view —
 // stops the grid's interval. The background chip keeps its own ticker, and elapsed
 // time is derived from running_since, so a stopwatch keeps accruing even while the
 // app is closed.
 function ttStopAllTimers() {
     ttStopTicker();
+    // Leaving the page: keep a slower heartbeat so the floating chip still
+    // reflects a stopwatch paused on another device.
+    if (ttCategories.some(c => c.running)) ttStartSync(60000);
+    else ttStopSync();
 }
 window.ttStopAllTimers = ttStopAllTimers;
 
@@ -573,7 +752,9 @@ function ttMiniPaint() {
     const nameEl = document.getElementById('ttMiniName');
     const timeEl = document.getElementById('ttMiniTime');
     const activeTask = running.active_task_id ? ttFindTask(running.active_task_id) : null;
-    if (nameEl) nameEl.textContent = activeTask ? `${running.name} · ${activeTask.title}` : (running.name || 'Tracking');
+    const activeHabit = running.active_habit_id ? ttFindHabit(running.active_habit_id) : null;
+    const itemName = activeTask ? activeTask.title : (activeHabit ? activeHabit.habit_name : '');
+    if (nameEl) nameEl.textContent = itemName ? `${running.name} · ${itemName}` : (running.name || 'Tracking');
     if (timeEl) timeEl.textContent = ttFormatHMS(ttLiveElapsed(running));
 }
 
@@ -709,6 +890,7 @@ async function renderTimeTracker() {
     else if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
     ttTick();
     if (ttCategories.some(c => c.running)) ttStartTicker();
+    ttStartSync(20000);
 }
 
 function ttPageHTML() {
@@ -838,12 +1020,19 @@ function ttPageHTML() {
         .tt-task-sum { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
         .tt-task-sum b { color: var(--text-1); font-variant-numeric: tabular-nums; }
 
+        .tt-pickers { display: flex; align-items: center; gap: 5px; flex: none; }
+        .tt-row-label {
+            margin: 9px 0 3px; padding: 0 6px; font-size: 10px; font-weight: 800;
+            letter-spacing: .06em; text-transform: uppercase; color: var(--text-3);
+        }
+        .tt-task.done .tt-task-title { text-decoration: line-through; color: var(--text-3); }
+
         .tt-card select.tt-cat-picker {
-            max-width: 130px; height: 26px; padding: 0 22px 0 9px !important; margin: 0;
+            max-width: 92px; height: 26px; padding: 0 20px 0 8px !important; margin: 0;
             border: 1px solid var(--border-color) !important; border-radius: 999px !important;
             background: var(--surface-2) !important; color: var(--text-2) !important;
-            font-size: 11.5px !important; font-weight: 700; font-family: inherit !important;
-            box-shadow: none !important; outline: none !important; cursor: pointer;
+            font-size: 11px !important; font-weight: 700; font-family: inherit !important;
+            text-overflow: ellipsis; box-shadow: none !important; outline: none !important; cursor: pointer;
             appearance: none; -webkit-appearance: none;
             background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%) !important;
             background-position: calc(100% - 12px) 11px, calc(100% - 8px) 11px !important;
@@ -887,7 +1076,11 @@ function ttPageHTML() {
         }
         .tt-undated:hover { background: var(--surface-2); color: var(--text-1); }
         .tt-todos-head span { font-size: 11px; font-weight: 800; color: var(--text-3); font-variant-numeric: tabular-nums; }
-        .tt-todo-list { display: flex; flex-direction: column; gap: 1px; max-height: 136px; overflow-y: auto; margin-bottom: 9px; }
+        /* Tall enough for a day's tasks plus its habits — the old 136px cap hid
+           whatever came after the first few rows inside a silent scroll area. */
+        .tt-todo-list { display: flex; flex-direction: column; gap: 1px; max-height: 280px; overflow-y: auto; margin-bottom: 9px; }
+        .tt-todo-list::-webkit-scrollbar { width: 5px; }
+        .tt-todo-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 999px; }
         .tt-todo { display: flex; align-items: center; gap: 9px; padding: 5px 6px; border-radius: 9px; transition: background .12s ease; }
         .tt-todo:hover { background: var(--surface-2); }
         .tt-todo input[type=checkbox] { width: 15px; height: 15px; flex: none; cursor: pointer; accent-color: var(--primary); }
@@ -932,6 +1125,7 @@ function ttPageHTML() {
         .tt-log-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-color); }
         .tt-log-swatch { width: 8px; height: 8px; border-radius: 50%; flex: none; }
         .tt-log-cat { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tt-log-cat em { display: block; font-style: normal; font-size: 11.5px; font-weight: 600; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
         .tt-log-time { font-size: 11.5px; color: var(--text-3); font-weight: 600; font-variant-numeric: tabular-nums; }
         .tt-log-dur { min-width: 56px; text-align: right; font-size: 13px; font-weight: 800; color: var(--text-1); font-variant-numeric: tabular-nums; }
         .tt-log-del { flex: none; border: none; background: none; color: var(--text-3); cursor: pointer; padding: 3px; display: flex; opacity: .55; }
@@ -1030,36 +1224,123 @@ function ttRenderTasksSection(cat) {
     const slot = cat.slot_index;
     const cats = ttTaskCategories();
     const linked = cat.task_category || '';
+    const routines = ttHabitRoutines();
+    const linkedRoutine = cat.habit_routine || '';
+
     const picker = `
         <select class="tt-cat-picker" onchange="ttSetCardCategory(${slot}, this.value)" title="Which task category feeds this card">
-            <option value="" ${linked ? '' : 'selected'}>Link tasks…</option>
+            <option value="" ${linked ? '' : 'selected'}>Tasks…</option>
             ${cats.map(c => `<option value="${ttEscape(c)}" ${String(c) === String(linked) ? 'selected' : ''}>${ttEscape(c)}</option>`).join('')}
+        </select>
+        <select class="tt-cat-picker" onchange="ttSetCardRoutine(${slot}, this.value)" title="Which habit routine feeds this card">
+            <option value="" ${linkedRoutine ? '' : 'selected'}>Habits…</option>
+            <option value="${TT_ALL_ROUTINES}" ${linkedRoutine === TT_ALL_ROUTINES ? 'selected' : ''}>All habits</option>
+            ${routines.map(r => `<option value="${ttEscape(r)}" ${String(r) === String(linkedRoutine) ? 'selected' : ''}>${ttEscape(r)}</option>`).join('')}
         </select>`;
 
-    if (!linked) {
-        return `
-            <div class="tt-todos-head"><b>Tasks</b>${picker}</div>
-            <div class="tt-empty">Link a task category to pull its tasks in here.</div>`;
+    const head = `<div class="tt-todos-head"><b>Tasks &amp; habits</b><span class="tt-pickers">${picker}</span></div>`;
+
+    if (!linked && !linkedRoutine) {
+        return head + '<div class="tt-empty">Link a task category or a habit routine to pull them in here.</div>';
     }
 
-    const { tasks, undated } = ttTasksFor(cat);
-    const rows = tasks.length
-        ? tasks.map(t => ttRenderTaskRow(slot, t, cat)).join('')
-        : '<div class="tt-empty">Nothing due today in this category.</div>';
+    const { tasks, undated } = linked ? ttTasksFor(cat) : { tasks: [], undated: 0 };
+    const habits = ttHabitsFor(cat);
+
+    let rows = tasks.map(t => ttRenderTaskRow(slot, t, cat)).join('');
+    if (habits.length) {
+        rows += `<div class="tt-row-label">Habits</div>` + habits.map(h => ttRenderHabitRow(slot, h, cat)).join('');
+    }
+    if (!rows) {
+        rows = `<div class="tt-empty">${linked ? 'Nothing due today here.' : 'No habits due today in this routine.'}</div>`;
+    }
 
     const undatedLine = undated
         ? `<button class="tt-undated" onclick="ttToggleUndated(${slot})">${ttShowUndated[slot] ? 'Hide' : 'Show'} ${undated} undated task${undated !== 1 ? 's' : ''}</button>`
         : '';
 
-    return `
-        <div class="tt-todos-head"><b>Tasks</b>${picker}</div>
-        <div class="tt-todo-list" id="ttTaskList_${slot}">${rows}</div>
-        ${undatedLine}
+    const addBox = linked ? `
         <div class="tt-add">
             <input type="text" maxlength="200" placeholder="Add a task…" id="ttTaskInput_${slot}"
                    onkeydown="if(event.key==='Enter'){ttAddTask(${slot}); event.preventDefault();}" />
             <button onclick="ttAddTask(${slot})" title="Add to ${ttEscape(linked)}">${TT_ICON.plus} Add</button>
-        </div>`;
+        </div>` : '';
+
+    return `${head}
+        <div class="tt-todo-list" id="ttTaskList_${slot}">${rows}</div>
+        ${undatedLine}
+        ${addBox}`;
+}
+
+function ttRenderHabitRow(slot, habit, cat) {
+    const isActive = cat.running && String(cat.active_habit_id || '') === String(habit.id);
+    const done = ttHabitDoneToday(habit.id);
+    const tracked = ttItemTracked('habit', habit.id);
+    return `
+    <div class="tt-task tt-habit ${isActive ? 'active' : ''} ${done ? 'done' : ''}" id="ttHabit_${slot}_${habit.id}">
+        <input type="checkbox" ${done ? 'checked' : ''} title="Mark done for today" onchange="ttToggleHabitDone(${slot}, '${habit.id}')" />
+        <span class="tt-task-title" title="${ttEscape(habit.habit_name || '')}">${ttEscape(habit.habit_name || 'Habit')}</span>
+        <span class="tt-task-time">
+            <b id="ttHabitTracked_${slot}_${habit.id}">${tracked ? ttFormatDuration(tracked) : '—'}</b>
+            <i>/</i>
+            <label class="tt-task-est" title="Planned minutes for this habit">
+                <input type="number" min="0" max="1440" placeholder="0" value="${habit.duration || ''}"
+                       onchange="ttUpdateHabitEstimate(${slot}, '${habit.id}', this.value)" />m
+            </label>
+        </span>
+        <button class="tt-task-play ${isActive ? 'on' : ''}" onclick="ttToggleHabit(${slot}, '${habit.id}')"
+                title="${isActive ? 'Pause' : 'Start this habit'}">${isActive ? TT_ICON.pause : TT_ICON.play}</button>
+    </div>`;
+}
+
+function ttSetCardRoutine(slot, value) {
+    const cat = ttFindCat(slot);
+    if (!cat) return;
+    cat.habit_routine = value || null;
+    ttScheduleSave(cat, { habit_routine: cat.habit_routine }, 0);
+    ttRenderTasksInto(cat);
+    ttTick();
+}
+
+// Ticking a habit writes the same habit_logs row the Habits page uses.
+async function ttToggleHabitDone(slot, habitId) {
+    const cat = ttFindCat(slot);
+    if (!cat) return;
+    const today = ttTodayStr();
+    if (!Array.isArray(state.data.habit_logs)) state.data.habit_logs = [];
+    const idx = state.data.habit_logs.findIndex(l =>
+        String(l.habit_id) === String(habitId) && String(l.date || '').slice(0, 10) === today);
+
+    try {
+        if (idx !== -1) {
+            const existing = state.data.habit_logs[idx];
+            state.data.habit_logs.splice(idx, 1);
+            ttRenderTasksInto(cat); ttTick();
+            await apiPost({ action: 'delete', sheet: 'habit_logs', id: existing.id });
+        } else {
+            const payload = { habit_id: String(habitId), date: today, status: 'completed' };
+            state.data.habit_logs.push({ id: 'temp-' + Date.now(), ...payload });
+            ttRenderTasksInto(cat); ttTick();
+            const res = await apiPost({ action: 'create', sheet: 'habit_logs', payload });
+            if (res && res.success && res.id) {
+                const temp = state.data.habit_logs.find(l => String(l.id).startsWith('temp-') && String(l.habit_id) === String(habitId));
+                if (temp) temp.id = res.id;
+            }
+        }
+    } catch (e) {
+        console.error('ttToggleHabitDone failed:', e);
+        if (typeof toast === 'function') toast('Could not update habit');
+    }
+}
+
+function ttUpdateHabitEstimate(slot, habitId, value) {
+    const habit = ttFindHabit(habitId);
+    if (!habit) return;
+    const mins = Math.max(0, Math.min(1440, parseInt(value, 10) || 0));
+    habit.duration = mins;
+    ttTick();
+    apiPost({ action: 'update', sheet: 'habits', id: habitId, payload: { duration: mins } })
+        .catch(e => console.error('ttUpdateHabitEstimate failed:', e));
 }
 
 function ttRenderTaskRow(slot, task, cat) {
@@ -1232,7 +1513,7 @@ function ttRenderLogList() {
                 return `
                 <div class="tt-log-row">
                     <span class="tt-log-swatch" style="background:${ttLogColor(l)}"></span>
-                    <span class="tt-log-cat">${ttEscape(l.category_name || 'Category')}</span>
+                    <span class="tt-log-cat">${ttEscape(l.category_name || 'Category')}${l.task_title ? `<em>${ttEscape(l.task_title)}</em>` : ''}</span>
                     <span class="tt-log-time">${timeStr}</span>
                     <span class="tt-log-dur">${ttFormatDuration(l.duration_seconds)}</span>
                     <button class="tt-log-del" onclick="ttDeleteLog('${l.id}')" title="Delete entry">${TT_ICON.trash}</button>
