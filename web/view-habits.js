@@ -498,7 +498,7 @@ function renderHabits() {
                 <div class="habit-emoji-circle">${habitIconHTML(h.emoji, 18)}</div>
                 <div>
                   <div class="habit-title-lg">${h.habit_name} ${comingInText}${String(h.id) === String(nextUpHabitId) ? '<span class="up-next-badge">Up Next</span>' : ''}${missedChip}</div>
-                  <div class="habit-meta">${h.routine || 'General'} • ${displayTime}</div>
+                  <div class="habit-meta">${h.category ? escapeHtml(h.category) + ' • ' : ''}${h.routine || 'General'} • ${displayTime}</div>
                 </div>
               </div>
               <div class="hb-right">
@@ -1205,7 +1205,11 @@ window.openHabitModal = function () {
   const s = state.data.settings?.[0] || {};
   const routinesStr = s.habit_routines || 'Morning,Work,Evening';
   const routines = routinesStr.split(',').map(r => r.trim()).filter(Boolean);
-  const categories = ['Health', 'Fitness', 'Learning', 'Productivity', 'Spiritual', 'Other'];
+  // Same category list Tasks and the Time Tracker use, so a habit lands on the
+  // right 'Time spent on' card. (Routine, below, is a different axis.)
+  const categories = (typeof window.appCategories === 'function')
+    ? window.appCategories()
+    : ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
 
   box.innerHTML = `
       <div class="modal-header-bar">
@@ -1247,7 +1251,14 @@ window.openHabitModal = function () {
         </div>
 
         <!-- Metadata Section -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+          <div>
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Category</label>
+            <select class="input" id="mHabitCategory" style="width: 100%;" title="Shared with Tasks and Time spent on">
+              <option value="">None</option>
+              ${categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+            </select>
+          </div>
           <div>
             <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Routine</label>
             <select class="input" id="mHabitRoutine" style="width: 100%;">
@@ -1330,7 +1341,11 @@ window.openEditHabit = function (id) {
   modal.classList.add('bottom-sheet');
   const box = modal.querySelector('.modal-box');
   const isWeekly = (typeof window.habitIsWeekly === 'function') ? window.habitIsWeekly(h) : (h.frequency === 'weekly');
-  const categories = ['Health', 'Fitness', 'Learning', 'Productivity', 'Spiritual', 'Other'];
+  // Same category list Tasks and the Time Tracker use, so a habit lands on the
+  // right 'Time spent on' card. (Routine, below, is a different axis.)
+  const categories = (typeof window.appCategories === 'function')
+    ? window.appCategories()
+    : ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
   const reminderTimeValue = parseReminderTimeToHHMM(h.reminder_time);
   const s = state.data.settings?.[0] || {};
   const routinesStr = s.habit_routines || 'Morning,Work,Evening';
@@ -1375,7 +1390,14 @@ window.openEditHabit = function (id) {
       </div>
 
       <!-- Metadata Section -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Category</label>
+          <select class="input" id="mHabitCategory" style="width: 100%;" title="Shared with Tasks and Time spent on">
+            <option value="">None</option>
+            ${categories.map(c => `<option value="${escapeHtml(c)}" ${h.category === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+          </select>
+        </div>
         <div>
           <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block;">Routine</label>
           <select class="input" id="mHabitRoutine" style="width: 100%;">

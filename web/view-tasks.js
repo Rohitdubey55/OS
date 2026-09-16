@@ -1925,9 +1925,13 @@ async function saveTaskCategoriesToSettings(categories) {
 }
 
 function getAllTaskCategories() {
+  // One vocabulary across Tasks, Habits and Time spent on — so a category coined
+  // on a habit is offered here too. main.js owns it; this is the fallback.
+  if (typeof window.appCategories === 'function') return window.appCategories();
   const savedCats = getTaskCategories();
   const taskCats = (state.data.tasks || []).map(t => t.category).filter(Boolean);
-  return [...new Set([...savedCats, ...taskCats])];
+  const habitCats = (state.data.habits || []).map(h => h.category).filter(Boolean);
+  return [...new Set([...savedCats, ...taskCats, ...habitCats])];
 }
 
 window.addTaskCategory = async function (categoryName) {
