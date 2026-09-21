@@ -53,6 +53,12 @@ function ttFormatDuration(sec) {
     return `${sec}s`;
 }
 
+// Same, but keeps the sign — a hand-entered correction logs a negative stretch.
+function ttFormatSigned(sec) {
+    sec = Math.floor(sec || 0);
+    return (sec < 0 ? '−' : '') + ttFormatDuration(Math.abs(sec));
+}
+
 function ttFormatDateLabel(dateStr) {
     if (!dateStr) return '';
     const today = ttTodayStr();
@@ -89,6 +95,7 @@ const TT_ICON = {
     trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 21 6"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>',
     check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
     plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    timer: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><polyline points="12 9 12 13 15 13"/><line x1="9" y1="2" x2="15" y2="2"/></svg>',
     plusClock: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 0-8.5 8.5"/><polyline points="12 7 12 12 15 13.5"/><line x1="18.5" y1="16" x2="18.5" y2="23"/><line x1="15" y1="19.5" x2="22" y2="19.5"/></svg>'
 };
 
@@ -378,6 +385,109 @@ function ttCloseInterval(cat) {
     return deltaSec;
 }
 
+/* ── Countdown ── A card can be given a target for THIS sitting: type minutes,
+   press Enter, and the stopwatch starts with the clock reading down instead of
+   up. Time still accrues to the category exactly as a normal run does; at zero
+   the run is banked and paused for you. The target lives on the row, so a phone
+   and a laptop show the same countdown. */
+
+const ttFinishedRuns = new Set();   // cat.id + running_since, so a tick fires once
+
+function ttCountdownRemaining(cat) {
+    if (!cat || !cat.running || !cat.running_since || !cat.timer_target_seconds) return null;
+    const ran = Math.floor((Date.now() - new Date(cat.running_since).getTime()) / 1000);
+    return (cat.timer_target_seconds || 0) - Math.max(0, ran);
+}
+
+function ttCountdownEndsAt(cat) {
+    if (!cat || !cat.running_since || !cat.timer_target_seconds) return null;
+    return new Date(new Date(cat.running_since).getTime() + cat.timer_target_seconds * 1000);
+}
+
+// Type a number of minutes and press Enter. Starts the clock if it's paused;
+// re-times the current sitting from now if it's already running.
+async function ttStartCountdown(slotIndex, minutes) {
+    const cat = ttFindCat(slotIndex);
+    if (!cat) return;
+    const mins = Math.round(Number(minutes));
+    if (!mins || mins <= 0 || mins > 600) {
+        if (typeof showToast === 'function') showToast('Enter a timer between 1 and 600 minutes');
+        return;
+    }
+
+    document.activeElement?.blur?.();
+    if (cat.running) ttCloseInterval(cat);   // bank what's on the clock, then re-time
+    cat.running = true;
+    cat.running_since = new Date().toISOString();
+    cat.timer_target_seconds = mins * 60;
+    ttFinishedRuns.delete(cat.id + cat.running_since);
+
+    ttPersistCategory(cat, {
+        running: true, running_since: cat.running_since,
+        elapsed_seconds: cat.elapsed_seconds, timer_target_seconds: cat.timer_target_seconds
+    });
+    ttStartTicker();
+    ttSyncCardState(cat);
+    ttTick();
+    if (typeof showToast === 'function') showToast(`${mins}m timer running on ${cat.name || 'this category'}`);
+}
+
+// Drop the target but keep the stopwatch going — back to counting up.
+function ttCancelCountdown(slotIndex) {
+    const cat = ttFindCat(slotIndex);
+    if (!cat || !cat.timer_target_seconds) return;
+    cat.timer_target_seconds = null;
+    ttPersistCategory(cat, { timer_target_seconds: null });
+    ttSyncCardState(cat);
+    ttTick();
+}
+
+// The countdown hit zero: bank the sitting, pause, and say so.
+function ttFinishCountdown(cat) {
+    const key = cat.id + cat.running_since;
+    if (ttFinishedRuns.has(key)) return;
+    ttFinishedRuns.add(key);
+
+    const ran = cat.timer_target_seconds;
+    ttCloseInterval(cat);
+    cat.running = false;
+    cat.running_since = null;
+    cat.timer_target_seconds = null;
+    cat.active_task_id = null;
+    cat.active_habit_id = null;
+    ttPersistCategory(cat, {
+        running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds,
+        timer_target_seconds: null, active_task_id: null, active_habit_id: null
+    });
+    ttSyncCardState(cat);
+    ttRenderTasksInto(cat);
+    ttChime();
+    if (typeof showToast === 'function') {
+        showToast(`${Math.round(ran / 60)}m up on ${cat.name || 'this category'} — paused`);
+    }
+}
+
+// A short two-note chime, so a finished timer registers without the page open.
+function ttChime() {
+    try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        const ctx = new Ctx();
+        [880, 1174].forEach((freq, i) => {
+            const osc = ctx.createOscillator(), gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            const t = ctx.currentTime + i * 0.18;
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.exponentialRampToValueAtTime(0.22, t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(t); osc.stop(t + 0.36);
+        });
+        setTimeout(() => ctx.close && ctx.close(), 1200);
+    } catch (e) { /* audio is a nicety, never a failure */ }
+}
+
 async function ttToggle(slotIndex) {
     const cat = ttFindCat(slotIndex);
     if (!cat) return;
@@ -393,9 +503,10 @@ async function ttToggle(slotIndex) {
         ttCloseInterval(cat);
         cat.running = false;
         cat.running_since = null;
+        cat.timer_target_seconds = null;
         cat.active_task_id = null;
         cat.active_habit_id = null;
-        ttPersistCategory(cat, { running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds, active_task_id: null, active_habit_id: null });
+        ttPersistCategory(cat, { running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds, timer_target_seconds: null, active_task_id: null, active_habit_id: null });
     }
 
     ttSyncCardState(cat);
@@ -418,6 +529,7 @@ async function ttToggleItem(slotIndex, kind, id) {
     if (isActive) {
         cat.running = false;
         cat.running_since = null;
+        cat.timer_target_seconds = null;
         cat[activeKey] = null;
         cat[otherKey] = null;
     } else {
@@ -432,6 +544,7 @@ async function ttToggleItem(slotIndex, kind, id) {
         running: cat.running,
         running_since: cat.running_since,
         elapsed_seconds: cat.elapsed_seconds,
+        timer_target_seconds: cat.timer_target_seconds || null,
         active_task_id: cat.active_task_id || null,
         active_habit_id: cat.active_habit_id || null
     });
@@ -455,9 +568,10 @@ async function ttResetTimer(slotIndex) {
     cat.elapsed_seconds = 0;
     cat.running = false;
     cat.running_since = null;
+    cat.timer_target_seconds = null;
     cat.active_task_id = null;
     cat.active_habit_id = null;
-    ttPersistCategory(cat, { elapsed_seconds: 0, running: false, running_since: null, active_task_id: null, active_habit_id: null });
+    ttPersistCategory(cat, { elapsed_seconds: 0, running: false, running_since: null, timer_target_seconds: null, active_task_id: null, active_habit_id: null });
     ttSyncCardState(cat);
     ttRenderTasksInto(cat);
     ttTick();
@@ -491,12 +605,22 @@ function ttTick() {
     let todayTotal = 0;
 
     ttCategories.forEach(cat => {
+        // A countdown that has run out banks itself and pauses, here on the tick.
+        const remaining = ttCountdownRemaining(cat);
+        if (remaining !== null && remaining <= 0) { ttFinishCountdown(cat); }
+
         if (cat.running) anyRunning = true;
         const elapsed = ttLiveElapsed(cat);
         todayTotal += elapsed;
 
+        // While a timer is set the big clock reads down; the goal bar below still
+        // shows the day's total, so nothing is hidden.
+        const left = ttCountdownRemaining(cat);
         const el = document.getElementById('ttTime_' + cat.slot_index);
-        if (el) el.innerHTML = ttTimeHTML(elapsed);
+        if (el) el.innerHTML = ttTimeHTML(left !== null ? Math.max(0, left) : elapsed);
+        const cardEl = document.getElementById('ttCard_' + cat.slot_index);
+        if (cardEl) cardEl.classList.toggle('counting', left !== null);
+        ttPaintTimerRow(cat);
 
         const goalSec = (cat.goal_minutes || 0) * 60;
         const bar = document.getElementById('ttProg_' + cat.slot_index);
@@ -575,7 +699,7 @@ function ttTick() {
 ═══════════════════════════════════════════════════════ */
 
 const TT_SYNC_FIELDS = ['name', 'goal_minutes', 'elapsed_seconds', 'running', 'running_since',
-    'day', 'todos_json', 'task_category', 'active_task_id', 'active_habit_id'];
+    'day', 'todos_json', 'task_category', 'active_task_id', 'active_habit_id', 'timer_target_seconds'];
 const TT_TOUCH_GRACE_MS = 6000;
 let ttSyncTimer = null;
 let ttRealtimeChannel = null;
@@ -697,6 +821,7 @@ function ttMiniCSS() {
     .tt-mini-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
     .tt-mini-name { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3, #64748b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .tt-mini-time { font-size: 14.5px; font-weight: 850; color: var(--text-1, #0f172a); font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .tt-mini-time.counting { color: var(--primary, #4F46E5); }
     .tt-mini-pause { width: 30px; height: 30px; flex: none; border: none; border-radius: 50%; background: var(--surface-3, #e2e8f0); color: var(--text-1, #0f172a); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
     .tt-mini-pause:hover { background: var(--primary, #4F46E5); color: #fff; }
     @media (max-width: 640px) { .tt-mini { left: 12px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); } }
@@ -752,7 +877,14 @@ function ttMiniPaint() {
     const activeHabit = running.active_habit_id ? ttFindHabit(running.active_habit_id) : null;
     const itemName = activeTask ? activeTask.title : (activeHabit ? activeHabit.habit_name : '');
     if (nameEl) nameEl.textContent = itemName ? `${running.name} · ${itemName}` : (running.name || 'Tracking');
-    if (timeEl) timeEl.textContent = ttFormatHMS(ttLiveElapsed(running));
+
+    // A countdown finishes even with the page shut, and the chip reads down too.
+    const left = ttCountdownRemaining(running);
+    if (left !== null && left <= 0) { ttFinishCountdown(running); ttRenderMini(); return; }
+    if (timeEl) {
+        timeEl.textContent = ttFormatHMS(left !== null ? Math.max(0, left) : ttLiveElapsed(running));
+        timeEl.classList.toggle('counting', left !== null);
+    }
 }
 
 async function ttMiniPause() {
@@ -1018,6 +1150,40 @@ function ttPageHTML() {
         }
         .tt-manual:hover { color: var(--primary); background: var(--surface-3); }
 
+        .tt-timer-row { display: flex; align-items: center; gap: 6px; margin-top: 9px; min-height: 30px; }
+        .tt-timer-ico { display: flex; align-items: center; color: var(--text-3); flex: none; }
+        .tt-timer-input {
+            width: 56px; height: 30px; flex: none; text-align: center;
+            border: 1px solid var(--border-color) !important; border-radius: 9px !important;
+            background: var(--surface-2) !important; color: var(--text-1);
+            font-family: inherit; font-size: 12.5px !important; font-weight: 700;
+            padding: 0 6px !important; box-sizing: border-box;
+        }
+        .tt-timer-input:focus { border-color: var(--primary) !important; box-shadow: none !important; outline: none; }
+        .tt-timer-input::-webkit-outer-spin-button, .tt-timer-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .tt-timer-preset {
+            height: 30px; min-width: 32px; padding: 0 8px; flex: none;
+            border: 1px solid var(--border-color); border-radius: 9px; background: transparent;
+            color: var(--text-3); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+            transition: color .15s ease, background .15s ease, border-color .15s ease;
+        }
+        .tt-timer-preset:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
+        .tt-timer-live {
+            display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; height: 30px;
+            padding: 0 10px; border-radius: 9px; background: var(--primary-soft); color: var(--primary);
+        }
+        .tt-timer-live b { font-size: 12.5px; font-weight: 800; }
+        .tt-timer-live em { font-style: normal; font-size: 11.5px; font-weight: 600; opacity: .75;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tt-timer-cancel {
+            width: 30px; height: 30px; flex: none; border: 1px solid var(--border-color); border-radius: 9px;
+            background: var(--surface-2); color: var(--text-3); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .tt-timer-cancel:hover { color: var(--text-1); background: var(--surface-3); }
+        /* Counting down reads as a different mode, not just a different number. */
+        .tt-card.counting .tt-time { color: var(--primary); }
+
         .tt-man-form { display: flex; flex-direction: column; gap: 14px; padding-top: 14px; }
         .tt-man-row { display: flex; flex-direction: column; gap: 6px; }
         .tt-man-row > span { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
@@ -1039,6 +1205,14 @@ function ttPageHTML() {
         }
         .tt-man-save:hover { filter: brightness(1.07); }
         .tt-man-note { font-size: 12px; color: var(--text-3); font-weight: 600; line-height: 1.5; margin: 0; }
+        .tt-man-seg { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--surface-2); }
+        .tt-man-seg button {
+            flex: 1; height: 34px; border: none; border-radius: 9px; background: transparent;
+            color: var(--text-3); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+            transition: background .15s ease, color .15s ease;
+        }
+        .tt-man-seg button.on { background: var(--surface-1); color: var(--text-1); box-shadow: 0 1px 3px rgba(15,23,42,.1); }
+        .tt-log-row.negative .tt-log-dur { color: var(--danger, #EF4444); }
 
         .tt-todos { display: flex; flex-direction: column; flex: 1; margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--border-color); }
         .tt-todos-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -1189,7 +1363,7 @@ function ttPageHTML() {
         <div class="tt-sheet-inner">
             <div class="tt-sheet-head">
                 <div>
-                    <h3>Add time</h3>
+                    <h3 id="ttManualTitle">Add time</h3>
                     <p id="ttManualSub">Log a stretch you didn't run the stopwatch for</p>
                 </div>
                 <button class="tt-sheet-close" onclick="ttCloseManual()">${TT_ICON.close}</button>
@@ -1251,6 +1425,8 @@ function ttRenderCard(cat) {
             <button class="tt-reset" onclick="ttResetTimer(${slot})" title="Reset today's time">${TT_ICON.reset}</button>
         </div>
 
+        <div class="tt-timer-row" id="ttTimerRow_${slot}">${ttTimerRowHTML(cat)}</div>
+
         <div class="tt-todos" id="ttTasksWrap_${slot}">
             ${ttRenderTasksSection(cat)}
         </div>
@@ -1261,6 +1437,44 @@ function ttRenderCard(cat) {
 // The lower half of a card: which task category feeds it, that category's live
 // tasks (each with an estimate, time tracked today and its own play button), and
 // a box that adds a new task straight into the Tasks app.
+// Either the "run for N minutes" box, or — while a countdown is live — what it
+// is and when it lands, with a way out.
+function ttTimerRowHTML(cat) {
+    const slot = cat.slot_index;
+    const left = ttCountdownRemaining(cat);
+    if (left !== null) {
+        const ends = ttCountdownEndsAt(cat);
+        const endStr = ends ? ends.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
+        return `
+            <span class="tt-timer-live">${TT_ICON.timer}
+                <b>${Math.round((cat.timer_target_seconds || 0) / 60)}m timer</b>
+                <em>ends ${endStr}</em>
+            </span>
+            <button class="tt-timer-cancel" onclick="ttCancelCountdown(${slot})" title="Keep counting up instead">${TT_ICON.close}</button>`;
+    }
+    return `
+        <span class="tt-timer-ico" title="Run this stopwatch for a set number of minutes">${TT_ICON.timer}</span>
+        <input type="number" class="tt-timer-input" id="ttTimerInput_${slot}" min="1" max="600" placeholder="min"
+               onkeydown="if(event.key==='Enter'){event.preventDefault(); ttStartCountdown(${slot}, this.value); this.value='';}" />
+        ${[5, 15, 25, 45].map(m => `<button class="tt-timer-preset" onclick="ttStartCountdown(${slot}, ${m})">${m}</button>`).join('')}`;
+}
+
+// Repaint just that row, so the "ends at" line and the input swap cleanly
+// without the tick stealing focus from whatever you're typing.
+function ttPaintTimerRow(cat) {
+    const row = document.getElementById('ttTimerRow_' + cat.slot_index);
+    if (!row) return;
+    const live = ttCountdownRemaining(cat) !== null;
+    const shows = row.getAttribute('data-live') === '1';
+    if (live === shows) return;                       // nothing structural changed
+    // Only mid-typing is worth protecting; a preset button keeps focus after the
+    // click and must not pin the row on the input it just replaced.
+    const el = document.activeElement;
+    if (el && el.classList && el.classList.contains('tt-timer-input') && row.contains(el)) return;
+    row.setAttribute('data-live', live ? '1' : '0');
+    row.innerHTML = ttTimerRowHTML(cat);
+}
+
 function ttRenderTasksSection(cat) {
     const slot = cat.slot_index;
     const cats = ttTaskCategories();
@@ -1492,6 +1706,7 @@ function ttRenderTodoItem(slotIndex, t) {
 ═══════════════════════════════════════════════════════ */
 
 let ttManualSlot = null;
+let ttManualMode = 'add';       // 'add' | 'remove' — the same sheet both ways
 
 function ttOpenManual(slot) {
     const cat = ttFindCat(slot);
@@ -1502,8 +1717,11 @@ function ttOpenManual(slot) {
     // Same containing-block trap as the log sheet: #main is transformed.
     if (modal.parentElement !== document.body) document.body.appendChild(modal);
 
+    ttManualMode = 'add';
+    const title = document.getElementById('ttManualTitle');
+    if (title) title.textContent = 'Add time';
     const sub = document.getElementById('ttManualSub');
-    if (sub) sub.textContent = `Into ${cat.name || 'this category'}`;
+    if (sub) sub.textContent = cat.name || 'this category';
 
     const { tasks } = cat.task_category ? ttTasksFor(cat) : { tasks: [] };
     const habits = ttHabitsFor(cat);
@@ -1516,16 +1734,20 @@ function ttOpenManual(slot) {
     const body = document.getElementById('ttManualBody');
     if (body) body.innerHTML = `
         <div class="tt-man-form">
+            <div class="tt-man-seg" id="ttManualSeg">
+                <button type="button" class="on" data-mode="add" onclick="ttManualSetMode('add')">Add time</button>
+                <button type="button" data-mode="remove" onclick="ttManualSetMode('remove')">Remove time</button>
+            </div>
             <div class="tt-man-row">
                 <span>How long</span>
                 <input type="number" id="ttManualMins" min="1" max="1440" step="5" placeholder="Minutes"
                        onkeydown="if(event.key==='Enter'){event.preventDefault(); ttSubmitManual();}" />
                 <div class="tt-man-quick">
-                    <button type="button" onclick="ttManualQuick(15)">+15m</button>
-                    <button type="button" onclick="ttManualQuick(30)">+30m</button>
-                    <button type="button" onclick="ttManualQuick(45)">+45m</button>
-                    <button type="button" onclick="ttManualQuick(60)">+1h</button>
-                    <button type="button" onclick="ttManualQuick(120)">+2h</button>
+                    <button type="button" onclick="ttManualQuick(15)">15m</button>
+                    <button type="button" onclick="ttManualQuick(30)">30m</button>
+                    <button type="button" onclick="ttManualQuick(45)">45m</button>
+                    <button type="button" onclick="ttManualQuick(60)">1h</button>
+                    <button type="button" onclick="ttManualQuick(120)">2h</button>
                 </div>
             </div>
             <div class="tt-man-row">
@@ -1536,12 +1758,36 @@ function ttOpenManual(slot) {
                 <span>Day</span>
                 <input type="date" id="ttManualDate" value="${ttTodayStr()}" max="${ttTodayStr()}" />
             </div>
-            <button class="tt-man-save" onclick="ttSubmitManual()">Add to ${ttEscape(cat.name || 'category')}</button>
-            <p class="tt-man-note">Time added for today counts toward the card's clock and its goal. An earlier day only shows up in the Log and Analysis.</p>
+            <button class="tt-man-save" id="ttManualSave" onclick="ttSubmitManual()">Add to ${ttEscape(cat.name || 'category')}</button>
+            <p class="tt-man-note" id="ttManualNote">Time added for today counts toward the card's clock and its goal. An earlier day only shows up in the Log and Analysis.</p>
         </div>`;
 
     modal.classList.remove('hidden');
     setTimeout(() => document.getElementById('ttManualMins')?.focus(), 50);
+}
+
+// Left the clock running through lunch? Remove mode takes the overrun back off
+// the card and logs the correction, so the day's totals stay honest.
+function ttManualSetMode(mode) {
+    ttManualMode = mode === 'remove' ? 'remove' : 'add';
+    const cat = ttFindCat(ttManualSlot);
+    const seg = document.getElementById('ttManualSeg');
+    if (seg) seg.querySelectorAll('button').forEach(b =>
+        b.classList.toggle('on', b.getAttribute('data-mode') === ttManualMode));
+
+    const title = document.getElementById('ttManualTitle');
+    if (title) title.textContent = ttManualMode === 'remove' ? 'Remove time' : 'Add time';
+
+    const save = document.getElementById('ttManualSave');
+    if (save) save.textContent = (ttManualMode === 'remove' ? 'Remove from ' : 'Add to ')
+        + (cat && cat.name ? cat.name : 'category');
+
+    const note = document.getElementById('ttManualNote');
+    if (note) note.textContent = ttManualMode === 'remove'
+        ? "Taken off today's clock and logged as a correction, so the Log and Analysis agree with the card. It can't go below zero."
+        : "Time added for today counts toward the card's clock and its goal. An earlier day only shows up in the Log and Analysis.";
+
+    document.getElementById('ttManualMins')?.focus();
 }
 
 function ttManualQuick(mins) {
@@ -1563,49 +1809,60 @@ function ttCloseManualBg(e) {
 async function ttSubmitManual() {
     const cat = ttFindCat(ttManualSlot);
     if (!cat) return;
+    const removing = ttManualMode === 'remove';
 
     const mins = parseInt(document.getElementById('ttManualMins')?.value, 10);
     if (!mins || mins <= 0) {
-        if (typeof showToast === 'function') showToast('Enter how many minutes to add');
+        if (typeof showToast === 'function') {
+            showToast(removing ? 'Enter how many minutes to remove' : 'Enter how many minutes to add');
+        }
         return;
     }
-    const seconds = Math.min(mins, 1440) * 60;
+    let seconds = Math.min(mins, 1440) * 60;
 
     const raw = document.getElementById('ttManualItem')?.value || '';
     const [kind, id] = raw ? raw.split(':') : [null, null];
     const dateStr = document.getElementById('ttManualDate')?.value || ttTodayStr();
     const today = ttTodayStr();
 
-    // The log row wants a plausible window; back-date it from the end of the day
-    // it belongs to, so the Log reads sensibly and the ordering holds.
-    const endedAt = dateStr === today ? new Date() : new Date(dateStr + 'T18:00:00');
-    const startedAt = new Date(endedAt.getTime() - seconds * 1000);
-
     ttCloseManual();
 
     if (dateStr === today) {
-        cat.elapsed_seconds = (cat.elapsed_seconds || 0) + seconds;
-        // Restart the running interval from now, so the banked time isn't
-        // double-counted against running_since.
+        // Bank whatever is on the clock first, so the correction applies to a
+        // settled number and running_since can't double-count it afterwards.
         if (cat.running) {
-            ttCloseInterval(cat);                       // bank what's on the clock first
+            ttCloseInterval(cat);
             cat.running_since = new Date().toISOString();
-            ttPersistCategory(cat, {
-                elapsed_seconds: cat.elapsed_seconds, running_since: cat.running_since
-            });
-        } else {
-            ttPersistCategory(cat, { elapsed_seconds: cat.elapsed_seconds });
         }
+        const before = cat.elapsed_seconds || 0;
+        const after = Math.max(0, before + (removing ? -seconds : seconds));
+        cat.elapsed_seconds = after;
+        // Never log away more than the card actually held.
+        if (removing) seconds = before - after;
+        ttPersistCategory(cat, cat.running
+            ? { elapsed_seconds: after, running_since: cat.running_since }
+            : { elapsed_seconds: after });
     }
 
-    await ttCreateLog(cat, startedAt.toISOString(), endedAt.toISOString(), seconds,
-        kind === 'task' ? id : null, kind === 'habit' ? id : null, dateStr);
+    if (seconds > 0) {
+        // The log row wants a plausible window; back-date it from the end of the
+        // day it belongs to, so the Log reads sensibly and the ordering holds.
+        const endedAt = dateStr === today ? new Date() : new Date(dateStr + 'T18:00:00');
+        const startedAt = new Date(endedAt.getTime() - seconds * 1000);
+        await ttCreateLog(cat, startedAt.toISOString(), endedAt.toISOString(),
+            removing ? -seconds : seconds,
+            kind === 'task' ? id : null, kind === 'habit' ? id : null, dateStr);
+    }
 
     ttSyncCardState(cat);
     ttRenderTasksInto(cat);
     ttTick();
     if (typeof showToast === 'function') {
-        showToast(`Added ${ttFormatDuration(seconds)} to ${cat.name || 'this category'}`);
+        const label = cat.name || 'this category';
+        showToast(seconds > 0
+            ? (removing ? `Removed ${ttFormatDuration(seconds)} from ${label}`
+                        : `Added ${ttFormatDuration(seconds)} to ${label}`)
+            : `${label} was already at zero`);
     }
 }
 
@@ -1661,17 +1918,18 @@ function ttRenderLogList() {
         const dayTotal = rows.reduce((s, l) => s + (l.duration_seconds || 0), 0);
         return `
         <div class="tt-log-group">
-            <div class="tt-log-date">${ttFormatDateLabel(date)} · ${ttFormatDuration(dayTotal)}</div>
+            <div class="tt-log-date">${ttFormatDateLabel(date)} · ${ttFormatSigned(dayTotal)}</div>
             ${rows.map(l => {
                 const started = l.started_at ? new Date(l.started_at) : null;
                 const timeStr = started && !isNaN(started.getTime())
                     ? started.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
+                const negative = (l.duration_seconds || 0) < 0;
                 return `
-                <div class="tt-log-row">
+                <div class="tt-log-row${negative ? ' negative' : ''}">
                     <span class="tt-log-swatch" style="background:${ttLogColor(l)}"></span>
-                    <span class="tt-log-cat">${ttEscape(l.category_name || 'Category')}${l.task_title ? `<em>${ttEscape(l.task_title)}</em>` : ''}</span>
+                    <span class="tt-log-cat">${ttEscape(l.category_name || 'Category')}${l.task_title ? `<em>${ttEscape(l.task_title)}</em>` : ''}${negative ? '<em>correction</em>' : ''}</span>
                     <span class="tt-log-time">${timeStr}</span>
-                    <span class="tt-log-dur">${ttFormatDuration(l.duration_seconds)}</span>
+                    <span class="tt-log-dur">${ttFormatSigned(l.duration_seconds)}</span>
                     <button class="tt-log-del" onclick="ttDeleteLog('${l.id}')" title="Delete entry">${TT_ICON.trash}</button>
                 </div>`;
             }).join('')}

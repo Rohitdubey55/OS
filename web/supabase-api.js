@@ -234,7 +234,7 @@
         // Repeatable weekly template — one row per (weekday 0=Mon..6=Sun, slot).
         meal_template: new Set(['id','user_id','weekday','slot','planned','created_at','updated_at']),
         // Time Tracker — 6-slot stopwatch grid linked from the Pomodoro page.
-        time_categories: new Set(['id','user_id','slot_index','name','goal_minutes','elapsed_seconds','running','running_since','day','todos_json','task_category','habit_routine','active_task_id','active_habit_id']),
+        time_categories: new Set(['id','user_id','slot_index','name','goal_minutes','elapsed_seconds','running','running_since','day','todos_json','task_category','habit_routine','active_task_id','active_habit_id','timer_target_seconds']),
         time_logs: new Set(['id','user_id','category_id','category_name','date','duration_seconds','started_at','ended_at','task_id','task_title','habit_id'])
     };
 
