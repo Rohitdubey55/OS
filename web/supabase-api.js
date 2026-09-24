@@ -59,16 +59,55 @@
 
                 // ─────────────────────────────────────────────────────
                 case 'init': {
-                    // Bulk-load every table in parallel. Match the shape the legacy
-                    // apiCall returns: { success: true, data: { table1: [...], ... } }
+                    // Bulk-load every table. Match the shape the legacy apiCall
+                    // returns: { success: true, data: { table1: [...], ... } }.
+                    //
+                    // Two rules earn their keep here. Each table gets its OWN
+                    // deadline, so one slow table can't drag the whole load past
+                    // the caller's timeout and lose everything with it. And a
+                    // table that misses its deadline is left OUT of the map
+                    // rather than mapped to [] — applyBulkDataToState only
+                    // touches keys it's given, so a miss keeps whatever was
+                    // already in state instead of blanking the app.
+                    //
+                    // Firing all ~44 at once doesn't make them arrive sooner
+                    // either: the browser caps concurrent connections per host,
+                    // so the rest queue anyway, and a big paginated table ends up
+                    // interleaved behind the queue. A small pool is both faster
+                    // in practice and far more predictable.
                     const tables = payload?.tables || _getAllTables();
-                    const results = await Promise.all(tables.map(async (t) => {
-                        try {
-                            return [t, await _fetchAllRows(sb, t)];
-                        } catch (e) { return [t, []]; }
-                    }));
-                    const dataMap = Object.fromEntries(results);
-                    return { success: true, data: dataMap };
+                    const TABLE_TIMEOUT_MS = 9000;
+                    const POOL = 6;
+
+                    const dataMap = {};
+                    const failed = [];
+                    let next = 0;
+
+                    async function drain() {
+                        while (next < tables.length) {
+                            const t = tables[next++];
+                            let timer;
+                            try {
+                                dataMap[t] = await Promise.race([
+                                    _fetchAllRows(sb, t),
+                                    new Promise((_, rej) => {
+                                        timer = setTimeout(() => rej(new Error('timed out')), TABLE_TIMEOUT_MS);
+                                    })
+                                ]);
+                            } catch (e) {
+                                failed.push(t);
+                                console.warn(`[init] ${t} did not load:`, e && e.message || e);
+                            } finally {
+                                clearTimeout(timer);
+                            }
+                        }
+                    }
+
+                    await Promise.all(
+                        Array.from({ length: Math.min(POOL, tables.length) }, drain)
+                    );
+
+                    return { success: true, data: dataMap, failed, partial: failed.length > 0 };
                 }
 
                 // ─────────────────────────────────────────────────────

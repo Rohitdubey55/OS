@@ -2526,6 +2526,31 @@ const SHEET_TO_KEY = {
     'vision_board': 'vision'
 };
 
+// Tables that missed their slot on the first pass get one quiet second go a
+// moment later, once the initial burst of connections has cleared. If they turn
+// up and the user is still on the page they started on, that page is repainted —
+// otherwise their data would sit in state, correct and invisible.
+async function _retryMissingTables(tables) {
+    if (!Array.isArray(tables) || !tables.length) return;
+    const viewAtStart = state.view;
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+        const res = await apiCall('init', null, { tables });
+        if (!res || !res.data || !Object.keys(res.data).length) return;
+        applyBulkDataToState(res.data);
+        console.log('loadAllData: caught up on', Object.keys(res.data).join(', '));
+        if (typeof updateWidgetData === 'function') updateWidgetData();
+        if (window.personalStore && state.data) {
+            for (const k of Object.keys(res.data)) {
+                window.personalStore.notify(SHEET_TO_KEY[k] || k);
+            }
+        }
+        if (state.view === viewAtStart && typeof routeTo === 'function') routeTo(state.view);
+    } catch (e) {
+        console.warn('loadAllData: catch-up failed:', e && e.message || e);
+    }
+}
+
 function applyBulkDataToState(bulkData) {
     Object.keys(bulkData).forEach(sheetName => {
         const key = SHEET_TO_KEY[sheetName] || sheetName;
@@ -2667,25 +2692,41 @@ async function fetchFreshData(force = false) {
         } catch (e) { /* session lookup failed; still try the init below */ }
 
         updateLoader(10, 'Loading your data…');
+
+        // init now bounds each table itself and returns whatever arrived, so this
+        // is only a backstop against the whole call hanging — not a data deadline.
+        // It used to be 10s, which a slow morning could lose, and losing it meant
+        // returning with EVERY table empty and no second attempt: the app came up
+        // blank until the user reloaded. Now a miss keeps what we have and the
+        // stragglers are re-fetched in the background.
+        const runInit = (tables) => Promise.race([
+            apiCall('init', null, tables ? { tables } : {}),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout')), 45000))
+        ]);
+
+        let result = null;
         try {
-            const result = await Promise.race([
-                apiCall('init', null, {}),
-                // 10-second safety timeout so the loader can't hang forever
-                new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout')), 10000))
-            ]);
-            if (result && result.success && result.data) {
-                updateLoader(80, 'Processing data…');
-                applyBulkDataToState(result.data);
-                console.log(`loadAllData: ✅ Supabase init in ${Math.round(performance.now() - startTime)}ms`);
-                if (typeof updateWidgetData === 'function') updateWidgetData();
-                if (window.personalStore && state.data) {
-                    for (const k of Object.keys(state.data)) window.personalStore.notify(k);
-                }
-                return;
-            }
+            result = await runInit();
         } catch (e) {
-            console.warn('loadAllData: Supabase init failed:', e.message);
+            console.warn('loadAllData: Supabase init failed:', e.message, '— retrying once');
+            try { result = await runInit(); }
+            catch (e2) { console.warn('loadAllData: retry failed too:', e2.message); }
         }
+
+        if (result && result.success && result.data && Object.keys(result.data).length) {
+            updateLoader(80, 'Processing data…');
+            applyBulkDataToState(result.data);
+            console.log(`loadAllData: ✅ Supabase init in ${Math.round(performance.now() - startTime)}ms`
+                + (result.partial ? ` (${result.failed.length} table(s) pending: ${result.failed.join(', ')})` : ''));
+            if (typeof updateWidgetData === 'function') updateWidgetData();
+            if (window.personalStore && state.data) {
+                for (const k of Object.keys(state.data)) window.personalStore.notify(k);
+            }
+            if (result.partial) _retryMissingTables(result.failed);
+            return;
+        }
+
+        console.warn('loadAllData: no data came back from Supabase');
         return;
     }
 
