@@ -372,7 +372,10 @@ function addLongPressListener(selector, callback) {
 
 const APP_DEFAULT_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
 
-window.appCategories = function appCategories() {
+// The list the user actually curates, in the Tasks category manager. This is
+// the answer to "what are my categories?" — and it's what a page should offer
+// when it's asking you to choose a focus area.
+window.appSavedCategories = function appSavedCategories() {
     const settings = (state.data.settings && state.data.settings[0]) || {};
     let list = [];
     if (settings.task_categories) {
@@ -384,10 +387,26 @@ window.appCategories = function appCategories() {
         } catch (e) { }
         if (!list.length) list = String(raw).split(',').map(c => c.trim()).filter(Boolean);
     }
-    if (!list.length) list = APP_DEFAULT_CATEGORIES.slice();
+    return list.length ? list : APP_DEFAULT_CATEGORIES.slice();
+};
+
+// The curated list PLUS any category still filed on a task or a habit. Use this
+// wherever hiding a category would strand the items sitting under it — the
+// Tasks filters, the stopwatch card pickers. It is deliberately a superset: a
+// retired category lingers here until the last item using it is re-filed, which
+// is the point, not a bug.
+window.appCategories = function appCategories() {
+    const list = window.appSavedCategories();
     (state.data.tasks || []).forEach(t => { if (t.category && !list.includes(t.category)) list.push(t.category); });
     (state.data.habits || []).forEach(h => { if (h.category && !list.includes(h.category)) list.push(h.category); });
     return list;
+};
+
+// Categories that are only present because something is still filed under them.
+// Surfaced so a stray old task can't quietly pad every picker in the app.
+window.appStrayCategories = function appStrayCategories() {
+    const saved = window.appSavedCategories();
+    return window.appCategories().filter(c => !saved.includes(c));
 };
 
 const VIEW_MAP = {
@@ -412,7 +431,7 @@ const VIEW_MAP = {
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js?v=20260924a', render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
-    tdp:           { src: 'view-tdp.js?v=20260924a',  render: 'renderTDP' },
+    tdp:           { src: 'view-tdp.js?v=20260924c',  render: 'renderTDP' },
     meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
     timeTracker:   { src: 'view-time-tracker.js?v=20260924a', render: 'renderTimeTracker' },
     timeAnalysis:  { src: 'view-time-tracker.js?v=20260924a', render: 'renderTimeAnalysis' }

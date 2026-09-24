@@ -82,15 +82,29 @@ function tdpCats(plan) {
     } catch (e) { return {}; }
 }
 
-// The shared vocabulary, plus any category this plan already carries — so a plan
-// written under the old fixed names keeps showing its items after the switch.
+// The categories you curate in the Tasks category manager, plus any this plan
+// already carries — so a plan written under the old fixed names keeps showing
+// its items after the switch.
+//
+// Deliberately the CURATED list, not window.appCategories(): that one also
+// includes any category still filed on some old task or habit, which is right
+// for a filter or a picker (hiding it would strand those items) and wrong here.
+// A planning page asks you to pick focus areas for ten days; it shouldn't hand
+// you a card for a category you retired months ago because one task still
+// mentions it.
 function tdpCategoriesFor(plan) {
     let list = [];
-    if (typeof window.appCategories === 'function') {
+    if (typeof window.appSavedCategories === 'function') {
+        try { list = window.appSavedCategories().slice(); } catch (e) { list = []; }
+    } else if (typeof window.appCategories === 'function') {
         try { list = window.appCategories().slice(); } catch (e) { list = []; }
     }
     if (!list.length) list = TDP_LEGACY_CATEGORIES.slice();
-    Object.keys(tdpCats(plan)).forEach(k => { if (!list.includes(k)) list.push(k); });
+    // A plan's own categories always show, even ones no longer on the list —
+    // otherwise items already typed into it would vanish.
+    Object.keys(tdpCats(plan)).forEach(k => {
+        if (!list.includes(k) && (tdpCats(plan)[k] || []).length) list.push(k);
+    });
     return list;
 }
 
