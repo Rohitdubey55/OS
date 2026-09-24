@@ -219,7 +219,7 @@
         diary_tags: new Set(['id','user_id','name','color','usage_count']),
         diary_achievements: new Set(['id','user_id','type','name','description','target_value','unlocked_at']),
         vision_images: new Set(['id','user_id','vision_id','file_id','url','name','uploaded_at']),
-        vision_tdp: new Set(['id','user_id','start_date','end_date','status','categories_json']),
+        vision_tdp: new Set(['id','user_id','start_date','end_date','status','categories_json','created_at']),
         mural_projects: new Set(['id','user_id','title','category','bg_pattern','bg_color']),
         mural_categories: new Set(['id','user_id','name','color']),
         mural_elements: new Set(['id','user_id','project_id','type','x','y','w','h','content','color','z_index','shape','from_id','to_id','connector_style','from_side','to_side','line_style','arrow_mode','font_size','text_color','bold','text_align','stroke_width','from_x','from_y','to_x','to_y','from_rx','from_ry','to_rx','to_ry','border_radius']),
@@ -234,8 +234,8 @@
         // Repeatable weekly template — one row per (weekday 0=Mon..6=Sun, slot).
         meal_template: new Set(['id','user_id','weekday','slot','planned','created_at','updated_at']),
         // Time Tracker — 6-slot stopwatch grid linked from the Pomodoro page.
-        time_categories: new Set(['id','user_id','slot_index','name','goal_minutes','elapsed_seconds','running','running_since','day','todos_json','task_category','habit_routine','active_task_id','active_habit_id','timer_target_seconds']),
-        time_logs: new Set(['id','user_id','category_id','category_name','date','duration_seconds','started_at','ended_at','task_id','task_title','habit_id'])
+        time_categories: new Set(['id','user_id','slot_index','name','goal_minutes','elapsed_seconds','running','running_since','day','todos_json','task_category','habit_routine','active_task_id','active_habit_id','active_tdp_item_id','timer_target_seconds']),
+        time_logs: new Set(['id','user_id','category_id','category_name','date','duration_seconds','started_at','ended_at','task_id','task_title','habit_id','tdp_item_id'])
     };
 
     // If a write fails because a column doesn't exist yet (e.g. a column added in a

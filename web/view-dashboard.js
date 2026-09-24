@@ -509,13 +509,9 @@ window._dashSetImage = function () {
     if (typeof renderDashboard === 'function') renderDashboard();
 };
 
-// Open the 10-Day-Plan modal from the dashboard (lazy-load the vision module first).
-window._dashOpenTDP = async function () {
-    if (typeof openTDPModal !== 'function' && typeof ensureViewLoaded === 'function') {
-        try { await ensureViewLoaded('vision'); } catch (e) {}
-    }
-    if (typeof openTDPModal === 'function') openTDPModal();
-    else if (typeof routeTo === 'function') routeTo('vision');
+// The 10 Days Plan is its own page now (it used to be a modal on Vision).
+window._dashOpenTDP = function () {
+    if (typeof routeTo === 'function') routeTo('tdp');
 };
 
 // Helper to look up catalog entry

@@ -197,17 +197,52 @@ function ttFindHabit(habitId) {
 }
 
 // Time tracked today against one task or habit, including the running interval.
+const TT_LOG_KEY = { habit: 'habit_id', tdp: 'tdp_item_id', task: 'task_id' };
+const TT_ACTIVE_KEY = { habit: 'active_habit_id', tdp: 'active_tdp_item_id', task: 'active_task_id' };
+
 function ttItemTracked(kind, id) {
     const today = ttTodayStr();
-    const key = kind === 'habit' ? 'habit_id' : 'task_id';
+    const key = TT_LOG_KEY[kind] || 'task_id';
     let sec = (ttLogs || []).reduce((s, l) =>
         s + (String(l[key] || '') === String(id) && l.date === today ? (l.duration_seconds || 0) : 0), 0);
-    const activeKey = kind === 'habit' ? 'active_habit_id' : 'active_task_id';
+    const activeKey = TT_ACTIVE_KEY[kind] || 'active_task_id';
     const live = ttCategories.find(c => c.running && String(c[activeKey] || '') === String(id));
     if (live && live.running_since) {
         sec += Math.max(0, Math.floor((Date.now() - new Date(live.running_since).getTime()) / 1000));
     }
     return sec;
+}
+
+/* ── Ten Days Plan ── The TDP page files its items under the same categories, so
+   a card pulls in the active plan's items for its category alongside the tasks
+   and habits. view-tdp.js owns the plan model and is lazy-loaded on render. */
+
+function ttTdpFor(cat) {
+    if (!cat.task_category || typeof window.tdpItemsForCategory !== 'function') return [];
+    try { return window.tdpItemsForCategory(cat.task_category) || []; }
+    catch (e) { return []; }
+}
+
+function ttJsStr(v) {
+    return String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function ttTdpFind(itemId) {
+    if (typeof window.tdpItemsForCategory !== 'function') return null;
+    for (const c of ttCategories) {
+        if (!c.task_category) continue;
+        const hit = ttTdpFor(c).find(i => String(i.id) === String(itemId));
+        if (hit) return hit;
+    }
+    return null;
+}
+
+function ttTdpPlanLabel() {
+    if (typeof window.tdpActivePlanSummary !== 'function') return '';
+    try {
+        const s = window.tdpActivePlanSummary();
+        return s ? `10 days plan · day ${s.day}` : '';
+    } catch (e) { return ''; }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -334,7 +369,7 @@ async function ttSaveCard(slotIndex) {
     }
 }
 
-async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId, habitId, dateStr) {
+async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId, habitId, dateStr, tdpItemId) {
     const task = taskId ? ttFindTask(taskId) : null;
     const habit = habitId ? ttFindHabit(habitId) : null;
     const payload = {
@@ -348,6 +383,11 @@ async function ttCreateLog(cat, startedAt, endedAt, durationSeconds, taskId, hab
     if (habitId) {
         payload.habit_id = String(habitId);
         payload.task_title = habit ? (habit.habit_name || '') : '';   // shared label column
+    }
+    if (tdpItemId) {
+        payload.tdp_item_id = String(tdpItemId);
+        const tdpItem = ttTdpFind(tdpItemId);
+        payload.task_title = tdpItem ? tdpItem.text : '';             // same label column
     }
     // Keep the local list in step so per-task totals update without a refetch.
     ttLogs.unshift({ id: 'local-' + Date.now(), ...payload });
@@ -381,7 +421,10 @@ function ttCloseInterval(cat) {
     const endedAt = new Date();
     const deltaSec = Math.max(0, Math.floor((endedAt.getTime() - new Date(startedAt).getTime()) / 1000));
     cat.elapsed_seconds = (cat.elapsed_seconds || 0) + deltaSec;
-    if (deltaSec >= 1) ttCreateLog(cat, startedAt, endedAt.toISOString(), deltaSec, cat.active_task_id, cat.active_habit_id);
+    if (deltaSec >= 1) {
+        ttCreateLog(cat, startedAt, endedAt.toISOString(), deltaSec,
+            cat.active_task_id, cat.active_habit_id, null, cat.active_tdp_item_id);
+    }
     return deltaSec;
 }
 
@@ -455,9 +498,10 @@ function ttFinishCountdown(cat) {
     cat.timer_target_seconds = null;
     cat.active_task_id = null;
     cat.active_habit_id = null;
+    cat.active_tdp_item_id = null;
     ttPersistCategory(cat, {
         running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds,
-        timer_target_seconds: null, active_task_id: null, active_habit_id: null
+        timer_target_seconds: null, active_task_id: null, active_habit_id: null, active_tdp_item_id: null
     });
     ttSyncCardState(cat);
     ttRenderTasksInto(cat);
@@ -497,7 +541,8 @@ async function ttToggle(slotIndex) {
         cat.running_since = new Date().toISOString();
         cat.active_task_id = null;
         cat.active_habit_id = null;
-        ttPersistCategory(cat, { running: true, running_since: cat.running_since, active_task_id: null, active_habit_id: null });
+        cat.active_tdp_item_id = null;
+        ttPersistCategory(cat, { running: true, running_since: cat.running_since, active_task_id: null, active_habit_id: null, active_tdp_item_id: null });
         ttStartTicker();
     } else {
         ttCloseInterval(cat);
@@ -506,7 +551,8 @@ async function ttToggle(slotIndex) {
         cat.timer_target_seconds = null;
         cat.active_task_id = null;
         cat.active_habit_id = null;
-        ttPersistCategory(cat, { running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds, timer_target_seconds: null, active_task_id: null, active_habit_id: null });
+        cat.active_tdp_item_id = null;
+        ttPersistCategory(cat, { running: false, running_since: null, elapsed_seconds: cat.elapsed_seconds, timer_target_seconds: null, active_task_id: null, active_habit_id: null, active_tdp_item_id: null });
     }
 
     ttSyncCardState(cat);
@@ -521,22 +567,20 @@ async function ttToggleItem(slotIndex, kind, id) {
     const cat = ttFindCat(slotIndex);
     if (!cat) return;
 
-    const activeKey = kind === 'habit' ? 'active_habit_id' : 'active_task_id';
-    const otherKey = kind === 'habit' ? 'active_task_id' : 'active_habit_id';
+    const activeKey = TT_ACTIVE_KEY[kind] || 'active_task_id';
+    const allKeys = ['active_task_id', 'active_habit_id', 'active_tdp_item_id'];
     const isActive = cat.running && String(cat[activeKey] || '') === String(id);
     ttCloseInterval(cat);
 
+    allKeys.forEach(k => { cat[k] = null; });   // only one thing is being worked on
     if (isActive) {
         cat.running = false;
         cat.running_since = null;
         cat.timer_target_seconds = null;
-        cat[activeKey] = null;
-        cat[otherKey] = null;
     } else {
         cat.running = true;
         cat.running_since = new Date().toISOString();
         cat[activeKey] = String(id);
-        cat[otherKey] = null;
         ttStartTicker();
     }
 
@@ -546,7 +590,8 @@ async function ttToggleItem(slotIndex, kind, id) {
         elapsed_seconds: cat.elapsed_seconds,
         timer_target_seconds: cat.timer_target_seconds || null,
         active_task_id: cat.active_task_id || null,
-        active_habit_id: cat.active_habit_id || null
+        active_habit_id: cat.active_habit_id || null,
+        active_tdp_item_id: cat.active_tdp_item_id || null
     });
 
     ttSyncCardState(cat);
@@ -556,6 +601,7 @@ async function ttToggleItem(slotIndex, kind, id) {
 
 function ttToggleTask(slotIndex, taskId) { return ttToggleItem(slotIndex, 'task', taskId); }
 function ttToggleHabit(slotIndex, habitId) { return ttToggleItem(slotIndex, 'habit', habitId); }
+function ttToggleTdp(slotIndex, itemId) { return ttToggleItem(slotIndex, 'tdp', itemId); }
 
 // Zero today's accumulated time for one stopwatch. Logged intervals are
 // untouched — the Log and Analysis keep everything already recorded.
@@ -571,7 +617,8 @@ async function ttResetTimer(slotIndex) {
     cat.timer_target_seconds = null;
     cat.active_task_id = null;
     cat.active_habit_id = null;
-    ttPersistCategory(cat, { elapsed_seconds: 0, running: false, running_since: null, timer_target_seconds: null, active_task_id: null, active_habit_id: null });
+    cat.active_tdp_item_id = null;
+    ttPersistCategory(cat, { elapsed_seconds: 0, running: false, running_since: null, timer_target_seconds: null, active_task_id: null, active_habit_id: null, active_tdp_item_id: null });
     ttSyncCardState(cat);
     ttRenderTasksInto(cat);
     ttTick();
@@ -660,7 +707,15 @@ function ttTick() {
             const el = document.getElementById(`ttHabitTracked_${cat.slot_index}_${h.id}`);
             if (el) el.textContent = sec ? ttFormatDuration(sec) : '—';
         });
-        sumEl.innerHTML = (tasks.length + habits.length)
+        const tdpItems = ttTdpFor(cat);
+        tdpItems.forEach(i => {
+            planned += (Number(i.minutes) || 0) * 60;
+            const sec = ttItemTracked('tdp', i.id);
+            tracked += sec;
+            const el = document.getElementById(`ttTdpTracked_${cat.slot_index}_${i.id}`);
+            if (el) el.textContent = sec ? ttFormatDuration(sec) : '—';
+        });
+        sumEl.innerHTML = (tasks.length + habits.length + tdpItems.length)
             ? `<span>Planned <b>${ttFormatDuration(planned)}</b></span><span>tracked <b>${ttFormatDuration(tracked)}</b></span>`
             : '';
     });
@@ -699,7 +754,7 @@ function ttTick() {
 ═══════════════════════════════════════════════════════ */
 
 const TT_SYNC_FIELDS = ['name', 'goal_minutes', 'elapsed_seconds', 'running', 'running_since',
-    'day', 'todos_json', 'task_category', 'active_task_id', 'active_habit_id', 'timer_target_seconds'];
+    'day', 'todos_json', 'task_category', 'active_task_id', 'active_habit_id', 'active_tdp_item_id', 'timer_target_seconds'];
 const TT_TOUCH_GRACE_MS = 6000;
 let ttSyncTimer = null;
 let ttRealtimeChannel = null;
@@ -875,7 +930,9 @@ function ttMiniPaint() {
     const timeEl = document.getElementById('ttMiniTime');
     const activeTask = running.active_task_id ? ttFindTask(running.active_task_id) : null;
     const activeHabit = running.active_habit_id ? ttFindHabit(running.active_habit_id) : null;
-    const itemName = activeTask ? activeTask.title : (activeHabit ? activeHabit.habit_name : '');
+    const activeTdp = running.active_tdp_item_id ? ttTdpFind(running.active_tdp_item_id) : null;
+    const itemName = activeTask ? activeTask.title
+        : (activeHabit ? activeHabit.habit_name : (activeTdp ? activeTdp.text : ''));
     if (nameEl) nameEl.textContent = itemName ? `${running.name} · ${itemName}` : (running.name || 'Tracking');
 
     // A countdown finishes even with the page shut, and the chip reads down too.
@@ -1013,6 +1070,10 @@ async function renderTimeTracker() {
     try {
         await ttLoadCategories();
         await ttLoadLogs(true);   // per-task tracked time comes from today's logs
+        // view-tdp.js owns the 10-days-plan model; a card needs it to list items.
+        if (typeof window.tdpItemsForCategory !== 'function' && typeof ensureViewLoaded === 'function') {
+            try { await ensureViewLoaded('tdp'); } catch (e) { }
+        }
     } catch (e) {
         console.error('renderTimeTracker: load failed', e);
     }
@@ -1486,18 +1547,24 @@ function ttRenderTasksSection(cat) {
             ${cats.map(c => `<option value="${ttEscape(c)}" ${String(c) === String(linked) ? 'selected' : ''}>${ttEscape(c)}</option>`).join('')}
         </select>`;
 
-    const head = `<div class="tt-todos-head"><b>Tasks &amp; habits</b><span class="tt-pickers">${picker}</span></div>`;
+    const head = `<div class="tt-todos-head"><b>Tasks, habits &amp; plan</b><span class="tt-pickers">${picker}</span></div>`;
 
     if (!linked) {
-        return head + '<div class="tt-empty">Pick a category to pull in its tasks and habits.</div>';
+        return head + '<div class="tt-empty">Pick a category to pull in its tasks, habits and plan items.</div>';
     }
 
     const { tasks, undated } = ttTasksFor(cat);
     const habits = ttHabitsFor(cat);
 
+    const tdpItems = ttTdpFor(cat);
+
     let rows = tasks.map(t => ttRenderTaskRow(slot, t, cat)).join('');
     if (habits.length) {
         rows += `<div class="tt-row-label">Habits</div>` + habits.map(h => ttRenderHabitRow(slot, h, cat)).join('');
+    }
+    if (tdpItems.length) {
+        rows += `<div class="tt-row-label">${ttEscape(ttTdpPlanLabel() || '10 days plan')}</div>`
+             + tdpItems.map(i => ttRenderTdpRow(slot, i, cat)).join('');
     }
     if (!rows) {
         rows = `<div class="tt-empty">Nothing due today in ${ttEscape(linked)}.</div>`;
@@ -1615,6 +1682,44 @@ function ttRenderTasksInto(cat) {
     if (wrap) wrap.innerHTML = ttRenderTasksSection(cat);
 }
 
+// A 10-days-plan item: same shape as a task row, but ticking it writes back into
+// the plan's categories_json rather than a row of its own.
+function ttRenderTdpRow(slot, item, cat) {
+    const isActive = cat.running && String(cat.active_tdp_item_id || '') === String(item.id);
+    const tracked = ttItemTracked('tdp', item.id);
+    return `
+    <div class="tt-task tt-tdp ${isActive ? 'active' : ''} ${item.completed ? 'done' : ''}" id="ttTdp_${slot}_${ttEscape(item.id)}">
+        <input type="checkbox" ${item.completed ? 'checked' : ''} title="Tick off in the 10 days plan"
+               onchange="ttToggleTdpDone(${slot}, '${ttEscape(ttJsStr(item.id))}')" />
+        <span class="tt-task-title" title="${ttEscape(item.text)}">${ttEscape(item.text || 'Item')}</span>
+        <span class="tt-task-time">
+            <b id="ttTdpTracked_${slot}_${ttEscape(item.id)}">${tracked ? ttFormatDuration(tracked) : '—'}</b>
+            <i>/</i>
+            <label class="tt-task-est" title="Minutes you mean to give this">
+                <input type="number" min="0" max="1440" placeholder="0" value="${item.minutes || ''}"
+                       onchange="ttUpdateTdpEstimate(${slot}, '${ttEscape(ttJsStr(item.id))}', this.value)" />m
+            </label>
+        </span>
+        <button class="tt-task-play ${isActive ? 'on' : ''}" onclick="ttToggleTdp(${slot}, '${ttEscape(ttJsStr(item.id))}')"
+                title="${isActive ? 'Pause' : 'Start on this'}">${isActive ? TT_ICON.pause : TT_ICON.play}</button>
+    </div>`;
+}
+
+async function ttToggleTdpDone(slot, itemId) {
+    const cat = ttFindCat(slot);
+    if (!cat || typeof window.tdpToggleItemById !== 'function') return;
+    await window.tdpToggleItemById(itemId);
+    ttRenderTasksInto(cat);
+    ttTick();
+}
+
+async function ttUpdateTdpEstimate(slot, itemId, value) {
+    const cat = ttFindCat(slot);
+    if (!cat || typeof window.tdpSetItemMinutes !== 'function') return;
+    await window.tdpSetItemMinutes(itemId, value);
+    ttTick();
+}
+
 function ttSetCardCategory(slot, value) {
     const cat = ttFindCat(slot);
     if (!cat) return;
@@ -1725,10 +1830,12 @@ function ttOpenManual(slot) {
 
     const { tasks } = cat.task_category ? ttTasksFor(cat) : { tasks: [] };
     const habits = ttHabitsFor(cat);
+    const tdpItems = ttTdpFor(cat);
     const itemOptions = [
         '<option value="">The category itself</option>',
         ...tasks.map(t => `<option value="task:${ttEscape(t.id)}">${ttEscape(t.title || 'Task')}</option>`),
-        ...habits.map(h => `<option value="habit:${ttEscape(h.id)}">${ttEscape(h.habit_name || 'Habit')}</option>`)
+        ...habits.map(h => `<option value="habit:${ttEscape(h.id)}">${ttEscape(h.habit_name || 'Habit')}</option>`),
+        ...tdpItems.map(i => `<option value="tdp:${ttEscape(i.id)}">${ttEscape(i.text || 'Plan item')}</option>`)
     ].join('');
 
     const body = document.getElementById('ttManualBody');
@@ -1821,7 +1928,9 @@ async function ttSubmitManual() {
     let seconds = Math.min(mins, 1440) * 60;
 
     const raw = document.getElementById('ttManualItem')?.value || '';
-    const [kind, id] = raw ? raw.split(':') : [null, null];
+    const sep = raw.indexOf(':');                       // TDP handles contain colons
+    const kind = sep === -1 ? null : raw.slice(0, sep);
+    const id = sep === -1 ? null : raw.slice(sep + 1);
     const dateStr = document.getElementById('ttManualDate')?.value || ttTodayStr();
     const today = ttTodayStr();
 
@@ -1851,7 +1960,8 @@ async function ttSubmitManual() {
         const startedAt = new Date(endedAt.getTime() - seconds * 1000);
         await ttCreateLog(cat, startedAt.toISOString(), endedAt.toISOString(),
             removing ? -seconds : seconds,
-            kind === 'task' ? id : null, kind === 'habit' ? id : null, dateStr);
+            kind === 'task' ? id : null, kind === 'habit' ? id : null, dateStr,
+            kind === 'tdp' ? id : null);
     }
 
     ttSyncCardState(cat);

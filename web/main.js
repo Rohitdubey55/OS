@@ -391,13 +391,13 @@ window.appCategories = function appCategories() {
 };
 
 const VIEW_MAP = {
-    dashboard:     { src: 'view-dashboard.js?v=20260622', render: 'renderDashboard' },
+    dashboard:     { src: 'view-dashboard.js?v=20260924a', render: 'renderDashboard' },
     calendar:      { src: 'view-calendar.js?v=20260621', render: 'renderCalendar' },
     tasks:         { src: 'view-tasks.js?v=20260916c', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260916c', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
-    vision:        { src: 'view-vision.js?v=20260621k', render: 'renderVision' },
+    vision:        { src: 'view-vision.js?v=20260924a', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260915d', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
     gym:           { src: 'view-gym.js?v=20260915c', render: 'renderGym' },
@@ -410,11 +410,12 @@ const VIEW_MAP = {
     mural:         { src: 'view-mural.js?v=20260621c', render: 'renderMural' },
     tutor:         { src: 'view-tutor.js',         render: 'renderTutor' },
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
-    dailyTools:    { src: 'view-daily-tools.js?v=20260915c', render: 'renderDailyTools' },
+    dailyTools:    { src: 'view-daily-tools.js?v=20260924a', render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
+    tdp:           { src: 'view-tdp.js?v=20260924a',  render: 'renderTDP' },
     meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
-    timeTracker:   { src: 'view-time-tracker.js?v=20260921a', render: 'renderTimeTracker' },
-    timeAnalysis:  { src: 'view-time-tracker.js?v=20260921a', render: 'renderTimeAnalysis' }
+    timeTracker:   { src: 'view-time-tracker.js?v=20260924a', render: 'renderTimeTracker' },
+    timeAnalysis:  { src: 'view-time-tracker.js?v=20260924a', render: 'renderTimeAnalysis' }
 };
 
 const _loadedScripts = new Set();
@@ -507,7 +508,7 @@ async function routeTo(viewName) {
         notes: 'Notes', gym: 'Gym', chimes: 'Chimes', tutor: 'Tutor',
         meditation: 'Meditate', reader: 'Reader', lifeCalendar: 'Life',
         dailyTools: 'Daily Life Tools', wishlist: 'Wishlist', meals: 'Food Planner',
-        timeTracker: 'Time Spent On', timeAnalysis: 'Time Analysis'
+        timeTracker: 'Time Spent On', timeAnalysis: 'Time Analysis', tdp: '10 Days Plan'
     };
     const headerBar = document.querySelector('.main-header-bar');
     if (headerBar) headerBar.setAttribute('data-page-title', PAGE_TITLES[viewName] || '');
