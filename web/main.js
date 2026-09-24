@@ -433,8 +433,8 @@ const VIEW_MAP = {
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
     tdp:           { src: 'view-tdp.js?v=20260924c',  render: 'renderTDP' },
     meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
-    timeTracker:   { src: 'view-time-tracker.js?v=20260924a', render: 'renderTimeTracker' },
-    timeAnalysis:  { src: 'view-time-tracker.js?v=20260924a', render: 'renderTimeAnalysis' }
+    timeTracker:   { src: 'view-time-tracker.js?v=20260924d', render: 'renderTimeTracker' },
+    timeAnalysis:  { src: 'view-time-tracker.js?v=20260924d', render: 'renderTimeAnalysis' }
 };
 
 const _loadedScripts = new Set();

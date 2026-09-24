@@ -1205,11 +1205,15 @@ function ttPageHTML() {
         }
         .tt-reset:hover { color: var(--danger, #EF4444); background: var(--surface-3); }
         .tt-manual {
-            width: 42px; flex: none; border: 1px solid var(--border-color); border-radius: 12px;
-            background: var(--surface-2); color: var(--text-3); cursor: pointer;
-            display: flex; align-items: center; justify-content: center; transition: color .15s ease, background .15s ease;
+            flex: none; height: 42px; padding: 0 13px; gap: 5px;
+            border: 1px solid var(--border-color); border-radius: 12px;
+            background: var(--surface-2); color: var(--text-2); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-family: inherit; font-size: 13px; font-weight: 700;
+            transition: color .15s ease, background .15s ease, border-color .15s ease;
         }
-        .tt-manual:hover { color: var(--primary); background: var(--surface-3); }
+        .tt-manual b { font-size: 15px; font-weight: 800; line-height: 1; }
+        .tt-manual:hover { color: var(--primary); border-color: var(--primary); background: var(--primary-soft); }
 
         .tt-timer-row { display: flex; align-items: center; gap: 6px; margin-top: 9px; min-height: 30px; }
         .tt-timer-ico { display: flex; align-items: center; color: var(--text-3); flex: none; }
@@ -1482,7 +1486,8 @@ function ttRenderCard(cat) {
                     title="${cat.running ? 'Pause this stopwatch' : 'Start this stopwatch'}">
                 ${cat.running ? TT_ICON.pause : TT_ICON.play}<span>${cat.running ? 'Pause' : 'Start'}</span>
             </button>
-            <button class="tt-manual" onclick="ttOpenManual(${slot})" title="Log time you forgot to run the stopwatch for">${TT_ICON.plusClock}</button>
+            <button class="tt-manual" onclick="ttOpenManual(${slot})"
+                    title="Add time you tracked elsewhere, or take back time the clock ran on without you"><b>±</b> Time</button>
             <button class="tt-reset" onclick="ttResetTimer(${slot})" title="Reset today's time">${TT_ICON.reset}</button>
         </div>
 
