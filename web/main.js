@@ -431,7 +431,7 @@ const VIEW_MAP = {
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js?v=20260924a', render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
-    tdp:           { src: 'view-tdp.js?v=20260924c',  render: 'renderTDP' },
+    tdp:           { src: 'view-tdp.js?v=20260928a',  render: 'renderTDP' },
     meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
     timeTracker:   { src: 'view-time-tracker.js?v=20260924d', render: 'renderTimeTracker' },
     timeAnalysis:  { src: 'view-time-tracker.js?v=20260924d', render: 'renderTimeAnalysis' }

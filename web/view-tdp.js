@@ -22,6 +22,9 @@ const TDP_ICON = {
     close: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>',
     edit: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     archive: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><line x1="10" y1="13" x2="14" y2="13"/></svg>',
+    left: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>',
+    right: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+    today: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"/></svg>',
     clock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>'
 };
 
@@ -68,6 +71,57 @@ function tdpPlans() {
 
 function tdpActivePlan() {
     return tdpPlans().find(p => p.status === 'active') || null;
+}
+
+/* ── Which plan is on screen ──────────────────────────────────────────────
+   The page opens on the running plan, but you can step back through finished
+   ones and forward into any you've lined up. tdpViewId is just what's being
+   looked at; the plan that's actually RUNNING is always tdpActivePlan(), so
+   browsing never changes which one the stopwatch cards read from. */
+
+let tdpViewId = null;
+
+// Every plan in date order — the spine the arrows walk along.
+function tdpTimeline() {
+    return tdpPlans().slice().sort((a, b) =>
+        String(a.start_date || '').localeCompare(String(b.start_date || '')));
+}
+
+function tdpViewedPlan() {
+    if (tdpViewId) {
+        const hit = tdpFindPlan(tdpViewId);
+        if (hit) return hit;
+        tdpViewId = null;                    // it was deleted out from under us
+    }
+    return tdpActivePlan() || tdpTimeline().slice(-1)[0] || null;
+}
+
+function tdpNeighbours(plan) {
+    const line = tdpTimeline();
+    const i = line.findIndex(p => String(p.id) === String(plan && plan.id));
+    return { prev: i > 0 ? line[i - 1] : null, next: i >= 0 && i < line.length - 1 ? line[i + 1] : null };
+}
+
+window.tdpGoToPlan = function (id) {
+    tdpViewId = id || null;
+    tdpCloseSheet();
+    renderTDP();
+};
+
+window.tdpStep = function (dir) {
+    const { prev, next } = tdpNeighbours(tdpViewedPlan());
+    const target = dir < 0 ? prev : next;
+    if (target) tdpGoToPlan(target.id);
+};
+
+// Where a plan sits relative to today. 'upcoming' is a real status: a plan you
+// wrote before its start date, which becomes the active one when the day comes.
+function tdpPhase(plan) {
+    if (!plan) return 'none';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (tdpParseLocal(plan.start_date) > today) return 'upcoming';
+    if (tdpParseLocal(plan.end_date) < today) return 'past';
+    return 'current';
 }
 
 function tdpFindPlan(id) {
@@ -264,7 +318,7 @@ window.tdpDeleteItem = async function (planId, cat, idx) {
 };
 
 window.tdpUpdateStart = async function (val) {
-    const plan = tdpActivePlan();
+    const plan = tdpViewedPlan();
     if (!plan || !val) return;
     plan.start_date = val;
     plan.end_date = tdpPlusDays(val, 9);
@@ -275,15 +329,24 @@ window.tdpUpdateStart = async function (val) {
 
 window.tdpCreatePlan = async function () {
     const start = document.getElementById('tdpNewStart')?.value || tdpLocalDateStr();
-    for (const p of tdpPlans()) {
-        if (p.status === 'active') { p.status = 'archived'; await tdpSavePlan(p); }
+    const today = tdpLocalDateStr();
+    const startsLater = start > today;
+
+    // A plan dated ahead is queued, not swapped in: the one running now keeps
+    // running until its ten days are up. Only a plan starting today (or earlier)
+    // takes over, and that's the only case that archives what it replaces.
+    if (!startsLater) {
+        for (const p of tdpPlans()) {
+            if (p.status === 'active') { p.status = 'archived'; await tdpSavePlan(p); }
+        }
     }
+
     const cats = {};
     tdpCategoriesFor(null).forEach(c => { cats[c] = []; });
     const plan = {
         start_date: start,
         end_date: tdpPlusDays(start, 9),
-        status: 'active',
+        status: startsLater ? 'upcoming' : 'active',
         categories_json: JSON.stringify(cats),
         created_at: new Date().toISOString()
     };
@@ -296,20 +359,54 @@ window.tdpCreatePlan = async function () {
     }
     if (!Array.isArray(state.data.vision_tdp)) state.data.vision_tdp = [];
     state.data.vision_tdp.push(plan);
+    tdpViewId = plan.id;
     tdpCloseSheet();
     renderTDP();
-    if (typeof showToast === 'function') showToast('New 10 days plan started');
+    if (typeof showToast === 'function') {
+        showToast(startsLater
+            ? `Lined up for ${tdpNiceDate(start)}`
+            : 'New 10 days plan started');
+    }
 };
 
-// A plan whose ten days are up archives itself the next time you look.
-async function tdpAutoArchive() {
-    const plan = tdpActivePlan();
-    if (!plan) return;
+// Roll the timeline forward on each visit: a plan whose ten days are up
+// archives itself, and one you queued takes over the day it starts. Doing it
+// here rather than on a timer means it's right whenever you actually look,
+// including after the app has been shut for a week.
+async function tdpRollOver() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    if (tdpParseLocal(plan.end_date) < today) {
-        plan.status = 'archived';
-        await tdpSavePlan(plan);
-        if (typeof showToast === 'function') showToast('Your last 10 days plan has ended');
+    let ended = null, started = null;
+
+    for (const p of tdpPlans()) {
+        if (p.status === 'active' && tdpParseLocal(p.end_date) < today) {
+            p.status = 'archived';
+            await tdpSavePlan(p);
+            ended = p;
+        }
+    }
+    // Only one can be running; if several came due, the earliest wins and the
+    // rest stay queued behind it.
+    if (!tdpActivePlan()) {
+        const due = tdpTimeline().filter(p =>
+            p.status === 'upcoming' && tdpParseLocal(p.start_date) <= today && tdpParseLocal(p.end_date) >= today);
+        if (due.length) {
+            due[0].status = 'active';
+            await tdpSavePlan(due[0]);
+            started = due[0];
+        }
+    }
+    // A queued plan whose window passed entirely without ever starting is just
+    // history now.
+    for (const p of tdpPlans()) {
+        if (p.status === 'upcoming' && tdpParseLocal(p.end_date) < today) {
+            p.status = 'archived';
+            await tdpSavePlan(p);
+        }
+    }
+
+    if (typeof showToast === 'function') {
+        if (started) showToast('Your next 10 days plan has begun');
+        else if (ended) showToast('Your last 10 days plan has ended');
     }
 }
 
@@ -327,6 +424,27 @@ function tdpCSS() {
         border: 1px solid var(--border-color); border-radius: 18px;
         background: var(--surface-1); box-shadow: var(--shadow-card);
     }
+    .tdp-bar--away { border-style: dashed; }
+    .tdp-nav { display: flex; gap: 4px; flex: none; }
+    .tdp-arrow {
+        width: 32px; height: 32px; border: 1px solid var(--border-color); border-radius: 9px;
+        background: var(--surface-1); color: var(--text-2); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: background .15s ease, color .15s ease, border-color .15s ease;
+    }
+    .tdp-arrow:hover:not(:disabled) { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+    .tdp-arrow:disabled { opacity: .3; cursor: default; }
+
+    .tdp-banner {
+        display: block; padding: 10px 14px; margin-bottom: 14px;
+        border-radius: 12px; font-size: 12.5px; font-weight: 700; line-height: 1.5;
+    }
+    .tdp-banner.past { background: var(--surface-2); color: var(--text-3); border: 1px solid var(--border-color); }
+    .tdp-banner.next { background: var(--primary-soft); color: var(--primary); }
+
+    .tdp-card.locked .tdp-box { cursor: default; }
+    .tdp-card.locked .tdp-item:hover { background: transparent; }
+
     .tdp-bar-day { display: flex; flex-direction: column; gap: 2px; flex: none; }
     .tdp-bar-day b { font-size: 24px; font-weight: 850; color: var(--text-1); line-height: 1; font-variant-numeric: tabular-nums; }
     .tdp-bar-day span { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
@@ -418,7 +536,18 @@ function tdpCSS() {
     }
     .tdp-note { font-size: 12.5px; color: var(--text-3); font-weight: 600; line-height: 1.55; margin: 0 0 18px; }
     .tdp-note b { color: var(--text-1); }
-    .tdp-arch { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border: 1px solid var(--border-color); border-radius: 13px; margin-bottom: 9px; }
+    .tdp-arch {
+        display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+        padding: 13px 14px; border: 1px solid var(--border-color); border-radius: 13px;
+        margin-bottom: 9px; background: var(--surface-1); font-family: inherit; cursor: pointer;
+        transition: border-color .15s ease, background .15s ease;
+    }
+    .tdp-arch:hover { border-color: var(--primary); background: var(--primary-soft); }
+    .tdp-arch.here { border-color: var(--primary); }
+    .tdp-arch em { font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: .05em;
+        text-transform: uppercase; padding: 2px 6px; border-radius: 6px; margin-left: 6px; vertical-align: 1px; }
+    .tdp-arch em.now { background: var(--primary); color: #fff; }
+    .tdp-arch em.next { background: var(--surface-3); color: var(--text-2); }
     .tdp-arch-main { flex: 1; min-width: 0; }
     .tdp-arch-main b { display: block; font-size: 13.5px; font-weight: 800; color: var(--text-1); }
     .tdp-arch-main span { font-size: 12px; color: var(--text-3); font-weight: 600; }
@@ -435,35 +564,38 @@ function tdpColor(name) {
     return TDP_PALETTE[h % TDP_PALETTE.length];
 }
 
-function tdpCardHTML(plan, cat) {
+// `locked` is a finished plan: you can read it, not rewrite it. Ten days that
+// already happened aren't a to-do list any more, and quietly letting a stray
+// click change last month's score would make the history worth nothing.
+function tdpCardHTML(plan, cat, locked) {
     const items = tdpCats(plan)[cat] || [];
     const done = items.filter(i => i && i.completed).length;
     const rows = items.map((item, idx) => `
-        <div class="tdp-item ${item.completed ? 'done' : ''}">
-            <div class="tdp-box" onclick="tdpToggleItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', ${idx})"
-                 title="${item.completed ? 'Mark as not done' : 'Mark done'}">${TDP_ICON.check}</div>
+        <div class="tdp-item ${item.completed ? 'done' : ''} ${locked ? 'locked' : ''}">
+            <div class="tdp-box" ${locked ? '' : `onclick="tdpToggleItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', ${idx})"`}
+                 title="${locked ? '' : (item.completed ? 'Mark as not done' : 'Mark done')}">${TDP_ICON.check}</div>
             <div class="tdp-text">${tdpEscape(item.text || '')}</div>
-            <button class="tdp-del" onclick="tdpDeleteItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', ${idx})" title="Remove">${TDP_ICON.trash}</button>
+            ${locked ? '' : `<button class="tdp-del" onclick="tdpDeleteItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', ${idx})" title="Remove">${TDP_ICON.trash}</button>`}
         </div>`).join('');
 
     return `
-    <div class="tdp-card" id="tdpCard_${tdpEscape(cat)}">
+    <div class="tdp-card ${locked ? 'locked' : ''}" id="tdpCard_${tdpEscape(cat)}">
         <div class="tdp-card-head">
             <span class="tdp-dot" style="background:${tdpColor(cat)}"></span>
             <span class="tdp-card-name">${tdpEscape(cat)}</span>
             <span class="tdp-count">${done}/${items.length}</span>
         </div>
         <div class="tdp-items">${rows || `<div class="tdp-empty">Nothing here for these ten days.</div>`}</div>
-        <div class="tdp-add">
+        ${locked ? '' : `<div class="tdp-add">
             <input type="text" maxlength="200" placeholder="Add to ${tdpEscape(cat)}…"
                    onkeydown="if(event.key==='Enter'){event.preventDefault(); tdpAddItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', this);}" />
             <button onclick="tdpAddItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', this.previousElementSibling)" title="Add">${TDP_ICON.plus}</button>
-        </div>
+        </div>`}
     </div>`;
 }
 
 function tdpPageHTML() {
-    const plan = tdpActivePlan();
+    const plan = tdpViewedPlan();
 
     const sheets = `
     <div class="tdp-sheet hidden" id="tdpSheet" onclick="if(event.target.id==='tdpSheet') tdpCloseSheet()">
@@ -491,13 +623,39 @@ function tdpPageHTML() {
     const info = tdpDayInfo(plan);
     const prog = tdpProgress(plan);
     const cats = tdpCategoriesFor(plan);
+    const phase = tdpPhase(plan);
+    const { prev, next } = tdpNeighbours(plan);
+    const active = tdpActivePlan();
+    const away = active && String(active.id) !== String(plan.id);
+
+    // The headline says where you are without you having to work it out from
+    // dates: a day count while it's running, a countdown before it starts, and
+    // the score once it's over.
+    let headline, subline;
+    if (phase === 'current') {
+        headline = `Day ${info.day}`;
+        subline = `of 10 · ${info.remaining} left`;
+    } else if (phase === 'upcoming') {
+        const days = Math.max(0, Math.ceil((tdpParseLocal(plan.start_date) - new Date().setHours(0, 0, 0, 0)) / 86400000));
+        headline = 'Next';
+        subline = days === 0 ? 'starts today' : `starts in ${days} day${days === 1 ? '' : 's'}`;
+    } else {
+        headline = 'Done';
+        subline = `${prog.done} of ${prog.total} finished`;
+    }
 
     return tdpCSS() + `
     <div class="tdp-wrap">
-        <div class="tdp-bar">
+        <div class="tdp-bar ${phase !== 'current' ? 'tdp-bar--away' : ''}">
+            <div class="tdp-nav">
+                <button class="tdp-arrow" ${prev ? '' : 'disabled'} onclick="tdpStep(-1)"
+                        title="${prev ? 'Previous plan · ' + tdpNiceDate(prev.start_date) : 'Nothing before this'}">${TDP_ICON.left}</button>
+                <button class="tdp-arrow" ${next ? '' : 'disabled'} onclick="tdpStep(1)"
+                        title="${next ? 'Next plan · ' + tdpNiceDate(next.start_date) : 'Nothing after this'}">${TDP_ICON.right}</button>
+            </div>
             <div class="tdp-bar-day">
-                <b>Day ${info.day}</b>
-                <span>of 10 · ${info.remaining} left</span>
+                <b>${headline}</b>
+                <span>${subline}</span>
             </div>
             <div class="tdp-bar-range">
                 ${tdpNiceDate(plan.start_date)} – ${tdpNiceDate(plan.end_date)}
@@ -514,14 +672,18 @@ function tdpPageHTML() {
                 <div class="tdp-track ${prog.pct >= 100 ? 'hit' : ''}"><i style="width:${prog.pct}%"></i></div>
             </div>
             <div class="tdp-bar-acts">
-                <button class="tdp-btn" onclick="routeTo('timeTracker')" title="These items show up on the matching stopwatch card">${TDP_ICON.clock} Time spent on</button>
-                <button class="tdp-btn" onclick="tdpOpenArchive()">${TDP_ICON.archive} Past</button>
+                ${away ? `<button class="tdp-btn" onclick="tdpGoToPlan('${tdpEscape(active.id)}')">${TDP_ICON.today} Back to now</button>`
+                       : `<button class="tdp-btn" onclick="routeTo('timeTracker')" title="These items show up on the matching stopwatch card">${TDP_ICON.clock} Time spent on</button>`}
+                <button class="tdp-btn" onclick="tdpOpenArchive()">${TDP_ICON.archive} All plans</button>
                 <button class="tdp-btn primary" onclick="tdpOpenCreate()">${TDP_ICON.plus} New plan</button>
             </div>
         </div>
 
+        ${phase === 'past' ? `<div class="tdp-banner past">Looking at a finished plan — ${tdpNiceDate(plan.start_date)} to ${tdpNiceDate(plan.end_date)}. It's read-only.</div>` : ''}
+        ${phase === 'upcoming' ? `<div class="tdp-banner next">Looking ahead — this one starts ${tdpNiceDate(plan.start_date)}. Write it now; it takes over once the plan before it finishes.</div>` : ''}
+
         <div class="tdp-grid" id="tdpGrid">
-            ${cats.map(cat => tdpCardHTML(plan, cat)).join('')}
+            ${cats.map(cat => tdpCardHTML(plan, cat, phase === 'past')).join('')}
         </div>
     </div>` + sheets;
 }
@@ -529,7 +691,7 @@ function tdpPageHTML() {
 // Repaint in place. With a category given, only that card is rebuilt, so adding
 // an item doesn't blur the box you're still typing in elsewhere.
 function tdpRepaint(onlyCat) {
-    const plan = tdpActivePlan();
+    const plan = tdpViewedPlan();
     if (!plan) { renderTDP(); return; }
 
     if (onlyCat) {
@@ -537,12 +699,12 @@ function tdpRepaint(onlyCat) {
         if (card) {
             const input = card.querySelector('.tdp-add input');
             const hadFocus = document.activeElement === input;
-            card.outerHTML = tdpCardHTML(plan, onlyCat);
+            card.outerHTML = tdpCardHTML(plan, onlyCat, tdpPhase(plan) === 'past');
             if (hadFocus) document.getElementById('tdpCard_' + onlyCat)?.querySelector('.tdp-add input')?.focus();
         }
     } else {
         const grid = document.getElementById('tdpGrid');
-        if (grid) grid.innerHTML = tdpCategoriesFor(plan).map(c => tdpCardHTML(plan, c)).join('');
+        if (grid) grid.innerHTML = tdpCategoriesFor(plan).map(c => tdpCardHTML(plan, c, tdpPhase(plan) === 'past')).join('');
     }
 
     // The header numbers move with every tick, whichever card it came from.
@@ -602,25 +764,33 @@ window.tdpPreviewEnd = function () {
     el.innerHTML = `Runs through <b>${tdpNiceDate(tdpPlusDays(val, 9))}</b>. Categories come from the same list Tasks, Habits and Time Spent On use, so anything you put here lands on the matching stopwatch card.`;
 };
 
+// Every plan, newest first, as a jump list — the arrows are for stepping one at
+// a time, this is for when you know roughly when something was.
 window.tdpOpenArchive = function () {
     const modal = tdpSheet();
     if (!modal) return;
-    const past = tdpPlans().filter(p => p.status === 'archived')
-        .sort((a, b) => String(b.start_date).localeCompare(String(a.start_date)));
-    document.getElementById('tdpSheetTitle').textContent = 'Past plans';
-    document.getElementById('tdpSheetSub').textContent = past.length ? `${past.length} finished` : '';
-    document.getElementById('tdpSheetBody').innerHTML = past.length
-        ? past.map(p => {
+    const all = tdpTimeline().reverse();
+    const viewing = tdpViewedPlan();
+
+    document.getElementById('tdpSheetTitle').textContent = 'All plans';
+    document.getElementById('tdpSheetSub').textContent =
+        all.length ? `${all.length} plan${all.length === 1 ? '' : 's'}` : '';
+    document.getElementById('tdpSheetBody').innerHTML = all.length
+        ? all.map(p => {
             const pr = tdpProgress(p);
-            return `<div class="tdp-arch">
+            const ph = tdpPhase(p);
+            const tag = ph === 'current' ? '<em class="now">Running</em>'
+                : ph === 'upcoming' ? '<em class="next">Lined up</em>' : '';
+            const here = viewing && String(viewing.id) === String(p.id);
+            return `<button class="tdp-arch ${here ? 'here' : ''}" onclick="tdpGoToPlan('${tdpEscape(p.id)}')">
                 <div class="tdp-arch-main">
-                    <b>${tdpNiceDate(p.start_date)} – ${tdpNiceDate(p.end_date)}</b>
-                    <span>${pr.done} of ${pr.total} done</span>
+                    <b>${tdpNiceDate(p.start_date)} – ${tdpNiceDate(p.end_date)} ${tag}</b>
+                    <span>${pr.total ? `${pr.done} of ${pr.total} done` : 'nothing written down'}</span>
                 </div>
-                <span class="tdp-arch-pct">${pr.pct}%</span>
-            </div>`;
+                <span class="tdp-arch-pct">${pr.total ? pr.pct + '%' : '—'}</span>
+            </button>`;
         }).join('')
-        : '<p class="tdp-note">Nothing archived yet. A plan lands here when its ten days are up, or when you start a new one.</p>';
+        : '<p class="tdp-note">No plans yet.</p>';
     modal.classList.remove('hidden');
 };
 
@@ -640,7 +810,7 @@ async function renderTDP() {
         try { state.data.vision_tdp = await apiGet('vision_tdp') || []; }
         catch (e) { console.error('renderTDP: load failed', e); state.data.vision_tdp = state.data.vision_tdp || []; }
     }
-    await tdpAutoArchive();
+    await tdpRollOver();
 
     main.innerHTML = tdpPageHTML();
 }
