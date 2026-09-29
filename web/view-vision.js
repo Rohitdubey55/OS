@@ -8359,8 +8359,14 @@ window.v2StoryClose = function () {
    story, follows the mute button, and dips while a video plays its own sound. */
 
 const V2_TRACKS = [
-  { key: 'builtin:calm', name: 'Calm pad', note: 'Slow, warm chords' },
-  { key: 'builtin:dawn', name: 'Morning light', note: 'Brighter, gently rising' },
+  { key: 'builtin:rise',     name: 'Rise',          note: 'Motivational · bright, steady beat',   group: 'Motivational' },
+  { key: 'builtin:momentum', name: 'Momentum',      note: 'Motivational · driving pulse',         group: 'Motivational' },
+  { key: 'builtin:summit',   name: 'Summit',        note: 'Inspirational · big, anthem-like',     group: 'Inspirational' },
+  { key: 'builtin:horizon',  name: 'Horizon',       note: 'Inspirational · wide, cinematic',      group: 'Inspirational' },
+  { key: 'builtin:bloom',    name: 'Bloom',         note: 'Growth · gentle rising arpeggios',     group: 'Growth' },
+  { key: 'builtin:roots',    name: 'Roots',         note: 'Growth · warm, patient build',         group: 'Growth' },
+  { key: 'builtin:calm',     name: 'Calm pad',      note: 'Calm · slow, warm chords',             group: 'Calm' },
+  { key: 'builtin:dawn',     name: 'Morning light', note: 'Calm · brighter, gently rising',       group: 'Calm' },
 ];
 const V2_MUSIC_MAX = 20 * 1024 * 1024;
 
@@ -8375,10 +8381,38 @@ function v2MusicKey(m) { return m ? (v2RefParts(m.ref) ? v2RefParts(m.ref).key :
 
 const v2m = { key: '', vol: 0.6, audio: null, synth: null, ducked: false };
 
-// ── A small ambient synth: four-voice pad, soft filter, a little echo ──
+// ── A small in-browser band: pad, arpeggio, bass and a soft kick ──
+// Chords are MIDI notes; the first is the bass root. Everything is scheduled a
+// bar ahead on the audio clock, so timing stays tight even if the page is busy.
 const V2_SYNTH = {
-  'builtin:calm': { chords: [[45, 52, 57, 60, 64], [41, 48, 53, 57, 60], [48, 55, 60, 64, 67], [43, 50, 55, 59, 62]], bar: 8, type: 'sine', cutoff: 900 },
-  'builtin:dawn': { chords: [[50, 57, 62, 66, 69], [55, 62, 67, 71, 74], [52, 59, 64, 67, 71], [57, 64, 69, 73, 76]], bar: 6, type: 'triangle', cutoff: 1500 },
+  // I–V–vi–IV in C, bright 8th-note arpeggio, kick on every beat
+  'builtin:rise': { gain: 1.2, bpm: 100, chords: [[48, 60, 64, 67, 72], [43, 59, 62, 67, 71], [45, 57, 60, 64, 69], [41, 57, 60, 65, 69]],
+    pad: { type: 'triangle', level: 0.05 }, arp: { steps: 2, pattern: [1, 2, 3, 4, 3, 2, 3, 4], oct: 12, type: 'triangle', level: 0.07, decay: 0.35 },
+    bass: { steps: 1, level: 0.12 }, kick: [1, 1, 1, 1], cutoff: 2600 },
+  // vi–IV–I–V in A minor/C, 16th pulse, four-on-the-floor
+  'builtin:momentum': { gain: 1.3, bpm: 116, chords: [[45, 57, 60, 64, 69], [41, 57, 60, 65, 69], [48, 55, 60, 64, 67], [43, 55, 59, 62, 67]],
+    pad: { type: 'sawtooth', level: 0.025 }, arp: { steps: 4, pattern: [1, 3, 2, 4, 1, 3, 2, 4, 1, 3, 2, 4, 1, 3, 2, 4], oct: 12, type: 'square', level: 0.03, decay: 0.12 },
+    bass: { steps: 2, level: 0.11, pluck: true }, kick: [1, 1, 1, 1], cutoff: 2200 },
+  // IV–V–vi–I anthem in D, quarter-note plucks, kick on 1 and 3
+  'builtin:summit': { gain: 1.7, bpm: 90, chords: [[43, 55, 59, 62, 67], [45, 57, 61, 64, 69], [47, 59, 62, 66, 71], [38, 57, 62, 66, 69]],
+    pad: { type: 'sawtooth', level: 0.035 }, arp: { steps: 1, pattern: [4, 3, 2, 3], oct: 12, type: 'triangle', level: 0.09, decay: 0.8 },
+    bass: { steps: 1, level: 0.12 }, kick: [1, 0, 1, 0], cutoff: 1800 },
+  // slow cinematic swell, sparse high bells, no drums
+  'builtin:horizon': { gain: 2.4, bpm: 64, chords: [[41, 53, 57, 60, 65], [43, 55, 59, 62, 67], [45, 57, 60, 64, 69], [48, 55, 60, 64, 72]],
+    pad: { type: 'sawtooth', level: 0.04 }, arp: { steps: 1, pattern: [4, 0, 3, 0], oct: 24, type: 'sine', level: 0.06, decay: 1.6 },
+    bass: { steps: 0.5, level: 0.1 }, kick: null, cutoff: 1300 },
+  // Lydian lift, rising 8ths like a marimba, light kick
+  'builtin:bloom': { gain: 1.3, bpm: 96, chords: [[48, 60, 64, 66, 71], [50, 62, 66, 69, 74], [52, 64, 67, 71, 76], [50, 62, 66, 69, 74]],
+    pad: { type: 'sine', level: 0.05 }, arp: { steps: 2, pattern: [1, 2, 3, 4, 2, 3, 4, 3], oct: 12, type: 'sine', level: 0.1, decay: 0.28 },
+    bass: { steps: 0.5, level: 0.1 }, kick: [1, 0, 0, 0], cutoff: 3000 },
+  // warm, patient: pad and bass, arpeggio climbs one note a beat
+  'builtin:roots': { gain: 1.4, bpm: 72, chords: [[40, 52, 55, 59, 64], [36, 52, 55, 60, 64], [43, 55, 59, 62, 67], [38, 54, 57, 62, 66]],
+    pad: { type: 'triangle', level: 0.06 }, arp: { steps: 1, pattern: [1, 2, 3, 4], oct: 0, type: 'triangle', level: 0.07, decay: 0.9 },
+    bass: { steps: 1, level: 0.11 }, kick: [1, 0, 0, 0], cutoff: 1400 },
+  'builtin:calm': { gain: 0.65, bpm: 30, chords: [[45, 52, 57, 60, 64], [41, 48, 53, 57, 60], [48, 55, 60, 64, 67], [43, 50, 55, 59, 62]],
+    pad: { type: 'sine', level: 0.11 }, cutoff: 900 },
+  'builtin:dawn': { gain: 1.0, bpm: 40, chords: [[50, 57, 62, 66, 69], [55, 62, 67, 71, 74], [52, 59, 64, 67, 71], [57, 64, 69, 73, 76]],
+    pad: { type: 'triangle', level: 0.11 }, cutoff: 1500 },
 };
 function v2SynthStart(key, vol) {
   const spec = V2_SYNTH[key];
@@ -8386,32 +8420,71 @@ function v2SynthStart(key, vol) {
   if (!spec || !AC) return null;
   const ctx = new AC();
   const master = ctx.createGain(); master.gain.value = 0;
-  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = spec.cutoff; lp.Q.value = 0.4;
-  const delay = ctx.createDelay(2); delay.delayTime.value = 0.42;
-  const fb = ctx.createGain(); fb.gain.value = 0.28;
-  lp.connect(master); lp.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(master);
-  master.connect(ctx.destination);
+  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 3;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = spec.cutoff || 1500; lp.Q.value = 0.4;
+  const delay = ctx.createDelay(2); delay.delayTime.value = (60 / spec.bpm) * 0.75;
+  const fb = ctx.createGain(); fb.gain.value = 0.25;
+  const wet = ctx.createGain(); wet.gain.value = 0.35;
+  lp.connect(comp); lp.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(comp);
+  comp.connect(master); master.connect(ctx.destination);
   const hz = n => 440 * Math.pow(2, (n - 69) / 12);
-  const s = { ctx, master, lp, timer: 0, i: 0, voices: [] };
-  const play = () => {
-    const now = ctx.currentTime, len = spec.bar;
-    const chord = spec.chords[s.i++ % spec.chords.length];
-    chord.forEach((n, k) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = spec.type; o.frequency.value = hz(n); o.detune.value = (k % 2 ? 5 : -5);
-      g.gain.setValueAtTime(0, now);
-      g.gain.linearRampToValueAtTime(0.11 / (1 + k * 0.25), now + len * 0.35);
-      g.gain.linearRampToValueAtTime(0, now + len * 1.25);
-      o.connect(g); g.connect(lp);
-      o.start(now); o.stop(now + len * 1.3);
-    });
-    s.timer = setTimeout(play, len * 1000);
+  const beat = 60 / spec.bpm, barLen = beat * 4;
+  const s = { ctx, master, timer: 0, i: 0, next: 0 };
+
+  const tone = (freq, t, len, type, level, attack, dest) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(level, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(g); g.connect(dest || lp);
+    o.start(t); o.stop(t + len + 0.05);
   };
-  play();
-  master.gain.linearRampToValueAtTime(vol, ctx.currentTime + 1.5);
-  s.setVol = v => { try { master.gain.cancelScheduledValues(ctx.currentTime); master.gain.linearRampToValueAtTime(v, ctx.currentTime + 0.4); } catch (e) { } };
+  const kick = t => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.18);
+    g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.connect(g); g.connect(comp); o.start(t); o.stop(t + 0.32);
+  };
+  const scheduleBar = t => {
+    const chord = spec.chords[s.i++ % spec.chords.length];
+    const pad = spec.pad;
+    if (pad) chord.slice(1).forEach((n, k) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = pad.type; o.frequency.value = hz(n); o.detune.value = k % 2 ? 6 : -6;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(pad.level / (1 + k * 0.2), t + Math.min(barLen * 0.35, 1.5));
+      g.gain.linearRampToValueAtTime(0, t + barLen * 1.15);
+      o.connect(g); g.connect(lp); o.start(t); o.stop(t + barLen * 1.2);
+    });
+    if (spec.arp) {
+      const a = spec.arp, step = beat / a.steps, count = Math.round(4 * a.steps);
+      for (let k = 0; k < count; k++) {
+        const idx = a.pattern[k % a.pattern.length];
+        if (!idx) continue;
+        tone(hz(chord[Math.min(idx, chord.length - 1)] + (a.oct || 0)), t + k * step, a.decay, a.type, a.level, 0.006);
+      }
+    }
+    if (spec.bass) {
+      const b = spec.bass, step = beat / b.steps, count = Math.max(1, Math.round(4 * b.steps));
+      for (let k = 0; k < count; k++) {
+        tone(hz(chord[0]), t + k * step, b.pluck ? step * 0.9 : step * 0.98, 'triangle', b.level, b.pluck ? 0.005 : 0.03, comp);
+      }
+    }
+    if (spec.kick) spec.kick.forEach((on, k) => { if (on) kick(t + k * beat); });
+  };
+  const pump = () => {
+    // keep one bar scheduled ahead of the clock
+    while (s.next < ctx.currentTime + barLen) { scheduleBar(s.next); s.next += barLen; }
+    s.timer = setTimeout(pump, Math.max(200, barLen * 250));
+  };
+  s.next = ctx.currentTime + 0.05;
+  pump();
+  const G = spec.gain || 1;                    // evens out loudness between tracks
+  master.gain.linearRampToValueAtTime(vol * G, ctx.currentTime + 1.2);
+  s.setVol = v => { try { master.gain.cancelScheduledValues(ctx.currentTime); master.gain.linearRampToValueAtTime(v * G, ctx.currentTime + 0.4); } catch (e) { } };
   s.pause = () => { clearTimeout(s.timer); ctx.suspend().catch(() => { }); };
-  s.resume = () => { ctx.resume().catch(() => { }); clearTimeout(s.timer); s.timer = setTimeout(play, 200); };
+  s.resume = () => { clearTimeout(s.timer); ctx.resume().then(() => { s.next = Math.max(s.next, ctx.currentTime + 0.05); pump(); }).catch(() => { }); };
   s.stop = () => { clearTimeout(s.timer); try { master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5); } catch (e) { } setTimeout(() => ctx.close().catch(() => { }), 600); };
   return s;
 }
@@ -8475,7 +8548,9 @@ window.v2StoryEdit = function () {
         <button class="v2s-ic dark" onclick="v2StoryEditClose(false)" aria-label="Close">✕</button></div>
       <div class="v2s-opts">
         ${opt('', 'No music', '')}
-        ${V2_TRACKS.map(t => opt(t.key, t.name, t.note)).join('')}
+        ${[...new Set(V2_TRACKS.map(t => t.group))].map(grp => `
+          <div class="v2s-grp">${v2Esc(grp)}</div>
+          ${V2_TRACKS.filter(t => t.group === grp).map(t => opt(t.key, t.name, t.note.replace(/^[^·]+·\s*/, ''))).join('')}`).join('')}
         ${own ? opt(own.ref, own.name || 'Your track', 'Your upload') : ''}
         <label class="v2s-opt v2s-upload">
           <input type="file" accept="audio/*" hidden onchange="v2StoryEditUpload(this)">
@@ -9051,6 +9126,7 @@ function v2InjectCSS() {
   .v2s-opt > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .v2s-opt b { font-size: 14px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .v2s-opt em { font-style: normal; font-size: 12px; color: #6B7280; }
+  .v2s-grp { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #9CA3AF; margin: 8px 2px 0; }
   .v2s-upload { border-style: dashed; }
   .v2s-upload b { color: var(--primary); }
   .v2s-try { border: 1px solid #E5E7EB; background: #fff; border-radius: 99px; height: 28px; padding: 0 12px; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
