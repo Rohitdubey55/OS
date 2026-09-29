@@ -1209,7 +1209,7 @@ window.openHabitModal = function () {
   // right 'Time spent on' card. (Routine, below, is a different axis.)
   const categories = (typeof window.appCategories === 'function')
     ? window.appCategories()
-    : ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
+    : ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine', 'Other'];
 
   box.innerHTML = `
       <div class="modal-header-bar">
@@ -1345,7 +1345,7 @@ window.openEditHabit = function (id) {
   // right 'Time spent on' card. (Routine, below, is a different axis.)
   const categories = (typeof window.appCategories === 'function')
     ? window.appCategories()
-    : ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
+    : ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine', 'Other'];
   const reminderTimeValue = parseReminderTimeToHHMM(h.reminder_time);
   const s = state.data.settings?.[0] || {};
   const routinesStr = s.habit_routines || 'Morning,Work,Evening';

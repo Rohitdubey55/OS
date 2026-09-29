@@ -315,6 +315,42 @@ window.tdpAddItemToCategory = async function (category, text) {
     return await tdpCreateItem(plan, category, text);
 };
 
+/* ── For Vision ────────────────────────────────────────────────────────────
+   A goal's subtasks are the running plan's items linked to it. Category does
+   the narrowing — only plan items in the goal's own category are offered to
+   attach — and the link does the deciding, because four Personality goals
+   shouldn't all claim the same four Personality items. These don't repaint
+   anything: Vision owns its own screen. */
+
+window.tdpGoalItems = function (goalId) {
+    const plan = tdpActivePlan();
+    if (!plan || !goalId) return [];
+    return tdpTasksOf(plan).filter(t =>
+        t.status !== 'cancelled' && String(t.vision_id || '') === String(goalId));
+};
+
+window.tdpGoalCandidates = function (goal) {
+    const plan = tdpActivePlan();
+    if (!plan || !goal || !goal.category) return [];
+    return tdpTasksOf(plan, goal.category).filter(t => t.status !== 'cancelled' && !t.vision_id);
+};
+
+window.tdpAddForGoal = async function (goal, text) {
+    const plan = tdpActivePlan();
+    if (!plan || !goal || !String(text || '').trim()) return null;
+    return await tdpCreateItem(plan, goal.category || 'Other', text, { vision_id: String(goal.id) });
+};
+
+window.tdpLinkQuietly = async function (taskId, goalId) {
+    const t = tdpFindTask(taskId);
+    if (!t) return false;
+    t.vision_id = goalId ? String(goalId) : null;
+    await tdpSaveTask(t, { vision_id: t.vision_id });
+    return true;
+};
+
+window.tdpHasActivePlan = function () { return !!tdpActivePlan(); };
+
 window.tdpActivePlanSummary = function () {
     const plan = tdpActivePlan();
     if (!plan) return null;
@@ -348,7 +384,7 @@ async function tdpSaveTask(task, fields) {
 }
 
 // One new plan item = one new task, due the day the plan ends.
-async function tdpCreateItem(plan, category, text) {
+async function tdpCreateItem(plan, category, text, extra) {
     const payload = {
         title: String(text).trim(),
         status: 'pending',
@@ -357,7 +393,8 @@ async function tdpCreateItem(plan, category, text) {
         due_date: plan.end_date,
         tdp_plan_id: String(plan.id),
         subtasks: '[]',
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        ...(extra || {})
     };
     let id;
     try {

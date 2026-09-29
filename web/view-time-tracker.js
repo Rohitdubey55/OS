@@ -104,7 +104,7 @@ const TT_ICON = {
    shows that category's live tasks, rather than keeping a private to-do list.
 ═══════════════════════════════════════════════════════ */
 
-const TT_DEFAULT_TASK_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
+const TT_DEFAULT_TASK_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine', 'Other'];
 let ttShowUndated = {};   // slot_index -> include tasks with no due date
 
 // The one category vocabulary Tasks, Habits and this page share. main.js owns

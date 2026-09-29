@@ -1269,13 +1269,25 @@ async function preloadLocalMedia(goals) {
 // Vision State Management
 let visionState = {
   view: 'grid',
-  filter: 'focus', // default = Focus This Month
+  filter: 'all',
   search: '',
   sort: 'newest',
   listSort: { col: 'target', dir: 'asc' }, // desktop table column sort
 };
 
-const VISION_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine'];
+// Vision reads the same category list as Tasks, Habits, the 10 Days Plan and
+// Time Spent On — that shared name is what links a goal to everything else.
+// Any category still on a goal is kept too, so nothing is stranded.
+const VISION_CATEGORIES_FALLBACK = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine', 'Other'];
+function vzCategories() {
+  let list = [];
+  if (typeof window.appSavedCategories === 'function') {
+    try { list = window.appSavedCategories().slice(); } catch (e) { list = []; }
+  }
+  if (!list.length) list = VISION_CATEGORIES_FALLBACK.slice();
+  (state.data.vision || []).forEach(g => { if (g.category && !list.includes(g.category)) list.push(g.category); });
+  return list;
+}
 
 // Time horizons — how far out a goal reaches. Stored in vision_board.horizon.
 const VISION_HORIZONS = [
@@ -1500,6 +1512,25 @@ const VISION_REFINE_CSS = `<style>
 .vz-pro .vz-table { width:100%; border-collapse:separate; border-spacing:0; }
 .vz-pro .vz-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); font-weight:600; padding:12px 16px; border-bottom:1px solid var(--border-color); background:var(--surface-2); cursor:pointer; user-select:none; white-space:nowrap; }
 .vz-pro .vz-table th:hover { color:var(--text-1); }
+.vz-pro .vz-table .vz-td-pick { width:34px; padding-right:0; cursor:default; }
+.vz-pro .vz-table .vz-td-pick input { width:16px; height:16px; accent-color:var(--primary); cursor:pointer; vertical-align:middle; }
+.vz-pro .vz-table tr.picked td { background:var(--primary-soft); }
+.vz-pro .vz-table .vz-tplan { font-size:13px; color:var(--text-3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.vz-pro .vz-table .vz-tplan b { color:var(--text-1); }
+.vz-pro .vz-table .vz-td-del { width:1%; white-space:nowrap; text-align:right; }
+.vz-pro .vz-row-del { display:inline-flex; align-items:center; gap:5px; height:30px; padding:0 10px; border:1px solid transparent;
+  border-radius:9px; background:none; color:var(--text-3); font:inherit; font-size:12px; font-weight:700; cursor:pointer;
+  opacity:.55; transition:opacity .15s ease, color .15s ease, border-color .15s ease; }
+.vz-pro .vz-table tr:hover .vz-row-del { opacity:1; }
+.vz-pro .vz-row-del:hover { color:var(--danger,#EF4444); border-color:var(--danger,#EF4444); }
+.vz-bulk { display:none; align-items:center; gap:10px; padding:10px 14px; margin-bottom:10px;
+  border:1px solid var(--primary); border-radius:13px; background:var(--primary-soft); }
+.vz-bulk.show { display:flex; }
+.vz-bulk span { flex:1; font-size:13px; font-weight:800; color:var(--primary); }
+.vz-bulk-btn { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 14px; border:1px solid var(--border-color);
+  border-radius:10px; background:var(--surface-1); color:var(--text-2); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+.vz-bulk-btn.danger { background:var(--danger,#EF4444); border-color:var(--danger,#EF4444); color:#fff; }
+.vz-bulk-btn.danger:hover { filter:brightness(1.07); }
 .vz-pro .vz-table td { padding:13px 16px; border-bottom:1px solid var(--border-color); font-size:13.5px; color:var(--text-2); }
 .vz-pro .vz-table tbody tr:last-child td { border-bottom:none; }
 .vz-pro .vz-table tbody tr { cursor:pointer; transition:background .12s; }
@@ -1628,7 +1659,10 @@ const VISION_REFINE_CSS = `<style>
 let _vzSelId = null;
 function _vzDesktop() { try { return window.matchMedia('(min-width:1000px)').matches; } catch (e) { return (window.innerWidth || 1280) >= 1000; } }
 function _vzDays(d) { return d ? Math.ceil((new Date(d) - new Date()) / 86400000) : null; }
-function _vzIsFocus(g) { return g.month_focus === true || String(g.month_focus).toLowerCase() === 'true'; }
+// Focus was removed. Answering false everywhere retires every star, chip and
+// filter that keyed off it in one place; month_focus stays on the rows,
+// untouched, in case it's ever wanted back.
+function _vzIsFocus(g) { return false; }
 function _vzRitualStreak() {
   const days = new Set((state.data.ritual_logs || []).filter(r => r.completed !== false && r.date).map(r => String(r.date).slice(0, 10)));
   if (!days.size) return 0;
@@ -1658,7 +1692,7 @@ function _vzLinkedHabitNames(g) {
   return arr.map(h => { const id = (h && h.id != null) ? h.id : h; const hb = habits.find(x => String(x.id) === String(id)); return hb ? hb.habit_name : null; }).filter(Boolean);
 }
 
-window.vzCardOpen = function (id) { openVisionDetail(id); };
+window.vzCardOpen = function (id) { openGoalEditor(id); };
 window.vzSelect = function (id) {
   _vzSelId = (String(id) === String(_vzSelId)) ? null : String(id);
   vzRenderPane();
@@ -1715,7 +1749,7 @@ function vzInsightHTML() {
   const focus = goals.filter(_vzIsFocus);
   const due = goals.filter(g => g.target_date).sort((a, b) => new Date(a.target_date) - new Date(b.target_date)).slice(0, 4);
   const cats = {};
-  goals.forEach(g => { const c = g.category || 'Personal'; (cats[c] = cats[c] || { n: 0, sum: 0 }); cats[c].n++; cats[c].sum += (parseInt(g.progress, 10) || 0); });
+  goals.forEach(g => { const c = g.category || 'Other'; (cats[c] = cats[c] || { n: 0, sum: 0 }); cats[c].n++; cats[c].sum += (parseInt(g.progress, 10) || 0); });
   const catRows = Object.keys(cats).sort().map(c => { const a = Math.round(cats[c].sum / cats[c].n); return `<div class="vzp-cat"><div class="vzp-cat-top"><span>${escapeHtml(c)}</span><b>${a}%</b></div><div class="vzp-bar"><i style="width:${a}%"></i></div></div>`; }).join('');
   const focusRows = focus.length ? focus.map(g => `<div class="vzp-row" onclick="vzSelect('${g.id}')"><span class="vzp-dot" style="background:var(--primary)"></span><span class="nm">${escapeHtml(g.title || '')}</span><span class="dd">${(parseInt(g.progress, 10) || 0)}%</span></div>`).join('') : `<div class="vzp-empty">Star goals to focus on this month.</div>`;
   const dueRows = due.length ? due.map(g => { const d = _vzDays(g.target_date); const u = d != null && d <= 30; return `<div class="vzp-row" onclick="vzSelect('${g.id}')"><span class="vzp-dot" style="background:${u ? '#DC2626' : 'var(--text-3)'}"></span><span class="nm">${escapeHtml(g.title || '')}</span><span class="dd ${u ? 'urgent' : ''}">${d < 0 ? Math.abs(d) + 'd ago' : d + 'd'}</span></div>`; }).join('') : `<div class="vzp-empty">No upcoming target dates.</div>`;
@@ -1725,7 +1759,6 @@ function vzInsightHTML() {
     <div><div class="rx">Daily Ritual</div><div class="rs">${rstreak > 0 ? `🔥 ${rstreak}-day streak` : 'Manifest your vision'}</div></div>
     <span class="rgo"><i data-lucide="play" style="width:14px;height:14px"></i></span>
   </div>
-  <div class="vzp-card"><div class="vzp-h">Focus this month</div>${focusRows}</div>
   <div class="vzp-card"><div class="vzp-h">Due soon</div>${dueRows}</div>
   ${catRows ? `<div class="vzp-card"><div class="vzp-h">Progress by category</div>${catRows}</div>` : ''}`;
 }
@@ -1741,7 +1774,7 @@ function vzGoalDetailHTML(g) {
   return `
   <div class="vzp-card">
     <div class="vzp-hero" style="background-image:url('${hero}')">
-      <span class="cat">${escapeHtml(g.category || 'Personal')}</span>
+      <span class="cat">${escapeHtml(g.category || 'Other')}</span>
       <button class="x" onclick="vzCloseDetail()"><i data-lucide="x" style="width:14px;height:14px"></i></button>
     </div>
     <div class="vzp-dtitle">${escapeHtml(g.title || '')}</div>
@@ -1757,8 +1790,7 @@ function vzGoalDetailHTML(g) {
     <div class="vzp-actions">
       <button class="vzp-btn primary" onclick="startManifestationRitual('${g.id}')"><i data-lucide="sparkles" style="width:14px;height:14px"></i> Start ritual${affs.length ? ` · ${affs.length}` : ''}</button>
       <button class="vzp-btn" onclick="openVisionDetail('${g.id}')">Open full</button>
-      <button class="vzp-btn" onclick="openEditVision('${g.id}')">Edit</button>
-      <button class="vzp-btn ${isFocus ? 'ok' : ''}" onclick="toggleVisionFocus('${g.id}');setTimeout(vzRenderPane,150)">★ Focus</button>
+      <button class="vzp-btn" onclick="openGoalEditor('${g.id}')">Edit</button>
       <button class="vzp-btn ok" onclick="markVisionAchieved('${g.id}')">Achieve</button>
       <button class="vzp-btn danger" onclick="deleteVision('${g.id}')">Delete</button>
     </div>
@@ -1778,9 +1810,8 @@ function _vzStoryGoals(mode) {
 }
 
 window.openVisionStories = function (startId, mode) {
-  let m = mode || (visionState.filter === 'focus' ? 'focus' : 'all');
-  let goals = _vzStoryGoals(m);
-  if (goals.length === 0 && m === 'focus') { m = 'all'; goals = _vzStoryGoals('all'); }
+  const m = 'all';
+  const goals = _vzStoryGoals(m);
   const ids = goals.map(g => String(g.id));
   let i = (startId != null) ? ids.indexOf(String(startId)) : 0;
   if (i < 0) i = 0;
@@ -1847,10 +1878,6 @@ function _vzStoryEnsureDom() {
   ov.className = 'vz-story-overlay hidden';
   ov.innerHTML = `
     <div class="vz-story-tools">
-      <div class="vz-story-modes">
-        <button id="vzStoryMF" onclick="vzStorySetMode('focus')">Focus</button>
-        <button id="vzStoryMA" onclick="vzStorySetMode('all')">All</button>
-      </div>
       <div style="flex:1"></div>
       <button class="vz-story-tbtn" onclick="vzStoryEdit()" title="Edit goal">${renderIcon('edit', null, 'style="width:16px"')}</button>
       <button class="vz-story-tbtn" onclick="closeVisionStories()" title="Close (Esc)" style="font-size:20px">&times;</button>
@@ -1870,13 +1897,10 @@ async function _vzStoryRender() {
   const segs = document.getElementById('vzStorySegs');
   if (!stage) return;
 
-  const mf = document.getElementById('vzStoryMF'), ma = document.getElementById('vzStoryMA');
-  if (mf) mf.classList.toggle('active', s.mode === 'focus');
-  if (ma) ma.classList.toggle('active', s.mode === 'all');
 
   if (!s.ids.length) {
     if (segs) segs.innerHTML = '';
-    stage.innerHTML = `<div class="vz-story-empty">${s.mode === 'focus' ? 'No focus goals yet — star goals to add them here, or switch to All.' : 'No active visions yet. Add one to get started.'}</div>`;
+    stage.innerHTML = `<div class="vz-story-empty">No active visions yet. Add one to get started.</div>`;
     return;
   }
 
@@ -1908,7 +1932,7 @@ async function _vzStoryRender() {
     <div class="vz-story-card">
       <div class="vz-story-media">
         ${media}
-        <span class="vz-story-cat">${escapeHtml(g.category || 'Personal')}</span>
+        <span class="vz-story-cat">${escapeHtml(g.category || 'Other')}</span>
         <div class="vz-story-mtitle">${escapeHtml(g.title || '')}</div>
       </div>
       <div class="vz-story-side">
@@ -1946,6 +1970,9 @@ async function _vzStoryRender() {
 }
 
 async function renderVision() {
+  if (typeof window.tdpGoalItems !== 'function' && typeof ensureViewLoaded === 'function') {
+    try { await ensureViewLoaded('tdp'); } catch (e) { }
+  }
   const goals = state.data.vision || [];
   await preloadLocalMedia(goals);
   let filtered = filterVisions(goals);
@@ -2038,8 +2065,8 @@ async function renderVision() {
 }
 
 function renderFilterChips() {
-  const cats = ['focus', 'all', ...VISION_CATEGORIES];
-  const labels = { focus: `${renderIcon('target', null, 'style="width:14px; display:inline-block; vertical-align:middle; margin-right:4px;"')} Focus`, all: 'All' };
+  const cats = ['all', ...vzCategories()];
+  const labels = { all: 'All' };
   const catChips = cats.map(c => `
     <button class="vision-filter-chip ${visionState.filter === c ? 'active' : ''}"
             onclick="setVisionFilter('${c}')">
@@ -2072,8 +2099,7 @@ function renderVisionGrid(goals) {
 
   // Section heading anchors the grid as the primary content (desktop only).
   const f = visionState.filter;
-  const headLabel = f === 'focus' ? 'Focus this month'
-    : f === 'all' ? 'All goals'
+  const headLabel = f === 'all' ? 'All goals'
     : String(f).startsWith('hz:') ? vzHorizonShort(String(f).slice(3)) + ' horizon'
     : (String(f).charAt(0).toUpperCase() + String(f).slice(1));
   const head = _vzDesktop() ? `<div class="vz-board-head"><h2>${escapeHtml(headLabel)}</h2><span class="n">${active.length} active</span></div>` : '';
@@ -2107,7 +2133,7 @@ function renderVisionGrid(goals) {
 // eyes than saturated primaries. Per-goal g.color overrides.
 const VZ_CAT_COLORS = {
   'Work': '#456A95', 'Personality': '#7A5C97', 'Ouro': '#2F7368',
-  'Enjoyment': '#B36A4A', 'Routine': '#2E7D86', 'Personal': '#5B6491',
+  'Enjoyment': '#B36A4A', 'Routine': '#2E7D86', 'Other': '#5B6491', 'Personal': '#5B6491',
   'Health': '#AA5450', 'Finance': '#3F7A5E', 'Social': '#A85877'
 };
 // Maps the old saturated palette → the new muted tones so EXISTING goals (whose bright
@@ -2320,18 +2346,119 @@ window.vzSortList = function (col) {
   else { ls.col = col; ls.dir = col === 'progress' ? 'desc' : 'asc'; }
   renderVision();
 };
+/* ── Selection ── goals picked for a bulk action. A Set of string ids, so it
+   survives a re-sort or a filter change; anything no longer on screen is just
+   ignored when the action runs. */
+const vzSelected = new Set();
+
+window.vzToggleSelect = function (id, ev) {
+  if (ev) ev.stopPropagation();          // the row itself opens the goal
+  const k = String(id);
+  if (vzSelected.has(k)) vzSelected.delete(k); else vzSelected.add(k);
+  vzPaintSelection();
+};
+
+window.vzSelectAll = function (checked, ev) {
+  if (ev) ev.stopPropagation();
+  document.querySelectorAll('.vz-table tbody tr[data-id]').forEach(tr => {
+    const k = tr.getAttribute('data-id');
+    if (checked) vzSelected.add(k); else vzSelected.delete(k);
+  });
+  vzPaintSelection();
+};
+
+window.vzClearSelection = function () { vzSelected.clear(); vzPaintSelection(); };
+
+// Repaint the ticks and the bulk bar without rebuilding the table.
+function vzPaintSelection() {
+  const rows = document.querySelectorAll('.vz-table tbody tr[data-id]');
+  let onScreen = 0;
+  rows.forEach(tr => {
+    const on = vzSelected.has(tr.getAttribute('data-id'));
+    tr.classList.toggle('picked', on);
+    const cb = tr.querySelector('.vz-pick');
+    if (cb) cb.checked = on;
+    if (on) onScreen++;
+  });
+  const all = document.getElementById('vzPickAll');
+  if (all) {
+    all.checked = rows.length > 0 && onScreen === rows.length;
+    all.indeterminate = onScreen > 0 && onScreen < rows.length;
+  }
+  const bar = document.getElementById('vzBulkBar');
+  if (bar) {
+    bar.classList.toggle('show', onScreen > 0);
+    const n = document.getElementById('vzBulkCount');
+    if (n) n.textContent = `${onScreen} selected`;
+  }
+}
+
+async function vzDeleteGoals(ids) {
+  const goals = (state.data.vision || []).filter(v => ids.includes(String(v.id)));
+  if (!goals.length) return;
+  const what = goals.length === 1 ? `"${goals[0].title}"` : `these ${goals.length} goals`;
+  if (!confirm(`Delete ${what}?\n\nThis can't be undone. Tasks and plan items linked to them are kept — they just stop pointing at a goal.`)) return;
+
+  // Optimistic: they leave the screen now, the server catches up.
+  state.data.vision = (state.data.vision || []).filter(v => !ids.includes(String(v.id)));
+  ids.forEach(id => vzSelected.delete(String(id)));
+  document.getElementById('universalModal')?.classList.add('hidden');
+  renderVision();
+
+  let failed = 0;
+  for (const id of ids) {
+    try { await apiCall('delete', 'vision_board', {}, id); }
+    catch (e) { failed++; console.error('vzDeleteGoals:', id, e); }
+  }
+  // A task still pointing at a deleted goal would dangle; unhook them.
+  for (const t of (state.data.tasks || [])) {
+    if (t.vision_id && ids.includes(String(t.vision_id))) {
+      t.vision_id = null;
+      try { await apiCall('update', 'tasks', { vision_id: null }, t.id); } catch (e) { }
+    }
+  }
+  await refreshData('vision');
+  showToast(failed ? `Deleted ${ids.length - failed}, ${failed} failed` : (ids.length === 1 ? 'Goal deleted' : `${ids.length} goals deleted`));
+}
+
+window.vzDeleteOne = function (id, ev) {
+  if (ev) ev.stopPropagation();
+  return vzDeleteGoals([String(id)]);
+};
+
+window.vzDeleteSelected = function () {
+  const onScreen = [...document.querySelectorAll('.vz-table tbody tr[data-id]')]
+    .map(tr => tr.getAttribute('data-id')).filter(k => vzSelected.has(k));
+  return vzDeleteGoals(onScreen);
+};
+
+// How many of the running plan's items this goal has, as "done/total".
+function vzPlanCount(g) {
+  if (typeof window.tdpGoalItems !== 'function') return null;
+  const items = window.tdpGoalItems(g.id);
+  if (!items.length) return null;
+  return { done: items.filter(t => t.status === 'completed').length, total: items.length };
+}
+
 function vzTableRow(g) {
   const d = _vzDays(g.target_date);
   const prog = parseInt(g.progress, 10) || 0;
   const isA = g.status === 'achieved';
   const over = d != null && d < 0 && !isA;
+  const on = vzSelected.has(String(g.id));
+  const pc = vzPlanCount(g);
   return `
-    <tr onclick="openVisionDetail('${g.id}')">
-      <td class="vz-td-title">${_vzIsFocus(g) ? '<span style="color:var(--primary)">★</span> ' : ''}${escapeHtml(g.title || '')}</td>
-      <td><span class="vz-tcat">${escapeHtml(g.category || 'Personal')}</span></td>
+    <tr data-id="${escapeHtml(String(g.id))}" class="${on ? 'picked' : ''}" onclick="openGoalEditor('${g.id}')">
+      <td class="vz-td-pick" onclick="event.stopPropagation()">
+        <input type="checkbox" class="vz-pick" ${on ? 'checked' : ''} onclick="vzToggleSelect('${g.id}', event)" aria-label="Select ${escapeHtml(g.title || 'goal')}">
+      </td>
+      <td class="vz-td-title">${escapeHtml(g.title || '')}</td>
+      <td><span class="vz-tcat">${escapeHtml(g.category || 'Other')}</span></td>
       <td><div class="vz-tprog"><div class="vz-tprog-bar"><i style="width:${prog}%"></i></div><span>${prog}%</span></div></td>
+      <td class="vz-tplan">${pc ? `<b>${pc.done}</b>/${pc.total}` : '<span>—</span>'}</td>
       <td class="vz-tdate ${over ? 'over' : ''}">${g.target_date ? formatDate(g.target_date) : '—'}</td>
       <td>${isA ? '<span class="vz-tbadge ok">Achieved</span>' : over ? '<span class="vz-tbadge late">Overdue</span>' : '<span class="vz-tbadge">Active</span>'}</td>
+      <td class="vz-td-del"><button class="vz-row-del" onclick="vzDeleteOne('${g.id}', event)" title="Delete ${escapeHtml(g.title || 'goal')}">${renderIcon('trash', null, 'style="width:15px"')}<span>Delete</span></button></td>
     </tr>`;
 }
 function vzListTable(goals) {
@@ -2339,14 +2466,22 @@ function vzListTable(goals) {
   const rows = vzSortGoalsForList(goals, ls).map(vzTableRow).join('');
   const arr = c => ls.col === c ? (ls.dir === 'asc' ? ' ↑' : ' ↓') : '';
   return `
+    <div class="vz-bulk" id="vzBulkBar">
+      <span id="vzBulkCount">0 selected</span>
+      <button class="vz-bulk-btn danger" onclick="vzDeleteSelected()">${renderIcon('trash', null, 'style="width:14px"')} Delete</button>
+      <button class="vz-bulk-btn" onclick="vzClearSelection()">Clear</button>
+    </div>
     <div class="vz-table-wrap">
       <table class="vz-table">
         <thead><tr>
+          <th class="vz-td-pick"><input type="checkbox" id="vzPickAll" onclick="vzSelectAll(this.checked, event)" aria-label="Select all"></th>
           <th onclick="vzSortList('title')">Goal${arr('title')}</th>
           <th onclick="vzSortList('category')">Category${arr('category')}</th>
           <th onclick="vzSortList('progress')">Progress${arr('progress')}</th>
+          <th title="Items on the running 10 days plan linked to this goal">Plan</th>
           <th onclick="vzSortList('target')">Target${arr('target')}</th>
           <th onclick="vzSortList('status')">Status${arr('status')}</th>
+          <th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -2365,7 +2500,7 @@ function renderVisionListItem(g) {
   const thumbStyle = g.image_url ? `background-image:url('${sanitizeUrl(g.image_url)}'); background-size:cover; background-position:center;` : 'background:#111';
 
   return `
-    <div class="vision-list-item" onclick="openVisionDetail('${g.id}')">
+    <div class="vision-list-item" onclick="openGoalEditor('${g.id}')">
       ${hasThumb
       ? `<div class="vision-list-thumb" style="${thumbStyle}">
              ${g.video_url ? '<span style="color:white;font-size:18px;display:flex;align-items:center;justify-content:center;height:100%">▶</span>' : ''}
@@ -2373,7 +2508,7 @@ function renderVisionListItem(g) {
       : `<div class="vision-list-icon">${getCategoryEmoji(g.category)}</div>`}
       <div class="vision-list-content">
         <div class="vision-list-title">${g.title}</div>
-        <div class="vision-list-cat">${g.category || 'Personal'}</div>
+        <div class="vision-list-cat">${g.category || 'Other'}</div>
         <div class="vision-list-date">${g.target_date ? 'Target: ' + formatDate(g.target_date) : 'No deadline'}</div>
         <div class="vision-list-progress-wrap">
           <div class="vision-progress-fill" style="--progress-width:${g.progress || 0}%; width:${g.progress || 0}%"></div>
@@ -2408,7 +2543,7 @@ function renderTimelineItem(g) {
   const isAchieved = g.status === 'achieved';
 
   return `
-    <div class="timeline-item" onclick="openVisionDetail('${g.id}')">
+    <div class="timeline-item" onclick="openGoalEditor('${g.id}')">
       <div class="timeline-dot"></div>
       <div class="timeline-content">
         <div class="timeline-title">${getCategoryEmoji(g.category)} ${g.title}</div>
@@ -2430,7 +2565,7 @@ function vzRoadItem(g) {
   const prog = parseInt(g.progress, 10) || 0;
   const isA = g.status === 'achieved';
   return `
-    <div class="vz-rd-item" onclick="openVisionDetail('${g.id}')">
+    <div class="vz-rd-item" onclick="openGoalEditor('${g.id}')">
       <div class="vz-rd-cat">${getCategoryEmoji(g.category)}</div>
       <div class="vz-rd-main">
         <div class="vz-rd-title">${escapeHtml(g.title || '')}</div>
@@ -2721,9 +2856,7 @@ window.openVisionDetail = async function (id) {
       <div style="display:flex; gap:12px; margin-top:12px;">
         <button class="btn" onclick="closeVisionDetail()" style="flex:1;">Close</button>
         <button class="btn primary" onclick="closeVisionDetail(); setTimeout(() => { openTaskModal(); setTimeout(() => { if(document.getElementById('mTaskVisionGoal')) document.getElementById('mTaskVisionGoal').value = '${g.id}'; }, 100); }, 300);" style="flex:1.5;">+ Quick Task</button>
-        <button class="btn ${g.month_focus === true || String(g.month_focus).toLowerCase() === 'true' ? 'success' : ''}" onclick="toggleVisionFocus('${g.id}')" style="width:50px; display:flex; align-items:center; justify-content:center; padding:0;">
-          ${renderIcon('star', null, `style="width:20px; ${g.month_focus === true || String(g.month_focus).toLowerCase() === 'true' ? 'fill:var(--warning);' : ''}"`)}
-        </button>
+
       </div>
     </div>
   `;
@@ -3033,7 +3166,7 @@ function buildVisionForm(g) {
         <input class="input" id="mVisTitle" placeholder="Goal Title *" value="${isEdit ? escH(g.title) : ''}" style="margin-bottom:12px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <select class="input" id="mVisCat">
-            ${VISION_CATEGORIES.map(c => `<option value="${c}" ${isEdit && g.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+            ${vzCategories().map(c => `<option value="${escapeHtml(c)}" ${isEdit && g.category === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
           </select>
           <input type="date" class="input" id="mVisDate" value="${isEdit ? (g.target_date || '') : ''}">
         </div>
@@ -3113,7 +3246,7 @@ function buildVisionForm(g) {
         </div>
       </div>
 
-      <!-- Section 5: Habits & Focus -->
+      <!-- Section 5: Habits -->
       <div class="vision-form-section">
         <div class="vision-form-label">${renderIcon('link', null, 'style="width:14px;"')} Link Habits</div>
         <div style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto; padding-right:4px;">
@@ -3154,14 +3287,7 @@ function buildVisionForm(g) {
     })()}
         </div>
 
-        <label style="display:flex; align-items:center; gap:12px; margin-top:16px; padding:14px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:12px; cursor:pointer;">
-          <input type="checkbox" id="mVisMonthFocus" ${isEdit && (g.month_focus === true || String(g.month_focus).toLowerCase() === 'true') ? 'checked' : ''} style="width:20px; height:20px; accent-color:var(--primary);">
-          <div>
-            <div style="font-size:14px; font-weight:700;">Focus This Month</div>
-            <div style="font-size:11px; color:var(--text-muted);">Pin to top and manifestation views</div>
-          </div>
-          <span style="margin-left:auto; font-size:18px;">⭐</span>
-        </label>
+
       </div>
 
       <!-- Action Buttons -->
@@ -3390,7 +3516,6 @@ function collectVisionPayload() {
   });
 
   const linkedHabits = JSON.stringify(linkedHabitsDocs);
-  const monthFocus = document.getElementById('mVisMonthFocus')?.checked || false;
 
   return {
     title: document.getElementById('mVisTitle').value.trim(),
@@ -3400,7 +3525,6 @@ function collectVisionPayload() {
     progress: parseInt(document.getElementById('mVisProgress').value, 10),
     image_url,
     video_url,
-    month_focus: monthFocus,
     linked_habits: linkedHabits,
     display_mode: document.getElementById('mVisDisplayMode')?.value || 'color',
     horizon: document.getElementById('mVisHorizon')?.value || '',
@@ -6037,9 +6161,8 @@ window.handleVisionSort = function (sortType) {
 /* ─── HELPERS ───────────────────────────────────────────────────── */
 function filterVisions(goals) {
   let filtered = [...goals];
-  if (visionState.filter === 'focus') {
-    filtered = filtered.filter(g => g.month_focus === true || g.month_focus === 'true' || g.month_focus === 'TRUE');
-  } else if (String(visionState.filter).startsWith('hz:')) {
+  if (visionState.filter === 'focus') visionState.filter = 'all';
+  if (String(visionState.filter).startsWith('hz:')) {
     const key = String(visionState.filter).slice(3);
     filtered = filtered.filter(g => g.horizon === key);
   } else if (visionState.filter !== 'all') {
@@ -6161,3 +6284,454 @@ window.sendUpcomingHabitSummary = window.sendUpcomingHabitSummary || function ()
 /* The 10 Days Plan lived here as a modal on the Vision page. It's a daily tool
    rather than a long-horizon one, and its categories are now the shared ones, so
    it has its own page: see view-tdp.js. Vision links to it from the header. */
+
+/* ═══════════════════════════════════════════════════════════════════════
+   GOAL EDITOR — one compact sheet where every field edits in place.
+
+   The old goal view was a viewer first: a full-width photo, a progress bar
+   that rendered solid black at 0%, and icon-only buttons, with editing a
+   second modal away. This is an editor first. Title, category, target,
+   horizon, progress and notes all change where they sit and save as you go —
+   there is no Save button because there is nothing to forget to press.
+
+   The 10 Days Plan items linked to the goal are its subtasks. Category narrows
+   what's offered (only plan items in the goal's own category), the link
+   decides — four Personality goals shouldn't all claim the same items.
+
+   The immersive photos-and-video view is still here for goals that have media,
+   one click away rather than in the way.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+let vzeId = null;
+let vzeDirty = false;
+let vzeProgTimer = null;
+
+function vzeGoal() {
+  return (state.data.vision || []).find(v => String(v.id) === String(vzeId)) || null;
+}
+
+async function vzeSave(field, value) {
+  const g = vzeGoal();
+  if (!g) return;
+  if (String(g[field] == null ? '' : g[field]) === String(value == null ? '' : value)) return;
+  g[field] = value;
+  vzeDirty = true;
+  vzeFlash('Saving…');
+  try {
+    await apiCall('update', 'vision_board', { [field]: value === '' ? null : value }, g.id);
+    vzeFlash('Saved');
+  } catch (e) {
+    console.error('vzeSave failed:', field, e);
+    vzeFlash('Could not save');
+  }
+}
+
+function vzeFlash(msg) {
+  const el = document.getElementById('vzeStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('on');
+  clearTimeout(el._t);
+  if (msg !== 'Saving…') el._t = setTimeout(() => el.classList.remove('on'), 1400);
+}
+
+window.vzeSetTitle = function (el) {
+  const v = String(el.value || '').trim();
+  if (!v) { const g = vzeGoal(); el.value = g ? g.title || '' : ''; return; }
+  vzeSave('title', v);
+};
+
+window.vzeSetProgress = function (val) {
+  const n = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+  const lbl = document.getElementById('vzeProgVal');
+  if (lbl) lbl.textContent = n + '%';
+  const fill = document.getElementById('vzeProgFill');
+  if (fill) fill.style.width = n + '%';
+  clearTimeout(vzeProgTimer);
+  vzeProgTimer = setTimeout(() => vzeSave('progress', n), 350);   // not every pixel of a drag
+};
+
+window.vzeToggleAchieved = async function () {
+  const g = vzeGoal();
+  if (!g) return;
+  const next = g.status === 'achieved' ? 'active' : 'achieved';
+  await vzeSave('status', next);
+  if (next === 'achieved') { await vzeSave('progress', 100); }
+  vzePaint();
+};
+
+window.vzeDelete = async function () {
+  const g = vzeGoal();
+  if (!g) return;
+  closeGoalEditor(true);
+  await vzDeleteGoals([String(g.id)]);
+};
+
+/* ── Subtasks: the running plan's items for this goal ── */
+
+function vzePlanHTML(g) {
+  const ready = typeof window.tdpGoalItems === 'function';
+  const planOn = ready && window.tdpHasActivePlan && window.tdpHasActivePlan();
+  const other = (state.data.tasks || []).filter(t =>
+    String(t.vision_id || '') === String(g.id) && !t.tdp_plan_id && t.status !== 'cancelled');
+
+  const row = (t, kind) => `
+    <div class="vze-sub ${t.status === 'completed' ? 'done' : ''}">
+      <input type="checkbox" ${t.status === 'completed' ? 'checked' : ''} onchange="vzeToggleTask('${escapeHtml(String(t.id))}')" aria-label="Done">
+      <span class="vze-sub-t">${escapeHtml(t.title || '')}</span>
+      ${t.due_date ? `<span class="vze-sub-d">${formatDate(t.due_date)}</span>` : ''}
+      <button class="vze-x" onclick="vzeUnlink('${escapeHtml(String(t.id))}')" title="Stop linking this to the goal">×</button>
+    </div>`;
+
+  let body = '';
+  if (!planOn) {
+    body = `<p class="vze-hint">No 10 days plan is running. <a onclick="closeGoalEditor(); routeTo('tdp')">Start one</a> and its items can live here as subtasks.</p>`;
+  } else {
+    const items = window.tdpGoalItems(g.id);
+    const cands = window.tdpGoalCandidates(g);
+    const done = items.filter(t => t.status === 'completed').length;
+    body = `
+      ${items.length ? items.map(t => row(t, 'plan')).join('') : `<p class="vze-hint">Nothing on this plan for this goal yet.</p>`}
+      <div class="vze-add">
+        <input type="text" maxlength="200" placeholder="Add a subtask to this plan…"
+               onkeydown="if(event.key==='Enter'){event.preventDefault(); vzeAddSub(this);}">
+        <button onclick="vzeAddSub(this.previousElementSibling)">Add</button>
+      </div>
+      ${cands.length ? `
+        <div class="vze-cands">
+          <div class="vze-cands-h">Also on the plan in ${escapeHtml(g.category || '')}</div>
+          ${cands.map(t => `
+            <div class="vze-cand">
+              <span>${escapeHtml(t.title || '')}</span>
+              <button onclick="vzeLink('${escapeHtml(String(t.id))}')">Link</button>
+            </div>`).join('')}
+        </div>` : ''}`;
+    body = `<div class="vze-sec-meta">${items.length ? `${done} of ${items.length} done` : ''}</div>` + body;
+  }
+
+  return `
+    <section class="vze-sec" id="vzePlan">
+      <h4>10 days plan</h4>
+      ${body}
+      ${other.length ? `<h4 style="margin-top:14px">Other tasks</h4>${other.map(t => row(t, 'task')).join('')}` : ''}
+    </section>`;
+}
+
+function vzeRepaintPlan() {
+  const g = vzeGoal();
+  const el = document.getElementById('vzePlan');
+  if (g && el) el.outerHTML = vzePlanHTML(g);
+}
+
+window.vzeAddSub = async function (input) {
+  const g = vzeGoal();
+  const text = String(input && input.value || '').trim();
+  if (!g || !text || typeof window.tdpAddForGoal !== 'function') return;
+  input.value = '';
+  await window.tdpAddForGoal(g, text);
+  vzeDirty = true;
+  vzeRepaintPlan();
+  document.querySelector('#vzePlan .vze-add input')?.focus();
+};
+
+window.vzeLink = async function (taskId) {
+  const g = vzeGoal();
+  if (!g || typeof window.tdpLinkQuietly !== 'function') return;
+  await window.tdpLinkQuietly(taskId, g.id);
+  vzeDirty = true;
+  vzeRepaintPlan();
+};
+
+window.vzeUnlink = async function (taskId) {
+  const t = (state.data.tasks || []).find(x => String(x.id) === String(taskId));
+  if (!t) return;
+  t.vision_id = null;
+  vzeDirty = true;
+  vzeRepaintPlan();
+  try { await apiCall('update', 'tasks', { vision_id: null }, t.id); } catch (e) { }
+};
+
+window.vzeToggleTask = async function (taskId) {
+  const t = (state.data.tasks || []).find(x => String(x.id) === String(taskId));
+  if (!t) return;
+  const done = t.status !== 'completed';
+  t.status = done ? 'completed' : 'pending';
+  t.completed_at = done ? new Date().toISOString() : null;
+  vzeDirty = true;
+  vzeRepaintPlan();
+  try { await apiCall('update', 'tasks', { status: t.status, completed_at: t.completed_at }, t.id); } catch (e) { }
+};
+
+/* ── Affirmations: inline for text, the full creator for media ── */
+
+function vzeAffHTML(g) {
+  const affs = (state.data.vision_affirmations || [])
+    .filter(a => String(a.vision_id) === String(g.id))
+    .sort((a, b) => (parseInt(a.order, 10) || 0) - (parseInt(b.order, 10) || 0));
+  return `
+    <section class="vze-sec" id="vzeAff">
+      <h4>Affirmations</h4>
+      ${affs.map(a => `
+        <div class="vze-aff">
+          <textarea rows="1" onblur="vzeSaveAff('${escapeHtml(String(a.id))}', this.value)"
+                    oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">${escapeHtml(a.text || '')}</textarea>
+          <button class="vze-x" onclick="vzeDeleteAff('${escapeHtml(String(a.id))}')" title="Delete">×</button>
+        </div>`).join('')}
+      <div class="vze-add">
+        <input type="text" maxlength="400" placeholder="Add an affirmation…"
+               onkeydown="if(event.key==='Enter'){event.preventDefault(); vzeAddAff(this);}">
+        <button onclick="vzeAddAff(this.previousElementSibling)">Add</button>
+      </div>
+      <a class="vze-more" onclick="openAffirmationCreator('${g.id}')">Add one with a voice note, image or style →</a>
+    </section>`;
+}
+
+function vzeRepaintAff() {
+  const g = vzeGoal();
+  const el = document.getElementById('vzeAff');
+  if (g && el) el.outerHTML = vzeAffHTML(g);
+}
+
+window.vzeAddAff = async function (input) {
+  const g = vzeGoal();
+  const text = String(input && input.value || '').trim();
+  if (!g || !text) return;
+  input.value = '';
+  const existing = (state.data.vision_affirmations || []).filter(a => String(a.vision_id) === String(g.id));
+  const payload = { vision_id: g.id, text, bg_style: 'dawn', is_pinned: 'false', order: existing.length };
+  try {
+    const res = await apiCall('create', 'vision_affirmations', payload);
+    const id = (res && (res.id || (res.data && res.data.id))) || ('aff-' + Date.now());
+    if (!Array.isArray(state.data.vision_affirmations)) state.data.vision_affirmations = [];
+    state.data.vision_affirmations.push({ id, ...payload });
+  } catch (e) { showToast('Could not add that'); }
+  vzeRepaintAff();
+  document.querySelector('#vzeAff .vze-add input')?.focus();
+};
+
+window.vzeSaveAff = async function (affId, text) {
+  const a = (state.data.vision_affirmations || []).find(x => String(x.id) === String(affId));
+  const v = String(text || '').trim();
+  if (!a || !v || v === a.text) return;
+  a.text = v;
+  vzeFlash('Saving…');
+  try { await apiCall('update', 'vision_affirmations', { text: v }, affId); vzeFlash('Saved'); }
+  catch (e) { vzeFlash('Could not save'); }
+};
+
+window.vzeDeleteAff = async function (affId) {
+  if (!confirm('Delete this affirmation?')) return;
+  state.data.vision_affirmations = (state.data.vision_affirmations || []).filter(x => String(x.id) !== String(affId));
+  vzeRepaintAff();
+  try { await apiCall('delete', 'vision_affirmations', {}, affId); } catch (e) { }
+};
+
+/* ── The sheet ── */
+
+function vzeHTML(g) {
+  const prog = parseInt(g.progress, 10) || 0;
+  const achieved = g.status === 'achieved';
+  const hasMedia = !!(g.image_url || g.video_url);
+  const thumb = g.image_url ? (resolveMediaUrl(g.image_url) || sanitizeUrl(g.image_url)) : '';
+  const cats = vzCategories();
+
+  return `
+  <div class="vze-panel" role="dialog" aria-label="Edit goal">
+    <div class="vze-head">
+      <input class="vze-title" value="${escapeHtml(g.title || '')}" maxlength="120"
+             onblur="vzeSetTitle(this)" onkeydown="if(event.key==='Enter'){this.blur();}">
+      <span class="vze-status" id="vzeStatus"></span>
+      <button class="vze-close" onclick="closeGoalEditor()" aria-label="Close">×</button>
+    </div>
+
+    <div class="vze-fields">
+      <label><span>Category</span>
+        <select onchange="vzeSave('category', this.value); vzeRepaintPlan();">
+          ${cats.map(c => `<option value="${escapeHtml(c)}" ${g.category === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+        </select>
+      </label>
+      <label><span>Target</span>
+        <input type="date" value="${escapeHtml(String(g.target_date || '').slice(0, 10))}" onchange="vzeSave('target_date', this.value)">
+      </label>
+      <label><span>Horizon</span>
+        <select onchange="vzeSave('horizon', this.value)">
+          <option value="" ${!g.horizon ? 'selected' : ''}>—</option>
+          ${VISION_HORIZONS.map(h => `<option value="${h.key}" ${g.horizon === h.key ? 'selected' : ''}>${h.short}</option>`).join('')}
+        </select>
+      </label>
+    </div>
+
+    <div class="vze-prog">
+      <div class="vze-prog-top"><span>Progress</span><b id="vzeProgVal">${prog}%</b></div>
+      <div class="vze-prog-track"><i id="vzeProgFill" style="width:${prog}%"></i>
+        <input type="range" min="0" max="100" step="5" value="${prog}" oninput="vzeSetProgress(this.value)" aria-label="Progress">
+      </div>
+    </div>
+
+    ${hasMedia ? `
+    <button class="vze-media" onclick="closeGoalEditor(); openVisionDetail('${g.id}')">
+      ${thumb ? `<i style="background-image:url('${thumb}')"></i>` : `<i class="vid">▶</i>`}
+      <span>View photos &amp; video</span>
+    </button>` : ''}
+
+    <section class="vze-sec">
+      <h4>Why this matters</h4>
+      <textarea class="vze-notes" rows="3" placeholder="What it looks like when you get there…"
+                onblur="vzeSave('description', this.value)">${escapeHtml(g.description || '')}</textarea>
+    </section>
+
+    ${vzePlanHTML(g)}
+    ${vzeAffHTML(g)}
+
+    <div class="vze-foot">
+      <button class="vze-btn danger" onclick="vzeDelete()">Delete</button>
+      <button class="vze-btn" onclick="vzeToggleAchieved()">${achieved ? 'Mark as not achieved' : 'Mark achieved'}</button>
+      <span style="flex:1"></span>
+      <button class="vze-btn primary" onclick="closeGoalEditor()">Done</button>
+    </div>
+  </div>`;
+}
+
+function vzePaint() {
+  const g = vzeGoal();
+  const sheet = document.getElementById('vzEditor');
+  if (!g || !sheet) return;
+  sheet.innerHTML = vzeHTML(g);
+}
+
+window.openGoalEditor = async function (id) {
+  vzeId = String(id);
+  vzeDirty = false;
+  if (typeof window.tdpGoalItems !== 'function' && typeof ensureViewLoaded === 'function') {
+    try { await ensureViewLoaded('tdp'); } catch (e) { }
+  }
+  vzeInjectCSS();
+  let sheet = document.getElementById('vzEditor');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'vzEditor';
+    sheet.className = 'vze-sheet';
+    // Clicking the dim backdrop closes; clicks inside the panel don't bubble to it.
+    sheet.addEventListener('mousedown', e => { if (e.target === sheet) closeGoalEditor(); });
+    // Lives on <body>: #main carries a transform, which would trap position:fixed.
+    document.body.appendChild(sheet);
+  }
+  vzePaint();
+  sheet.classList.add('open');
+  document.addEventListener('keydown', vzeEsc);
+};
+
+function vzeEsc(e) { if (e.key === 'Escape') closeGoalEditor(); }
+
+window.closeGoalEditor = function (skipRefresh) {
+  // Commit anything still focused (a title mid-edit) before the sheet goes.
+  const active = document.activeElement;
+  if (active && document.getElementById('vzEditor')?.contains(active)) active.blur();
+  clearTimeout(vzeProgTimer);
+  document.getElementById('vzEditor')?.classList.remove('open');
+  document.removeEventListener('keydown', vzeEsc);
+  const changed = vzeDirty;
+  vzeId = null;
+  vzeDirty = false;
+  if (changed && !skipRefresh && state.view === 'vision') renderVision();
+};
+
+function vzeInjectCSS() {
+  if (document.getElementById('vzeStyles')) return;
+  const st = document.createElement('style');
+  st.id = 'vzeStyles';
+  st.textContent = `
+  .vze-sheet { position: fixed; inset: 0; z-index: 900; display: none; align-items: flex-start; justify-content: center;
+    padding: 5vh 16px; background: rgba(15,23,42,.42); backdrop-filter: blur(2px); overflow-y: auto; }
+  .vze-sheet.open { display: flex; }
+  .vze-panel { width: 100%; max-width: 620px; background: var(--surface-1); border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(15,23,42,.25); padding: 22px 24px 18px; box-sizing: border-box; }
+  @media (max-width: 640px) { .vze-sheet { padding: 0; align-items: flex-end; } .vze-panel { border-radius: 20px 20px 0 0; min-height: 70vh; } }
+
+  .vze-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .vze-title { flex: 1; min-width: 0; font-family: inherit; font-size: 22px !important; font-weight: 800; color: var(--text-1);
+    border: 1px solid transparent !important; background: transparent !important; border-radius: 10px !important;
+    padding: 6px 8px !important; margin-left: -8px; box-shadow: none !important; }
+  .vze-title:hover { border-color: var(--border-color) !important; }
+  .vze-title:focus { border-color: var(--primary) !important; background: var(--surface-2) !important; outline: none; }
+  .vze-status { font-size: 11.5px; font-weight: 700; color: var(--text-3); opacity: 0; transition: opacity .2s ease; white-space: nowrap; }
+  .vze-status.on { opacity: 1; }
+  .vze-close { width: 34px; height: 34px; flex: none; border: 1px solid var(--border-color); border-radius: 10px;
+    background: var(--surface-2); color: var(--text-2); font-size: 20px; line-height: 1; cursor: pointer; }
+
+  .vze-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  @media (max-width: 520px) { .vze-fields { grid-template-columns: 1fr 1fr; } }
+  .vze-fields label { display: flex; flex-direction: column; gap: 5px; }
+  .vze-fields span, .vze-sec h4, .vze-prog-top span { font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-3); margin: 0; }
+  .vze-fields select, .vze-fields input { height: 38px; border: 1px solid var(--border-color) !important;
+    border-radius: 10px !important; background: var(--surface-2) !important; color: var(--text-1);
+    font-family: inherit; font-size: 13.5px !important; font-weight: 600; padding: 0 10px !important; box-sizing: border-box; width: 100%; }
+
+  .vze-prog { margin-bottom: 16px; }
+  .vze-prog-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+  .vze-prog-top b { font-size: 15px; font-weight: 850; color: var(--text-1); font-variant-numeric: tabular-nums; }
+  .vze-prog-track { position: relative; height: 10px; border-radius: 99px; background: var(--surface-3); }
+  .vze-prog-track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--primary); pointer-events: none; }
+  .vze-prog-track input { position: absolute; inset: -8px 0; width: 100%; margin: 0; opacity: 0; cursor: pointer; }
+
+  .vze-media { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; margin-bottom: 16px;
+    border: 1px solid var(--border-color); border-radius: 14px; background: var(--surface-1); cursor: pointer;
+    font-family: inherit; font-size: 13px; font-weight: 700; color: var(--text-2); text-align: left; }
+  .vze-media:hover { border-color: var(--primary); color: var(--primary); }
+  .vze-media i { width: 64px; height: 44px; flex: none; border-radius: 9px; background-size: cover; background-position: center;
+    background-color: #111; color: #fff; display: flex; align-items: center; justify-content: center; font-style: normal; }
+
+  .vze-sec { padding-top: 14px; margin-top: 2px; border-top: 1px solid var(--border-color); margin-bottom: 14px; }
+  .vze-sec h4 { margin-bottom: 9px; }
+  .vze-sec-meta { float: right; margin-top: -24px; font-size: 11.5px; font-weight: 700; color: var(--text-3); }
+  .vze-notes { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px;
+    border: 1px solid var(--border-color) !important; border-radius: 12px !important; background: var(--surface-2) !important;
+    color: var(--text-1); font-family: inherit; font-size: 13.5px !important; line-height: 1.55; padding: 10px 12px !important; }
+  .vze-notes:focus, .vze-add input:focus, .vze-aff textarea:focus { border-color: var(--primary) !important; box-shadow: none !important; outline: none; }
+  .vze-hint { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text-3); line-height: 1.5; }
+  .vze-hint a { color: var(--primary); cursor: pointer; text-decoration: underline; }
+
+  .vze-sub { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 9px; }
+  .vze-sub:hover { background: var(--surface-2); }
+  .vze-sub input { width: 17px; height: 17px; flex: none; accent-color: var(--primary); cursor: pointer; }
+  .vze-sub-t { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--text-1); overflow-wrap: anywhere; }
+  .vze-sub.done .vze-sub-t { color: var(--text-3); text-decoration: line-through; }
+  .vze-sub-d { font-size: 11.5px; font-weight: 700; color: var(--text-3); flex: none; }
+  .vze-x { flex: none; width: 26px; height: 26px; border: none; background: none; color: var(--text-3);
+    font-size: 18px; line-height: 1; cursor: pointer; border-radius: 7px; }
+  .vze-x:hover { color: var(--danger, #EF4444); background: var(--surface-3); }
+
+  .vze-add { display: flex; gap: 7px; margin-top: 8px; }
+  .vze-add input { flex: 1; min-width: 0; height: 36px; border: 1px dashed var(--border-strong, #cbd5e1) !important;
+    border-radius: 10px !important; background: transparent !important; color: var(--text-1);
+    font-family: inherit; font-size: 13px !important; font-weight: 600; padding: 0 11px !important; box-sizing: border-box; }
+  .vze-add button, .vze-cand button { height: 36px; padding: 0 14px; flex: none; border: 1px solid var(--border-color);
+    border-radius: 10px; background: var(--surface-2); color: var(--text-2); font-family: inherit;
+    font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .vze-add button:hover, .vze-cand button:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+  .vze-cands { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
+  .vze-cands-h { font-size: 11px; font-weight: 800; color: var(--text-3); margin-bottom: 6px; }
+  .vze-cand { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 13px; font-weight: 600; color: var(--text-2); }
+  .vze-cand span { flex: 1; min-width: 0; }
+  .vze-cand button { height: 28px; padding: 0 11px; font-size: 12px; }
+
+  .vze-aff { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 6px; }
+  .vze-aff textarea { flex: 1; resize: none; overflow: hidden; min-height: 38px; box-sizing: border-box;
+    border: 1px solid transparent !important; border-radius: 10px !important; background: var(--surface-2) !important;
+    color: var(--text-1); font-family: inherit; font-size: 13.5px !important; line-height: 1.5; padding: 8px 11px !important; }
+  .vze-aff textarea:hover { border-color: var(--border-color) !important; }
+  .vze-more { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; color: var(--text-3); cursor: pointer; }
+  .vze-more:hover { color: var(--primary); }
+
+  .vze-foot { display: flex; align-items: center; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border-color); }
+  .vze-btn { height: 40px; padding: 0 16px; border: 1px solid var(--border-color); border-radius: 11px;
+    background: var(--surface-1); color: var(--text-2); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .vze-btn:hover { background: var(--surface-2); color: var(--text-1); }
+  .vze-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .vze-btn.primary:hover { filter: brightness(1.07); background: var(--primary); color: #fff; }
+  .vze-btn.danger:hover { color: var(--danger, #EF4444); border-color: var(--danger, #EF4444); background: transparent; }
+  `;
+  document.head.appendChild(st);
+}

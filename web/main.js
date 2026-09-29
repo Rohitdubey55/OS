@@ -370,7 +370,7 @@ function addLongPressListener(selector, callback) {
    or a habit is folded in so nothing is unreachable. A habit's "routine" is a
    different axis — when in the day it happens — and stays out of this.        */
 
-const APP_DEFAULT_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
+const APP_DEFAULT_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine', 'Other'];
 
 // The list the user actually curates, in the Tasks category manager. This is
 // the answer to "what are my categories?" — and it's what a page should offer
@@ -402,6 +402,81 @@ window.appCategories = function appCategories() {
     return list;
 };
 
+/* ── Editing the list ────────────────────────────────────────────────────
+   A category name is stored on the rows themselves — tasks (which includes
+   every 10 Days Plan item), habits, vision goals, and the category a stopwatch
+   card is linked to. Renaming just the saved list would orphan all of them,
+   which is the bug that split "Personal" from "Personality" in the first place.
+   So a rename or a delete here walks every one of those tables. */
+
+const APP_CATEGORY_HOLDERS = [
+    { sheet: 'tasks',           key: 'tasks',           field: 'category' },
+    { sheet: 'habits',          key: 'habits',          field: 'category' },
+    { sheet: 'vision_board',    key: 'vision',          field: 'category' },
+    { sheet: 'time_categories', key: 'time_categories', field: 'task_category' }
+];
+
+// Write the list back, keeping the Tasks page's 'VIEW:…|' prefix if it has one.
+window.appSaveCategories = async function (list) {
+    const clean = [];
+    (list || []).forEach(c => { const v = String(c || '').trim(); if (v && !clean.includes(v)) clean.push(v); });
+    if (!Array.isArray(state.data.settings)) state.data.settings = [];
+    const settings = state.data.settings[0] || {};
+    const raw = String(settings.task_categories || '');
+    const prefix = raw.startsWith('VIEW:') ? raw.split('|')[0] + '|' : '';
+    const next = { ...settings, task_categories: prefix + clean.join(',') };
+    state.data.settings[0] = next;
+    if (settings.id) await apiCall('update', 'settings', { task_categories: next.task_categories }, settings.id);
+    else await apiCall('create', 'settings', next);
+    return clean;
+};
+
+// How many rows carry a category, per kind — so a rename can say what it'll touch.
+window.appCategoryUsage = function (name) {
+    const out = {};
+    APP_CATEGORY_HOLDERS.forEach(h => {
+        out[h.key] = (state.data[h.key] || []).filter(r => String(r[h.field] || '') === String(name)).length;
+    });
+    return out;
+};
+
+// Retag every row from one name to another, six writes at a time.
+async function _appRetag(from, to) {
+    const jobs = [];
+    APP_CATEGORY_HOLDERS.forEach(h => {
+        (state.data[h.key] || []).forEach(r => {
+            if (String(r[h.field] || '') !== String(from)) return;
+            r[h.field] = to || null;
+            jobs.push(() => apiCall('update', h.sheet, { [h.field]: to || null }, r.id));
+        });
+    });
+    for (let i = 0; i < jobs.length; i += 6) {
+        await Promise.all(jobs.slice(i, i + 6).map(fn => fn().catch(e => console.error('[categories] retag failed', e))));
+    }
+    return jobs.length;
+}
+
+// Rename — or, if `to` is already on the list, merge into it.
+window.appRenameCategory = async function (from, to) {
+    from = String(from || '').trim(); to = String(to || '').trim();
+    if (!from || !to || from === to) return 0;
+    const list = window.appSavedCategories();
+    const merging = list.includes(to);
+    const next = merging ? list.filter(c => c !== from) : list.map(c => c === from ? to : c);
+    const moved = await _appRetag(from, to);
+    await window.appSaveCategories(next);
+    return moved;
+};
+
+// Remove a category; whatever was filed under it moves to `moveTo` (or none).
+window.appDeleteCategory = async function (name, moveTo) {
+    name = String(name || '').trim();
+    if (!name) return 0;
+    const moved = await _appRetag(name, moveTo || '');
+    await window.appSaveCategories(window.appSavedCategories().filter(c => c !== name));
+    return moved;
+};
+
 // Categories that are only present because something is still filed under them.
 // Surfaced so a stray old task can't quietly pad every picker in the app.
 window.appStrayCategories = function appStrayCategories() {
@@ -412,12 +487,12 @@ window.appStrayCategories = function appStrayCategories() {
 const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js?v=20260924a', render: 'renderDashboard' },
     calendar:      { src: 'view-calendar.js?v=20260929a', render: 'renderCalendar' },
-    tasks:         { src: 'view-tasks.js?v=20260916c', render: 'renderTasks' },
+    tasks:         { src: 'view-tasks.js?v=20260930a', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
-    habits:        { src: 'view-habits.js?v=20260929a', render: 'renderHabits' },
+    habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
-    vision:        { src: 'view-vision.js?v=20260924a', render: 'renderVision' },
-    settings:      { src: 'view-settings.js?v=20260915d', render: 'renderSettings' },
+    vision:        { src: 'view-vision.js?v=20260930a', render: 'renderVision' },
+    settings:      { src: 'view-settings.js?v=20260930a', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
     gym:           { src: 'view-gym.js?v=20260915c', render: 'renderGym' },
     notes:         { src: 'view-notes.js',         render: 'renderNotes' },
@@ -431,10 +506,10 @@ const VIEW_MAP = {
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js?v=20260924a', render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
-    tdp:           { src: 'view-tdp.js?v=20260929b',  render: 'renderTDP' },
+    tdp:           { src: 'view-tdp.js?v=20260930a',  render: 'renderTDP' },
     meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
-    timeTracker:   { src: 'view-time-tracker.js?v=20260929b', render: 'renderTimeTracker' },
-    timeAnalysis:  { src: 'view-time-tracker.js?v=20260929b', render: 'renderTimeAnalysis' }
+    timeTracker:   { src: 'view-time-tracker.js?v=20260930a', render: 'renderTimeTracker' },
+    timeAnalysis:  { src: 'view-time-tracker.js?v=20260930a', render: 'renderTimeAnalysis' }
 };
 
 const _loadedScripts = new Set();

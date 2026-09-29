@@ -1893,7 +1893,7 @@ window.deleteTask = async function (id) {
 /* ══════════════════════════════════════════════════════
    CATEGORY CRUD (unchanged)
 ══════════════════════════════════════════════════════ */
-const DEFAULT_TASK_CATEGORIES = ['Work', 'Personal', 'Health', 'Finance', 'Study', 'Other'];
+const DEFAULT_TASK_CATEGORIES = ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine', 'Other'];
 
 function getTaskCategories() {
   const settings = state.data.settings?.[0] || {};
@@ -1946,11 +1946,17 @@ window.addTaskCategory = async function (categoryName) {
 };
 
 window.deleteTaskCategory = async function (categoryName) {
-  if (!confirm(`Delete category "${categoryName}"? Tasks will become uncategorized.`)) return;
-  const categories = getTaskCategories().filter(c => c !== categoryName);
-  await saveTaskCategoriesToSettings(categories);
-  const tasksToUpdate = state.data.tasks.filter(t => t.category === categoryName);
-  for (const t of tasksToUpdate) await apiCall('update', 'tasks', { ...t, category: '' }, t.id);
+  if (!confirm(`Delete category "${categoryName}"? Anything filed under it — tasks, habits, goals — becomes uncategorised.`)) return;
+  // One list for the whole app now, so a delete here has to reach every page
+  // that files things under this name, not just the tasks.
+  if (typeof window.appDeleteCategory === 'function') {
+    await window.appDeleteCategory(categoryName, '');
+  } else {
+    const categories = getTaskCategories().filter(c => c !== categoryName);
+    await saveTaskCategoriesToSettings(categories);
+    const tasksToUpdate = state.data.tasks.filter(t => t.category === categoryName);
+    for (const t of tasksToUpdate) await apiCall('update', 'tasks', { ...t, category: '' }, t.id);
+  }
   showToast(`Category "${categoryName}" deleted`);
   await refreshData('tasks');
 };
@@ -1960,10 +1966,16 @@ window.renameTaskCategory = async function (oldName, newName) {
   const trimmed = newName.trim();
   const categories = getTaskCategories();
   if (categories.includes(trimmed) && trimmed !== oldName) { showToast('Category name already exists'); return false; }
-  const newCategories = categories.map(c => c === oldName ? trimmed : c);
-  await saveTaskCategoriesToSettings(newCategories);
-  const tasksToUpdate = state.data.tasks.filter(t => t.category === oldName);
-  for (const t of tasksToUpdate) await apiCall('update', 'tasks', { ...t, category: trimmed }, t.id);
+  // Renames everywhere the name is stored — habits, goals and stopwatch cards
+  // too — or they'd keep the old name and quietly stop linking.
+  if (typeof window.appRenameCategory === 'function') {
+    await window.appRenameCategory(oldName, trimmed);
+  } else {
+    const newCategories = categories.map(c => c === oldName ? trimmed : c);
+    await saveTaskCategoriesToSettings(newCategories);
+    const tasksToUpdate = state.data.tasks.filter(t => t.category === oldName);
+    for (const t of tasksToUpdate) await apiCall('update', 'tasks', { ...t, category: trimmed }, t.id);
+  }
   showToast(`Category renamed to "${trimmed}"`);
   await refreshData('tasks');
   return true;

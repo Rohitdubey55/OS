@@ -285,6 +285,22 @@ function renderSettings() {
         </div>
       </details>
 
+      <!-- CATEGORIES -->
+      <details class="settings-details" style="display:block;" id="setCatsSection">
+        <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
+            <div class="widget-title">${renderIcon('tag', null, 'style="width:18px; margin-right:8px;"')} Categories</div>
+            ${renderIcon('down', null, 'style="width:20px; transition:transform 0.3s;"')}
+        </summary>
+        <div class="widget-body" style="padding:20px; border-radius:0 0 16px 16px; background:var(--surface-1);">
+          <p class="section-description" style="margin-bottom:14px;">
+            One list for the whole app. These categories are what <b>Tasks</b>, <b>Habits</b>, the <b>10 Days Plan</b>,
+            <b>Time Spent On</b> and <b>Vision</b> all file things under — and matching names is what links them.
+            Renaming one here renames it everywhere it's used.
+          </p>
+          <div id="setCatsList">${setCatsListHTML()}</div>
+        </div>
+      </details>
+
       <!-- 4. TAB VISIBILITY -->
       <details class="settings-details" style="display:block;">
         <summary class="widget-header" style="cursor:pointer; padding:16px 20px; margin:0; background:var(--surface-1); border-bottom:1px solid var(--border-color); border-radius:16px 16px 0 0; list-style:none;">
@@ -2014,4 +2030,167 @@ window.toggleBiometricLock = function (enabled) {
         if (status) status.textContent = 'Disabled';
         if (typeof showToast === 'function') showToast('Biometric lock disabled');
     }
+};
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CATEGORIES — the one list Tasks, Habits, the 10 Days Plan, Time Spent On
+   and Vision share. Rename and delete go through main.js, which retags every
+   row that carries the name rather than just editing the saved list.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function setCatsEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function setCatsUsageText(name) {
+  if (typeof window.appCategoryUsage !== 'function') return '';
+  const u = window.appCategoryUsage(name);
+  const parts = [];
+  if (u.tasks) parts.push(`${u.tasks} task${u.tasks === 1 ? '' : 's'}`);
+  if (u.habits) parts.push(`${u.habits} habit${u.habits === 1 ? '' : 's'}`);
+  if (u.vision) parts.push(`${u.vision} goal${u.vision === 1 ? '' : 's'}`);
+  if (u.time_categories) parts.push(`${u.time_categories} stopwatch${u.time_categories === 1 ? '' : 'es'}`);
+  return parts.length ? parts.join(' · ') : 'Not used yet';
+}
+
+function setCatsListHTML() {
+  const list = typeof window.appSavedCategories === 'function' ? window.appSavedCategories() : [];
+  const strays = typeof window.appStrayCategories === 'function' ? window.appStrayCategories() : [];
+  const rows = list.map((c, i) => `
+    <div class="setcat-row" data-cat="${setCatsEsc(c)}">
+      <div class="setcat-order">
+        <button onclick="setCatsMove(${i}, -1)" ${i === 0 ? 'disabled' : ''} title="Move up">▲</button>
+        <button onclick="setCatsMove(${i}, 1)" ${i === list.length - 1 ? 'disabled' : ''} title="Move down">▼</button>
+      </div>
+      <div class="setcat-main">
+        <input class="setcat-name" value="${setCatsEsc(c)}" maxlength="40"
+               onkeydown="if(event.key==='Enter'){this.blur();} if(event.key==='Escape'){this.value=this.defaultValue; this.blur();}"
+               onblur="setCatsRename('${setCatsEsc(c)}', this.value, this)">
+        <span class="setcat-use">${setCatsUsageText(c)}</span>
+      </div>
+      <button class="setcat-del" onclick="setCatsDelete('${setCatsEsc(c)}')">Delete</button>
+    </div>`).join('');
+
+  return `
+    <style>
+      .setcat-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border-color);
+        border-radius:12px; margin-bottom:8px; background:var(--surface-1); }
+      .setcat-order { display:flex; flex-direction:column; gap:2px; }
+      .setcat-order button { width:24px; height:16px; border:none; background:var(--surface-2); color:var(--text-3);
+        font-size:9px; line-height:1; border-radius:4px; cursor:pointer; padding:0; }
+      .setcat-order button:disabled { opacity:.3; cursor:default; }
+      .setcat-order button:not(:disabled):hover { color:var(--primary); }
+      .setcat-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+      .setcat-name { font:inherit; font-size:14px !important; font-weight:700; color:var(--text-1);
+        border:1px solid transparent !important; background:transparent !important; border-radius:8px !important;
+        padding:4px 8px !important; margin-left:-8px; box-shadow:none !important; width:100%; box-sizing:border-box; }
+      .setcat-name:hover { border-color:var(--border-color) !important; }
+      .setcat-name:focus { border-color:var(--primary) !important; background:var(--surface-2) !important; outline:none; }
+      .setcat-use { font-size:11.5px; font-weight:600; color:var(--text-3); }
+      .setcat-del { height:32px; padding:0 12px; border:1px solid var(--border-color); border-radius:9px; background:none;
+        color:var(--text-3); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; }
+      .setcat-del:hover { color:var(--danger,#EF4444); border-color:var(--danger,#EF4444); }
+      .setcat-add { display:flex; gap:8px; margin-top:12px; }
+      .setcat-add input { flex:1; height:38px; border:1px dashed var(--border-strong,#cbd5e1) !important; border-radius:10px !important;
+        background:transparent !important; font:inherit; font-size:13.5px !important; padding:0 12px !important; box-sizing:border-box; }
+      .setcat-stray { margin-top:16px; padding:12px 14px; border-radius:12px; background:var(--surface-2);
+        font-size:12.5px; color:var(--text-2); line-height:1.55; }
+      .setcat-stray b { color:var(--text-1); }
+      .setcat-stray button { margin:6px 6px 0 0; height:28px; padding:0 10px; border:1px solid var(--border-color);
+        border-radius:8px; background:var(--surface-1); font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+    </style>
+    ${rows}
+    <div class="setcat-add">
+      <input id="setCatNew" maxlength="40" placeholder="New category…"
+             onkeydown="if(event.key==='Enter'){event.preventDefault(); setCatsAdd();}">
+      <button class="btn primary" onclick="setCatsAdd()">Add</button>
+    </div>
+    ${strays.length ? `
+    <div class="setcat-stray">
+      <b>Still in use but not on your list:</b> ${strays.map(setCatsEsc).join(', ')}.
+      Some older items are filed under ${strays.length === 1 ? 'it' : 'these'}, so ${strays.length === 1 ? 'it keeps' : 'they keep'} appearing in pickers.
+      Move them into one of yours:
+      <div>${strays.map(st => `<button onclick="setCatsFoldStray('${setCatsEsc(st)}')">Move ${setCatsEsc(st)} →</button>`).join('')}</div>
+    </div>` : ''}`;
+}
+
+function setCatsRepaint() {
+  const el = document.getElementById('setCatsList');
+  if (el) el.innerHTML = setCatsListHTML();
+}
+
+window.setCatsAdd = async function () {
+  const input = document.getElementById('setCatNew');
+  const v = String(input && input.value || '').trim();
+  if (!v) return;
+  const list = window.appSavedCategories();
+  if (list.some(c => c.toLowerCase() === v.toLowerCase())) { showToast('That category already exists'); return; }
+  await window.appSaveCategories([...list, v]);
+  setCatsRepaint();
+  showToast(`Added ${v}`);
+  document.getElementById('setCatNew')?.focus();
+};
+
+window.setCatsMove = async function (i, dir) {
+  const list = window.appSavedCategories();
+  const j = i + dir;
+  if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  await window.appSaveCategories(list);
+  setCatsRepaint();
+};
+
+window.setCatsRename = async function (from, to, input) {
+  to = String(to || '').trim();
+  if (!to || to === from) { if (input) input.value = from; return; }
+  const list = window.appSavedCategories();
+  const clash = list.find(c => c !== from && c.toLowerCase() === to.toLowerCase());
+  const usage = setCatsUsageText(from);
+  const msg = clash
+    ? `Merge "${from}" into "${clash}"?\n\nEverything filed under ${from} (${usage}) moves to ${clash}, and ${from} is removed.`
+    : `Rename "${from}" to "${to}"?\n\nThis updates it everywhere: ${usage}.`;
+  if (!confirm(msg)) { if (input) input.value = from; return; }
+  const moved = await window.appRenameCategory(from, clash || to);
+  setCatsRepaint();
+  showToast(clash ? `Merged into ${clash}` : `Renamed — ${moved} item${moved === 1 ? '' : 's'} updated`);
+};
+
+// Delete asks where the items go, rather than leaving them uncategorised.
+window.setCatsDelete = async function (name) {
+  const others = window.appSavedCategories().filter(c => c !== name);
+  const usage = window.appCategoryUsage(name);
+  const count = Object.values(usage).reduce((a, b) => a + b, 0);
+  let moveTo = '';
+  if (count) {
+    const fallback = others.includes('Other') ? 'Other' : (others[0] || '');
+    const pick = prompt(
+      `Delete "${name}"?\n\n${setCatsUsageText(name)} are filed under it. Move them to which category?\n\n` +
+      `${others.join(', ')}\n\nLeave blank to leave them uncategorised.`, fallback);
+    if (pick === null) return;                                   // cancelled
+    moveTo = String(pick).trim();
+    if (moveTo && !others.includes(moveTo)) { showToast(`"${moveTo}" isn't one of your categories`); return; }
+  } else if (!confirm(`Delete "${name}"? Nothing is filed under it.`)) {
+    return;
+  }
+  await window.appDeleteCategory(name, moveTo);
+  setCatsRepaint();
+  showToast(moveTo ? `Deleted — items moved to ${moveTo}` : 'Deleted');
+};
+
+// A stray is a name that isn't on the list; folding it is a rename into one that is.
+window.setCatsFoldStray = async function (stray) {
+  const list = window.appSavedCategories();
+  const fallback = list.includes('Other') ? 'Other' : (list[0] || '');
+  const pick = prompt(`Move everything filed under "${stray}" (${setCatsUsageText(stray)}) into which category?\n\n${list.join(', ')}`, fallback);
+  if (pick === null) return;
+  const to = String(pick).trim();
+  if (!list.includes(to)) { showToast(`"${to}" isn't one of your categories`); return; }
+  const n = await window.appRenameCategory(stray, to);
+  // appRenameCategory treats a name already on the list as a merge, and a stray
+  // was never on the list — so make sure it isn't added by accident.
+  await window.appSaveCategories(window.appSavedCategories().filter(c => c !== stray));
+  setCatsRepaint();
+  showToast(`Moved ${n} item${n === 1 ? '' : 's'} into ${to}`);
 };
