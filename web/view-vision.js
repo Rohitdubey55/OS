@@ -7791,6 +7791,11 @@ async function v2SyncGoalMedia(goalId) {
       }
       if (changed) { g.video_url = parts.join(','); try { await apiCall('update', 'vision_board', { video_url: g.video_url }, g.id); } catch (e) { } }
     }
+    const mus = v2MusicOf(g);
+    if (mus && !mus.ref.startsWith('builtin:') && !v2RefInCloud(mus.ref)) {
+      const next = await v2CloudRef(mus.ref, 'story_music_' + (mus.name || k));
+      if (next !== mus.ref) await v2Save(g, { story_music: JSON.stringify({ ...mus, ref: next }) });
+    }
     for (const row of (state.data.vision_images || []).filter(r => String(r.vision_id) === k)) {
       if (!row.url || v2RefInCloud(row.url)) continue;
       const next = await v2CloudRef(row.url, 'vision_gallery_' + row.id);
@@ -8105,6 +8110,8 @@ function v2StoryMount() {
         <span class="v2s-av" id="v2sAv"></span>
         <span class="v2s-who"><b id="v2sName"></b><span id="v2sMeta"></span></span>
         <span style="flex:1"></span>
+        <button class="v2s-ic" onclick="v2StoryEdit()" aria-label="Edit story music" title="Music">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
         <button class="v2s-ic" id="v2sMute" onclick="v2StoryMute()" aria-label="Sound"></button>
         <button class="v2s-ic" id="v2sPause" onclick="v2StoryTogglePause()" aria-label="Pause"></button>
         <button class="v2s-ic" onclick="v2StoryClose()" aria-label="Close">✕</button>
@@ -8147,7 +8154,9 @@ async function v2StoryShow() {
   av.style.backgroundImage = cover ? `url('${cover}')` : '';
   av.style.backgroundColor = v2CatColor(g.category);
   document.getElementById('v2sName').textContent = g.title || '';
-  document.getElementById('v2sMeta').textContent = `${g.category || ''} · ${v2s.ii + 1}/${group.items.length}`;
+  const mus = v2MusicOf(g);
+  document.getElementById('v2sMeta').textContent = `${g.category || ''} · ${v2s.ii + 1}/${group.items.length}${mus ? ` · ♪ ${mus.name || 'Music'}` : ''}`;
+  v2MusicFor(g);
   document.getElementById('v2sBars').innerHTML = group.items
     .map((_, k) => `<i><em style="width:${k < v2s.ii ? 100 : 0}%"></em></i>`).join('');
   document.getElementById('v2sBackdrop').style.backgroundImage = it.kind === 'image' ? `url('${it.url}')` : (cover ? `url('${cover}')` : '');
@@ -8171,6 +8180,7 @@ async function v2StoryShow() {
     const v = document.createElement('video');
     v.src = it.url; v.playsInline = true; v.muted = v2s.muted; v.preload = 'auto';
     v.addEventListener('ended', () => v2StoryNext());
+    v.addEventListener('playing', () => v2MusicDuck(!v.muted));
     v.addEventListener('timeupdate', () => v2StoryBar(v.duration ? v.currentTime / v.duration : 0));
     v.addEventListener('error', () => v2StoryNext());
     box.appendChild(v);
@@ -8178,6 +8188,7 @@ async function v2StoryShow() {
     if (p && p.catch) p.catch(() => { v.muted = true; v2s.muted = true; v2StoryIcons(); v.play().catch(() => { }); });
     if (v2s.paused) v.pause();
   } else {
+    v2MusicDuck(false);
     const img = document.createElement('img');
     img.src = it.url; img.alt = '';
     box.appendChild(img);
@@ -8233,6 +8244,7 @@ function v2StoryPause() {
   if (v) v.pause();
   else if (!v2s.pausedAt) { cancelAnimationFrame(v2s.raf); v2s.elapsed += performance.now() - v2s.t0; }
   v2s.pausedAt = true;
+  v2MusicPause();
 }
 function v2StoryResume() {
   if (v2s.paused) return;                       // a deliberate pause wins over a released hold
@@ -8240,6 +8252,7 @@ function v2StoryResume() {
   if (v) v.play().catch(() => { });
   else if (v2s.pausedAt) { v2s.t0 = performance.now(); v2StoryTick(); }
   v2s.pausedAt = false;
+  v2MusicResume();
 }
 window.v2StoryTogglePause = function () {
   v2s.paused = !v2s.paused;
@@ -8249,7 +8262,8 @@ window.v2StoryTogglePause = function () {
 window.v2StoryMute = function () {
   v2s.muted = !v2s.muted;
   const v = document.querySelector('#v2sMedia video');
-  if (v) v.muted = v2s.muted;
+  if (v) { v.muted = v2s.muted; v2MusicDuck(!v.muted && !v.paused); }
+  v2MusicApplyLevel();
   v2StoryIcons();
 };
 function v2StoryIcons() {
@@ -8278,6 +8292,7 @@ function v2StoryUp(e) {
   if (e.clientX - r.left < r.width * 0.3) v2StoryPrev(); else v2StoryNext();
 }
 function v2StoryKey(e) {
+  if (document.getElementById('v2sEdit')) { if (e.key === 'Escape') v2StoryEditClose(false); return; }
   if (e.key === 'Escape') v2StoryClose();
   else if (e.key === 'ArrowRight') v2StoryNext();
   else if (e.key === 'ArrowLeft') v2StoryPrev();
@@ -8291,6 +8306,8 @@ window.v2StoryOpenVision = function () {
 };
 
 window.v2StoryClose = function () {
+  v2MusicStop();
+  if (v2Preview) { v2Preview.stop(); v2Preview = null; }
   cancelAnimationFrame(v2s.raf);
   clearTimeout(v2s.holdTimer);
   const el = document.getElementById('v2Story');
@@ -8307,6 +8324,218 @@ window.v2StoryClose = function () {
   }
 };
 
+
+/* ═══ STORY MUSIC ════════════════════════════════════════════════════════
+   Each vision can carry a soundtrack for its story, set from the pencil in
+   the story header. It lives on the vision row (story_music, JSON) so it
+   follows you to every device: the two built-in tracks are generated live
+   in the browser (nothing to download), and your own file is copied to
+   Supabase Storage like photos are. Music keeps playing across a vision's
+   photos, changes when the next vision's track differs, pauses with the
+   story, follows the mute button, and dips while a video plays its own sound. */
+
+const V2_TRACKS = [
+  { key: 'builtin:calm', name: 'Calm pad', note: 'Slow, warm chords' },
+  { key: 'builtin:dawn', name: 'Morning light', note: 'Brighter, gently rising' },
+];
+const V2_MUSIC_MAX = 20 * 1024 * 1024;
+
+function v2MusicOf(g) {
+  if (!g || !g.story_music) return null;
+  try {
+    const m = typeof g.story_music === 'string' ? JSON.parse(g.story_music) : g.story_music;
+    return m && m.ref ? { ref: String(m.ref), name: m.name || '', vol: m.vol == null ? 0.6 : Math.max(0, Math.min(1, +m.vol)) } : null;
+  } catch (e) { return null; }
+}
+function v2MusicKey(m) { return m ? (v2RefParts(m.ref) ? v2RefParts(m.ref).key : m.ref) : ''; }
+
+const v2m = { key: '', vol: 0.6, audio: null, synth: null, ducked: false };
+
+// ── A small ambient synth: four-voice pad, soft filter, a little echo ──
+const V2_SYNTH = {
+  'builtin:calm': { chords: [[45, 52, 57, 60, 64], [41, 48, 53, 57, 60], [48, 55, 60, 64, 67], [43, 50, 55, 59, 62]], bar: 8, type: 'sine', cutoff: 900 },
+  'builtin:dawn': { chords: [[50, 57, 62, 66, 69], [55, 62, 67, 71, 74], [52, 59, 64, 67, 71], [57, 64, 69, 73, 76]], bar: 6, type: 'triangle', cutoff: 1500 },
+};
+function v2SynthStart(key, vol) {
+  const spec = V2_SYNTH[key];
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!spec || !AC) return null;
+  const ctx = new AC();
+  const master = ctx.createGain(); master.gain.value = 0;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = spec.cutoff; lp.Q.value = 0.4;
+  const delay = ctx.createDelay(2); delay.delayTime.value = 0.42;
+  const fb = ctx.createGain(); fb.gain.value = 0.28;
+  lp.connect(master); lp.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(master);
+  master.connect(ctx.destination);
+  const hz = n => 440 * Math.pow(2, (n - 69) / 12);
+  const s = { ctx, master, lp, timer: 0, i: 0, voices: [] };
+  const play = () => {
+    const now = ctx.currentTime, len = spec.bar;
+    const chord = spec.chords[s.i++ % spec.chords.length];
+    chord.forEach((n, k) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = spec.type; o.frequency.value = hz(n); o.detune.value = (k % 2 ? 5 : -5);
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.11 / (1 + k * 0.25), now + len * 0.35);
+      g.gain.linearRampToValueAtTime(0, now + len * 1.25);
+      o.connect(g); g.connect(lp);
+      o.start(now); o.stop(now + len * 1.3);
+    });
+    s.timer = setTimeout(play, len * 1000);
+  };
+  play();
+  master.gain.linearRampToValueAtTime(vol, ctx.currentTime + 1.5);
+  s.setVol = v => { try { master.gain.cancelScheduledValues(ctx.currentTime); master.gain.linearRampToValueAtTime(v, ctx.currentTime + 0.4); } catch (e) { } };
+  s.pause = () => { clearTimeout(s.timer); ctx.suspend().catch(() => { }); };
+  s.resume = () => { ctx.resume().catch(() => { }); clearTimeout(s.timer); s.timer = setTimeout(play, 200); };
+  s.stop = () => { clearTimeout(s.timer); try { master.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5); } catch (e) { } setTimeout(() => ctx.close().catch(() => { }), 600); };
+  return s;
+}
+
+function v2MusicLevel() { return v2s.muted ? 0 : v2m.vol * (v2m.ducked ? 0.2 : 1); }
+function v2MusicApplyLevel() {
+  if (v2m.audio) v2m.audio.volume = Math.max(0, Math.min(1, v2MusicLevel()));
+  if (v2m.synth) v2m.synth.setVol(v2MusicLevel());
+}
+function v2MusicStop() {
+  if (v2m.audio) { try { v2m.audio.pause(); v2m.audio.removeAttribute('src'); v2m.audio.load(); } catch (e) { } }
+  if (v2m.synth) v2m.synth.stop();
+  v2m.audio = null; v2m.synth = null; v2m.key = '';
+}
+// Called for each story segment: keep the track if it's the same, else switch.
+async function v2MusicFor(g) {
+  const m = v2MusicOf(g);
+  const key = m ? v2MusicKey(m) : '';
+  if (key === v2m.key) { if (m) { v2m.vol = m.vol; v2MusicApplyLevel(); } return; }
+  v2MusicStop();
+  if (!m) return;
+  v2m.key = key; v2m.vol = m.vol;
+  if (m.ref.startsWith('builtin:')) {
+    v2m.synth = v2SynthStart(m.ref, v2MusicLevel());
+    if (v2s.paused || v2s.pausedAt) v2m.synth && v2m.synth.pause();
+    return;
+  }
+  const url = await v2Resolve(m.ref);
+  if (!url || v2m.key !== key) { if (!url) showToast('This track is still syncing from your other device'); return; }
+  const a = new Audio(url);
+  a.loop = true; a.volume = Math.max(0, Math.min(1, v2MusicLevel()));
+  v2m.audio = a;
+  if (!(v2s.paused || v2s.pausedAt)) a.play().catch(() => { });
+}
+function v2MusicPause() { if (v2m.audio) v2m.audio.pause(); if (v2m.synth) v2m.synth.pause(); }
+function v2MusicResume() { if (v2m.audio) v2m.audio.play().catch(() => { }); if (v2m.synth) v2m.synth.resume(); }
+function v2MusicDuck(on) { if (v2m.ducked !== on) { v2m.ducked = on; v2MusicApplyLevel(); } }
+
+// ── The editor, inside the story ──
+window.v2StoryEdit = function () {
+  const group = v2s.groups[v2s.gi];
+  if (!group) return;
+  const g = group.goal, cur = v2MusicOf(g);
+  v2s.editWasPaused = v2s.paused;
+  if (!v2s.paused) { v2s.paused = true; v2StoryPause(); v2StoryIcons(); }
+  v2MusicPause();
+  const pick = cur ? cur.ref : '';
+  const own = cur && !cur.ref.startsWith('builtin:') ? cur : null;
+  const opt = (ref, name, note) => `
+    <label class="v2s-opt ${pick === ref ? 'on' : ''}">
+      <input type="radio" name="v2sTrack" value="${v2Esc(ref)}" ${pick === ref ? 'checked' : ''} onchange="v2StoryEditPick(this)">
+      <span><b>${v2Esc(name)}</b>${note ? `<em>${v2Esc(note)}</em>` : ''}</span>
+      ${ref && ref.startsWith('builtin:') ? `<button type="button" class="v2s-try" onclick="event.preventDefault(); v2StoryEditTry('${v2Js(ref)}')">Play</button>` : ''}
+    </label>`;
+  const panel = document.createElement('div');
+  panel.className = 'v2s-edit';
+  panel.id = 'v2sEdit';
+  panel.innerHTML = `
+    <div class="v2s-edit-card" role="dialog" aria-label="Story music">
+      <div class="v2s-edit-head"><b>Story music</b><span>${v2Esc(g.title || '')}</span>
+        <button class="v2s-ic dark" onclick="v2StoryEditClose(false)" aria-label="Close">✕</button></div>
+      <div class="v2s-opts">
+        ${opt('', 'No music', '')}
+        ${V2_TRACKS.map(t => opt(t.key, t.name, t.note)).join('')}
+        ${own ? opt(own.ref, own.name || 'Your track', 'Your upload') : ''}
+        <label class="v2s-opt v2s-upload">
+          <input type="file" accept="audio/*" hidden onchange="v2StoryEditUpload(this)">
+          <span><b>＋ Upload your own</b><em>MP3, M4A, WAV · up to 20 MB</em></span>
+        </label>
+      </div>
+      <div class="v2s-edit-row"><span>Volume</span>
+        <input type="range" id="v2sVol" min="0" max="100" value="${Math.round((cur ? cur.vol : 0.6) * 100)}"></div>
+      <div class="v2s-edit-row"><span>Use for</span>
+        <div class="v2s-seg">
+          <label><input type="radio" name="v2sScope" value="one" checked> This vision</label>
+          <label><input type="radio" name="v2sScope" value="all"> All visions</label>
+        </div></div>
+      <div class="v2s-edit-foot">
+        <button class="v2s-btn ghost" onclick="v2StoryEditClose(false)">Cancel</button>
+        <button class="v2s-btn" id="v2sEditSave" onclick="v2StoryEditSave()">Save</button>
+      </div>
+    </div>`;
+  panel.addEventListener('pointerdown', e => { if (e.target === panel) v2StoryEditClose(false); });
+  v2s.editPick = cur ? { ...cur } : null;
+  document.getElementById('v2Story').appendChild(panel);
+};
+window.v2StoryEditPick = function (input) {
+  document.querySelectorAll('.v2s-opt').forEach(l => l.classList.toggle('on', l.contains(input) && input.checked));
+  const ref = input.value;
+  if (!ref) { v2s.editPick = null; return; }
+  const t = V2_TRACKS.find(x => x.key === ref);
+  v2s.editPick = { ref, name: t ? t.name : (v2s.editPick && v2s.editPick.ref === ref ? v2s.editPick.name : 'Your track') };
+};
+let v2Preview = null;
+window.v2StoryEditTry = function (ref) {
+  if (v2Preview) { v2Preview.stop(); const same = v2Preview.ref === ref; v2Preview = null; if (same) return; }
+  const vol = (+document.getElementById('v2sVol').value || 60) / 100;
+  v2Preview = v2SynthStart(ref, vol);
+  if (v2Preview) v2Preview.ref = ref;
+};
+window.v2StoryEditUpload = async function (input) {
+  const f = input.files && input.files[0];
+  input.value = '';
+  if (!f) return;
+  if (f.size > V2_MUSIC_MAX) { showToast('That file is over 20 MB'); return; }
+  const key = 'aud_' + Date.now() + Math.random().toString(36).slice(2, 7);
+  try { await _VisionIDB.put(key, { type: f.type || 'audio/mpeg', buffer: await f.arrayBuffer() }); }
+  catch (e) { showToast('Could not read that file'); return; }
+  const name = f.name.replace(/\.[^.]+$/, '').slice(0, 60);
+  v2s.editPick = { ref: 'local://' + key, name };
+  // Show it as the chosen option.
+  const opts = document.querySelector('#v2sEdit .v2s-opts');
+  const up = opts.querySelector('.v2s-upload');
+  opts.querySelectorAll('.v2s-opt').forEach(l => l.classList.remove('on'));
+  const lab = document.createElement('label');
+  lab.className = 'v2s-opt on';
+  lab.innerHTML = `<input type="radio" name="v2sTrack" value="local://${key}" checked onchange="v2StoryEditPick(this)"><span><b>${v2Esc(name)}</b><em>Your upload</em></span>`;
+  opts.insertBefore(lab, up);
+};
+window.v2StoryEditSave = async function () {
+  const group = v2s.groups[v2s.gi];
+  if (!group) return;
+  const btn = document.getElementById('v2sEditSave');
+  const scope = (document.querySelector('input[name="v2sScope"]:checked') || {}).value || 'one';
+  const vol = Math.max(0, Math.min(1, (+document.getElementById('v2sVol').value) / 100));
+  let pick = v2s.editPick ? { ...v2s.editPick, vol } : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  // Upload once, then share the finished ref, so "All visions" is one file.
+  if (pick && !pick.ref.startsWith('builtin:')) pick.ref = await v2CloudRef(pick.ref, 'story_music_' + (pick.name || 'track'));
+  const value = pick ? JSON.stringify(pick) : '';
+  const targets = scope === 'all' ? (state.data.vision || []) : [group.goal];
+  for (const g of targets) await v2Save(g, { story_music: value });
+  if (pick && !v2RefInCloud(pick.ref)) showToast('Saved — the music will reach your other devices once it uploads');
+  else showToast(scope === 'all' ? 'Music set for every vision' : 'Music saved');
+  v2StoryEditClose(true);
+};
+window.v2StoryEditClose = function (saved) {
+  if (v2Preview) { v2Preview.stop(); v2Preview = null; }
+  document.getElementById('v2sEdit')?.remove();
+  const group = v2s.groups[v2s.gi];
+  if (saved && group) {
+    v2MusicStop();
+    const mus = v2MusicOf(group.goal), meta = document.getElementById('v2sMeta');
+    if (meta) meta.textContent = `${group.goal.category || ''} · ${v2s.ii + 1}/${group.items.length}${mus ? ` · ♪ ${mus.name || 'Music'}` : ''}`;
+  }
+  if (!v2s.editWasPaused) { v2s.paused = false; v2s.pausedAt = true; v2StoryResume(); v2StoryIcons(); }
+  if (group) v2MusicFor(group.goal).then(() => { if (!v2s.paused) v2MusicResume(); });
+};
 
 /* ═══ WIRING ═════════════════════════════════════════════════════════════ */
 
@@ -8782,6 +9011,35 @@ function v2InjectCSS() {
   .v2-td-title { display: flex; flex-direction: column; min-width: 0; }
   .v2-td-title .v2-3m { margin: 3px 0 0; }
   .v2-save { height: 32px; padding: 0 16px; }
+  .v2s-edit { position: absolute; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(4px); }
+  .v2s-edit-card { width: min(420px, 100%); max-height: calc(100% - 32px); overflow: auto; background: #fff; color: #111827;
+    border-radius: 20px; padding: 18px; box-shadow: 0 20px 60px rgba(0,0,0,.4); font-family: inherit; }
+  .v2s-edit-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .v2s-edit-head b { font-size: 16px; font-weight: 850; }
+  .v2s-edit-head span { flex: 1; min-width: 0; color: #6B7280; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .v2s-ic.dark { color: #374151; }
+  .v2s-ic.dark:hover { background: #F3F4F6; }
+  .v2s-opts { display: grid; gap: 6px; margin-bottom: 14px; }
+  .v2s-opt { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid #E5E7EB; border-radius: 13px; cursor: pointer; }
+  .v2s-opt.on { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, #fff); }
+  .v2s-opt input[type=radio] { accent-color: var(--primary); margin: 0; }
+  .v2s-opt > span { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .v2s-opt b { font-size: 14px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .v2s-opt em { font-style: normal; font-size: 12px; color: #6B7280; }
+  .v2s-upload { border-style: dashed; }
+  .v2s-upload b { color: var(--primary); }
+  .v2s-try { border: 1px solid #E5E7EB; background: #fff; border-radius: 99px; height: 28px; padding: 0 12px; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
+  .v2s-edit-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; font-size: 13px; font-weight: 700; color: #374151; }
+  .v2s-edit-row > span { width: 60px; flex: none; }
+  .v2s-edit-row input[type=range] { flex: 1; accent-color: var(--primary); }
+  .v2s-seg { display: flex; gap: 14px; flex-wrap: wrap; font-weight: 600; }
+  .v2s-seg label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .v2s-seg input { accent-color: var(--primary); margin: 0; }
+  .v2s-edit-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+  .v2s-btn { height: 38px; padding: 0 18px; border: none; border-radius: 11px; background: var(--primary); color: #fff; font: inherit; font-size: 13.5px; font-weight: 750; cursor: pointer; }
+  .v2s-btn.ghost { background: #F3F4F6; color: #374151; }
+  .v2s-btn:disabled { opacity: .6; }
   `;
   document.head.appendChild(st);
 }
