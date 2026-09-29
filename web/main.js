@@ -491,7 +491,7 @@ const VIEW_MAP = {
     finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
-    vision:        { src: 'view-vision.js?v=20260930a', render: 'renderVision' },
+    vision:        { src: 'view-vision.js?v=20261001a', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260930a', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
     gym:           { src: 'view-gym.js?v=20260915c', render: 'renderGym' },
@@ -636,10 +636,10 @@ async function routeTo(viewName) {
                 <button class="page-action-btn" onclick="startManifestationRitual()" title="Daily ritual" aria-label="Daily ritual">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 10l-6.1 1.2L12 17l-1.9-5.8L4 10l6.1-1.2L12 3z"/></svg>
                 </button>
-                <button onclick="openVisionModal()" title="New goal" aria-label="New goal"
+                <button onclick="openVisionModal()" title="New vision" aria-label="New vision"
                     style="display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 16px;border:none;border-radius:9px;background:var(--primary);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05);">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    New goal
+                    New vision
                 </button>
             `;
         } else if (viewName === 'people') {

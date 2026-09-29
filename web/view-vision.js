@@ -1969,7 +1969,7 @@ async function _vzStoryRender() {
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
-async function renderVision() {
+async function renderVisionClassic() {
   if (typeof window.tdpGoalItems !== 'function' && typeof ensureViewLoaded === 'function') {
     try { await ensureViewLoaded('tdp'); } catch (e) { }
   }
@@ -6732,6 +6732,1779 @@ function vzeInjectCSS() {
   .vze-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
   .vze-btn.primary:hover { filter: brightness(1.07); background: var(--primary); color: #fff; }
   .vze-btn.danger:hover { color: var(--danger, #EF4444); border-color: var(--danger, #EF4444); background: transparent; }
+  `;
+  document.head.appendChild(st);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VISION, REBUILT
+
+   Three levels, each doing one job:
+
+     Home   — your categories, and inside each the visions that belong to it,
+              with a story tray across the top.
+     Vision — one page per vision: where it's heading at 3 months, 1 year and
+              3 years; the photos and video that make it real; the note; the
+              habits that move it, with honest stats; the tasks and 10 Days
+              Plan items that serve it; its affirmations.
+     Story  — every vision's photos and video, full-screen, the way Instagram
+              and WhatsApp do status: one account per vision, bars across the
+              top, tap to skip, hold to pause.
+
+   The old board, list, table and editor are still defined above and nothing
+   calls them. The media storage, cloud sync, ritual and affirmation creator
+   are reused as they are.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const V2_HORIZONS = [
+  { key: '3m', label: '3 Months', short: '3M', hint: 'Close enough to act on this week' },
+  { key: '1y', label: '1 Year',   short: '1Y', hint: 'What a year of that adds up to' },
+  { key: '3y', label: '3 Years',  short: '3Y', hint: 'The picture you are steering by' }
+];
+
+const v2 = {
+  page: null,          // vision id when a vision is open, else home
+  editingNote: false
+};
+
+function v2Esc(s) { return escapeHtml(String(s == null ? '' : s)); }
+function v2Js(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+function v2Goal(id) { return (state.data.vision || []).find(v => String(v.id) === String(id)) || null; }
+function v2Uid(p) { return (p || 'i') + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+async function v2Save(g, fields) {
+  Object.assign(g, fields);
+  try { await apiCall('update', 'vision_board', fields, g.id); }
+  catch (e) { console.error('v2Save failed', fields, e); showToast('Could not save — check your connection'); }
+}
+
+/* ── Horizons ─────────────────────────────────────────────────────────── */
+
+function v2Horizons(g) {
+  let h = {};
+  try { h = g && g.horizon_goals_json ? JSON.parse(g.horizon_goals_json) : {}; } catch (e) { h = {}; }
+  V2_HORIZONS.forEach(x => { if (!Array.isArray(h[x.key])) h[x.key] = []; });
+  return h;
+}
+
+function v2HorizonStats(g) {
+  const h = v2Horizons(g);
+  const out = {};
+  V2_HORIZONS.forEach(x => {
+    const items = h[x.key];
+    out[x.key] = { total: items.length, done: items.filter(i => i.done).length };
+  });
+  return out;
+}
+
+async function v2SaveHorizons(g, h) {
+  await v2Save(g, { horizon_goals_json: JSON.stringify(h) });
+}
+
+/* ── The note: stored as plain text, rendered as light markdown ──────────
+   Escape first, then format — so nothing typed can become markup. Handles
+   headings (#), bullets (- or *), numbered lines, **bold**, *italic*, and
+   bare links. Anything else is a paragraph. */
+
+function v2NoteText(g) {
+  return String((g && (g.notes || g.description)) || '');
+}
+
+function v2Inline(t) {
+  return t
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<i>$2</i>')
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+
+function v2RenderNote(text) {
+  const lines = v2Esc(text).split(/\r?\n/);
+  const out = [];
+  let list = null;                         // 'ul' | 'ol'
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  let para = [];
+  const flush = () => { if (para.length) { out.push(`<p>${v2Inline(para.join('<br>'))}</p>`); para = []; } };
+
+  lines.forEach(raw => {
+    const line = raw.trimEnd();
+    let m;
+    if (!line.trim()) { flush(); close(); return; }
+    if ((m = /^(#{1,3})\s+(.*)$/.exec(line))) {
+      flush(); close();
+      const lvl = Math.min(3, m[1].length) + 2;             // h3–h5
+      out.push(`<h${lvl}>${v2Inline(m[2])}</h${lvl}>`);
+      return;
+    }
+    if ((m = /^\s*[-*•]\s+(.*)$/.exec(line))) {
+      flush();
+      if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; }
+      out.push(`<li>${v2Inline(m[1])}</li>`);
+      return;
+    }
+    if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(line))) {
+      flush();
+      if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; }
+      out.push(`<li>${v2Inline(m[1])}</li>`);
+      return;
+    }
+    close();
+    para.push(line);
+  });
+  flush(); close();
+  return out.join('');
+}
+
+/* ── Media ────────────────────────────────────────────────────────────────
+   A vision's media lives in three places, for historical reasons: the cover
+   (image_url), a comma list of videos (video_url), and extra photos in the
+   vision_images table. Everything below treats them as one ordered list. */
+
+function v2MediaOf(g) {
+  if (!g) return [];
+  const out = [];
+  if (g.image_url) out.push({ kind: 'image', ref: g.image_url, source: 'cover' });
+  (state.data.vision_images || [])
+    .filter(im => String(im.vision_id) === String(g.id) && im.url)
+    .forEach(im => out.push({ kind: 'image', ref: im.url, source: 'gallery', rowId: im.id }));
+  String(g.video_url || '').split(',').map(s => s.trim()).filter(Boolean)
+    .forEach((ref, i) => out.push({ kind: 'video', ref, source: 'video', index: i }));
+  return out;
+}
+
+// Resolve a stored ref to something a <img>/<video> can load. '' when the file
+// only exists on another device and has no cloud copy — callers skip those.
+async function v2Resolve(ref) {
+  if (!ref) return '';
+  try {
+    if (ref.startsWith('local://') || ref.startsWith('local-img://')) return await resolveMediaUrlAsync(ref) || '';
+    return sanitizeUrl(ref) || '';
+  } catch (e) { return ''; }
+}
+
+function v2CoverSync(g) {
+  if (g && g.image_url) {
+    const u = resolveMediaUrl(g.image_url.split('|')[0]);
+    if (u) return u;
+  }
+  const im = (state.data.vision_images || []).find(x => String(x.vision_id) === String(g && g.id) && x.url);
+  if (im) { const u = resolveMediaUrl(String(im.url).split('|')[0]); if (u) return u; }
+  return '';
+}
+
+// Warm the cache for everything the home page will show as a cover.
+async function v2PreloadCovers(goals) {
+  const refs = [];
+  goals.forEach(g => {
+    if (g.image_url) refs.push(g.image_url);
+    const im = (state.data.vision_images || []).find(x => String(x.vision_id) === String(g.id) && x.url);
+    if (im) refs.push(im.url);
+  });
+  await Promise.all(refs.map(r => v2Resolve(r)));
+}
+
+/* ── Habit stats ──────────────────────────────────────────────────────────
+   "Done 30 times" on its own says little — 30 times over what? These are
+   measured against the days the habit was actually due (a Mon/Wed/Fri habit
+   isn't failing on Tuesdays), and compared with the 30 days before, so the
+   question it answers is "am I doing this, and is it getting better?" */
+
+function v2LinkedHabits(g) {
+  let arr = [];
+  try {
+    if (g && g.linked_habits) {
+      arr = String(g.linked_habits).trim().startsWith('[')
+        ? JSON.parse(g.linked_habits)
+        : String(g.linked_habits).split(',').map(x => ({ id: x.trim() }));
+    }
+  } catch (e) { arr = []; }
+  return arr.filter(x => x && x.id);
+}
+
+function v2DayStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function v2HabitStats(habit, link) {
+  const done = new Set((state.data.habit_logs || [])
+    .filter(l => String(l.habit_id) === String(habit.id))
+    .map(l => String(l.date || '').slice(0, 10)));
+  const due = d => (typeof window.habitScheduledOn === 'function') ? window.habitScheduledOn(habit, d) : true;
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const strip = [];                                  // oldest → newest, 30 days
+  let dueNow = 0, hitNow = 0, duePrev = 0, hitPrev = 0;
+
+  for (let i = 59; i >= 0; i--) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    const key = v2DayStr(d);
+    const isDue = due(d), isDone = done.has(key);
+    if (i < 30) {
+      if (isDue) { dueNow++; if (isDone) hitNow++; }
+      strip.push({ key, due: isDue, done: isDone, today: i === 0 });
+    } else if (isDue) { duePrev++; if (isDone) hitPrev++; }
+  }
+
+  // Current run of due days done, walking back from today. Today not being
+  // done YET doesn't break it — the day isn't over.
+  let streak = 0;
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    if (!due(d)) continue;
+    if (done.has(v2DayStr(d))) streak++;
+    else if (i === 0) continue;
+    else break;
+  }
+
+  const rate = dueNow ? Math.round(hitNow / dueNow * 100) : 0;
+  const prevRate = duePrev ? Math.round(hitPrev / duePrev * 100) : null;
+
+  // Progress toward the target set when it was linked to this vision.
+  let target = null;
+  if (link && Number(link.target) > 0) {
+    const since = link.startDate ? String(link.startDate).slice(0, 10) : '';
+    const count = [...done].filter(k => !since || k >= since).length;
+    target = { count, of: Number(link.target), since };
+  }
+
+  return { strip, dueNow, hitNow, rate, prevRate, trend: prevRate == null ? null : rate - prevRate, streak, target };
+}
+
+/* ═══ LAYOUT ═════════════════════════════════════════════════════════════
+   Two layouts, not one that stacks. A phone gets rows it can scan with a
+   thumb and a vision page led by swipeable media; a desktop gets card grids
+   and a two-column page. 900px is where the second column stops fitting. */
+
+function v2Phone() { return window.innerWidth < 900; }
+
+let v2LastPhone = null;
+window.addEventListener('resize', () => {
+  const now = v2Phone();
+  if (v2LastPhone !== null && now !== v2LastPhone && state.view === 'vision') renderVision();
+  v2LastPhone = now;
+});
+
+/* ═══ HOME ═══════════════════════════════════════════════════════════════ */
+
+const v2Sel = { on: false, ids: new Set() };
+
+function v2CatColor(c) {
+  return (typeof VZ_CAT_COLORS === 'object' && VZ_CAT_COLORS[c]) || '#5B6491';
+}
+
+function v2Cats() {
+  return typeof vzCategories === 'function' ? vzCategories() : ['Personality', 'Ouro', 'Work', 'Enjoyment', 'Routine', 'Other'];
+}
+
+function v2Avg(goals) {
+  if (!goals.length) return 0;
+  return Math.round(goals.reduce((n, g) => n + v2Progress(g).pct, 0) / goals.length);
+}
+
+function v2CardHTML(g) {
+  const cover = v2CoverSync(g);
+  const media = v2MediaOf(g);
+  const photos = media.filter(m => m.kind === 'image').length;
+  const videos = media.filter(m => m.kind === 'video').length;
+  const hz = v2HorizonStats(g);
+  const prog = v2Progress(g).pct;
+  const habits = v2LinkedHabits(g).length;
+  const picked = v2Sel.ids.has(String(g.id));
+  const col = v2CatColor(g.category);
+
+  return `
+  <article class="v2-card ${picked ? 'picked' : ''}" data-id="${v2Esc(g.id)}"
+           onclick="${v2Sel.on ? `v2TogglePick('${v2Js(g.id)}')` : `v2Open('${v2Js(g.id)}')`}">
+    <div class="v2-cover" style="${cover ? `background-image:url('${v2Esc(cover)}')` : `background:linear-gradient(135deg, ${col}, ${col}bb)`}">
+      ${!cover ? `<span class="v2-cover-mark">${v2Esc((g.title || '?').trim().charAt(0).toUpperCase())}</span>` : ''}
+      ${photos || videos ? `<span class="v2-media-count">${photos ? `${photos} photo${photos === 1 ? '' : 's'}` : ''}${photos && videos ? ' · ' : ''}${videos ? `${videos} video${videos === 1 ? '' : 's'}` : ''}</span>` : ''}
+      ${v2Sel.on ? `<span class="v2-check ${picked ? 'on' : ''}">✓</span>` : ''}
+    </div>
+    <div class="v2-card-body">
+      <h3>${v2Esc(g.title || 'Untitled')}</h3>
+      <div class="v2-hz-mini">
+        ${V2_HORIZONS.map(x => {
+          const s = hz[x.key];
+          const pct = s.total ? Math.round(s.done / s.total * 100) : 0;
+          return `<span class="${s.total ? '' : 'empty'}" title="${x.label}: ${s.done} of ${s.total}">
+            <b>${x.short}</b><i><em style="width:${pct}%"></em></i></span>`;
+        }).join('')}
+      </div>
+      <div class="v2-card-foot">
+        <div class="v2-bar"><i style="width:${prog}%;background:${col}"></i></div>
+        <span>${prog}%</span>
+        ${habits ? `<span class="v2-dot-sep">·</span><span>${habits} habit${habits === 1 ? '' : 's'}</span>` : ''}
+      </div>
+    </div>
+  </article>`;
+}
+
+// A phone row: thumbnail, title, horizons and progress on one line you can
+// scan twenty of with a thumb.
+function v2RowHTML(g) {
+  const cover = v2CoverSync(g);
+  const hz = v2HorizonStats(g);
+  const prog = v2Progress(g).pct;
+  const col = v2CatColor(g.category);
+  const picked = v2Sel.ids.has(String(g.id));
+  const hzLine = V2_HORIZONS.filter(x => hz[x.key].total)
+    .map(x => `${x.short} ${hz[x.key].done}/${hz[x.key].total}`).join(' · ');
+  return `
+  <button class="v2-row ${picked ? 'picked' : ''}" data-id="${v2Esc(g.id)}"
+          onclick="${v2Sel.on ? `v2TogglePick('${v2Js(g.id)}')` : `v2Open('${v2Js(g.id)}')`}">
+    <span class="v2-row-th" style="${cover ? `background-image:url('${v2Esc(cover)}')` : `background:${col}`}">${cover ? '' : v2Esc((g.title || '?').charAt(0))}</span>
+    <span class="v2-row-main">
+      <b>${v2Esc(g.title || 'Untitled')}</b>
+      <span>${hzLine || 'No horizon goals yet'}</span>
+    </span>
+    <span class="v2-row-prog"><i style="--p:${prog};--c:${col}"></i><em>${prog}%</em></span>
+    ${v2Sel.on ? `<span class="v2-check ${picked ? 'on' : ''}">✓</span>` : ''}
+  </button>`;
+}
+
+function v2HomeHTML() {
+  const all = state.data.vision || [];
+  const active = all.filter(g => g.status !== 'achieved');
+  const achieved = all.filter(g => g.status === 'achieved');
+  const cats = v2Cats();
+  const hzDone = active.reduce((n, g) => n + Object.values(v2HorizonStats(g)).reduce((a, s) => a + s.done, 0), 0);
+  const hzTotal = active.reduce((n, g) => n + Object.values(v2HorizonStats(g)).reduce((a, s) => a + s.total, 0), 0);
+  const withMedia = active.filter(g => v2MediaOf(g).length);
+  const phone = v2Phone();
+
+  const sections = cats.map(c => {
+    const goals = active.filter(g => (g.category || 'Other') === c);
+    const col = v2CatColor(c);
+    return `
+    <section class="v2-cat">
+      <header>
+        <span class="v2-cat-dot" style="background:${col}"></span>
+        <h2>${v2Esc(c)}</h2>
+        <span class="v2-cat-meta">${goals.length ? `${goals.length} vision${goals.length === 1 ? '' : 's'} · ${v2Avg(goals)}% avg` : 'Nothing here yet'}</span>
+        <span style="flex:1"></span>
+        <button class="v2-link" onclick="v2NewVision('${v2Js(c)}')">+ Add</button>
+      </header>
+      ${phone
+        ? `<div class="v2-rows">${goals.map(v2RowHTML).join('') || `<button class="v2-row v2-row-empty" onclick="v2NewVision('${v2Js(c)}')">+ Add a vision to ${v2Esc(c)}</button>`}</div>`
+        : `<div class="v2-grid">
+            ${goals.map(v2CardHTML).join('')}
+            ${!goals.length ? `<button class="v2-card v2-card-empty" onclick="v2NewVision('${v2Js(c)}')">
+                <span>+</span><b>Add a vision to ${v2Esc(c)}</b></button>` : ''}
+          </div>`}
+    </section>`;
+  }).join('');
+
+  const done = achieved.length ? `
+    <details class="v2-cat v2-achieved">
+      <summary><h2>Achieved</h2><span class="v2-cat-meta">${achieved.length}</span></summary>
+      ${phone ? `<div class="v2-rows">${achieved.map(v2RowHTML).join('')}</div>`
+              : `<div class="v2-grid">${achieved.map(v2CardHTML).join('')}</div>`}
+    </details>` : '';
+
+  return `
+  <div class="v2">
+    <div class="v2-top">
+      <div class="v2-stats">
+        <span><b>${active.length}</b> vision${active.length === 1 ? '' : 's'}</span>
+        <span><b>${v2Avg(active)}%</b> average</span>
+        ${hzTotal ? `<span><b>${hzDone}/${hzTotal}</b> horizon goals done</span>` : ''}
+      </div>
+      <div class="v2-acts">
+        <button class="v2-btn" onclick="v2ToggleSelect()">${v2Sel.on ? 'Cancel' : 'Select'}</button>
+        ${phone ? '' : `<button class="v2-btn" onclick="routeTo('tdp')">10 Days Plan</button>`}
+        ${withMedia.length ? `<button class="v2-btn story" onclick="v2StoryOpen()">▶ Story</button>` : ''}
+        ${phone ? `<button class="v2-btn primary" onclick="v2NewVision()">+ New</button>` : ''}
+      </div>
+    </div>
+
+    ${withMedia.length ? `
+    <div class="v2-tray" aria-label="Stories">
+      ${withMedia.map(g => {
+        const cover = v2CoverSync(g);
+        const seen = v2StorySeenAll(g);
+        return `<button class="v2-tray-item ${seen ? 'seen' : ''}" onclick="v2StoryOpen('${v2Js(g.id)}')">
+          <span class="v2-ring"><span class="v2-av" style="${cover ? `background-image:url('${v2Esc(cover)}')` : `background:${v2CatColor(g.category)}`}">${cover ? '' : v2Esc((g.title || '?').charAt(0))}</span></span>
+          <span class="v2-tray-name">${v2Esc(g.title || '')}</span>
+        </button>`;
+      }).join('')}
+    </div>` : ''}
+
+    <div class="v2-bulk ${v2Sel.on && v2Sel.ids.size ? 'show' : ''}" id="v2Bulk">
+      <span id="v2BulkN">${v2Sel.ids.size} selected</span>
+      <button class="v2-btn danger" onclick="v2DeletePicked()">Delete</button>
+    </div>
+
+    ${sections}
+    ${done}
+  </div>`;
+}
+
+/* ── Selecting and deleting from home ── */
+
+window.v2ToggleSelect = function () {
+  v2Sel.on = !v2Sel.on;
+  v2Sel.ids.clear();
+  renderVision();
+};
+
+window.v2TogglePick = function (id) {
+  const k = String(id);
+  if (v2Sel.ids.has(k)) v2Sel.ids.delete(k); else v2Sel.ids.add(k);
+  const card = document.querySelector(`.v2-card[data-id="${CSS.escape(k)}"], .v2-row[data-id="${CSS.escape(k)}"]`);
+  if (card) {
+    card.classList.toggle('picked', v2Sel.ids.has(k));
+    card.querySelector('.v2-check')?.classList.toggle('on', v2Sel.ids.has(k));
+  }
+  const bar = document.getElementById('v2Bulk');
+  if (bar) bar.classList.toggle('show', v2Sel.ids.size > 0);
+  const n = document.getElementById('v2BulkN');
+  if (n) n.textContent = `${v2Sel.ids.size} selected`;
+};
+
+window.v2DeletePicked = async function () {
+  const ids = [...v2Sel.ids];
+  if (!ids.length) return;
+  v2Sel.on = false; v2Sel.ids.clear();
+  await vzDeleteGoals(ids);
+};
+
+/* ── A new vision: a name and a category, then straight onto its page ── */
+
+/* ── A new vision ─────────────────────────────────────────────────────────
+   The old form asked for a title, a category, a deadline, a horizon, a
+   progress figure and notes before a vision existed — most of which don't
+   belong to a vision at all, and none of which you know on day one. Now it's a
+   name and a category (and a photo if you have one to hand); everything else
+   is filled in on the vision's own page, where each empty section says what
+   goes there. */
+
+let v2NewPhoto = null;              // { localKey, type } while the sheet is open
+
+window.v2NewVision = function (category) {
+  const sheet = v2Sheet();
+  const cats = v2Cats();
+  const pick = category && cats.includes(category) ? category : cats[0];
+  v2NewPhoto = null;
+  sheet.innerHTML = `
+    <div class="v2-sheet-panel v2-new">
+      <div class="v2-new-photo" id="v2NewPhoto" onclick="document.getElementById('v2NewFile').click()">
+        <span>+ Add a cover photo</span>
+        <input type="file" id="v2NewFile" accept="image/*" hidden onchange="v2NewPickPhoto(this.files)">
+      </div>
+      <input class="v2-new-title" id="v2NewTitle" maxlength="120" placeholder="Name your vision"
+             onkeydown="if(event.key==='Enter'){event.preventDefault(); v2CreateVision();}">
+      <div class="v2-new-lbl">Category</div>
+      <div class="v2-pills" id="v2NewCats">
+        ${cats.map(c => `<button type="button" class="v2-pill ${c === pick ? 'on' : ''}" data-cat="${v2Esc(c)}"
+            style="--c:${v2CatColor(c)}" onclick="v2NewPickCat(this)">${v2Esc(c)}</button>`).join('')}
+      </div>
+      <p class="v2-new-note">Next you'll set what it looks like in 3 months, 1 year and 3 years.</p>
+      <div class="v2-sheet-foot">
+        <button class="v2-btn" onclick="v2CloseSheet()">Cancel</button>
+        <button class="v2-btn primary" onclick="v2CreateVision()">Create vision</button>
+      </div>
+    </div>`;
+  sheet.classList.add('open');
+  setTimeout(() => document.getElementById('v2NewTitle')?.focus(), 30);
+};
+
+window.v2NewPickCat = function (btn) {
+  document.querySelectorAll('#v2NewCats .v2-pill').forEach(b => b.classList.toggle('on', b === btn));
+};
+
+window.v2NewPickPhoto = async function (files) {
+  const f = files && files[0];
+  if (!f) return;
+  const stored = await v2StoreFile(f, 'image');
+  if (!stored) return;
+  v2NewPhoto = stored;
+  const box = document.getElementById('v2NewPhoto');
+  if (box) { box.style.backgroundImage = `url('${stored.url}')`; box.classList.add('has'); box.querySelector('span').textContent = 'Change photo'; }
+};
+
+window.v2CreateVision = async function () {
+  const title = String(document.getElementById('v2NewTitle')?.value || '').trim();
+  const category = document.querySelector('#v2NewCats .v2-pill.on')?.getAttribute('data-cat') || 'Other';
+  if (!title) { document.getElementById('v2NewTitle')?.focus(); return; }
+  const payload = { title, category, status: 'active', progress: 0 };
+  if (v2NewPhoto) payload.image_url = 'local-img://' + v2NewPhoto.localKey;
+  let id;
+  try {
+    const res = await apiCall('create', 'vision_board', payload);
+    id = (res && (res.id || (res.data && res.data.id))) || ('v-' + Date.now());
+  } catch (e) { showToast('Could not create that'); return; }
+  if (!Array.isArray(state.data.vision)) state.data.vision = [];
+  state.data.vision.push({ id, ...payload });
+  if (v2NewPhoto && typeof _syncVisionMediaToCloud === 'function') _syncVisionMediaToCloud(id).catch(() => { });
+  v2NewPhoto = null;
+  v2CloseSheet();
+  v2Open(id);
+};
+
+/* Store a picked file the way the rest of Vision does — IndexedDB on this
+   device, with a cloud copy made afterwards so other devices can see it. */
+async function v2StoreFile(file, kind) {
+  const max = kind === 'image' ? 8 * 1024 * 1024 : 200 * 1024 * 1024;
+  if (file.size > max) { showToast(`${kind === 'image' ? 'Photo' : 'Video'} is too large (max ${kind === 'image' ? '8' : '200'} MB)`); return null; }
+  const buffer = await file.arrayBuffer();
+  const localKey = (kind === 'image' ? 'img_' : 'vid_') + Date.now() + Math.random().toString(36).slice(2, 7);
+  try {
+    await _VisionIDB.put(localKey, { type: file.type, buffer });
+  } catch (e) { showToast('Could not save that file'); return null; }
+  const url = URL.createObjectURL(new Blob([buffer], { type: file.type }));
+  window._visionMediaCache[localKey] = url;
+  return { localKey, type: file.type, url, name: file.name };
+}
+
+function v2Sheet() {
+  let s = document.getElementById('v2Sheet');
+  if (!s) {
+    s = document.createElement('div');
+    s.id = 'v2Sheet';
+    s.className = 'v2-sheet';
+    s.addEventListener('mousedown', e => { if (e.target === s) v2CloseSheet(); });
+    document.body.appendChild(s);              // #main is transformed; fixed must live on body
+  }
+  return s;
+}
+window.v2CloseSheet = function () { document.getElementById('v2Sheet')?.classList.remove('open'); };
+
+/* ═══ VISION PAGE ════════════════════════════════════════════════════════ */
+
+window.v2Open = function (id) {
+  v2.page = String(id);
+  v2.editingNote = false;
+  v2.tab = '3m';
+  renderVision();
+  window.scrollTo && window.scrollTo(0, 0);
+  document.getElementById('main')?.scrollTo?.(0, 0);
+};
+
+window.v2Home = function () {
+  v2.page = null;
+  renderVision();
+};
+
+/* Progress is earned, not typed. Once a vision has horizon goals its figure is
+   the share of them done, written back so the home page and dashboard agree.
+   With none yet, the manual slider is all there is to go on. */
+function v2Progress(g) {
+  const hz = v2HorizonStats(g);
+  const total = Object.values(hz).reduce((n, s) => n + s.total, 0);
+  const done = Object.values(hz).reduce((n, s) => n + s.done, 0);
+  if (!total) return { derived: false, pct: parseInt(g.progress, 10) || 0 };
+  return { derived: true, pct: Math.round(done / total * 100), done, total };
+}
+
+async function v2SyncProgress(g) {
+  const p = v2Progress(g);
+  if (p.derived && p.pct !== (parseInt(g.progress, 10) || 0)) await v2Save(g, { progress: p.pct });
+}
+
+/* ── Horizons ── */
+
+function v2HorizonColHTML(g, x) {
+  const items = v2Horizons(g)[x.key];
+  const done = items.filter(i => i.done).length;
+  return `
+  <div class="v2-hz" data-hz="${x.key}">
+    <div class="v2-hz-head">
+      <b>${x.label}</b>
+      <span>${items.length ? `${done}/${items.length}` : ''}</span>
+    </div>
+    <div class="v2-hz-list">
+      ${items.map(it => `
+        <div class="v2-hz-item ${it.done ? 'done' : ''}">
+          <input type="checkbox" ${it.done ? 'checked' : ''} onchange="v2HzToggle('${x.key}','${v2Js(it.id)}')" aria-label="Done">
+          <span class="v2-hz-text" contenteditable="true" spellcheck="false"
+                onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}"
+                onblur="v2HzEdit('${x.key}','${v2Js(it.id)}', this.innerText)">${v2Esc(it.text)}</span>
+          <button class="v2-x" onclick="v2HzDelete('${x.key}','${v2Js(it.id)}')" title="Remove">×</button>
+        </div>`).join('')}
+      ${!items.length ? `<p class="v2-hz-empty">${x.hint}</p>` : ''}
+    </div>
+    <div class="v2-hz-add">
+      <input maxlength="200" placeholder="Add a ${x.label.toLowerCase()} goal…"
+             onkeydown="if(event.key==='Enter'){event.preventDefault(); v2HzAdd('${x.key}', this);}">
+    </div>
+  </div>`;
+}
+
+function v2RepaintHorizons() {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  document.querySelectorAll('.v2-hz[data-hz]').forEach(el => {
+    const x = V2_HORIZONS.find(h => h.key === el.getAttribute('data-hz'));
+    if (x) el.outerHTML = v2HorizonColHTML(g, x);
+  });
+  v2RepaintProgress();
+  document.querySelectorAll('.v2-tab').forEach(t => {
+    const s = v2HorizonStats(g)[t.getAttribute('data-hz')];
+    const n = t.querySelector('em'); if (n) n.textContent = s && s.total ? `${s.done}/${s.total}` : '';
+  });
+}
+
+async function v2HzMutate(fn) {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  const h = v2Horizons(g);
+  fn(h);
+  g.horizon_goals_json = JSON.stringify(h);
+  v2RepaintHorizons();
+  await v2SaveHorizons(g, h);
+  await v2SyncProgress(g);
+}
+
+window.v2HzAdd = function (key, input) {
+  const text = String(input && input.value || '').trim();
+  if (!text) return;
+  input.value = '';
+  v2HzMutate(h => h[key].push({ id: v2Uid('hz'), text, done: false })).then(() => {
+    document.querySelector(`.v2-hz[data-hz="${key}"] .v2-hz-add input`)?.focus();
+  });
+};
+window.v2HzToggle = function (key, id) {
+  v2HzMutate(h => { const it = h[key].find(i => i.id === id); if (it) it.done = !it.done; });
+};
+window.v2HzEdit = function (key, id, text) {
+  const v = String(text || '').trim();
+  const g = v2Goal(v2.page);
+  const cur = g && v2Horizons(g)[key].find(i => i.id === id);
+  if (!cur || !v || v === cur.text) { if (cur && !v) v2RepaintHorizons(); return; }
+  v2HzMutate(h => { const it = h[key].find(i => i.id === id); if (it) it.text = v; });
+};
+window.v2HzDelete = function (key, id) {
+  v2HzMutate(h => { h[key] = h[key].filter(i => i.id !== id); });
+};
+window.v2SetTab = function (key) {
+  v2.tab = key;
+  document.querySelectorAll('.v2-tab').forEach(t => t.classList.toggle('on', t.getAttribute('data-hz') === key));
+  document.querySelectorAll('.v2-hz[data-hz]').forEach(el => el.classList.toggle('shown', el.getAttribute('data-hz') === key));
+};
+
+/* ── Progress ── */
+
+function v2ProgressHTML(g) {
+  const p = v2Progress(g);
+  const col = v2CatColor(g.category);
+  return `
+  <div class="v2-progress" id="v2Progress">
+    <div class="v2-progress-top">
+      <span>${p.derived ? `${p.done} of ${p.total} horizon goals done` : 'Progress'}</span>
+      <b>${p.pct}%</b>
+    </div>
+    <div class="v2-progress-track">
+      <i style="width:${p.pct}%;background:${col}"></i>
+      ${p.derived ? '' : `<input type="range" min="0" max="100" step="5" value="${p.pct}" oninput="v2ManualProgress(this.value)" aria-label="Progress">`}
+    </div>
+    ${p.derived ? '' : `<p class="v2-progress-hint">Add horizon goals and this fills itself in as you tick them off.</p>`}
+  </div>`;
+}
+function v2RepaintProgress() {
+  const g = v2Goal(v2.page);
+  const el = document.getElementById('v2Progress');
+  if (g && el) el.outerHTML = v2ProgressHTML(g);
+}
+let v2ProgTimer = null;
+window.v2ManualProgress = function (val) {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  const n = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+  g.progress = n;
+  const b = document.querySelector('#v2Progress .v2-progress-top b'); if (b) b.textContent = n + '%';
+  const i = document.querySelector('#v2Progress .v2-progress-track i'); if (i) i.style.width = n + '%';
+  clearTimeout(v2ProgTimer);
+  v2ProgTimer = setTimeout(() => v2Save(g, { progress: n }), 350);
+};
+
+/* ── The note ── */
+
+function v2NoteHTML(g) {
+  const text = v2NoteText(g);
+  if (v2.editingNote) {
+    return `
+    <section class="v2-sec v2-note editing" id="v2Note">
+      <div class="v2-sec-head"><h4>Note</h4></div>
+      <textarea id="v2NoteInput" rows="8" placeholder="What does it look and feel like when you're there?">${v2Esc(text)}</textarea>
+      <div class="v2-note-foot">
+        <span class="v2-note-help"># heading &nbsp; - bullet &nbsp; **bold** &nbsp; *italic*</span>
+        <span style="flex:1"></span>
+        <button class="v2-btn" onclick="v2NoteCancel()">Cancel</button>
+        <button class="v2-btn primary" onclick="v2NoteSave()">Save</button>
+      </div>
+    </section>`;
+  }
+  return `
+  <section class="v2-sec v2-note" id="v2Note">
+    <div class="v2-sec-head">
+      <h4>Note</h4>
+      <button class="v2-icon" onclick="v2NoteEdit()" title="Edit note" aria-label="Edit note">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+    </div>
+    ${text.trim()
+      ? `<div class="v2-note-body">${v2RenderNote(text)}</div>`
+      : `<button class="v2-empty-cta" onclick="v2NoteEdit()">Write what this vision looks like when it's real — the details make it pull.</button>`}
+  </section>`;
+}
+function v2RepaintNote() {
+  const g = v2Goal(v2.page);
+  const el = document.getElementById('v2Note');
+  if (g && el) el.outerHTML = v2NoteHTML(g);
+}
+window.v2NoteEdit = function () {
+  v2.editingNote = true; v2RepaintNote();
+  const t = document.getElementById('v2NoteInput');
+  if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+};
+window.v2NoteCancel = function () { v2.editingNote = false; v2RepaintNote(); };
+window.v2NoteSave = async function () {
+  const g = v2Goal(v2.page);
+  const v = document.getElementById('v2NoteInput')?.value ?? '';
+  v2.editingNote = false;
+  if (g) { g.notes = v; v2RepaintNote(); await v2Save(g, { notes: v }); }
+};
+
+/* ── Habits ── */
+
+function v2HabitsHTML(g) {
+  const links = v2LinkedHabits(g);
+  const habits = state.data.habits || [];
+  const rows = links.map(link => {
+    const h = habits.find(x => String(x.id) === String(link.id));
+    if (!h) return '';
+    const st = v2HabitStats(h, link);
+    const trend = st.trend == null ? '' :
+      st.trend > 0 ? `<span class="up">↑ ${st.trend} pts</span>` :
+      st.trend < 0 ? `<span class="down">↓ ${Math.abs(st.trend)} pts</span>` : `<span>level</span>`;
+    return `
+    <div class="v2-habit">
+      <div class="v2-habit-top">
+        <b>${v2Esc(h.habit_name || 'Habit')}</b>
+        ${st.streak ? `<span class="v2-streak" title="Current streak of due days done">${st.streak} day streak</span>` : ''}
+        <button class="v2-x" onclick="v2UnlinkHabit('${v2Js(h.id)}')" title="Unlink">×</button>
+      </div>
+      <div class="v2-strip" aria-label="Last 30 days">
+        ${st.strip.map(d => `<i class="${d.done ? 'done' : d.due ? 'miss' : 'off'} ${d.today ? 'today' : ''}" title="${d.key}${d.done ? ' · done' : d.due ? ' · missed' : ' · not due'}"></i>`).join('')}
+      </div>
+      <div class="v2-habit-stats">
+        <span><b>${st.rate}%</b> of due days</span>
+        <span>${st.hitNow} of ${st.dueNow} in 30 days</span>
+        ${trend ? `<span>${trend} vs the 30 before</span>` : ''}
+        ${st.target ? `<span><b>${st.target.count}/${st.target.of}</b> toward this vision</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+  <section class="v2-sec" id="v2Habits">
+    <div class="v2-sec-head">
+      <h4>Habits</h4>
+      <button class="v2-link" onclick="v2PickHabit()">+ Link a habit</button>
+    </div>
+    ${rows || `<button class="v2-empty-cta" onclick="v2PickHabit()">Which daily habits move this forward? Link them to see how consistently you're showing up.</button>`}
+  </section>`;
+}
+function v2RepaintHabits() {
+  const g = v2Goal(v2.page);
+  const el = document.getElementById('v2Habits');
+  if (g && el) el.outerHTML = v2HabitsHTML(g);
+}
+window.v2PickHabit = function () {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  const linked = new Set(v2LinkedHabits(g).map(x => String(x.id)));
+  const all = (state.data.habits || []).filter(h => !linked.has(String(h.id)));
+  // Same category first — that's the likely match.
+  all.sort((a, b) => (b.category === g.category) - (a.category === g.category)
+    || String(a.habit_name || '').localeCompare(String(b.habit_name || '')));
+  const sheet = v2Sheet();
+  sheet.innerHTML = `
+    <div class="v2-sheet-panel" style="max-width:460px">
+      <h3>Link a habit</h3>
+      ${all.length ? `<div class="v2-pick-list">
+        ${all.map(h => `<button class="v2-pick" onclick="v2LinkHabit('${v2Js(h.id)}')">
+          <b>${v2Esc(h.habit_name || 'Habit')}</b>
+          <span>${v2Esc(h.category || '')}${h.category === g.category ? ' · same category' : ''}</span>
+        </button>`).join('')}
+      </div>` : `<p class="v2-hint">Every habit is already linked. Add more on the Habits page.</p>`}
+      <div class="v2-sheet-foot"><button class="v2-btn" onclick="v2CloseSheet()">Close</button></div>
+    </div>`;
+  sheet.classList.add('open');
+};
+window.v2LinkHabit = async function (habitId) {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  const links = v2LinkedHabits(g);
+  links.push({ id: String(habitId), target: 0, startDate: v2DayStr(new Date()) });
+  v2CloseSheet();
+  g.linked_habits = JSON.stringify(links);
+  v2RepaintHabits();
+  await v2Save(g, { linked_habits: g.linked_habits });
+};
+window.v2UnlinkHabit = async function (habitId) {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  g.linked_habits = JSON.stringify(v2LinkedHabits(g).filter(x => String(x.id) !== String(habitId)));
+  v2RepaintHabits();
+  await v2Save(g, { linked_habits: g.linked_habits });
+};
+
+/* ── Media ── */
+
+function v2MediaHTML(g, big) {
+  const media = v2MediaOf(g);
+  const tiles = media.map((m, i) => `
+    <div class="v2-tile ${m.kind} ${m.source === 'cover' ? 'cover' : ''}" data-ref="${v2Esc(m.ref)}" data-kind="${m.kind}"
+         onclick="v2StoryOpen('${v2Js(g.id)}', ${i})">
+      ${m.kind === 'video' ? '<span class="v2-play">▶</span>' : ''}
+      ${m.source === 'cover' ? '<span class="v2-cover-tag">Cover</span>' : ''}
+      <span class="v2-tile-acts" onclick="event.stopPropagation()">
+        <button class="rm" onclick="v2RemoveMedia(${i})" title="Remove" aria-label="Remove">${v2Phone() ? '×' : 'Remove'}</button>
+        ${m.source === 'gallery' ? `<button onclick="v2MakeCover('${v2Js(m.rowId)}')">${v2Phone() ? 'Cover' : 'Make cover'}</button>` : ''}
+      </span>
+    </div>`).join('');
+  return `
+  <section class="v2-sec" id="v2Media">
+    <div class="v2-sec-head">
+      <h4>Photos &amp; video</h4>
+      ${media.length ? `<button class="v2-link" onclick="v2StoryOpen('${v2Js(g.id)}', 0)">Play as story</button>` : ''}
+    </div>
+    <div class="v2-tiles ${big ? 'big' : ''}">
+      ${tiles}
+      <label class="v2-tile v2-tile-add">
+        <input type="file" accept="image/*,video/*" multiple hidden onchange="v2AddMedia(this.files)">
+        <span>+</span><em>${media.length ? 'Add' : 'Add photos or video'}</em>
+      </label>
+    </div>
+  </section>`;
+}
+
+// Fill every [data-ref] in a container once its file is found.
+async function v2Hydrate(root) {
+  const els = (root || document).querySelectorAll('[data-ref]');
+  for (const el of els) {
+    const url = await v2Resolve(el.getAttribute('data-ref'));
+    if (!url) { el.classList.add('missing'); continue; }
+    if (el.getAttribute('data-kind') === 'video') {
+      if (!el.querySelector('video')) {
+        const v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.preload = 'metadata';
+        v.src = url + '#t=0.5';
+        el.prepend(v);
+      }
+    } else {
+      el.style.backgroundImage = `url('${url}')`;
+    }
+  }
+}
+
+function v2RepaintMedia() {
+  const g = v2Goal(v2.page);
+  const el = document.getElementById('v2Media');
+  if (g && el) { el.outerHTML = v2MediaHTML(g, !v2Phone()); v2Hydrate(document.getElementById('v2Media')); }
+  if (v2Phone()) v2RepaintHero();
+}
+
+window.v2AddMedia = async function (files) {
+  const g = v2Goal(v2.page);
+  if (!g || !files || !files.length) return;
+  showToast(`Adding ${files.length} file${files.length === 1 ? '' : 's'}…`);
+  const galleryUploads = [];
+  for (const f of files) {
+    const kind = String(f.type).startsWith('video') ? 'video' : 'image';
+    const stored = await v2StoreFile(f, kind);
+    if (!stored) continue;
+    if (kind === 'video') {
+      const list = String(g.video_url || '').split(',').map(x => x.trim()).filter(Boolean);
+      list.push('local://' + stored.localKey);
+      await v2Save(g, { video_url: list.join(',') });
+    } else if (!g.image_url) {
+      await v2Save(g, { image_url: 'local-img://' + stored.localKey });
+    } else {
+      const row = { vision_id: g.id, url: 'local-img://' + stored.localKey, name: f.name, uploaded_at: new Date().toISOString() };
+      try {
+        const res = await apiCall('create', 'vision_images', row);
+        const id = (res && (res.id || (res.data && res.data.id))) || ('im-' + Date.now());
+        if (!Array.isArray(state.data.vision_images)) state.data.vision_images = [];
+        state.data.vision_images.push({ id, ...row });
+        galleryUploads.push({ id, localKey: stored.localKey, name: f.name, type: f.type });
+      } catch (e) { showToast('Could not add a photo'); }
+    }
+  }
+  v2RepaintMedia();
+  // Back up to the cloud in the background so the other devices see them too.
+  if (typeof _syncVisionMediaToCloud === 'function') _syncVisionMediaToCloud(g.id).catch(() => { });
+  for (const u of galleryUploads) v2BackupGalleryPhoto(u).catch(() => { });
+};
+
+// The existing sync covers the cover and videos; gallery photos get the same.
+async function v2BackupGalleryPhoto(u) {
+  if (typeof _uploadMediaToDrive !== 'function') return;
+  const ref = await _uploadMediaToDrive(u.localKey, 'vision_gallery_' + u.id, u.type || 'image/jpeg');
+  if (!ref) return;
+  const row = (state.data.vision_images || []).find(r => String(r.id) === String(u.id));
+  if (!row) return;
+  row.url = 'local-img://' + u.localKey + '|' + ref;
+  try { await apiCall('update', 'vision_images', { url: row.url }, row.id); } catch (e) { }
+}
+
+window.v2RemoveMedia = async function (index) {
+  const g = v2Goal(v2.page);
+  const m = g && v2MediaOf(g)[index];
+  if (!m || !confirm(`Remove this ${m.kind === 'video' ? 'video' : 'photo'}?`)) return;
+  if (m.source === 'cover') {
+    // The next photo along steps up, so a vision with photos always has a cover.
+    const next = (state.data.vision_images || []).find(im => String(im.vision_id) === String(g.id) && im.url);
+    await v2Save(g, { image_url: next ? next.url : '' });
+    if (next) {
+      state.data.vision_images = state.data.vision_images.filter(r => r !== next);
+      try { await apiCall('delete', 'vision_images', {}, next.id); } catch (e) { }
+    }
+  } else if (m.source === 'gallery') {
+    state.data.vision_images = (state.data.vision_images || []).filter(r => String(r.id) !== String(m.rowId));
+    try { await apiCall('delete', 'vision_images', {}, m.rowId); } catch (e) { }
+  } else {
+    const list = String(g.video_url || '').split(',').map(x => x.trim()).filter(Boolean);
+    list.splice(m.index, 1);
+    await v2Save(g, { video_url: list.join(',') });
+  }
+  v2RepaintMedia();
+};
+
+window.v2MakeCover = async function (rowId) {
+  const g = v2Goal(v2.page);
+  const row = (state.data.vision_images || []).find(r => String(r.id) === String(rowId));
+  if (!g || !row) return;
+  const old = g.image_url;
+  await v2Save(g, { image_url: row.url });
+  if (old) { row.url = old; try { await apiCall('update', 'vision_images', { url: old }, row.id); } catch (e) { } }
+  else {
+    state.data.vision_images = state.data.vision_images.filter(r => r !== row);
+    try { await apiCall('delete', 'vision_images', {}, row.id); } catch (e) { }
+  }
+  v2RepaintMedia();
+};
+
+/* ── Phone hero: the media, full-bleed and swipeable ── */
+
+function v2HeroHTML(g) {
+  const media = v2MediaOf(g);
+  const col = v2CatColor(g.category);
+  return `
+  <div class="v2-hero" id="v2Hero" style="--c:${col}">
+    <div class="v2-hero-track" onscroll="v2HeroDots(this)">
+      ${media.length ? media.map((m, i) => `
+        <div class="v2-hero-slide" data-ref="${v2Esc(m.ref)}" data-kind="${m.kind}" onclick="v2StoryOpen('${v2Js(g.id)}', ${i})">
+          ${m.kind === 'video' ? '<span class="v2-play">▶</span>' : ''}
+        </div>`).join('')
+      : `<label class="v2-hero-slide v2-hero-empty">
+          <input type="file" accept="image/*,video/*" multiple hidden onchange="v2AddMedia(this.files)">
+          <span>+ Add photos or video</span>
+        </label>`}
+    </div>
+    ${media.length > 1 ? `<div class="v2-hero-dots">${media.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}
+    <button class="v2-hero-back" onclick="v2Home()" aria-label="Back">‹</button>
+    ${media.length ? `<button class="v2-hero-story" onclick="v2StoryOpen('${v2Js(g.id)}', 0)">▶ Story</button>` : ''}
+  </div>`;
+}
+function v2RepaintHero() {
+  const g = v2Goal(v2.page);
+  const el = document.getElementById('v2Hero');
+  if (g && el) { el.outerHTML = v2HeroHTML(g); v2Hydrate(document.getElementById('v2Hero')); }
+}
+window.v2HeroDots = function (track) {
+  const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+  track.parentElement.querySelectorAll('.v2-hero-dots i').forEach((d, k) => d.classList.toggle('on', k === i));
+};
+
+/* ── The page, twice ── */
+
+function v2HeadHTML(g) {
+  const cats = v2Cats();
+  return `
+  <div class="v2-head">
+    <span class="v2-cat-wrap" style="--c:${v2CatColor(g.category)}">
+      <select class="v2-cat-select" onchange="v2SetCategory(this.value)" aria-label="Category">
+        ${cats.map(c => `<option ${c === g.category ? 'selected' : ''}>${v2Esc(c)}</option>`).join('')}
+      </select>
+    </span>
+    <input class="v2-title" value="${v2Esc(g.title || '')}" maxlength="120"
+           onkeydown="if(event.key==='Enter'){this.blur();}" onblur="v2SetTitle(this)" aria-label="Vision name">
+    ${g.status === 'achieved' ? '<span class="v2-achieved-tag">Achieved</span>' : ''}
+  </div>`;
+}
+
+window.v2SetTitle = function (el) {
+  const g = v2Goal(v2.page);
+  const v = String(el.value || '').trim();
+  if (!g) return;
+  if (!v) { el.value = g.title || ''; return; }
+  if (v !== g.title) v2Save(g, { title: v });
+};
+window.v2SetCategory = async function (c) {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  await v2Save(g, { category: c });
+  const wrap = document.querySelector('.v2-cat-wrap');
+  if (wrap) wrap.style.setProperty('--c', v2CatColor(c));
+  vzeRepaintPlan();                          // same-category plan items change
+};
+window.v2ToggleAchieved = async function () {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  await v2Save(g, { status: g.status === 'achieved' ? 'active' : 'achieved' });
+  renderVision();
+};
+window.v2Delete = async function () {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  const id = String(g.id);
+  v2.page = null;
+  await vzDeleteGoals([id]);
+};
+
+function v2ActionsHTML(g) {
+  return `
+  <div class="v2-page-acts">
+    <button class="v2-btn" onclick="v2ToggleAchieved()">${g.status === 'achieved' ? 'Mark as not achieved' : 'Mark achieved'}</button>
+    <button class="v2-btn" onclick="startManifestationRitual('${v2Js(g.id)}')">Ritual</button>
+    <span style="flex:1"></span>
+    <button class="v2-btn danger" onclick="v2Delete()">Delete vision</button>
+  </div>`;
+}
+
+function v2PageHTML(g) {
+  vzeId = String(g.id);                       // the plan & affirmation blocks read this
+  const tasks = typeof vzePlanHTML === 'function' ? vzePlanHTML(g) : '';
+  const affs = typeof vzeAffHTML === 'function' ? vzeAffHTML(g) : '';
+
+  if (v2Phone()) {
+    const tab = v2.tab || '3m';
+    const hz = v2HorizonStats(g);
+    return `
+    <div class="v2 v2-page v2-phone">
+      ${v2HeroHTML(g)}
+      <div class="v2-page-body">
+        ${v2HeadHTML(g)}
+        ${v2ProgressHTML(g)}
+        <div class="v2-tabs" role="tablist">
+          ${V2_HORIZONS.map(x => `<button class="v2-tab ${x.key === tab ? 'on' : ''}" data-hz="${x.key}" onclick="v2SetTab('${x.key}')">
+            ${x.label}<em>${hz[x.key].total ? `${hz[x.key].done}/${hz[x.key].total}` : ''}</em></button>`).join('')}
+        </div>
+        <div class="v2-hz-tabs">
+          ${V2_HORIZONS.map(x => v2HorizonColHTML(g, x).replace('class="v2-hz"', `class="v2-hz ${x.key === tab ? 'shown' : ''}"`)).join('')}
+        </div>
+        ${v2NoteHTML(g)}
+        ${v2HabitsHTML(g)}
+        <div class="v2-sec v2-sec-wrap">${tasks}</div>
+        <div class="v2-sec v2-sec-wrap">${affs}</div>
+        ${v2MediaHTML(g, false)}
+        ${v2ActionsHTML(g)}
+      </div>
+    </div>`;
+  }
+
+  return `
+  <div class="v2 v2-page">
+    <div class="v2-crumb">
+      <button class="v2-back" onclick="v2Home()">‹ Vision</button>
+      <span>/</span><span>${v2Esc(g.category || 'Other')}</span>
+    </div>
+    <div class="v2-page-grid">
+      <div class="v2-main">
+        ${v2HeadHTML(g)}
+        ${v2ProgressHTML(g)}
+        <section class="v2-sec">
+          <div class="v2-sec-head"><h4>Where this is heading</h4></div>
+          <div class="v2-hz-grid">${V2_HORIZONS.map(x => v2HorizonColHTML(g, x)).join('')}</div>
+        </section>
+        ${v2NoteHTML(g)}
+        <div class="v2-sec v2-sec-wrap">${tasks}</div>
+        <div class="v2-sec v2-sec-wrap">${affs}</div>
+        ${v2ActionsHTML(g)}
+      </div>
+      <aside class="v2-side">
+        ${v2MediaHTML(g, true)}
+        ${v2HabitsHTML(g)}
+      </aside>
+    </div>
+  </div>`;
+}
+
+/* ═══ STORIES ════════════════════════════════════════════════════════════
+   Each vision with photos or video is one "account"; its media are the
+   segments. Photos hold for five seconds, videos for their own length. Tap
+   the left edge to go back, anywhere else to go on; hold to pause; swipe
+   sideways between visions and down to close. What you've seen is
+   remembered on this device, so the tray's rings go grey like the real thing. */
+
+const V2_PHOTO_MS = 5000;
+const v2s = { groups: [], gi: 0, ii: 0, t0: 0, elapsed: 0, raf: 0, paused: false, muted: false, holdTimer: 0, held: false, sx: 0, sy: 0 };
+
+function v2SeenSet() {
+  try { return new Set(JSON.parse(localStorage.getItem('os.vision.seen') || '[]')); } catch (e) { return new Set(); }
+}
+function v2MarkSeen(ref) {
+  try {
+    const s = v2SeenSet(); s.add(ref);
+    localStorage.setItem('os.vision.seen', JSON.stringify([...s].slice(-2000)));
+  } catch (e) { }
+}
+function v2StorySeenAll(g) {
+  const seen = v2SeenSet();
+  const m = v2MediaOf(g);
+  return m.length > 0 && m.every(x => seen.has(x.ref));
+}
+
+function v2StoryGroups() {
+  const cats = v2Cats();
+  return (state.data.vision || [])
+    .filter(g => g.status !== 'achieved' && v2MediaOf(g).length)
+    .sort((a, b) => cats.indexOf(a.category || 'Other') - cats.indexOf(b.category || 'Other'))
+    .map(g => ({ goal: g, items: v2MediaOf(g).map(m => ({ ...m, url: null })), resolved: false }));
+}
+
+async function v2StoryResolve(group) {
+  if (group.resolved) return;
+  for (const it of group.items) it.url = await v2Resolve(it.ref);
+  // A file that only lives on another device, with no cloud copy, can't play here.
+  group.items = group.items.filter(it => it.url);
+  group.resolved = true;
+}
+
+window.v2StoryOpen = async function (goalId, index) {
+  v2s.groups = v2StoryGroups();
+  if (!v2s.groups.length) { showToast('Add photos or video to a vision to see it as a story'); return; }
+  let gi = goalId ? v2s.groups.findIndex(g => String(g.goal.id) === String(goalId)) : -1;
+  if (gi < 0) {
+    // From the header button: start at the first vision with something unseen.
+    const seen = v2SeenSet();
+    gi = Math.max(0, v2s.groups.findIndex(g => g.items.some(i => !seen.has(i.ref))));
+  }
+  v2s.gi = gi;
+  v2s.ii = Math.max(0, index || 0);
+  v2s.paused = false;
+  v2StoryMount();
+  await v2StoryShow();
+};
+
+function v2StoryMount() {
+  let el = document.getElementById('v2Story');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'v2Story';
+    el.className = 'v2s';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div class="v2s-backdrop" id="v2sBackdrop"></div>
+    <button class="v2s-nav prev" onclick="v2StoryGroupStep(-1)" aria-label="Previous vision">‹</button>
+    <div class="v2s-stage" id="v2sStage">
+      <div class="v2s-bars" id="v2sBars"></div>
+      <div class="v2s-head">
+        <span class="v2s-av" id="v2sAv"></span>
+        <span class="v2s-who"><b id="v2sName"></b><span id="v2sMeta"></span></span>
+        <span style="flex:1"></span>
+        <button class="v2s-ic" id="v2sMute" onclick="v2StoryMute()" aria-label="Sound"></button>
+        <button class="v2s-ic" id="v2sPause" onclick="v2StoryTogglePause()" aria-label="Pause"></button>
+        <button class="v2s-ic" onclick="v2StoryClose()" aria-label="Close">✕</button>
+      </div>
+      <div class="v2s-media" id="v2sMedia"></div>
+      <div class="v2s-taps" id="v2sTaps"></div>
+      <div class="v2s-foot">
+        <p class="v2s-caption" id="v2sCaption"></p>
+        <button class="v2s-open" onclick="v2StoryOpenVision()">Open vision</button>
+      </div>
+    </div>
+    <button class="v2s-nav next" onclick="v2StoryGroupStep(1)" aria-label="Next vision">›</button>`;
+  el.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  const taps = document.getElementById('v2sTaps');
+  taps.addEventListener('pointerdown', v2StoryDown);
+  taps.addEventListener('pointerup', v2StoryUp);
+  taps.addEventListener('pointercancel', () => { clearTimeout(v2s.holdTimer); if (v2s.held) { v2s.held = false; v2StoryResume(); } });
+  document.addEventListener('keydown', v2StoryKey);
+  v2StoryIcons();
+}
+
+async function v2StoryShow() {
+  const group = v2s.groups[v2s.gi];
+  if (!group) { v2StoryClose(); return; }
+  await v2StoryResolve(group);
+  if (!group.items.length) {                   // nothing playable here — move on
+    v2s.groups.splice(v2s.gi, 1);
+    if (!v2s.groups.length) { showToast('These files are on another device'); v2StoryClose(); return; }
+    if (v2s.gi >= v2s.groups.length) v2s.gi = v2s.groups.length - 1;
+    return v2StoryShow();
+  }
+  if (v2s.ii >= group.items.length) v2s.ii = group.items.length - 1;
+  const g = group.goal, it = group.items[v2s.ii];
+
+  // Header, bars, backdrop
+  const cover = v2CoverSync(g) || (group.items.find(x => x.kind === 'image') || {}).url || '';
+  const av = document.getElementById('v2sAv');
+  av.style.backgroundImage = cover ? `url('${cover}')` : '';
+  av.style.backgroundColor = v2CatColor(g.category);
+  document.getElementById('v2sName').textContent = g.title || '';
+  document.getElementById('v2sMeta').textContent = `${g.category || ''} · ${v2s.ii + 1}/${group.items.length}`;
+  document.getElementById('v2sBars').innerHTML = group.items
+    .map((_, k) => `<i><em style="width:${k < v2s.ii ? 100 : 0}%"></em></i>`).join('');
+  document.getElementById('v2sBackdrop').style.backgroundImage = it.kind === 'image' ? `url('${it.url}')` : (cover ? `url('${cover}')` : '');
+  document.querySelector('.v2s-nav.prev').disabled = v2s.gi === 0;
+  document.querySelector('.v2s-nav.next').disabled = v2s.gi === v2s.groups.length - 1;
+
+  // Caption: the vision's affirmations take turns, else the note's first line.
+  const affs = (state.data.vision_affirmations || []).filter(a => String(a.vision_id) === String(g.id) && a.text);
+  const cap = affs.length ? affs[v2s.ii % affs.length].text
+    : (v2NoteText(g).split(/\r?\n/).map(s => s.replace(/^[#\-*•\d.)\s]+/, '').trim()).find(Boolean) || '');
+  document.getElementById('v2sCaption').textContent = cap;
+
+  // The media itself
+  cancelAnimationFrame(v2s.raf);
+  const box = document.getElementById('v2sMedia');
+  box.innerHTML = '';
+  v2s.elapsed = 0;
+  v2MarkSeen(it.ref);
+
+  if (it.kind === 'video') {
+    const v = document.createElement('video');
+    v.src = it.url; v.playsInline = true; v.muted = v2s.muted; v.preload = 'auto';
+    v.addEventListener('ended', () => v2StoryNext());
+    v.addEventListener('timeupdate', () => v2StoryBar(v.duration ? v.currentTime / v.duration : 0));
+    v.addEventListener('error', () => v2StoryNext());
+    box.appendChild(v);
+    const p = v.play();
+    if (p && p.catch) p.catch(() => { v.muted = true; v2s.muted = true; v2StoryIcons(); v.play().catch(() => { }); });
+    if (v2s.paused) v.pause();
+  } else {
+    const img = document.createElement('img');
+    img.src = it.url; img.alt = '';
+    box.appendChild(img);
+    v2s.t0 = performance.now();
+    if (!v2s.paused) v2StoryTick();
+  }
+  // Warm the next vision so the jump to it doesn't stall.
+  const nextG = v2s.groups[v2s.gi + 1];
+  if (nextG && !nextG.resolved) v2StoryResolve(nextG);
+}
+
+function v2StoryBar(frac) {
+  const bars = document.querySelectorAll('#v2sBars em');
+  const b = bars[v2s.ii];
+  if (b) b.style.width = Math.min(100, Math.max(0, frac * 100)) + '%';
+}
+
+function v2StoryTick() {
+  const f = () => {
+    const t = v2s.elapsed + (performance.now() - v2s.t0);
+    v2StoryBar(t / V2_PHOTO_MS);
+    if (t >= V2_PHOTO_MS) { v2StoryNext(); return; }
+    v2s.raf = requestAnimationFrame(f);
+  };
+  v2s.raf = requestAnimationFrame(f);
+}
+
+window.v2StoryNext = function () {
+  const group = v2s.groups[v2s.gi];
+  if (!group) return;
+  if (v2s.ii < group.items.length - 1) { v2s.ii++; v2StoryShow(); return; }
+  if (v2s.gi < v2s.groups.length - 1) { v2s.gi++; v2s.ii = 0; v2StoryShow(); return; }
+  v2StoryClose();                               // end of the last story
+};
+window.v2StoryPrev = function () {
+  if (v2s.ii > 0) { v2s.ii--; v2StoryShow(); return; }
+  if (v2s.gi > 0) {
+    v2s.gi--;
+    const g = v2s.groups[v2s.gi];
+    v2s.ii = g && g.resolved ? g.items.length - 1 : 0;
+    v2StoryShow(); return;
+  }
+  v2StoryShow();                                // first of all: restart it
+};
+window.v2StoryGroupStep = function (dir) {
+  const n = v2s.gi + dir;
+  if (n < 0 || n >= v2s.groups.length) return;
+  v2s.gi = n; v2s.ii = 0; v2StoryShow();
+};
+
+function v2StoryPause() {
+  const v = document.querySelector('#v2sMedia video');
+  if (v) v.pause();
+  else if (!v2s.pausedAt) { cancelAnimationFrame(v2s.raf); v2s.elapsed += performance.now() - v2s.t0; }
+  v2s.pausedAt = true;
+}
+function v2StoryResume() {
+  if (v2s.paused) return;                       // a deliberate pause wins over a released hold
+  const v = document.querySelector('#v2sMedia video');
+  if (v) v.play().catch(() => { });
+  else if (v2s.pausedAt) { v2s.t0 = performance.now(); v2StoryTick(); }
+  v2s.pausedAt = false;
+}
+window.v2StoryTogglePause = function () {
+  v2s.paused = !v2s.paused;
+  if (v2s.paused) v2StoryPause(); else { v2s.pausedAt = true; v2StoryResume(); }
+  v2StoryIcons();
+};
+window.v2StoryMute = function () {
+  v2s.muted = !v2s.muted;
+  const v = document.querySelector('#v2sMedia video');
+  if (v) v.muted = v2s.muted;
+  v2StoryIcons();
+};
+function v2StoryIcons() {
+  const p = document.getElementById('v2sPause'), m = document.getElementById('v2sMute');
+  if (p) p.innerHTML = v2s.paused
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="7,4 20,12 7,20"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+  if (m) m.innerHTML = v2s.muted
+    ? '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 5 6 9H2v6h4l5 4z" fill="currentColor"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>'
+    : '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 5 6 9H2v6h4l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>';
+}
+
+// Hold to pause; a quick tap navigates. Sideways swipe changes vision, down closes.
+function v2StoryDown(e) {
+  v2s.sx = e.clientX; v2s.sy = e.clientY; v2s.held = false;
+  clearTimeout(v2s.holdTimer);
+  v2s.holdTimer = setTimeout(() => { v2s.held = true; v2StoryPause(); }, 220);
+}
+function v2StoryUp(e) {
+  clearTimeout(v2s.holdTimer);
+  const dx = e.clientX - v2s.sx, dy = e.clientY - v2s.sy;
+  if (v2s.held) { v2s.held = false; v2StoryResume(); return; }
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { v2StoryGroupStep(dx < 0 ? 1 : -1); return; }
+  if (dy > 90 && Math.abs(dy) > Math.abs(dx)) { v2StoryClose(); return; }
+  const r = e.currentTarget.getBoundingClientRect();
+  if (e.clientX - r.left < r.width * 0.3) v2StoryPrev(); else v2StoryNext();
+}
+function v2StoryKey(e) {
+  if (e.key === 'Escape') v2StoryClose();
+  else if (e.key === 'ArrowRight') v2StoryNext();
+  else if (e.key === 'ArrowLeft') v2StoryPrev();
+  else if (e.key === ' ') { e.preventDefault(); v2StoryTogglePause(); }
+}
+
+window.v2StoryOpenVision = function () {
+  const g = v2s.groups[v2s.gi] && v2s.groups[v2s.gi].goal;
+  v2StoryClose();
+  if (g) v2Open(g.id);
+};
+
+window.v2StoryClose = function () {
+  cancelAnimationFrame(v2s.raf);
+  clearTimeout(v2s.holdTimer);
+  const el = document.getElementById('v2Story');
+  if (el) { el.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); }); el.classList.remove('open'); el.innerHTML = ''; }
+  document.body.style.overflow = '';
+  document.removeEventListener('keydown', v2StoryKey);
+  // The tray's rings reflect what was just watched.
+  if (state.view === 'vision' && !v2.page) {
+    document.querySelectorAll('.v2-tray-item').forEach(b => {
+      const id = (b.getAttribute('onclick') || '').match(/'([^']+)'/);
+      const g = id && v2Goal(id[1]);
+      if (g) b.classList.toggle('seen', v2StorySeenAll(g));
+    });
+  }
+};
+
+
+/* ═══ WIRING ═════════════════════════════════════════════════════════════ */
+
+async function renderVision() {
+  const main = document.getElementById('main');
+  if (!main) return;
+  if (typeof window.tdpGoalItems !== 'function' && typeof ensureViewLoaded === 'function') {
+    try { await ensureViewLoaded('tdp'); } catch (e) { }
+  }
+  v2InjectCSS();
+  if (typeof vzeInjectCSS === 'function') vzeInjectCSS();
+
+  let g = v2.page ? v2Goal(v2.page) : null;
+  if (v2.page && !g) v2.page = null;           // it was deleted
+
+  if (!g) await v2PreloadCovers((state.data.vision || []));
+  main.innerHTML = g ? v2PageHTML(g) : v2HomeHTML();
+  v2Hydrate(main);
+  v2LastPhone = v2Phone();
+}
+window.renderVision = renderVision;
+
+// Everything that used to open the old full-screen view or the side editor
+// now opens the vision's page — from anywhere in the app.
+window.openVisionDetailClassic = window.openVisionDetail;
+window.openVisionDetail = function (id) {
+  v2.page = String(id);
+  v2.tab = '3m';
+  if (state.view !== 'vision' && typeof routeTo === 'function') routeTo('vision');
+  else renderVision();
+};
+window.openGoalEditor = window.openVisionDetail;
+window.vzCardOpen = window.openVisionDetail;
+
+// And the old New Vision Goal form is retired: new visions start in the sheet,
+// edits happen on the page.
+window.openVisionModalClassic = window.openVisionModal;
+window.openVisionModal = function () {
+  if (state.view !== 'vision' && typeof routeTo === 'function') {
+    routeTo('vision');
+    setTimeout(() => v2NewVision(), 250);
+  } else v2NewVision();
+};
+window.openEditVisionClassic = window.openEditVision;
+window.openEditVision = function (id) { return id ? window.openVisionDetail(id) : window.openVisionModal(); };
+
+/* ═══ STYLES ═══════════════════════════════════════════════════════════ */
+
+function v2InjectCSS() {
+  if (document.getElementById('v2Styles')) return;
+  const st = document.createElement('style');
+  st.id = 'v2Styles';
+  st.textContent = `
+  .v2 { --r: 18px; color: var(--text-1); padding-bottom: 40px; }
+  .v2 button { font-family: inherit; }
+  .v2-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 15px;
+    border: 1px solid var(--border-color); border-radius: 11px; background: var(--surface-1); color: var(--text-2);
+    font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    transition: background .15s ease, color .15s ease, border-color .15s ease; }
+  .v2-btn:hover { background: var(--surface-2); color: var(--text-1); }
+  .v2-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .v2-btn.primary:hover { filter: brightness(1.07); background: var(--primary); color: #fff; }
+  .v2-btn.danger { color: var(--danger, #EF4444); }
+  .v2-btn.danger:hover { border-color: var(--danger, #EF4444); background: transparent; }
+  .v2-btn.story { background: linear-gradient(135deg, #F59E0B, #EC4899 55%, #8B5CF6); border: none; color: #fff; }
+  .v2-btn.story:hover { filter: brightness(1.06); color: #fff; }
+  .v2-link { border: none; background: none; color: var(--primary); font-size: 12.5px; font-weight: 800; cursor: pointer; padding: 4px 2px; }
+  .v2-link:hover { text-decoration: underline; }
+  .v2-x { flex: none; width: 24px; height: 24px; border: none; border-radius: 7px; background: none; color: var(--text-3);
+    font-size: 17px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s ease; }
+  .v2-x:hover { color: var(--danger, #EF4444); background: var(--surface-3); }
+  .v2-icon { width: 32px; height: 32px; border: 1px solid var(--border-color); border-radius: 9px; background: var(--surface-1);
+    color: var(--text-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .v2-icon:hover { color: var(--primary); border-color: var(--primary); }
+
+  /* ── home ── */
+  .v2-top { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+  .v2-stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--text-3); font-weight: 600; }
+  .v2-stats b { color: var(--text-1); font-weight: 850; font-variant-numeric: tabular-nums; }
+  .v2-acts { display: flex; gap: 8px; margin-left: auto; }
+
+  .v2-tray { display: flex; gap: 16px; overflow-x: auto; padding: 4px 2px 14px; margin-bottom: 14px;
+    scrollbar-width: none; border-bottom: 1px solid var(--border-color); }
+  .v2-tray::-webkit-scrollbar { display: none; }
+  .v2-tray-item { flex: none; width: 76px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    border: none; background: none; cursor: pointer; padding: 0; }
+  .v2-ring { width: 68px; height: 68px; border-radius: 50%; padding: 3px; box-sizing: border-box;
+    background: conic-gradient(from 210deg, #F59E0B, #EF4444, #EC4899, #8B5CF6, #F59E0B); }
+  .v2-tray-item.seen .v2-ring { background: var(--border-color); }
+  .v2-av { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 50%;
+    background-size: cover; background-position: center; border: 3px solid var(--surface-base, var(--surface-1));
+    box-sizing: border-box; color: #fff; font-weight: 800; font-size: 20px; }
+  .v2-tray-name { width: 100%; font-size: 11.5px; font-weight: 650; color: var(--text-2); text-align: center;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .v2-bulk { display: none; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 14px;
+    border: 1px solid var(--primary); border-radius: 13px; background: var(--primary-soft); }
+  .v2-bulk.show { display: flex; }
+  .v2-bulk span { flex: 1; font-size: 13px; font-weight: 800; color: var(--primary); }
+
+  .v2-cat { margin-bottom: 30px; }
+  .v2-cat > header, .v2-cat > summary { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .v2-cat > summary { cursor: pointer; list-style: none; }
+  .v2-cat > summary::-webkit-details-marker { display: none; }
+  .v2-cat h2 { margin: 0; font-size: 17px; font-weight: 850; letter-spacing: -.01em; color: var(--text-1); }
+  .v2-cat-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .v2-cat-meta { font-size: 12.5px; font-weight: 650; color: var(--text-3); }
+  .v2-achieved { opacity: .85; }
+
+  .v2-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 18px; }
+  .v2-card { position: relative; display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden;
+    border: 1px solid var(--border-color); border-radius: var(--r); background: var(--surface-1);
+    box-shadow: var(--shadow-card); cursor: pointer; transition: transform .16s ease, box-shadow .16s ease; }
+  .v2-card:hover { transform: translateY(-3px); box-shadow: 0 14px 34px rgba(15,23,42,.12); }
+  .v2-card.picked { outline: 3px solid var(--primary); outline-offset: -1px; }
+  .v2-cover { position: relative; aspect-ratio: 16 / 10; background-size: cover; background-position: center;
+    display: flex; align-items: center; justify-content: center; }
+  .v2-cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.28), transparent 45%); }
+  .v2-cover-mark { font-size: 44px; font-weight: 850; color: rgba(255,255,255,.85); }
+  .v2-media-count { position: absolute; left: 10px; bottom: 9px; z-index: 1; font-size: 11px; font-weight: 700;
+    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.4); }
+  .v2-check { position: absolute; top: 10px; right: 10px; z-index: 2; width: 26px; height: 26px; border-radius: 50%;
+    border: 2px solid #fff; background: rgba(0,0,0,.25); color: transparent; display: flex; align-items: center;
+    justify-content: center; font-size: 14px; font-weight: 900; }
+  .v2-check.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .v2-card-body { padding: 13px 15px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .v2-card-body h3 { margin: 0; font-size: 15px; font-weight: 800; color: var(--text-1); line-height: 1.3; }
+  .v2-hz-mini { display: flex; gap: 8px; }
+  .v2-hz-mini span { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .v2-hz-mini b { font-size: 10px; font-weight: 800; letter-spacing: .05em; color: var(--text-3); }
+  .v2-hz-mini i { height: 4px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+  .v2-hz-mini em { display: block; height: 100%; background: var(--primary); border-radius: 99px; }
+  .v2-hz-mini .empty b { opacity: .55; }
+  .v2-card-foot { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: var(--text-3);
+    font-variant-numeric: tabular-nums; }
+  .v2-bar { flex: 1; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+  .v2-bar i { display: block; height: 100%; border-radius: 99px; }
+  .v2-dot-sep { opacity: .5; }
+  .v2-card-empty { align-items: center; justify-content: center; gap: 8px; min-height: 180px; border-style: dashed;
+    box-shadow: none; background: transparent; color: var(--text-3); }
+  .v2-card-empty span { font-size: 28px; font-weight: 300; }
+  .v2-card-empty b { font-size: 13px; }
+  .v2-card-empty:hover { color: var(--primary); border-color: var(--primary); transform: none; box-shadow: none; }
+
+  /* phone rows */
+  .v2-rows { display: flex; flex-direction: column; border: 1px solid var(--border-color); border-radius: 16px;
+    background: var(--surface-1); overflow: hidden; }
+  .v2-row { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: none; background: none;
+    border-bottom: 1px solid var(--border-color); text-align: left; cursor: pointer; width: 100%; }
+  .v2-row:last-child { border-bottom: none; }
+  .v2-row:active { background: var(--surface-2); }
+  .v2-row.picked { background: var(--primary-soft); }
+  .v2-row-th { width: 46px; height: 46px; flex: none; border-radius: 12px; background-size: cover; background-position: center;
+    color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .v2-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .v2-row-main b { font-size: 14.5px; font-weight: 750; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .v2-row-main span { font-size: 12px; font-weight: 600; color: var(--text-3); }
+  .v2-row-prog { position: relative; width: 38px; height: 38px; flex: none; }
+  .v2-row-prog i { position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--surface-3) 0); }
+  .v2-row-prog i::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--surface-1); }
+  .v2-row-prog em { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-style: normal; font-size: 10px; font-weight: 800; color: var(--text-2); }
+  .v2-row .v2-check { position: static; border-color: var(--border-color); }
+  .v2-row-empty { justify-content: center; color: var(--text-3); font-size: 13px; font-weight: 700; padding: 16px; }
+
+  /* ── vision page ── */
+  .v2-crumb { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 13px; font-weight: 650; color: var(--text-3); }
+  .v2-back { border: none; background: none; color: var(--text-2); font-size: 13px; font-weight: 800; cursor: pointer; padding: 4px 0; }
+  .v2-back:hover { color: var(--primary); }
+  .v2-page-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
+  .v2-side { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 16px; }
+  .v2-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  .v2-head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .v2-cat-wrap { position: relative; display: inline-flex; align-self: flex-start; }
+  .v2-cat-wrap::after { content: ''; position: absolute; right: 12px; top: 50%; width: 5px; height: 5px;
+    border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+  .v2-cat-select { appearance: none; -webkit-appearance: none; width: auto !important; min-width: 0 !important; height: 28px !important;
+    padding: 0 28px 0 12px !important; border-radius: 99px !important; border: none !important; background: var(--c) !important;
+    color: #fff !important; font-family: inherit; font-size: 11.5px !important; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; cursor: pointer; box-shadow: none !important; }
+  .v2-title { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 30px !important; font-weight: 850;
+    letter-spacing: -.02em; line-height: 1.15; color: var(--text-1); border: 1px solid transparent !important;
+    background: transparent !important; border-radius: 12px !important; padding: 4px 8px !important; margin-left: -8px;
+    box-shadow: none !important; }
+  .v2-title:hover { border-color: var(--border-color) !important; }
+  .v2-title:focus { border-color: var(--primary) !important; background: var(--surface-1) !important; outline: none; }
+  .v2-achieved-tag { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--success, #10B981); }
+
+  .v2-progress { padding: 14px 16px; border: 1px solid var(--border-color); border-radius: 16px; background: var(--surface-1); }
+  .v2-progress-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px;
+    font-size: 12.5px; font-weight: 700; color: var(--text-3); }
+  .v2-progress-top b { font-size: 18px; font-weight: 850; color: var(--text-1); font-variant-numeric: tabular-nums; }
+  .v2-progress-track { position: relative; height: 10px; border-radius: 99px; background: var(--surface-3); }
+  .v2-progress-track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; transition: width .3s ease; }
+  .v2-progress-track input { position: absolute; inset: -8px 0; width: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .v2-progress-hint { margin: 8px 0 0; font-size: 12px; color: var(--text-3); font-weight: 600; }
+
+  .v2-sec { padding: 16px 18px; border: 1px solid var(--border-color); border-radius: 18px; background: var(--surface-1); }
+  .v2-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .v2-sec h4, .v2-sec-wrap .vze-sec h4 { margin: 0; font-size: 11px; font-weight: 850; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--text-3); }
+  .v2-sec-wrap .vze-sec { border-top: none; padding-top: 0; margin: 0; }
+  .v2-sec-wrap .vze-sec h4 { margin-bottom: 10px; }
+  .v2-empty-cta { display: block; width: 100%; text-align: left; padding: 14px 16px; border: 1px dashed var(--border-strong, #cbd5e1);
+    border-radius: 13px; background: transparent; color: var(--text-3); font-size: 13.5px; font-weight: 600; line-height: 1.5; cursor: pointer; }
+  .v2-empty-cta:hover { border-color: var(--primary); color: var(--primary); }
+  .v2-hint { font-size: 13px; color: var(--text-3); font-weight: 600; }
+
+  /* horizons */
+  .v2-hz-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .v2-hz { display: flex; flex-direction: column; padding: 12px; border-radius: 14px; background: var(--surface-2); min-width: 0; }
+  .v2-hz-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .v2-hz-head b { font-size: 13.5px; font-weight: 850; color: var(--text-1); }
+  .v2-hz-head span { font-size: 12px; font-weight: 800; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .v2-hz-list { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .v2-hz-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 4px; border-radius: 9px; }
+  .v2-hz-item:hover { background: var(--surface-1); }
+  .v2-hz-item:hover .v2-x { opacity: 1; }
+  .v2-hz-item input { width: 16px; height: 16px; flex: none; margin-top: 2px; accent-color: var(--primary); cursor: pointer; }
+  .v2-hz-text { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--text-1);
+    outline: none; border-radius: 5px; overflow-wrap: anywhere; cursor: text; }
+  .v2-hz-text:focus { background: var(--surface-1); box-shadow: 0 0 0 2px var(--primary-soft); }
+  .v2-hz-item.done .v2-hz-text { color: var(--text-3); text-decoration: line-through; }
+  .v2-hz-empty { margin: 2px 4px 6px; font-size: 12.5px; color: var(--text-3); font-weight: 600; line-height: 1.45; }
+  .v2-hz-add input { width: 100%; box-sizing: border-box; height: 34px; margin-top: 6px; border: 1px dashed var(--border-strong, #cbd5e1) !important;
+    border-radius: 10px !important; background: transparent !important; color: var(--text-1); font-family: inherit;
+    font-size: 13px !important; font-weight: 600; padding: 0 10px !important; box-shadow: none !important; }
+  .v2-hz-add input:focus { border-style: solid !important; border-color: var(--primary) !important; background: var(--surface-1) !important; outline: none; }
+
+  /* note */
+  .v2-note-body { font-size: 14.5px; line-height: 1.7; color: var(--text-1); }
+  .v2-note-body p { margin: 0 0 10px; }
+  .v2-note-body p:last-child { margin-bottom: 0; }
+  .v2-note-body h3, .v2-note-body h4, .v2-note-body h5 { margin: 14px 0 6px; font-weight: 850; line-height: 1.3; }
+  .v2-note-body h3 { font-size: 18px; } .v2-note-body h4 { font-size: 16px; } .v2-note-body h5 { font-size: 14.5px; }
+  .v2-note-body > :first-child { margin-top: 0; }
+  .v2-note-body ul, .v2-note-body ol { margin: 0 0 10px; padding-left: 22px; }
+  .v2-note-body li { margin-bottom: 3px; }
+  .v2-note-body a { color: var(--primary); }
+  .v2-note textarea { width: 100%; box-sizing: border-box; min-height: 160px; resize: vertical;
+    border: 1px solid var(--primary) !important; border-radius: 12px !important; background: var(--surface-2) !important;
+    color: var(--text-1); font-family: inherit; font-size: 14px !important; line-height: 1.6; padding: 12px 14px !important;
+    box-shadow: none !important; outline: none; }
+  .v2-note-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .v2-note-help { font-size: 11.5px; color: var(--text-3); font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  /* habits */
+  .v2-habit { padding: 11px 0; border-bottom: 1px solid var(--border-color); }
+  .v2-habit:first-of-type { padding-top: 0; }
+  .v2-habit:last-child { border-bottom: none; padding-bottom: 0; }
+  .v2-habit:hover .v2-x { opacity: 1; }
+  .v2-habit-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .v2-habit-top b { flex: 1; min-width: 0; font-size: 14px; font-weight: 750; }
+  .v2-streak { font-size: 11px; font-weight: 800; color: #C2410C; background: #FFEDD5; padding: 2px 8px; border-radius: 99px; }
+  .v2-strip { display: grid; grid-template-columns: repeat(30, 1fr); gap: 3px; margin-bottom: 8px; }
+  .v2-strip i { aspect-ratio: 1; border-radius: 3px; background: var(--surface-3); }
+  .v2-strip i.done { background: var(--success, #10B981); }
+  .v2-strip i.miss { background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--border-strong, #cbd5e1); }
+  .v2-strip i.off { background: transparent; box-shadow: inset 0 0 0 1px var(--border-color); opacity: .5; }
+  .v2-strip i.today { outline: 2px solid var(--primary); outline-offset: 1px; }
+  .v2-habit-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; font-weight: 600; color: var(--text-3); }
+  .v2-habit-stats b { color: var(--text-1); font-weight: 850; }
+  .v2-habit-stats .up { color: var(--success, #10B981); font-weight: 800; }
+  .v2-habit-stats .down { color: var(--danger, #EF4444); font-weight: 800; }
+
+  /* media */
+  .v2-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .v2-tiles.big { grid-template-columns: repeat(3, 1fr); }
+  .v2-tiles.big .v2-tile.cover { grid-column: span 3; aspect-ratio: 16 / 10; }
+  .v2-tile { position: relative; aspect-ratio: 1; border-radius: 11px; overflow: hidden; background: var(--surface-3) center / cover;
+    cursor: pointer; }
+  .v2-tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .v2-tile.missing::before { content: 'On another device'; position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; text-align: center; padding: 6px; font-size: 10.5px; font-weight: 700; color: var(--text-3); }
+  .v2-play { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; width: 34px; height: 34px;
+    border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; padding-left: 2px; box-sizing: border-box; }
+  .v2-cover-tag { position: absolute; left: 8px; top: 8px; z-index: 1; font-size: 10px; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; color: #fff; background: rgba(0,0,0,.4); padding: 3px 7px; border-radius: 6px; }
+  .v2-tile-acts { position: absolute; right: 6px; bottom: 6px; z-index: 2; display: flex; gap: 4px; opacity: 0; transition: opacity .15s ease; }
+  .v2-tile:hover .v2-tile-acts { opacity: 1; }
+  .v2-tile-acts button { height: 24px; padding: 0 8px; border: none; border-radius: 7px; background: rgba(0,0,0,.6); color: #fff;
+    font-size: 11px; font-weight: 700; cursor: pointer; }
+  .v2-tile-acts button:hover { background: rgba(0,0,0,.8); }
+  .v2-tile-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    border: 1.5px dashed var(--border-strong, #cbd5e1); background: transparent; color: var(--text-3); }
+  .v2-tile-add span { font-size: 22px; font-weight: 300; line-height: 1; }
+  .v2-tile-add em { font-style: normal; font-size: 11px; font-weight: 700; text-align: center; padding: 0 4px; }
+  .v2-tile-add:hover { border-color: var(--primary); color: var(--primary); }
+
+  .v2-page-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* sheet */
+  .v2-sheet { position: fixed; inset: 0; z-index: 950; display: none; align-items: center; justify-content: center; padding: 16px;
+    background: rgba(15,23,42,.45); backdrop-filter: blur(3px); }
+  .v2-sheet.open { display: flex; }
+  .v2-sheet-panel { width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto; box-sizing: border-box; padding: 22px;
+    border-radius: 22px; background: var(--surface-1); box-shadow: 0 24px 64px rgba(15,23,42,.28); }
+  .v2-sheet-panel h3 { margin: 0 0 16px; font-size: 18px; font-weight: 850; }
+  .v2-sheet-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .v2-new-photo { display: flex; align-items: flex-end; justify-content: center; height: 130px; margin: -22px -22px 18px;
+    border-radius: 22px 22px 0 0; background: var(--surface-2) center / cover; border-bottom: 1px solid var(--border-color);
+    cursor: pointer; padding-bottom: 12px; box-sizing: border-box; }
+  .v2-new-photo span { font-size: 12.5px; font-weight: 800; color: var(--text-3); background: var(--surface-1);
+    padding: 6px 12px; border-radius: 99px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .v2-new-photo.has { height: 170px; }
+  .v2-new-title { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 22px !important; font-weight: 800;
+    color: var(--text-1); border: none !important; border-bottom: 2px solid var(--border-color) !important; border-radius: 0 !important;
+    background: transparent !important; padding: 6px 0 10px !important; box-shadow: none !important; margin-bottom: 18px; }
+  .v2-new-title:focus { border-bottom-color: var(--primary) !important; outline: none; }
+  .v2-new-lbl { font-size: 11px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); margin-bottom: 9px; }
+  .v2-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .v2-pill { height: 34px; padding: 0 14px; border: 1.5px solid var(--border-color); border-radius: 99px; background: var(--surface-1);
+    color: var(--text-2); font-size: 13px; font-weight: 750; cursor: pointer; }
+  .v2-pill:hover { border-color: var(--c); color: var(--c); }
+  .v2-pill.on { background: var(--c); border-color: var(--c); color: #fff; }
+  .v2-new-note { margin: 16px 0 0; font-size: 12.5px; color: var(--text-3); font-weight: 600; }
+  .v2-pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+  .v2-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 11px 13px; border: 1px solid var(--border-color);
+    border-radius: 12px; background: var(--surface-1); cursor: pointer; text-align: left; }
+  .v2-pick:hover { border-color: var(--primary); background: var(--primary-soft); }
+  .v2-pick b { font-size: 14px; font-weight: 750; color: var(--text-1); }
+  .v2-pick span { font-size: 12px; color: var(--text-3); font-weight: 600; }
+
+  /* ── phone ── */
+  .v2-phone .v2-page-body { display: flex; flex-direction: column; gap: 14px; padding-top: 14px; }
+  .v2-hero { position: relative; aspect-ratio: 4 / 5; max-height: 62vh; border-radius: 20px; overflow: hidden;
+    background: linear-gradient(160deg, var(--c), color-mix(in srgb, var(--c) 60%, #000)); }
+  @media (max-width: 767px) {
+    .v2-hero { width: 100vw; margin-left: calc(50% - 50vw); margin-top: -8px; border-radius: 0 0 22px 22px; }
+  }
+  .v2-hero-track { display: flex; height: 100%; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .v2-hero-track::-webkit-scrollbar { display: none; }
+  .v2-hero-slide { position: relative; flex: 0 0 100%; height: 100%; scroll-snap-align: start; background: center / cover no-repeat; }
+  .v2-hero-slide video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+  .v2-hero-empty { display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .v2-hero-empty span { font-size: 14px; font-weight: 800; color: #fff; background: rgba(0,0,0,.25); padding: 10px 16px; border-radius: 99px; }
+  .v2-hero-dots { position: absolute; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; gap: 5px; pointer-events: none; }
+  .v2-hero-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.5); transition: width .2s ease; }
+  .v2-hero-dots i.on { width: 18px; border-radius: 99px; background: #fff; }
+  .v2-hero-back { position: absolute; left: 12px; top: 12px; width: 38px; height: 38px; border: none; border-radius: 50%;
+    background: rgba(0,0,0,.4); color: #fff; font-size: 26px; line-height: 1; cursor: pointer; padding-bottom: 3px; backdrop-filter: blur(6px); }
+  .v2-hero-story { position: absolute; right: 12px; top: 12px; height: 34px; padding: 0 14px; border: none; border-radius: 99px;
+    background: linear-gradient(135deg, #F59E0B, #EC4899 55%, #8B5CF6); color: #fff; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+  .v2-phone .v2-title { font-size: 25px !important; }
+  .v2-tabs { display: flex; gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-2); }
+  .v2-tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px; border: none;
+    border-radius: 11px; background: transparent; color: var(--text-3); font-size: 13px; font-weight: 800; cursor: pointer; }
+  .v2-tab em { font-style: normal; font-size: 10.5px; font-weight: 700; min-height: 13px; }
+  .v2-tab.on { background: var(--surface-1); color: var(--text-1); box-shadow: 0 1px 4px rgba(15,23,42,.1); }
+  .v2-hz-tabs .v2-hz { display: none; background: var(--surface-1); border: 1px solid var(--border-color); padding: 14px; }
+  .v2-hz-tabs .v2-hz.shown { display: flex; }
+  .v2-hz-tabs .v2-hz-head { display: none; }
+  .v2-phone .v2-x { opacity: 1; }
+  .v2-phone .v2-tile-acts { opacity: 1; top: 5px; right: 5px; bottom: auto; flex-direction: column; align-items: flex-end; }
+  .v2-phone .v2-tile-acts button { height: 22px; padding: 0 7px; font-size: 10.5px; }
+  .v2-phone .v2-tile-acts button.rm { width: 22px; padding: 0; font-size: 14px; border-radius: 50%; }
+  .v2-phone .v2-cover-tag { top: auto; bottom: 6px; left: 6px; }
+
+  /* ── stories ── */
+  .v2s { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; background: #000; }
+  .v2s.open { display: flex; }
+  .v2s-backdrop { position: absolute; inset: -40px; background: center / cover; filter: blur(40px) brightness(.4); transform: scale(1.1); }
+  .v2s-stage { position: relative; z-index: 1; height: min(92vh, 860px); aspect-ratio: 9 / 16; border-radius: 14px; overflow: hidden;
+    background: #111; box-shadow: 0 30px 80px rgba(0,0,0,.6); user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+  @media (max-width: 640px) {
+    .v2s-stage { height: 100%; width: 100%; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+    .v2s-nav { display: none !important; }
+  }
+  .v2s-media { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .v2s-media img, .v2s-media video { width: 100%; height: 100%; object-fit: cover; }
+  .v2s-bars { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 3; display: flex; gap: 4px; }
+  .v2s-bars i { flex: 1; height: 2.5px; border-radius: 2px; background: rgba(255,255,255,.35); overflow: hidden; }
+  .v2s-bars em { display: block; height: 100%; background: #fff; }
+  .v2s-head { position: absolute; top: 20px; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px 26px 12px; background: linear-gradient(to bottom, rgba(0,0,0,.45), transparent); color: #fff; }
+  .v2s-av { width: 34px; height: 34px; flex: none; border-radius: 50%; background: center / cover; border: 2px solid rgba(255,255,255,.9); }
+  .v2s-who { display: flex; flex-direction: column; min-width: 0; }
+  .v2s-who b { font-size: 14px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+  .v2s-who span { font-size: 11.5px; opacity: .8; font-weight: 600; }
+  .v2s-ic { width: 34px; height: 34px; flex: none; border: none; border-radius: 50%; background: transparent; color: #fff;
+    font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .v2s-ic:hover { background: rgba(255,255,255,.15); }
+  .v2s-taps { position: absolute; inset: 70px 0 90px; z-index: 2; cursor: pointer; }
+  .v2s-foot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 40px 16px 18px;
+    background: linear-gradient(to top, rgba(0,0,0,.6), transparent); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .v2s-caption { margin: 0; color: #fff; font-size: 16px; font-weight: 700; line-height: 1.45; text-align: center;
+    text-shadow: 0 1px 4px rgba(0,0,0,.45); max-width: 92%; }
+  .v2s-caption:empty { display: none; }
+  .v2s-open { height: 34px; padding: 0 16px; border: 1px solid rgba(255,255,255,.5); border-radius: 99px;
+    background: rgba(255,255,255,.12); color: #fff; font-family: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer;
+    backdrop-filter: blur(6px); }
+  .v2s-nav { position: relative; z-index: 1; width: 44px; height: 44px; margin: 0 18px; border: none; border-radius: 50%;
+    background: rgba(255,255,255,.18); color: #fff; font-size: 28px; line-height: 1; cursor: pointer; padding-bottom: 3px; }
+  .v2s-nav:hover:not(:disabled) { background: rgba(255,255,255,.3); }
+  .v2s-nav:disabled { opacity: 0; pointer-events: none; }
   `;
   document.head.appendChild(st);
 }
