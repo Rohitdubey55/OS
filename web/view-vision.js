@@ -9140,6 +9140,20 @@ function v2InjectCSS() {
   .v2s-btn { height: 38px; padding: 0 18px; border: none; border-radius: 11px; background: var(--primary); color: #fff; font: inherit; font-size: 13.5px; font-weight: 750; cursor: pointer; }
   .v2s-btn.ghost { background: #F3F4F6; color: #374151; }
   .v2s-btn:disabled { opacity: .6; }
+  @media (max-width: 640px) {
+    /* Full screen on a phone runs under the status bar / notch (the app uses
+       viewport-fit=cover), where taps go to the system. The picture stays
+       edge to edge; the bars, buttons and caption move into the safe area. */
+    .v2s-bars { top: calc(env(safe-area-inset-top, 0px) + 8px); }
+    .v2s-head { top: calc(env(safe-area-inset-top, 0px) + 16px); padding-top: 6px; }
+    .v2s-head::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: calc(env(safe-area-inset-top, 0px) + 16px);
+      background: rgba(0,0,0,.45); pointer-events: none; }
+    .v2s-ic { width: 40px; height: 40px; }
+    .v2s-taps { top: calc(env(safe-area-inset-top, 0px) + 84px); bottom: calc(env(safe-area-inset-bottom, 0px) + 100px); }
+    .v2s-foot { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); }
+    .v2s-edit { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px); }
+    .v2s-edit-card { max-height: 100%; }
+  }
   `;
   document.head.appendChild(st);
 }
