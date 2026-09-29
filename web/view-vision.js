@@ -7079,20 +7079,20 @@ function v2RowHTML(g) {
 /* ── Filters and view ─────────────────────────────────────────────────────
    One filter at a time, as before: All, a category, or a horizon. The horizon
    chips read the vision's horizon tag (set on its page), which is a timeframe,
-   not a deadline — separate from the 3M/1Y/3Y goals inside it. Grid or List is
-   remembered on this device. */
+   not a deadline — separate from the 3M/1Y/3Y goals inside it. Grid is the
+   default every time. */
 
 const V2_TAGS = (typeof VISION_HORIZONS !== 'undefined' && Array.isArray(VISION_HORIZONS))
   ? VISION_HORIZONS
   : [{ key: 'month', short: '1 Month' }, { key: '3month', short: '3 Months' }, { key: '3year', short: '3 Years' }, { key: '10year', short: '10 Years' }];
 
-function v2GetView() {
-  try { return localStorage.getItem('os.vision.view') || 'grid'; } catch (e) { return 'grid'; }
-}
+// Vision always opens in Grid; List lasts only until the page is reloaded.
+function v2GetView() { return v2.view === 'list' ? 'list' : 'grid'; }
 window.v2SetView = function (v) {
-  try { localStorage.setItem('os.vision.view', v); } catch (e) { }
+  v2.view = v === 'list' ? 'list' : 'grid';
   renderVision();
 };
+try { localStorage.removeItem('os.vision.view'); } catch (e) { }
 window.v2SetFilter = function (f) {
   v2.filter = f || 'all';
   renderVision();
