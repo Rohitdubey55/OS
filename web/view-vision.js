@@ -7021,6 +7021,7 @@ function v2CardHTML(g) {
     </div>
     <div class="v2-card-body">
       <h3>${v2Esc(g.title || 'Untitled')}</h3>
+      ${v2Goals3mHTML(g, 3)}
       <div class="v2-hz-mini">
         ${V2_HORIZONS.map(x => {
           const s = hz[x.key];
@@ -7036,6 +7037,19 @@ function v2CardHTML(g) {
       </div>
     </div>
   </article>`;
+}
+
+// The 3-month goals as small text, so the near term is readable from the list.
+function v2Goals3mHTML(g, max) {
+  const items = v2Horizons(g)['3m'] || [];
+  if (!items.length) return '';
+  const open = items.filter(i => !i.done), done = items.filter(i => i.done);
+  const list = [...open, ...done];
+  const shown = list.slice(0, max);
+  return `<span class="v2-3m" aria-label="3 month goals">
+    ${shown.map(i => `<span class="v2-3m-i ${i.done ? 'done' : ''}"><i>${i.done ? '✓' : '○'}</i>${v2Esc(i.text)}</span>`).join('')}
+    ${list.length > max ? `<span class="v2-3m-i more">+${list.length - max} more</span>` : ''}
+  </span>`;
 }
 
 // A phone row: thumbnail, title, horizons and progress on one line you can
@@ -7055,10 +7069,111 @@ function v2RowHTML(g) {
     <span class="v2-row-main">
       <b>${v2Esc(g.title || 'Untitled')}</b>
       <span>${hzLine || 'No horizon goals yet'}</span>
+      ${v2Goals3mHTML(g, 2)}
     </span>
     <span class="v2-row-prog"><i style="--p:${prog};--c:${col}"></i><em>${prog}%</em></span>
     ${v2Sel.on ? `<span class="v2-check ${picked ? 'on' : ''}">✓</span>` : ''}
   </button>`;
+}
+
+/* ── Filters and view ─────────────────────────────────────────────────────
+   One filter at a time, as before: All, a category, or a horizon. The horizon
+   chips read the vision's horizon tag (set on its page), which is a timeframe,
+   not a deadline — separate from the 3M/1Y/3Y goals inside it. Grid or List is
+   remembered on this device. */
+
+const V2_TAGS = (typeof VISION_HORIZONS !== 'undefined' && Array.isArray(VISION_HORIZONS))
+  ? VISION_HORIZONS
+  : [{ key: 'month', short: '1 Month' }, { key: '3month', short: '3 Months' }, { key: '3year', short: '3 Years' }, { key: '10year', short: '10 Years' }];
+
+function v2GetView() {
+  try { return localStorage.getItem('os.vision.view') || 'grid'; } catch (e) { return 'grid'; }
+}
+window.v2SetView = function (v) {
+  try { localStorage.setItem('os.vision.view', v); } catch (e) { }
+  renderVision();
+};
+window.v2SetFilter = function (f) {
+  v2.filter = f || 'all';
+  renderVision();
+};
+
+function v2Filtered(goals) {
+  const f = v2.filter || 'all';
+  if (f === 'all') return goals;
+  if (String(f).startsWith('hz:')) { const k = String(f).slice(3); return goals.filter(g => g.horizon === k); }
+  return goals.filter(g => (g.category || 'Other') === f);
+}
+
+function v2ToolbarHTML(withMedia, phone) {
+  const f = v2.filter || 'all';
+  const view = v2GetView();
+  const chip = (key, label, extra = '') =>
+    `<button class="v2-chip ${f === key ? 'on' : ''} ${extra}" onclick="v2SetFilter('${v2Js(key)}')">${v2Esc(label)}</button>`;
+  return `
+  <div class="v2-bar2">
+    <div class="v2-chips">
+      ${chip('all', 'All')}
+      ${v2Cats().map(c => chip(c, c)).join('')}
+      <span class="v2-chip-div" aria-hidden="true"></span>
+      ${V2_TAGS.map(h => chip('hz:' + h.key, h.short, 'hz')).join('')}
+    </div>
+    <div class="v2-bar2-acts">
+      <div class="v2-seg" role="group" aria-label="View">
+        <button class="${view === 'grid' ? 'on' : ''}" onclick="v2SetView('grid')" title="Grid" aria-label="Grid">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          ${phone ? '' : 'Grid'}</button>
+        <button class="${view === 'list' ? 'on' : ''}" onclick="v2SetView('list')" title="List" aria-label="List">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          ${phone ? '' : 'List'}</button>
+      </div>
+      <button class="v2-btn" onclick="startManifestationRitual()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="7,4 20,12 7,20"/></svg> Daily ritual</button>
+      <button class="v2-btn" onclick="routeTo('tdp')">10 Days Plan</button>
+    </div>
+  </div>`;
+}
+
+/* ── List view: one table on a desktop, rows on a phone ─────────────────── */
+
+function v2ListHTML(goals, phone) {
+  if (phone) return `<div class="v2-rows">${goals.map(v2RowHTML).join('')}</div>`;
+  const rows = goals.map(g => {
+    const hz = v2HorizonStats(g);
+    const prog = v2Progress(g).pct;
+    const col = v2CatColor(g.category);
+    const cover = v2CoverSync(g);
+    const tag = V2_TAGS.find(h => h.key === g.horizon);
+    const pc = typeof vzPlanCount === 'function' ? vzPlanCount(g) : null;
+    const picked = v2Sel.ids.has(String(g.id));
+    return `
+    <tr class="${picked ? 'picked' : ''}" data-id="${v2Esc(g.id)}"
+        onclick="${v2Sel.on ? `v2TogglePick('${v2Js(g.id)}')` : `v2Open('${v2Js(g.id)}')`}">
+      ${v2Sel.on ? `<td class="v2-td-pick"><span class="v2-check ${picked ? 'on' : ''}">✓</span></td>` : ''}
+      <td><div class="v2-td-name">
+        <span class="v2-td-th" style="${cover ? `background-image:url('${v2Esc(cover)}')` : `background:${col}`}"></span>
+        <span class="v2-td-title"><b>${v2Esc(g.title || 'Untitled')}</b>${v2Goals3mHTML(g, 2)}</span>
+      </div></td>
+      <td><span class="v2-td-cat" style="--c:${col}">${v2Esc(g.category || 'Other')}</span></td>
+      <td class="v2-td-muted">${tag ? v2Esc(tag.short) : '—'}</td>
+      ${V2_HORIZONS.map(x => `<td class="v2-td-num">${hz[x.key].total ? `<b>${hz[x.key].done}</b>/${hz[x.key].total}` : '<span>—</span>'}</td>`).join('')}
+      <td class="v2-td-prog"><div class="v2-bar"><i style="width:${prog}%;background:${col}"></i></div><span>${prog}%</span></td>
+      <td class="v2-td-num">${v2LinkedHabits(g).length || '<span>—</span>'}</td>
+      <td class="v2-td-num">${pc ? `<b>${pc.done}</b>/${pc.total}` : '<span>—</span>'}</td>
+    </tr>`;
+  }).join('');
+  return `
+  <div class="v2-table-wrap">
+    <table class="v2-table">
+      <thead><tr>
+        ${v2Sel.on ? '<th></th>' : ''}
+        <th>Vision</th><th>Category</th><th>Horizon</th>
+        ${V2_HORIZONS.map(x => `<th class="v2-td-num">${x.short}</th>`).join('')}
+        <th>Progress</th><th class="v2-td-num">Habits</th><th class="v2-td-num">Plan</th>
+      </tr></thead>
+      <tbody>${rows || `<tr><td colspan="10" class="v2-td-empty">No visions match this filter.</td></tr>`}</tbody>
+    </table>
+  </div>`;
 }
 
 function v2HomeHTML() {
@@ -7070,10 +7185,20 @@ function v2HomeHTML() {
   const hzTotal = active.reduce((n, g) => n + Object.values(v2HorizonStats(g)).reduce((a, s) => a + s.total, 0), 0);
   const withMedia = active.filter(g => v2MediaOf(g).length);
   const phone = v2Phone();
+  const view = v2GetView();
+  const f = v2.filter || 'all';
+  const shown = v2Filtered(active);
+  const shownDone = v2Filtered(achieved);
 
-  const sections = cats.map(c => {
-    const goals = active.filter(g => (g.category || 'Other') === c);
+  // Grid: category sections. A category chip narrows to that one section; a
+  // horizon chip keeps the sections but only what matches, and hides empties.
+  const grid = (goalsIn, isDone) => cats.map(c => {
+    const goals = goalsIn.filter(g => (g.category || 'Other') === c);
+    if (!goals.length && (f !== 'all' || isDone)) return '';
     const col = v2CatColor(c);
+    const body = phone
+      ? `<div class="v2-grid v2-grid-phone">${goals.map(v2CardHTML).join('')}${!goals.length ? `<button class="v2-card v2-card-empty" onclick="v2NewVision('${v2Js(c)}')"><span>+</span><b>Add to ${v2Esc(c)}</b></button>` : ''}</div>`
+      : `<div class="v2-grid">${goals.map(v2CardHTML).join('')}${!goals.length ? `<button class="v2-card v2-card-empty" onclick="v2NewVision('${v2Js(c)}')"><span>+</span><b>Add a vision to ${v2Esc(c)}</b></button>` : ''}</div>`;
     return `
     <section class="v2-cat">
       <header>
@@ -7081,23 +7206,22 @@ function v2HomeHTML() {
         <h2>${v2Esc(c)}</h2>
         <span class="v2-cat-meta">${goals.length ? `${goals.length} vision${goals.length === 1 ? '' : 's'} · ${v2Avg(goals)}% avg` : 'Nothing here yet'}</span>
         <span style="flex:1"></span>
-        <button class="v2-link" onclick="v2NewVision('${v2Js(c)}')">+ Add</button>
+        ${isDone ? '' : `<button class="v2-link" onclick="v2NewVision('${v2Js(c)}')">+ Add</button>`}
       </header>
-      ${phone
-        ? `<div class="v2-rows">${goals.map(v2RowHTML).join('') || `<button class="v2-row v2-row-empty" onclick="v2NewVision('${v2Js(c)}')">+ Add a vision to ${v2Esc(c)}</button>`}</div>`
-        : `<div class="v2-grid">
-            ${goals.map(v2CardHTML).join('')}
-            ${!goals.length ? `<button class="v2-card v2-card-empty" onclick="v2NewVision('${v2Js(c)}')">
-                <span>+</span><b>Add a vision to ${v2Esc(c)}</b></button>` : ''}
-          </div>`}
+      ${body}
     </section>`;
   }).join('');
 
-  const done = achieved.length ? `
+  const content = view === 'list'
+    ? v2ListHTML(shown, phone)
+    : (grid(shown, false) || `<p class="v2-none">No visions match this filter.</p>`);
+
+  const done = shownDone.length ? `
     <details class="v2-cat v2-achieved">
-      <summary><h2>Achieved</h2><span class="v2-cat-meta">${achieved.length}</span></summary>
-      ${phone ? `<div class="v2-rows">${achieved.map(v2RowHTML).join('')}</div>`
-              : `<div class="v2-grid">${achieved.map(v2CardHTML).join('')}</div>`}
+      <summary><h2>Achieved</h2><span class="v2-cat-meta">${shownDone.length}</span></summary>
+      ${view === 'list' ? v2ListHTML(shownDone, phone)
+        : phone ? `<div class="v2-grid v2-grid-phone">${shownDone.map(v2CardHTML).join('')}</div>`
+        : `<div class="v2-grid">${shownDone.map(v2CardHTML).join('')}</div>`}
     </details>` : '';
 
   return `
@@ -7110,7 +7234,6 @@ function v2HomeHTML() {
       </div>
       <div class="v2-acts">
         <button class="v2-btn" onclick="v2ToggleSelect()">${v2Sel.on ? 'Cancel' : 'Select'}</button>
-        ${phone ? '' : `<button class="v2-btn" onclick="routeTo('tdp')">10 Days Plan</button>`}
         ${withMedia.length ? `<button class="v2-btn story" onclick="v2StoryOpen()">▶ Story</button>` : ''}
         ${phone ? `<button class="v2-btn primary" onclick="v2NewVision()">+ New</button>` : ''}
       </div>
@@ -7128,12 +7251,14 @@ function v2HomeHTML() {
       }).join('')}
     </div>` : ''}
 
+    ${v2ToolbarHTML(withMedia, phone)}
+
     <div class="v2-bulk ${v2Sel.on && v2Sel.ids.size ? 'show' : ''}" id="v2Bulk">
       <span id="v2BulkN">${v2Sel.ids.size} selected</span>
       <button class="v2-btn danger" onclick="v2DeletePicked()">Delete</button>
     </div>
 
-    ${sections}
+    ${content}
     ${done}
   </div>`;
 }
@@ -7149,7 +7274,7 @@ window.v2ToggleSelect = function () {
 window.v2TogglePick = function (id) {
   const k = String(id);
   if (v2Sel.ids.has(k)) v2Sel.ids.delete(k); else v2Sel.ids.add(k);
-  const card = document.querySelector(`.v2-card[data-id="${CSS.escape(k)}"], .v2-row[data-id="${CSS.escape(k)}"]`);
+  const card = document.querySelector(`.v2-card[data-id="${CSS.escape(k)}"], .v2-row[data-id="${CSS.escape(k)}"], .v2-table tr[data-id="${CSS.escape(k)}"]`);
   if (card) {
     card.classList.toggle('picked', v2Sel.ids.has(k));
     card.querySelector('.v2-check')?.classList.toggle('on', v2Sel.ids.has(k));
@@ -7723,11 +7848,21 @@ function v2HeadHTML(g) {
   const cats = v2Cats();
   return `
   <div class="v2-head">
+    <div class="v2-pills">
     <span class="v2-cat-wrap" style="--c:${v2CatColor(g.category)}">
       <select class="v2-cat-select" onchange="v2SetCategory(this.value)" aria-label="Category">
         ${cats.map(c => `<option ${c === g.category ? 'selected' : ''}>${v2Esc(c)}</option>`).join('')}
       </select>
     </span>
+    <span class="v2-cat-wrap v2-hz-wrap">
+      <select class="v2-cat-select v2-hz-select" onchange="v2SetHorizonTag(this.value)" aria-label="Horizon" title="Horizon (used by the filter chips)">
+        <option value="" ${!g.horizon ? 'selected' : ''}>No horizon</option>
+        ${V2_TAGS.map(h => `<option value="${v2Esc(h.key)}" ${g.horizon === h.key ? 'selected' : ''}>${v2Esc(h.short)}</option>`).join('')}
+      </select>
+    </span>
+    <span style="flex:1"></span>
+    <button class="v2-btn primary v2-save" onclick="v2SaveAll()">Save</button>
+    </div>
     <input class="v2-title" value="${v2Esc(g.title || '')}" maxlength="120"
            onkeydown="if(event.key==='Enter'){this.blur();}" onblur="v2SetTitle(this)" aria-label="Vision name">
     ${g.status === 'achieved' ? '<span class="v2-achieved-tag">Achieved</span>' : ''}
@@ -7748,6 +7883,11 @@ window.v2SetCategory = async function (c) {
   const wrap = document.querySelector('.v2-cat-wrap');
   if (wrap) wrap.style.setProperty('--c', v2CatColor(c));
   vzeRepaintPlan();                          // same-category plan items change
+};
+window.v2SetHorizonTag = async function (k) {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  await v2Save(g, { horizon: k || null });
 };
 window.v2ToggleAchieved = async function () {
   const g = v2Goal(v2.page);
@@ -7770,8 +7910,37 @@ function v2ActionsHTML(g) {
     <button class="v2-btn" onclick="startManifestationRitual('${v2Js(g.id)}')">Ritual</button>
     <span style="flex:1"></span>
     <button class="v2-btn danger" onclick="v2Delete()">Delete vision</button>
+    <button class="v2-btn primary" onclick="v2SaveAll()">Save &amp; close</button>
   </div>`;
 }
+
+/* Edits already save as you go (a goal on Enter, the name on leaving the
+   field). Save commits anything still being typed — the name, a goal still in
+   an add box, a note left open — confirms it, and goes back to the list. */
+window.v2SaveAll = async function () {
+  const g = v2Goal(v2.page);
+  if (!g) return;
+  try {
+    const ae = document.activeElement;
+    if (ae && ae !== document.body && typeof ae.blur === 'function') ae.blur();
+    const title = document.querySelector('.v2-title');
+    if (title) { const v = String(title.value || '').trim(); if (v && v !== g.title) await v2Save(g, { title: v }); }
+    if (v2.editingNote && document.getElementById('v2NoteInput')) await v2NoteSave();
+    const pending = [...document.querySelectorAll('.v2-hz[data-hz] .v2-hz-add input')]
+      .map(i => ({ key: i.closest('.v2-hz').dataset.hz, text: String(i.value || '').trim(), el: i }))
+      .filter(p => p.text);
+    if (pending.length) {
+      pending.forEach(p => { p.el.value = ''; });
+      await v2HzMutate(h => pending.forEach(p => h[p.key].push({ id: v2Uid('hz'), text: p.text, done: false })));
+    }
+    await new Promise(r => setTimeout(r, 60));   // let any blur-save land
+    if (typeof showToast === 'function') showToast('Vision saved');
+    v2Home();
+  } catch (e) {
+    console.error('v2SaveAll', e);
+    if (typeof showToast === 'function') showToast('Could not save — check your connection');
+  }
+};
 
 function v2PageHTML(g) {
   vzeId = String(g.id);                       // the plan & affirmation blocks read this
@@ -8505,6 +8674,70 @@ function v2InjectCSS() {
     background: rgba(255,255,255,.18); color: #fff; font-size: 28px; line-height: 1; cursor: pointer; padding-bottom: 3px; }
   .v2s-nav:hover:not(:disabled) { background: rgba(255,255,255,.3); }
   .v2s-nav:disabled { opacity: 0; pointer-events: none; }
+
+  /* toolbar: filter chips + grid/list + shortcuts */
+  .v2-bar2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 18px; }
+  .v2-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+  .v2-chip { height: 32px; padding: 0 13px; border: 1px solid var(--border-color); border-radius: 999px; background: var(--surface-1);
+    color: var(--text-2); font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
+  .v2-chip:hover { background: var(--surface-2); color: var(--text-1); }
+  .v2-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .v2-chip.hz:not(.on) { border-style: dashed; }
+  .v2-chip-div { width: 1px; height: 20px; background: var(--border-color); margin: 0 4px; }
+  .v2-bar2-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .v2-seg { display: inline-flex; padding: 3px; border: 1px solid var(--border-color); border-radius: 11px; background: var(--surface-1); }
+  .v2-seg button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: none; border-radius: 8px;
+    background: none; color: var(--text-3); font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .v2-seg button.on { background: var(--surface-3, var(--surface-2)); color: var(--text-1); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .v2-none { color: var(--text-3); font-size: 14px; padding: 30px 0; text-align: center; }
+  .v2-pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; align-self: stretch; }
+  .v2-hz-wrap::after { border-color: var(--text-2); }
+  .v2-hz-wrap .v2-hz-select { background: var(--surface-1) !important; color: var(--text-2) !important;
+    border: 1px dashed var(--border-color) !important; }
+  /* list view (desktop table) */
+  .v2-table-wrap { overflow-x: auto; border: 1px solid var(--border-color); border-radius: var(--r); background: var(--surface-1); margin-bottom: 20px; }
+  .v2-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .v2-table th { text-align: left; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3);
+    padding: 11px 14px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+  .v2-table td { padding: 10px 14px; border-bottom: 1px solid var(--border-color); vertical-align: middle; white-space: nowrap; }
+  .v2-table tbody tr:last-child td { border-bottom: none; }
+  .v2-table tbody tr { cursor: pointer; transition: background .12s; }
+  .v2-table tbody tr:hover { background: var(--surface-2); }
+  .v2-table tr.picked { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+  .v2-td-name { display: flex; align-items: center; gap: 11px; min-width: 220px; }
+  .v2-td-name b { font-weight: 700; white-space: normal; }
+  .v2-td-th { flex: none; width: 36px; height: 36px; border-radius: 9px; background-size: cover; background-position: center; }
+  .v2-td-cat { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-2); }
+  .v2-td-cat::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .v2-td-muted { color: var(--text-3); }
+  .v2-td-num { text-align: center !important; color: var(--text-2); }
+  .v2-td-num span, .v2-td-num > span { color: var(--text-3); }
+  .v2-td-prog { min-width: 130px; }
+  .v2-td-prog .v2-bar { display: inline-block; width: 80px; vertical-align: middle; margin-right: 8px; }
+  .v2-td-prog span { font-weight: 700; color: var(--text-2); }
+  .v2-td-pick { width: 34px; }
+  .v2-td-pick .v2-check { position: static; border-color: var(--border-color); }
+  .v2-td-empty { text-align: center; color: var(--text-3); padding: 30px !important; }
+  /* phone grid: two across */
+  .v2-grid.v2-grid-phone { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px; }
+  @media (max-width: 899px) {
+    .v2-bar2 { gap: 10px; }
+    .v2-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; flex-basis: 100%; }
+    .v2-chips::-webkit-scrollbar { display: none; }
+    .v2-bar2-acts { width: 100%; }
+    .v2-bar2-acts .v2-btn { flex: 1; height: 36px; padding: 0 10px; }
+  }
+  .v2-3m { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 10px; }
+  .v2 .v2-3m-i { display: block; font-size: 12px; line-height: 1.35; color: var(--text-2); font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .v2-3m-i i { font-style: normal; color: var(--text-3); margin-right: 6px; font-size: 11px; }
+  .v2 .v2-3m-i.done { color: var(--text-3); text-decoration: line-through; }
+  .v2-3m-i.done i { color: var(--success, #10B981); }
+  .v2 .v2-3m-i.more { color: var(--text-3); font-weight: 700; font-size: 11.5px; }
+  .v2-row-main .v2-3m { margin: 3px 0 0; }
+  .v2-td-title { display: flex; flex-direction: column; min-width: 0; }
+  .v2-td-title .v2-3m { margin: 3px 0 0; }
+  .v2-save { height: 32px; padding: 0 16px; }
   `;
   document.head.appendChild(st);
 }
