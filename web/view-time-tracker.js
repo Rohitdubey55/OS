@@ -134,7 +134,7 @@ function ttTaskCategories() {
 }
 
 function ttTaskIsOpen(t) {
-    return t && t.status !== 'completed';
+    return t && t.status !== 'completed' && t.status !== 'cancelled';
 }
 
 // Open tasks in this card's category that are due today or overdue. Undated tasks
@@ -143,7 +143,12 @@ function ttTasksFor(cat) {
     const linked = cat.task_category;
     if (!linked) return { tasks: [], undated: 0 };
     const today = ttTodayStr();
-    const all = (state.data.tasks || []).filter(t => ttTaskIsOpen(t) && String(t.category || '') === String(linked));
+    // A 10-days-plan item IS a task now, and gets its own section below — so it
+    // must not also appear up here, or every plan item would show twice.
+    const planIds = typeof window.tdpActivePlanTaskIds === 'function'
+        ? new Set(window.tdpActivePlanTaskIds().map(String)) : new Set();
+    const all = (state.data.tasks || []).filter(t =>
+        ttTaskIsOpen(t) && String(t.category || '') === String(linked) && !planIds.has(String(t.id)));
     const dated = all.filter(t => t.due_date && String(t.due_date).slice(0, 10) <= today);
     const undated = all.filter(t => !t.due_date);
     const show = ttShowUndated[cat.slot_index] ? dated.concat(undated) : dated;
@@ -222,6 +227,10 @@ function ttTdpFor(cat) {
     try { return window.tdpItemsForCategory(cat.task_category) || []; }
     catch (e) { return []; }
 }
+
+// The plan's tasks are tracked through the same row as any other task, so the
+// clock can use the ordinary task handle rather than a separate one.
+function ttTdpIsTask() { return true; }
 
 function ttJsStr(v) {
     return String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/'/g, "\\'");

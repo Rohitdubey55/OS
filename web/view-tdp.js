@@ -22,6 +22,10 @@ const TDP_ICON = {
     close: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>',
     edit: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
     archive: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><line x1="10" y1="13" x2="14" y2="13"/></svg>',
+    forward: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>',
+    more: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>',
+    comment: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.8-.8L3 21l1.9-5a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-8.4 8.4 8.4 0 0 1 8.6 8.2z"/></svg>',
+    star: '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2.5 15,9 22,9.8 17,14.5 18.3,21.5 12,18.2 5.7,21.5 7,14.5 2,9.8 9,9"/></svg>',
     left: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>',
     right: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
     today: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"/></svg>',
@@ -131,21 +135,55 @@ function tdpFindPlan(id) {
 function tdpCats(plan) {
     if (!plan || !plan.categories_json) return {};
     try {
-        return typeof plan.categories_json === 'string'
+        const parsed = typeof plan.categories_json === 'string'
             ? JSON.parse(plan.categories_json) : (plan.categories_json || {});
+        const out = {};
+        Object.keys(parsed || {}).forEach(k => { if (k !== '__converted') out[k] = parsed[k]; });
+        return out;
     } catch (e) { return {}; }
 }
 
-// The categories you curate in the Tasks category manager, plus any this plan
-// already carries — so a plan written under the old fixed names keeps showing
-// its items after the switch.
-//
-// Deliberately the CURATED list, not window.appCategories(): that one also
-// includes any category still filed on some old task or habit, which is right
-// for a filter or a picker (hiding it would strand those items) and wrong here.
-// A planning page asks you to pick focus areas for ten days; it shouldn't hand
-// you a card for a category you retired months ago because one task still
-// mentions it.
+/* ── Items are tasks ──────────────────────────────────────────────────────
+   A plan item used to be an object inside categories_json, which meant the
+   Tasks app couldn't see it, it had no deadline, and comments or a vision link
+   would each have needed inventing from scratch. An item is now an ordinary
+   task carrying tdp_plan_id, due on the day its plan ends. One record, so
+   ticking it in the plan, in Tasks or on a stopwatch card is the same act. */
+
+function tdpTasks() {
+    return Array.isArray(state.data.tasks) ? state.data.tasks : [];
+}
+
+function tdpTasksOf(plan, category) {
+    if (!plan) return [];
+    return tdpTasks()
+        .filter(t => String(t.tdp_plan_id || '') === String(plan.id)
+                  && (category == null || String(t.category || '') === String(category)))
+        .sort((a, b) => {
+            const d = (tdpTaskDone(a) ? 1 : 0) - (tdpTaskDone(b) ? 1 : 0);
+            return d || String(a.created_at || '').localeCompare(String(b.created_at || ''));
+        });
+}
+
+function tdpTaskDone(t) {
+    return !!t && t.status === 'completed';
+}
+
+function tdpFindTask(id) {
+    return tdpTasks().find(t => String(t.id) === String(id)) || null;
+}
+
+function tdpComments(t) {
+    if (!t || !t.comments_json) return [];
+    try {
+        const parsed = typeof t.comments_json === 'string' ? JSON.parse(t.comments_json) : t.comments_json;
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+}
+
+// Every category this plan touches: the curated list plus any that its own
+// tasks are filed under, so an item can't go missing because you retired its
+// category mid-block.
 function tdpCategoriesFor(plan) {
     let list = [];
     if (typeof window.appSavedCategories === 'function') {
@@ -154,8 +192,10 @@ function tdpCategoriesFor(plan) {
         try { list = window.appCategories().slice(); } catch (e) { list = []; }
     }
     if (!list.length) list = TDP_LEGACY_CATEGORIES.slice();
-    // A plan's own categories always show, even ones no longer on the list —
-    // otherwise items already typed into it would vanish.
+    tdpTasksOf(plan).forEach(t => {
+        const c = t.category || '';
+        if (c && !list.includes(c)) list.push(c);
+    });
     Object.keys(tdpCats(plan)).forEach(k => {
         if (!list.includes(k) && (tdpCats(plan)[k] || []).length) list.push(k);
     });
@@ -163,12 +203,11 @@ function tdpCategoriesFor(plan) {
 }
 
 function tdpProgress(plan) {
-    const cats = tdpCats(plan);
-    let total = 0, done = 0;
-    Object.values(cats).forEach(items => (items || []).forEach(i => {
-        total++; if (i && i.completed) done++;
-    }));
-    return { total, done, pct: total ? Math.round(done / total * 100) : 0 };
+    // A carried-over stub is a record of where something went, not an item you
+    // failed to do — counting it would punish you twice for one move.
+    const items = tdpTasksOf(plan).filter(t => t.status !== 'cancelled');
+    const done = items.filter(tdpTaskDone).length;
+    return { total: items.length, done, pct: items.length ? Math.round(done / items.length * 100) : 0 };
 }
 
 function tdpDayInfo(plan) {
@@ -182,71 +221,98 @@ function tdpDayInfo(plan) {
     };
 }
 
-// A stable handle for one item, so time logged against it survives a reorder.
-// Items created from here carry their own id; older ones fall back to their slot.
-function tdpItemId(plan, cat, idx) {
-    const item = (tdpCats(plan)[cat] || [])[idx];
-    if (item && item.id) return String(item.id);
-    return `${plan.id}::${cat}::${idx}`;
-}
+/* ── Conversion ───────────────────────────────────────────────────────────
+   Plans written before this change still hold their items in categories_json.
+   Convert one item at a time, clearing each from the blob only once its task
+   exists, so a failure halfway leaves the rest intact to try again rather than
+   dropping them on the floor. */
 
-// The inverse: find an item anywhere in the active plan from that handle.
-function tdpFindItem(itemId) {
-    const plan = tdpActivePlan();
-    if (!plan || !itemId) return null;
+async function tdpConvertPlan(plan) {
     const cats = tdpCats(plan);
-    for (const cat of Object.keys(cats)) {
-        const items = cats[cat] || [];
-        for (let i = 0; i < items.length; i++) {
-            if (tdpItemId(plan, cat, i) === String(itemId)) {
-                return { plan, cat, idx: i, item: items[i] };
+    const names = Object.keys(cats);
+    if (!names.length) return false;
+
+    let moved = 0;
+    for (const cat of names) {
+        const items = (cats[cat] || []).slice();
+        for (const item of items) {
+            if (!item || !String(item.text || '').trim()) continue;
+            const payload = {
+                title: String(item.text).trim(),
+                status: item.completed ? 'completed' : 'pending',
+                priority: 'P2',
+                category: cat,
+                due_date: plan.end_date,
+                duration: Number(item.minutes) || null,
+                tdp_plan_id: String(plan.id),
+                subtasks: '[]',
+                created_at: new Date().toISOString()
+            };
+            if (item.completed) payload.completed_at = new Date().toISOString();
+            try {
+                const res = await apiPost('tasks', payload);
+                const id = (res && (res.id || (res.data && res.data.id))) || ('tk-' + Date.now() + moved);
+                if (!Array.isArray(state.data.tasks)) state.data.tasks = [];
+                state.data.tasks.push({ id, ...payload });
+            } catch (e) {
+                console.error('tdpConvertPlan: could not move an item, leaving it in place', e);
+                continue;                       // stays in the blob for next time
             }
+            // Only now is it safe to drop it from the old home.
+            cats[cat] = (cats[cat] || []).filter(x => x !== item);
+            moved++;
         }
     }
-    return null;
+
+    const leftovers = {};
+    Object.keys(cats).forEach(k => { if ((cats[k] || []).length) leftovers[k] = cats[k]; });
+    if (!Object.keys(leftovers).length) leftovers.__converted = true;
+    plan.categories_json = JSON.stringify(leftovers);
+    await tdpSavePlan(plan);
+    return moved > 0;
 }
 
-// Open items in one category of the active plan, for the Time Spent On cards.
-// Completed ones stay on, at the bottom, so ticking one doesn't yank the row out
-// from under the cursor mid-session.
+// Items in this plan's category, for the Time Spent On cards.
 window.tdpItemsForCategory = function (category) {
     const plan = tdpActivePlan();
     if (!plan || !category) return [];
-    const items = (tdpCats(plan)[category] || []).map((item, idx) => ({
-        id: tdpItemId(plan, category, idx),
-        text: item.text || '',
-        completed: !!item.completed,
-        minutes: Number(item.minutes) || 0
+    // Skip the carried-over stubs: they're a note about where something went,
+    // not work you can start a clock on.
+    return tdpTasksOf(plan, category).filter(t => t.status !== 'cancelled').map(t => ({
+        id: String(t.id),
+        text: t.title || '',
+        completed: tdpTaskDone(t),
+        minutes: Number(t.duration) || 0
     }));
-    return items.sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0));
 };
 
-// Planned minutes for a TDP item, set from a stopwatch card — the TDP page
-// itself stays a plain checklist, so this rides along in the same blob.
+// The ids a stopwatch card should NOT also list under plain Tasks.
+window.tdpActivePlanTaskIds = function () {
+    const plan = tdpActivePlan();
+    if (!plan) return [];
+    return tdpTasksOf(plan).filter(t => t.status !== 'cancelled').map(t => String(t.id));
+};
+
 window.tdpSetItemMinutes = async function (itemId, minutes) {
-    const found = tdpFindItem(itemId);
-    if (!found) return false;
-    const cats = tdpCats(found.plan);
+    const t = tdpFindTask(itemId);
+    if (!t) return false;
     const mins = Math.max(0, Math.min(1440, parseInt(minutes, 10) || 0));
-    if (mins) cats[found.cat][found.idx].minutes = mins;
-    else delete cats[found.cat][found.idx].minutes;
-    await tdpSavePlan(found.plan, cats);
+    t.duration = mins || null;
+    await tdpSaveTask(t, { duration: t.duration });
     return true;
 };
 
-// Add an item to the active plan from elsewhere in the app.
+window.tdpToggleItemById = async function (itemId) {
+    const t = tdpFindTask(itemId);
+    if (!t) return false;
+    await tdpSetTaskDone(t, !tdpTaskDone(t));
+    return true;
+};
+
 window.tdpAddItemToCategory = async function (category, text) {
     const plan = tdpActivePlan();
     if (!plan || !category || !String(text || '').trim()) return null;
-    const cats = tdpCats(plan);
-    if (!Array.isArray(cats[category])) cats[category] = [];
-    const item = {
-        id: 'tdpi-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        text: String(text).trim(), completed: false
-    };
-    cats[category].push(item);
-    await tdpSavePlan(plan, cats);
-    return item.id;
+    return await tdpCreateItem(plan, category, text);
 };
 
 window.tdpActivePlanSummary = function () {
@@ -261,8 +327,9 @@ window.tdpActivePlanSummary = function () {
    optimistic repaint and the save can't drift apart.
 ═══════════════════════════════════════════════════════ */
 
-async function tdpSavePlan(plan, cats) {
-    if (cats) plan.categories_json = JSON.stringify(cats);
+// The whole row goes every time — a plan is four fields and a blob, and
+// guessing which ones changed is how the blob gets clobbered.
+async function tdpSavePlan(plan) {
     try {
         await apiPost('vision_tdp', plan);
     } catch (e) {
@@ -271,24 +338,56 @@ async function tdpSavePlan(plan, cats) {
     }
 }
 
-window.tdpToggleItem = async function (planId, cat, idx, silent) {
-    const plan = tdpFindPlan(planId);
-    if (!plan) return;
-    const cats = tdpCats(plan);
-    if (!cats[cat] || !cats[cat][idx]) return;
-    cats[cat][idx].completed = !cats[cat][idx].completed;
-    await tdpSavePlan(plan, cats);
-    if (!silent) tdpRepaint();
-};
+async function tdpSaveTask(task, fields) {
+    try {
+        await apiPost({ action: 'update', sheet: 'tasks', id: task.id, payload: fields || task });
+    } catch (e) {
+        console.error('tdpSaveTask failed:', e);
+        if (typeof showToast === 'function') showToast('Could not save — check your connection');
+    }
+}
 
-// Ticking a TDP item from a stopwatch card, by the handle that card holds.
-window.tdpToggleItemById = async function (itemId) {
-    const found = tdpFindItem(itemId);
-    if (!found) return false;
-    const cats = tdpCats(found.plan);
-    cats[found.cat][found.idx].completed = !cats[found.cat][found.idx].completed;
-    await tdpSavePlan(found.plan, cats);
-    return true;
+// One new plan item = one new task, due the day the plan ends.
+async function tdpCreateItem(plan, category, text) {
+    const payload = {
+        title: String(text).trim(),
+        status: 'pending',
+        priority: 'P2',
+        category,
+        due_date: plan.end_date,
+        tdp_plan_id: String(plan.id),
+        subtasks: '[]',
+        created_at: new Date().toISOString()
+    };
+    let id;
+    try {
+        const res = await apiPost('tasks', payload);
+        id = (res && (res.id || (res.data && res.data.id))) || ('tk-' + Date.now());
+    } catch (e) {
+        console.error('tdpCreateItem failed:', e);
+        if (typeof showToast === 'function') showToast('Could not add that');
+        return null;
+    }
+    if (!Array.isArray(state.data.tasks)) state.data.tasks = [];
+    state.data.tasks.push({ id, ...payload });
+    return id;
+}
+
+async function tdpSetTaskDone(task, done) {
+    task.status = done ? 'completed' : 'pending';
+    task.completed_at = done ? new Date().toISOString() : null;
+    await tdpSaveTask(task, { status: task.status, completed_at: task.completed_at });
+    // A goal this item feeds gets its plan contribution recounted.
+    if (task.vision_id && typeof window.tdpRecountVision === 'function') {
+        window.tdpRecountVision(task.vision_id);
+    }
+}
+
+window.tdpToggleItem = async function (taskId) {
+    const t = tdpFindTask(taskId);
+    if (!t) return;
+    await tdpSetTaskDone(t, !tdpTaskDone(t));
+    tdpRepaint();
 };
 
 window.tdpAddItem = async function (planId, cat, inputEl) {
@@ -296,25 +395,144 @@ window.tdpAddItem = async function (planId, cat, inputEl) {
     if (!text) return;
     const plan = tdpFindPlan(planId);
     if (!plan) return;
-    const cats = tdpCats(plan);
-    if (!Array.isArray(cats[cat])) cats[cat] = [];
-    cats[cat].push({
-        id: 'tdpi-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        text, completed: false
-    });
     if (inputEl) inputEl.value = '';
-    await tdpSavePlan(plan, cats);
+    await tdpCreateItem(plan, cat, text);
     tdpRepaint(cat);
 };
 
-window.tdpDeleteItem = async function (planId, cat, idx) {
+// Deleting a plan item deletes the task — it was only ever the one record.
+window.tdpDeleteItem = async function (taskId) {
+    const t = tdpFindTask(taskId);
+    if (!t) return;
+    if (!confirm(`Delete "${t.title}"?\n\nIt's a task, so this removes it from Tasks too.`)) return;
+    state.data.tasks = tdpTasks().filter(x => String(x.id) !== String(taskId));
+    tdpCloseSheet();
+    tdpRepaint();
+    try { await apiPost({ action: 'delete', sheet: 'tasks', id: taskId }); }
+    catch (e) { console.error('tdpDeleteItem failed:', e); }
+};
+
+/* ── Carry over ───────────────────────────────────────────────────────────
+   An unfinished item moves to the next plan and takes that plan's end date as
+   its new deadline. The block it left keeps a greyed line saying where it went,
+   so a plan's history still shows what you set out to do, not just what
+   survived. That line is a real task too — cancelled, marked with where it
+   landed — which is why the score counts only items still in play. */
+
+function tdpNextPlanFor(plan) {
+    const { next } = tdpNeighbours(plan);
+    return next || null;
+}
+
+window.tdpCarryItem = async function (taskId) {
+    const t = tdpFindTask(taskId);
+    if (!t) return;
+    const from = tdpFindPlan(t.tdp_plan_id);
+    const to = tdpNextPlanFor(from);
+    if (!to) {
+        if (typeof showToast === 'function') showToast('No later plan to move it to — make one first');
+        return;
+    }
+
+    // The stub left behind: same title, cancelled, pointing forward.
+    const stub = {
+        title: t.title,
+        status: 'cancelled',
+        priority: t.priority || 'P2',
+        category: t.category || '',
+        due_date: from ? from.end_date : t.due_date,
+        tdp_plan_id: String(from ? from.id : t.tdp_plan_id),
+        tdp_carried_from: 'to:' + String(to.id),
+        subtasks: '[]',
+        created_at: new Date().toISOString()
+    };
+
+    t.tdp_plan_id = String(to.id);
+    t.tdp_carried_from = 'from:' + String(from ? from.id : '');
+    t.due_date = to.end_date;
+
+    await tdpSaveTask(t, {
+        tdp_plan_id: t.tdp_plan_id, tdp_carried_from: t.tdp_carried_from, due_date: t.due_date
+    });
+    try {
+        const res = await apiPost('tasks', stub);
+        const id = (res && (res.id || (res.data && res.data.id))) || ('tk-' + Date.now());
+        state.data.tasks.push({ id, ...stub });
+    } catch (e) { console.error('tdpCarryItem: stub failed', e); }
+
+    tdpCloseSheet();
+    tdpRepaint();
+    if (typeof showToast === 'function') showToast(`Moved to the plan starting ${tdpNiceDate(to.start_date)}`);
+};
+
+/* ── Comments ── a running log, not a description. Ten days is long enough
+   that "day 3: waiting on the vendor" is worth keeping. */
+
+window.tdpAddComment = async function (taskId, inputEl) {
+    const text = (inputEl && inputEl.value || '').trim();
+    if (!text) return;
+    const t = tdpFindTask(taskId);
+    if (!t) return;
+    const list = tdpComments(t);
+    list.push({ at: new Date().toISOString(), text });
+    t.comments_json = JSON.stringify(list);
+    if (inputEl) inputEl.value = '';
+    await tdpSaveTask(t, { comments_json: t.comments_json });
+    tdpPaintDetail(taskId);
+    tdpRepaint();
+};
+
+window.tdpDeleteComment = async function (taskId, idx) {
+    const t = tdpFindTask(taskId);
+    if (!t) return;
+    const list = tdpComments(t);
+    list.splice(idx, 1);
+    t.comments_json = JSON.stringify(list);
+    await tdpSaveTask(t, { comments_json: t.comments_json });
+    tdpPaintDetail(taskId);
+    tdpRepaint();
+};
+
+/* ── Vision link ── tasks already carry vision_id, so an item can point at a
+   goal without a new column. Deliberately a read-out, not a writer: habits
+   already drive vision progress, and two systems writing one number is how a
+   number stops meaning anything. The goal shows how much of it this block
+   carried; it doesn't overwrite the goal's own figure. */
+
+window.tdpSetVision = async function (taskId, visionId) {
+    const t = tdpFindTask(taskId);
+    if (!t) return;
+    const was = t.vision_id;
+    t.vision_id = visionId || null;
+    await tdpSaveTask(t, { vision_id: t.vision_id });
+    if (was && typeof window.tdpRecountVision === 'function') window.tdpRecountVision(was);
+    if (t.vision_id && typeof window.tdpRecountVision === 'function') window.tdpRecountVision(t.vision_id);
+    tdpPaintDetail(taskId);
+    tdpRepaint();
+};
+
+// How this plan is feeding one goal — read by the detail sheet and Vision.
+window.tdpVisionContribution = function (visionId, planId) {
+    const plan = planId ? tdpFindPlan(planId) : tdpActivePlan();
+    if (!plan || !visionId) return { total: 0, done: 0 };
+    const items = tdpTasksOf(plan).filter(t => String(t.vision_id || '') === String(visionId));
+    return { total: items.length, done: items.filter(tdpTaskDone).length };
+};
+
+window.tdpRecountVision = function (visionId) {
+    // Nothing to write — the figure is derived. Kept as a hook so callers read
+    // naturally and a future change has one obvious place to live.
+    return window.tdpVisionContribution(visionId);
+};
+
+/* ── Retro ── */
+
+window.tdpSaveRetro = async function (planId, text) {
     const plan = tdpFindPlan(planId);
     if (!plan) return;
-    const cats = tdpCats(plan);
-    if (!cats[cat]) return;
-    cats[cat].splice(idx, 1);
-    await tdpSavePlan(plan, cats);
-    tdpRepaint();
+    plan.retro = String(text || '');
+    await tdpSavePlan(plan);
+    if (typeof showToast === 'function') showToast('Saved');
 };
 
 window.tdpUpdateStart = async function (val) {
@@ -442,6 +660,57 @@ function tdpCSS() {
     .tdp-banner.past { background: var(--surface-2); color: var(--text-3); border: 1px solid var(--border-color); }
     .tdp-banner.next { background: var(--primary-soft); color: var(--primary); }
 
+    .tdp-item .tdp-text { cursor: pointer; }
+    .tdp-item.locked .tdp-text { cursor: default; }
+    .tdp-text em { font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: .03em;
+        padding: 1px 5px; border-radius: 5px; margin-left: 5px; vertical-align: 1px;
+        display: inline-flex; align-items: center; gap: 3px; }
+    .tdp-text em.in { background: var(--surface-3); color: var(--text-3); text-transform: uppercase; }
+    .tdp-text em.vis { background: transparent; color: var(--warning, #F59E0B); padding: 0; }
+    .tdp-text em.note { background: var(--surface-3); color: var(--text-3); }
+    .tdp-item.carried { opacity: .55; }
+    .tdp-item.carried .tdp-text { text-decoration: line-through; cursor: default; }
+    .tdp-item.carried .tdp-text em { text-decoration: none; }
+    .tdp-box.ghost { border-style: dashed; cursor: default; color: var(--text-3); }
+    .tdp-more { flex: none; border: none; background: none; color: var(--text-3); cursor: pointer;
+        padding: 4px; opacity: 0; transition: opacity .15s ease, color .15s ease; }
+    .tdp-item:hover .tdp-more { opacity: 1; }
+    .tdp-more:hover { color: var(--primary); }
+
+    .tdp-retro { margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--border-color);
+        border-radius: 16px; background: var(--surface-1); }
+    .tdp-retro label { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+        text-transform: uppercase; color: var(--text-3); margin-bottom: 7px; }
+    .tdp-retro textarea {
+        width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px;
+        border: 1px solid var(--border-color) !important; border-radius: 12px !important;
+        background: var(--surface-2) !important; color: var(--text-1);
+        font-family: inherit; font-size: 13.5px !important; font-weight: 500; line-height: 1.55;
+        padding: 10px 12px !important;
+    }
+    .tdp-retro textarea:focus { border-color: var(--primary) !important; box-shadow: none !important; outline: none; }
+
+    .tdp-comments { display: flex; flex-direction: column; gap: 7px; max-height: 240px; overflow-y: auto; }
+    .tdp-comment { display: flex; align-items: flex-start; gap: 8px; padding: 9px 11px;
+        border-radius: 11px; background: var(--surface-2); }
+    .tdp-comment > div { flex: 1; min-width: 0; }
+    .tdp-comment b { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .04em;
+        text-transform: uppercase; color: var(--text-3); margin-bottom: 3px; }
+    .tdp-comment p { margin: 0; font-size: 13.5px; font-weight: 500; color: var(--text-1);
+        line-height: 1.5; overflow-wrap: anywhere; }
+    .tdp-comment button { flex: none; border: none; background: none; color: var(--text-3);
+        cursor: pointer; padding: 2px; }
+    .tdp-comment button:hover { color: var(--danger, #EF4444); }
+
+    .tdp-detail-acts { display: flex; gap: 8px; margin-top: 4px; }
+    .tdp-detail-acts .tdp-btn { flex: 1; justify-content: center; }
+    .tdp-btn.danger:hover { color: var(--danger, #EF4444); border-color: var(--danger, #EF4444); background: transparent; }
+    .tdp-btn:disabled { opacity: .45; cursor: default; }
+
+    .tdp-arch-bar { height: 5px; border-radius: 99px; background: var(--surface-3);
+        overflow: hidden; margin: 6px 0 5px; }
+    .tdp-arch-bar i { display: block; height: 100%; border-radius: 99px; }
+
     .tdp-card.locked .tdp-box { cursor: default; }
     .tdp-card.locked .tdp-item:hover { background: transparent; }
 
@@ -568,22 +837,41 @@ function tdpColor(name) {
 // already happened aren't a to-do list any more, and quietly letting a stray
 // click change last month's score would make the history worth nothing.
 function tdpCardHTML(plan, cat, locked) {
-    const items = tdpCats(plan)[cat] || [];
-    const done = items.filter(i => i && i.completed).length;
-    const rows = items.map((item, idx) => `
-        <div class="tdp-item ${item.completed ? 'done' : ''} ${locked ? 'locked' : ''}">
-            <div class="tdp-box" ${locked ? '' : `onclick="tdpToggleItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', ${idx})"`}
-                 title="${locked ? '' : (item.completed ? 'Mark as not done' : 'Mark done')}">${TDP_ICON.check}</div>
-            <div class="tdp-text">${tdpEscape(item.text || '')}</div>
-            ${locked ? '' : `<button class="tdp-del" onclick="tdpDeleteItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', ${idx})" title="Remove">${TDP_ICON.trash}</button>`}
-        </div>`).join('');
+    const items = tdpTasksOf(plan, cat);
+    const live = items.filter(t => t.status !== 'cancelled');
+    const done = live.filter(tdpTaskDone).length;
+
+    const rows = items.map(t => {
+        const carriedAway = t.status === 'cancelled' && String(t.tdp_carried_from || '').startsWith('to:');
+        if (carriedAway) {
+            const to = tdpFindPlan(String(t.tdp_carried_from).slice(3));
+            return `<div class="tdp-item carried" title="Moved to a later plan">
+                <div class="tdp-box ghost">${TDP_ICON.forward}</div>
+                <div class="tdp-text">${tdpEscape(t.title || '')}
+                    <em>carried${to ? ' to ' + tdpNiceDate(to.start_date) : ''}</em></div>
+            </div>`;
+        }
+        const carriedIn = String(t.tdp_carried_from || '').startsWith('from:');
+        const notes = tdpComments(t).length;
+        return `
+        <div class="tdp-item ${tdpTaskDone(t) ? 'done' : ''} ${locked ? 'locked' : ''}">
+            <div class="tdp-box" ${locked ? '' : `onclick="tdpToggleItem('${tdpEscape(t.id)}')"`}
+                 title="${locked ? '' : (tdpTaskDone(t) ? 'Mark as not done' : 'Mark done')}">${TDP_ICON.check}</div>
+            <div class="tdp-text" onclick="tdpOpenDetail('${tdpEscape(t.id)}')">${tdpEscape(t.title || '')}
+                ${carriedIn ? '<em class="in">carried over</em>' : ''}
+                ${t.vision_id ? `<em class="vis">${TDP_ICON.star}</em>` : ''}
+                ${notes ? `<em class="note">${TDP_ICON.comment}${notes}</em>` : ''}
+            </div>
+            <button class="tdp-more" onclick="tdpOpenDetail('${tdpEscape(t.id)}')" title="Comments, vision goal, move">${TDP_ICON.more}</button>
+        </div>`;
+    }).join('');
 
     return `
     <div class="tdp-card ${locked ? 'locked' : ''}" id="tdpCard_${tdpEscape(cat)}">
         <div class="tdp-card-head">
             <span class="tdp-dot" style="background:${tdpColor(cat)}"></span>
             <span class="tdp-card-name">${tdpEscape(cat)}</span>
-            <span class="tdp-count">${done}/${items.length}</span>
+            <span class="tdp-count">${done}/${live.length}</span>
         </div>
         <div class="tdp-items">${rows || `<div class="tdp-empty">Nothing here for these ten days.</div>`}</div>
         ${locked ? '' : `<div class="tdp-add">
@@ -592,6 +880,81 @@ function tdpCardHTML(plan, cat, locked) {
             <button onclick="tdpAddItem('${tdpEscape(plan.id)}', '${tdpEscape(cat)}', this.previousElementSibling)" title="Add">${TDP_ICON.plus}</button>
         </div>`}
     </div>`;
+}
+
+/* ── One item, opened up: its comments, the goal it serves, where it can go ── */
+
+let tdpDetailId = null;
+
+window.tdpOpenDetail = function (taskId) {
+    const t = tdpFindTask(taskId);
+    if (!t) return;
+    tdpDetailId = taskId;
+    const modal = tdpSheet();
+    if (!modal) return;
+    document.getElementById('tdpSheetTitle').textContent = t.title || 'Item';
+    document.getElementById('tdpSheetSub').textContent =
+        `${t.category || 'No category'} · due ${tdpNiceDate(t.due_date)}`;
+    tdpPaintDetail(taskId);
+    modal.classList.remove('hidden');
+};
+
+function tdpPaintDetail(taskId) {
+    if (String(tdpDetailId) !== String(taskId)) return;
+    const body = document.getElementById('tdpSheetBody');
+    const t = tdpFindTask(taskId);
+    if (!body || !t) return;
+
+    const goals = (state.data.vision || []).filter(v => v.status !== 'achieved');
+    const contribution = t.vision_id ? window.tdpVisionContribution(t.vision_id, t.tdp_plan_id) : null;
+    const comments = tdpComments(t);
+    const to = tdpNextPlanFor(tdpFindPlan(t.tdp_plan_id));
+
+    body.innerHTML = `
+        <div class="tdp-field">
+            <span>Works toward</span>
+            <select onchange="tdpSetVision('${tdpEscape(t.id)}', this.value)">
+                <option value="">Nothing in particular</option>
+                ${goals.map(v => `<option value="${tdpEscape(v.id)}" ${String(t.vision_id || '') === String(v.id) ? 'selected' : ''}>${tdpEscape(v.title || 'Goal')}</option>`).join('')}
+            </select>
+            ${contribution && contribution.total
+                ? `<p class="tdp-note" style="margin:2px 0 0">This block carries <b>${contribution.done} of ${contribution.total}</b> items toward it.</p>` : ''}
+        </div>
+
+        <div class="tdp-field">
+            <span>Comments</span>
+            <div class="tdp-comments">
+                ${comments.length ? comments.map((c, i) => `
+                    <div class="tdp-comment">
+                        <div>
+                            <b>${tdpNiceDateTime(c.at)}</b>
+                            <p>${tdpEscape(c.text)}</p>
+                        </div>
+                        <button onclick="tdpDeleteComment('${tdpEscape(t.id)}', ${i})" title="Remove">${TDP_ICON.trash}</button>
+                    </div>`).join('')
+                : '<p class="tdp-note" style="margin:0">Nothing noted yet.</p>'}
+            </div>
+            <div class="tdp-add" style="margin-top:8px">
+                <input type="text" maxlength="500" placeholder="What's happening with this…"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault(); tdpAddComment('${tdpEscape(t.id)}', this);}" />
+                <button onclick="tdpAddComment('${tdpEscape(t.id)}', this.previousElementSibling)" title="Add">${TDP_ICON.plus}</button>
+            </div>
+        </div>
+
+        <div class="tdp-detail-acts">
+            <button class="tdp-btn" onclick="tdpCarryItem('${tdpEscape(t.id)}')" ${to ? '' : 'disabled'}
+                    title="${to ? 'Move to the plan starting ' + tdpNiceDate(to.start_date) : 'Make a later plan first'}">
+                ${TDP_ICON.forward} ${to ? 'Move to next plan' : 'No later plan'}
+            </button>
+            <button class="tdp-btn danger" onclick="tdpDeleteItem('${tdpEscape(t.id)}')">${TDP_ICON.trash} Delete</button>
+        </div>`;
+}
+
+function tdpNiceDateTime(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+        + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
 function tdpPageHTML() {
@@ -679,7 +1042,13 @@ function tdpPageHTML() {
             </div>
         </div>
 
-        ${phase === 'past' ? `<div class="tdp-banner past">Looking at a finished plan — ${tdpNiceDate(plan.start_date)} to ${tdpNiceDate(plan.end_date)}. It's read-only.</div>` : ''}
+        ${phase === 'past' ? `<div class="tdp-banner past">Looking at a finished plan — ${tdpNiceDate(plan.start_date)} to ${tdpNiceDate(plan.end_date)}. The list is read-only; the retro below isn't.</div>` : ''}
+        ${phase !== 'upcoming' ? `
+        <div class="tdp-retro">
+            <label for="tdpRetro">What worked, what didn't</label>
+            <textarea id="tdpRetro" rows="3" placeholder="Worth two lines while it's fresh — what moved, what stalled, what you'd do differently."
+                      onblur="tdpSaveRetro('${tdpEscape(plan.id)}', this.value)">${tdpEscape(plan.retro || '')}</textarea>
+        </div>` : ''}
         ${phase === 'upcoming' ? `<div class="tdp-banner next">Looking ahead — this one starts ${tdpNiceDate(plan.start_date)}. Write it now; it takes over once the plan before it finishes.</div>` : ''}
 
         <div class="tdp-grid" id="tdpGrid">
@@ -738,6 +1107,7 @@ function tdpSheet() {
 
 window.tdpCloseSheet = function () {
     document.getElementById('tdpSheet')?.classList.add('hidden');
+    tdpDetailId = null;
 };
 
 window.tdpOpenCreate = function () {
@@ -775,7 +1145,25 @@ window.tdpOpenArchive = function () {
     document.getElementById('tdpSheetTitle').textContent = 'All plans';
     document.getElementById('tdpSheetSub').textContent =
         all.length ? `${all.length} plan${all.length === 1 ? '' : 's'}` : '';
-    document.getElementById('tdpSheetBody').innerHTML = all.length
+    // Only plans that have actually run: a queued one is all zeros by definition
+    // and would drag the average down for no reason.
+    const scored = all.filter(p => tdpPhase(p) !== 'upcoming' && tdpProgress(p).total);
+    const avg = scored.length
+        ? Math.round(scored.reduce((n, p) => n + tdpProgress(p).pct, 0) / scored.length) : 0;
+    const trend = scored.length >= 4
+        ? (() => {
+            const half = Math.floor(scored.length / 2);
+            const recent = scored.slice(0, half), older = scored.slice(half);
+            const m = xs => Math.round(xs.reduce((n, p) => n + tdpProgress(p).pct, 0) / xs.length);
+            const d = m(recent) - m(older);
+            return d >= 8 ? `up ${d} points on your earlier ones`
+                 : d <= -8 ? `down ${Math.abs(d)} points on your earlier ones`
+                 : 'about level with your earlier ones';
+        })() : '';
+
+    document.getElementById('tdpSheetBody').innerHTML = (all.length
+        ? (scored.length ? `<p class="tdp-note"><b>${avg}%</b> average across ${scored.length} plan${scored.length === 1 ? '' : 's'}${trend ? ' — ' + trend : ''}.</p>` : '')
+        : '') + (all.length
         ? all.map(p => {
             const pr = tdpProgress(p);
             const ph = tdpPhase(p);
@@ -785,12 +1173,13 @@ window.tdpOpenArchive = function () {
             return `<button class="tdp-arch ${here ? 'here' : ''}" onclick="tdpGoToPlan('${tdpEscape(p.id)}')">
                 <div class="tdp-arch-main">
                     <b>${tdpNiceDate(p.start_date)} – ${tdpNiceDate(p.end_date)} ${tag}</b>
-                    <span>${pr.total ? `${pr.done} of ${pr.total} done` : 'nothing written down'}</span>
+                    <div class="tdp-arch-bar"><i style="width:${pr.pct}%;background:${pr.pct >= 70 ? 'var(--success,#10B981)' : pr.pct >= 40 ? 'var(--primary)' : 'var(--warning,#F59E0B)'}"></i></div>
+                    <span>${pr.total ? `${pr.done} of ${pr.total} done` : 'nothing written down'}${p.retro ? ' · has a retro' : ''}</span>
                 </div>
                 <span class="tdp-arch-pct">${pr.total ? pr.pct + '%' : '—'}</span>
             </button>`;
         }).join('')
-        : '<p class="tdp-note">No plans yet.</p>';
+        : '<p class="tdp-note">No plans yet.</p>');
     modal.classList.remove('hidden');
 };
 
@@ -810,7 +1199,20 @@ async function renderTDP() {
         try { state.data.vision_tdp = await apiGet('vision_tdp') || []; }
         catch (e) { console.error('renderTDP: load failed', e); state.data.vision_tdp = state.data.vision_tdp || []; }
     }
+    // Items are tasks now, so the page needs them.
+    if (!Array.isArray(state.data.tasks) || !state.data.tasks.length) {
+        try { state.data.tasks = await apiGet('tasks') || []; }
+        catch (e) { console.error('renderTDP: tasks load failed', e); state.data.tasks = state.data.tasks || []; }
+    }
     await tdpRollOver();
+
+    // One-off: lift any plan still holding its items in the old blob.
+    for (const plan of tdpPlans()) {
+        if (Object.keys(tdpCats(plan)).length) {
+            main.innerHTML = `<div class="tdp-wrap" style="padding:60px 20px;text-align:center;color:var(--text-3);font-size:13.5px">Moving your plan items into Tasks…</div>`;
+            await tdpConvertPlan(plan);
+        }
+    }
 
     main.innerHTML = tdpPageHTML();
 }
