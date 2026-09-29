@@ -118,9 +118,9 @@
                     do {
                         res = await sb.from(sheet).insert(row).select().single();
                         if (!res.error) break;
-                        const stripped = _stripMissingCol(res.error, row);
-                        if (!stripped) break;
-                        row = stripped;
+                        const fixed = _stripMissingCol(res.error, row) || _coerceBoolInts(res.error, row);
+                        if (!fixed) break;
+                        row = fixed;
                     } while (++tries < 5);
                     if (res.error) throw res.error;
                     return { success: true, data: res.data, id: res.data?.id };
@@ -139,9 +139,9 @@
                     while (updates && Object.keys(updates).length > 0 && tries < 5) {
                         res = await sb.from(sheet).update(updates).eq('id', String(id)).select().single();
                         if (!res.error) break;
-                        const stripped = _stripMissingCol(res.error, updates);
-                        if (!stripped) break;
-                        updates = stripped;
+                        const fixed = _stripMissingCol(res.error, updates) || _coerceBoolInts(res.error, updates);
+                        if (!fixed) break;
+                        updates = fixed;
                         tries++;
                         // If stripping a not-yet-migrated column emptied the payload,
                         // there's nothing left to persist — treat as a successful no-op
@@ -345,6 +345,27 @@
                 out[k] = v;
             }
         });
+        return out;
+    }
+
+    // Postgres will not take `true`/`false` for an INT column, and a caller
+    // reaching for a boolean where the schema says integer is an easy slip —
+    // habit_logs.pomodoro_completed is an INT that reads like a flag, and marking
+    // a habit done sent it `false` for months. _stripMissingCol already rescues
+    // the "column doesn't exist yet" case; this is the same idea for a boolean
+    // that should have been 1 or 0. Returns null when the error is something
+    // else, so a real problem still surfaces instead of retrying forever.
+    function _coerceBoolInts(error, row) {
+        const msg = String(error && error.message || '');
+        if (!/invalid input syntax for type integer/i.test(msg)) return null;
+        if (!/"(true|false)"/i.test(msg)) return null;
+        let changed = false;
+        const out = { ...row };
+        Object.keys(out).forEach(k => {
+            if (typeof out[k] === 'boolean') { out[k] = out[k] ? 1 : 0; changed = true; }
+        });
+        if (!changed) return null;
+        console.warn('[api] retrying with booleans as 1/0 —', msg);
         return out;
     }
 

@@ -1594,7 +1594,7 @@ async function completeLinkedItem() {
                 habit_id: pomodoroState.linkedItemId,
                 date: today,
                 status: 'completed',
-                pomodoro_completed: true
+                pomodoro_completed: 1
             });
             showToast('Habit completed! 🎉', 'success');
         }

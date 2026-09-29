@@ -411,10 +411,10 @@ window.appStrayCategories = function appStrayCategories() {
 
 const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js?v=20260924a', render: 'renderDashboard' },
-    calendar:      { src: 'view-calendar.js?v=20260621', render: 'renderCalendar' },
+    calendar:      { src: 'view-calendar.js?v=20260929a', render: 'renderCalendar' },
     tasks:         { src: 'view-tasks.js?v=20260916c', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
-    habits:        { src: 'view-habits.js?v=20260916c', render: 'renderHabits' },
+    habits:        { src: 'view-habits.js?v=20260929a', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20260924a', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260915d', render: 'renderSettings' },
@@ -423,7 +423,7 @@ const VIEW_MAP = {
     notes:         { src: 'view-notes.js',         render: 'renderNotes' },
     chimes:        { src: 'view-chimes.js',        render: 'renderChimesView' },
     lifeCalendar:  { src: 'view-life-calendar.js', render: 'renderLifeCalendar' },
-    pomodoro:      { src: 'view-pomodoro.js?v=20260621d', render: 'renderPomodoro' },
+    pomodoro:      { src: 'view-pomodoro.js?v=20260929a', render: 'renderPomodoro' },
     books:         { src: 'view-books.js?v=20260619c', render: 'renderBooks' },
     reader:        { src: 'view-reader.js',        render: 'renderReader' },
     mural:         { src: 'view-mural.js?v=20260621c', render: 'renderMural' },

@@ -684,7 +684,7 @@ window.plannerToggleHabit = async function (habitId, iso) {
     } else {
       state.data.habit_logs.push({ id: 'temp-' + Date.now(), habit_id: habitId, date: iso, completed: true });
       renderCalendar();
-      await apiCall('create', 'habit_logs', { habit_id: habitId, date: iso, status: 'completed', pomodoro_completed: false });
+      await apiCall('create', 'habit_logs', { habit_id: habitId, date: iso, status: 'completed', pomodoro_completed: 0 });
     }
     if (typeof refreshData === 'function') refreshData('habit_logs');
   } catch (e) { console.warn('plannerToggleHabit failed', e); }

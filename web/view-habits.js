@@ -653,10 +653,10 @@ window.toggleHabitForDate = async function (habitId, date) {
     showToast(`Habit unmarked for ${date}`);
   } else {
     // Not done on this date — add log
-    const newLog = { id: 'temp-' + Date.now(), habit_id: habitId, date: date, completed: true };
+    const newLog = { id: 'temp-' + Date.now(), habit_id: habitId, date: date, status: 'completed' };
     state.data.habit_logs.push(newLog);
     renderHabits();
-    await apiCall('create', 'habit_logs', { habit_id: habitId, date: date, completed: true });
+    await apiCall('create', 'habit_logs', { habit_id: habitId, date: date, status: 'completed', pomodoro_completed: 0 });
     showToast(`Habit marked for ${date}`);
   }
 
@@ -717,7 +717,7 @@ window.toggleHabitOptimistic = async function (id) {
     await apiCall('delete', 'habit_logs', {}, toDelete.id);
   } else {
     // Not done today — add log (mark done)
-    const newLog = { id: 'temp-' + Date.now(), habit_id: id, date: today, completed: true };
+    const newLog = { id: 'temp-' + Date.now(), habit_id: id, date: today, status: 'completed' };
     state.data.habit_logs.push(newLog);
 
     // Haptic interaction
@@ -754,7 +754,7 @@ window.toggleHabitOptimistic = async function (id) {
     }
 
     renderHabits(); // Instant re-render
-    await apiCall('create', 'habit_logs', { habit_id: id, date: today, status: 'completed', pomodoro_completed: false });
+    await apiCall('create', 'habit_logs', { habit_id: id, date: today, status: 'completed', pomodoro_completed: 0 });
   }
 
   // Background sync to stay in sync with server
@@ -786,7 +786,7 @@ window.markAllHabitsDone = async function () {
 
   // Optimistic update
   pending.forEach(h => {
-    state.data.habit_logs.push({ id: 'temp-' + Date.now() + h.id, habit_id: h.id, date: today, completed: true });
+    state.data.habit_logs.push({ id: 'temp-' + Date.now() + h.id, habit_id: h.id, date: today, status: 'completed' });
 
     // Cancel aggressive repeating native alarm individually
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) {
@@ -804,7 +804,7 @@ window.markAllHabitsDone = async function () {
   showToast(`Marked ${pending.length} habit${pending.length > 1 ? 's' : ''} as done!`);
 
   // Background sync
-  await Promise.all(pending.map(h => apiCall('create', 'habit_logs', { habit_id: h.id, date: today, completed: true })));
+  await Promise.all(pending.map(h => apiCall('create', 'habit_logs', { habit_id: h.id, date: today, status: 'completed', pomodoro_completed: 0 })));
   refreshData('habit_logs').then(() => {
     if (state.view === 'habits') renderHabits();
     if (typeof window.recalculateVisionProgressFromHabit === 'function') {
