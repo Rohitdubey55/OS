@@ -653,11 +653,11 @@ async function _uploadMediaToDrive(localKey, filename, mimeType) {
     const stored = await _VisionIDB.get(localKey);
     if (!stored || !stored.buffer) return null;
 
-    const base64 = _bufferToBase64(stored.buffer);
+    // Hand the raw bytes over; base64 would triple the memory for a video.
     const result = await apiCall('uploadMedia', null, {
       filename: filename,
-      data: base64,
-      mimeType: mimeType || stored.type || 'application/octet-stream'
+      buffer: stored.buffer,
+      mimeType: stored.type || mimeType || 'application/octet-stream'
     });
 
     return result?.url || null; // "drive:XXXX"
@@ -675,7 +675,8 @@ async function _downloadMediaFromDrive(driveRef) {
     else if (fileId.includes('id=')) fileId = fileId.split('id=')[1];
     else return null;
 
-    const result = await apiCall('downloadMedia', null, { file_id: fileId });
+    const result = await apiCall('downloadMedia', null, { file_id: fileId, as: 'buffer' });
+    if (result?.buffer) return { type: result.mimeType || 'application/octet-stream', buffer: result.buffer };
     if (!result?.data) return null;
 
     const binaryStr = atob(result.data);
@@ -691,43 +692,7 @@ async function _downloadMediaFromDrive(driveRef) {
 
 // After saving a vision goal, upload its media to Drive in background
 async function _syncVisionMediaToCloud(goalId) {
-  const goals = state.data.vision || state.data.visions || [];
-  const goal = goals.find(g => String(g.id) === String(goalId));
-  if (!goal) return;
-
-  // Upload image if it's a local reference
-  if (goal.image_url && goal.image_url.startsWith('local-img://')) {
-    const localKey = goal.image_url.replace('local-img://', '');
-    const ext = localKey.startsWith('img_') ? '.jpg' : '.dat';
-    const driveRef = await _uploadMediaToDrive(localKey, 'vision_' + goalId + '_img' + ext, 'image/jpeg');
-    if (driveRef) {
-      // Store both local + cloud ref: "local-img://KEY|drive:ID"
-      goal.image_url = 'local-img://' + localKey + '|' + driveRef;
-      apiCall('update', 'vision_board', { image_url: goal.image_url }, goalId).catch(() => {});
-    }
-  }
-
-  // Upload videos if they're local references
-  if (goal.video_url) {
-    const parts = goal.video_url.split(',');
-    let changed = false;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i].trim();
-      if (part.startsWith('local://') && !part.includes('|drive:')) {
-        const localKey = part.replace('local://', '');
-        const ext = '.mp4';
-        const driveRef = await _uploadMediaToDrive(localKey, 'vision_' + goalId + '_vid' + i + ext, 'video/mp4');
-        if (driveRef) {
-          parts[i] = 'local://' + localKey + '|' + driveRef;
-          changed = true;
-        }
-      }
-    }
-    if (changed) {
-      goal.video_url = parts.join(',');
-      apiCall('update', 'vision_board', { video_url: goal.video_url }, goalId).catch(() => {});
-    }
-  }
+  return v2SyncGoalMedia(goalId);              // see the v2 media sync below
 }
 
 // Sync missing cloud media to local IDB (called when loading a vision goal's media)
@@ -7101,37 +7066,56 @@ window.v2SetFilter = function (f) {
 function v2Filtered(goals) {
   const f = v2.filter || 'all';
   if (f === 'all') return goals;
-  if (String(f).startsWith('hz:')) { const k = String(f).slice(3); return goals.filter(g => g.horizon === k); }
   return goals.filter(g => (g.category || 'Other') === f);
 }
 
 function v2ToolbarHTML(withMedia, phone) {
   const f = v2.filter || 'all';
   const view = v2GetView();
-  const chip = (key, label, extra = '') =>
-    `<button class="v2-chip ${f === key ? 'on' : ''} ${extra}" onclick="v2SetFilter('${v2Js(key)}')">${v2Esc(label)}</button>`;
+  const chip = (key, label) =>
+    `<button class="v2-chip ${f === key ? 'on' : ''}" onclick="v2SetFilter('${v2Js(key)}')">${v2Esc(label)}</button>`;
   return `
   <div class="v2-bar2">
     <div class="v2-chips">
       ${chip('all', 'All')}
       ${v2Cats().map(c => chip(c, c)).join('')}
-      <span class="v2-chip-div" aria-hidden="true"></span>
-      ${V2_TAGS.map(h => chip('hz:' + h.key, h.short, 'hz')).join('')}
     </div>
-    <div class="v2-bar2-acts">
-      <div class="v2-seg" role="group" aria-label="View">
-        <button class="${view === 'grid' ? 'on' : ''}" onclick="v2SetView('grid')" title="Grid" aria-label="Grid">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
-          ${phone ? '' : 'Grid'}</button>
-        <button class="${view === 'list' ? 'on' : ''}" onclick="v2SetView('list')" title="List" aria-label="List">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          ${phone ? '' : 'List'}</button>
-      </div>
-      <button class="v2-btn" onclick="startManifestationRitual()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="7,4 20,12 7,20"/></svg> Daily ritual</button>
-      <button class="v2-btn" onclick="routeTo('tdp')">10 Days Plan</button>
+    <div class="v2-seg" role="group" aria-label="View">
+      <button class="${view === 'grid' ? 'on' : ''}" onclick="v2SetView('grid')" title="Grid" aria-label="Grid">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        ${phone ? '' : 'Grid'}</button>
+      <button class="${view === 'list' ? 'on' : ''}" onclick="v2SetView('list')" title="List" aria-label="List">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        ${phone ? '' : 'List'}</button>
     </div>
   </div>`;
+}
+
+/* Stats, Select, Story and 10 Days Plan sit in the page header beside New
+   vision, Daily ritual and Affirmations (desktop). On a phone the header is
+   too narrow, so they stay in a row at the top of the page. */
+function v2TopItemsHTML(active, withMedia) {
+  return `
+    <span class="v2-stats">
+      <span><b>${active.length}</b> vision${active.length === 1 ? '' : 's'}</span>
+      <span><b>${v2Avg(active)}%</b> average</span>
+    </span>
+    <button class="v2-btn" onclick="v2ToggleSelect()">${v2Sel.on ? 'Cancel' : 'Select'}</button>
+    ${withMedia.length ? `<button class="v2-btn story" onclick="v2StoryOpen()">▶ Story</button>` : ''}
+    <button class="v2-btn" onclick="routeTo('tdp')">10 Days Plan</button>`;
+}
+function v2PaintHeaderSlot(html) {
+  const pa = document.getElementById('pageActions');
+  if (!pa) return;
+  let slot = document.getElementById('v2HeadSlot');
+  if (!html) { if (slot) slot.remove(); return; }
+  if (!slot) {
+    slot = document.createElement('span');
+    slot.id = 'v2HeadSlot';
+    slot.className = 'v2-head-slot';
+    pa.insertBefore(slot, pa.firstChild);
+  }
+  slot.innerHTML = html;
 }
 
 /* ── List view: one table on a desktop, rows on a phone ─────────────────── */
@@ -7143,7 +7127,6 @@ function v2ListHTML(goals, phone) {
     const prog = v2Progress(g).pct;
     const col = v2CatColor(g.category);
     const cover = v2CoverSync(g);
-    const tag = V2_TAGS.find(h => h.key === g.horizon);
     const pc = typeof vzPlanCount === 'function' ? vzPlanCount(g) : null;
     const picked = v2Sel.ids.has(String(g.id));
     return `
@@ -7155,7 +7138,6 @@ function v2ListHTML(goals, phone) {
         <span class="v2-td-title"><b>${v2Esc(g.title || 'Untitled')}</b>${v2Goals3mHTML(g, 2)}</span>
       </div></td>
       <td><span class="v2-td-cat" style="--c:${col}">${v2Esc(g.category || 'Other')}</span></td>
-      <td class="v2-td-muted">${tag ? v2Esc(tag.short) : '—'}</td>
       ${V2_HORIZONS.map(x => `<td class="v2-td-num">${hz[x.key].total ? `<b>${hz[x.key].done}</b>/${hz[x.key].total}` : '<span>—</span>'}</td>`).join('')}
       <td class="v2-td-prog"><div class="v2-bar"><i style="width:${prog}%;background:${col}"></i></div><span>${prog}%</span></td>
       <td class="v2-td-num">${v2LinkedHabits(g).length || '<span>—</span>'}</td>
@@ -7167,11 +7149,11 @@ function v2ListHTML(goals, phone) {
     <table class="v2-table">
       <thead><tr>
         ${v2Sel.on ? '<th></th>' : ''}
-        <th>Vision</th><th>Category</th><th>Horizon</th>
+        <th>Vision</th><th>Category</th>
         ${V2_HORIZONS.map(x => `<th class="v2-td-num">${x.short}</th>`).join('')}
         <th>Progress</th><th class="v2-td-num">Habits</th><th class="v2-td-num">Plan</th>
       </tr></thead>
-      <tbody>${rows || `<tr><td colspan="10" class="v2-td-empty">No visions match this filter.</td></tr>`}</tbody>
+      <tbody>${rows || `<tr><td colspan="9" class="v2-td-empty">No visions match this filter.</td></tr>`}</tbody>
     </table>
   </div>`;
 }
@@ -7226,18 +7208,10 @@ function v2HomeHTML() {
 
   return `
   <div class="v2">
-    <div class="v2-top">
-      <div class="v2-stats">
-        <span><b>${active.length}</b> vision${active.length === 1 ? '' : 's'}</span>
-        <span><b>${v2Avg(active)}%</b> average</span>
-        ${hzTotal ? `<span><b>${hzDone}/${hzTotal}</b> horizon goals done</span>` : ''}
-      </div>
-      <div class="v2-acts">
-        <button class="v2-btn" onclick="v2ToggleSelect()">${v2Sel.on ? 'Cancel' : 'Select'}</button>
-        ${withMedia.length ? `<button class="v2-btn story" onclick="v2StoryOpen()">▶ Story</button>` : ''}
-        ${phone ? `<button class="v2-btn primary" onclick="v2NewVision()">+ New</button>` : ''}
-      </div>
-    </div>
+    ${phone ? `
+    <div class="v2-top v2-phone-top">
+      ${v2TopItemsHTML(active, withMedia).replace('<button class="v2-btn" onclick="routeTo(\'tdp\')">10 Days Plan</button>', '')}
+    </div>` : ''}
 
     ${withMedia.length ? `
     <div class="v2-tray" aria-label="Stories">
@@ -7762,15 +7736,78 @@ window.v2AddMedia = async function (files) {
   for (const u of galleryUploads) v2BackupGalleryPhoto(u).catch(() => { });
 };
 
-// The existing sync covers the cover and videos; gallery photos get the same.
+// Gallery photos sync with the rest of the vision's media.
 async function v2BackupGalleryPhoto(u) {
-  if (typeof _uploadMediaToDrive !== 'function') return;
-  const ref = await _uploadMediaToDrive(u.localKey, 'vision_gallery_' + u.id, u.type || 'image/jpeg');
-  if (!ref) return;
   const row = (state.data.vision_images || []).find(r => String(r.id) === String(u.id));
-  if (!row) return;
-  row.url = 'local-img://' + u.localKey + '|' + ref;
-  try { await apiCall('update', 'vision_images', { url: row.url }, row.id); } catch (e) { }
+  if (row) await v2SyncGoalMedia(row.vision_id);
+}
+
+/* ── Cross-device media ───────────────────────────────────────────────────
+   A photo or video is saved on the device that added it first (instant), then
+   copied to Supabase Storage. The ref records both: "local-img://KEY|drive:sb~PATH".
+   Another device finds no KEY locally, downloads PATH once and keeps it.
+   Refs whose cloud part isn't "sb~" (never uploaded, or pointing at the old
+   Google Drive backend) are re-uploaded from whichever device still has the file. */
+const V2_CLOUD_MAX = 50 * 1024 * 1024;        // Supabase's per-file limit on the free plan
+function v2RefParts(ref) {
+  const m = String(ref || '').match(/^(local-img:\/\/|local:\/\/)([^|]+)(?:\|(.*))?$/);
+  return m ? { prefix: m[1], key: m[2], cloud: m[3] || '' } : null;
+}
+function v2RefInCloud(ref) { const p = v2RefParts(ref); return !p || p.cloud.startsWith('drive:sb~'); }
+async function v2CloudRef(ref, name) {
+  const p = v2RefParts(ref);
+  if (!p || p.cloud.startsWith('drive:sb~')) return ref;
+  let stored = null;
+  try { stored = await _VisionIDB.get(p.key); } catch (e) { }
+  if (!stored || !stored.buffer) return ref;           // not on this device either
+  if (stored.buffer.byteLength > V2_CLOUD_MAX) { v2TooBigNote(); return ref; }
+  const up = await _uploadMediaToDrive(p.key, name, stored.type);
+  return up ? p.prefix + p.key + '|' + up : ref;
+}
+let v2TooBigShown = false;
+function v2TooBigNote() {
+  if (v2TooBigShown) return; v2TooBigShown = true;
+  if (typeof showToast === 'function') showToast('A video over 50 MB stays on this device only');
+}
+const v2SyncBusy = new Set();
+async function v2SyncGoalMedia(goalId) {
+  const k = String(goalId);
+  if (v2SyncBusy.has(k)) return;
+  v2SyncBusy.add(k);
+  try {
+    const g = v2Goal(k);
+    if (!g) return;
+    if (g.image_url && !v2RefInCloud(g.image_url)) {
+      const next = await v2CloudRef(g.image_url, 'vision_' + k + '_cover');
+      if (next !== g.image_url) { g.image_url = next; try { await apiCall('update', 'vision_board', { image_url: next }, g.id); } catch (e) { } }
+    }
+    if (g.video_url) {
+      const parts = String(g.video_url).split(',').map(x => x.trim()).filter(Boolean);
+      let changed = false;
+      for (let i = 0; i < parts.length; i++) {
+        if (v2RefInCloud(parts[i])) continue;
+        const next = await v2CloudRef(parts[i], 'vision_' + k + '_video' + i);
+        if (next !== parts[i]) { parts[i] = next; changed = true; }
+      }
+      if (changed) { g.video_url = parts.join(','); try { await apiCall('update', 'vision_board', { video_url: g.video_url }, g.id); } catch (e) { } }
+    }
+    for (const row of (state.data.vision_images || []).filter(r => String(r.vision_id) === k)) {
+      if (!row.url || v2RefInCloud(row.url)) continue;
+      const next = await v2CloudRef(row.url, 'vision_gallery_' + row.id);
+      if (next !== row.url) { row.url = next; try { await apiCall('update', 'vision_images', { url: next }, row.id); } catch (e) { } }
+    }
+  } finally { v2SyncBusy.delete(k); }
+}
+// Once per session, quietly push up anything this device holds that the
+// cloud doesn't have yet — this is what rescues photos added before sync worked.
+let v2BackfillDone = false;
+function v2BackfillMedia() {
+  if (v2BackfillDone) return; v2BackfillDone = true;
+  setTimeout(async () => {
+    for (const g of (state.data.vision || [])) {
+      try { await v2SyncGoalMedia(g.id); } catch (e) { }
+    }
+  }, 2500);
 }
 
 window.v2RemoveMedia = async function (index) {
@@ -7852,12 +7889,6 @@ function v2HeadHTML(g) {
     <span class="v2-cat-wrap" style="--c:${v2CatColor(g.category)}">
       <select class="v2-cat-select" onchange="v2SetCategory(this.value)" aria-label="Category">
         ${cats.map(c => `<option ${c === g.category ? 'selected' : ''}>${v2Esc(c)}</option>`).join('')}
-      </select>
-    </span>
-    <span class="v2-cat-wrap v2-hz-wrap">
-      <select class="v2-cat-select v2-hz-select" onchange="v2SetHorizonTag(this.value)" aria-label="Horizon" title="Horizon (used by the filter chips)">
-        <option value="" ${!g.horizon ? 'selected' : ''}>No horizon</option>
-        ${V2_TAGS.map(h => `<option value="${v2Esc(h.key)}" ${g.horizon === h.key ? 'selected' : ''}>${v2Esc(h.short)}</option>`).join('')}
       </select>
     </span>
     <span style="flex:1"></span>
@@ -8293,6 +8324,11 @@ async function renderVision() {
 
   if (!g) await v2PreloadCovers((state.data.vision || []));
   main.innerHTML = g ? v2PageHTML(g) : v2HomeHTML();
+  v2BackfillMedia();
+  if (state.view === 'vision') {
+    const active = (state.data.vision || []).filter(x => x.status !== 'achieved');
+    v2PaintHeaderSlot(!g && !v2Phone() ? v2TopItemsHTML(active, active.filter(x => v2MediaOf(x).length)) : '');
+  }
   v2Hydrate(main);
   v2LastPhone = v2Phone();
 }
@@ -8676,7 +8712,15 @@ function v2InjectCSS() {
   .v2s-nav:disabled { opacity: 0; pointer-events: none; }
 
   /* toolbar: filter chips + grid/list + shortcuts */
-  .v2-bar2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 18px; }
+  .v2-bar2 { display: flex; align-items: center; gap: 12px; margin: 4px 0 18px; }
+  .v2-bar2 .v2-seg { margin-left: auto; flex: none; }
+  .v2-phone-top { flex-wrap: nowrap; gap: 8px; }
+  .v2-phone-top .v2-stats { gap: 10px; font-size: 12.5px; margin-right: auto; white-space: nowrap; }
+  .v2-phone-top .v2-btn { height: 34px; padding: 0 12px; }
+  .v2-head-slot { display: inline-flex; align-items: center; gap: 8px; margin-right: 4px; }
+  .v2-head-slot .v2-btn { height: 36px; padding: 0 14px; font-size: 13px; }
+  .v2-head-slot .v2-stats { display: inline-flex; gap: 14px; margin-right: 8px; font-size: 13px; color: var(--text-3); font-weight: 600; white-space: nowrap; }
+  .v2-head-slot .v2-stats b { color: var(--text-1); font-weight: 850; }
   .v2-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
   .v2-chip { height: 32px; padding: 0 13px; border: 1px solid var(--border-color); border-radius: 999px; background: var(--surface-1);
     color: var(--text-2); font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s, border-color .15s; }
@@ -8722,7 +8766,7 @@ function v2InjectCSS() {
   .v2-grid.v2-grid-phone { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px; }
   @media (max-width: 899px) {
     .v2-bar2 { gap: 10px; }
-    .v2-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; flex-basis: 100%; }
+    .v2-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -16px; padding-left: 16px; flex: 1 1 auto; }
     .v2-chips::-webkit-scrollbar { display: none; }
     .v2-bar2-acts { width: 100%; }
     .v2-bar2-acts .v2-btn { flex: 1; height: 36px; padding: 0 10px; }

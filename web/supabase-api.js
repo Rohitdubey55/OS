@@ -45,6 +45,60 @@
         return all;
     }
 
+    const MEDIA_BUCKET = 'vision-media';
+    let _storageWarned = false;
+    function _storageWarn(e) {
+        console.warn('[Supabase storage]', e && (e.message || e));
+        const msg = String(e && (e.message || e) || '');
+        if (_storageWarned) return;
+        if (/bucket not found|not found|row-level security|policy|unauthori[sz]ed|403|404/i.test(msg)) {
+            _storageWarned = true;
+            if (typeof showToast === 'function') showToast('Photo sync is off — run the vision-media storage migration in Supabase');
+        }
+    }
+    function _b64ToBytes(b64) {
+        const bin = atob(b64);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+    }
+    function _bytesToB64(bytes) {
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+        return btoa(bin);
+    }
+    async function _storageUpload(sb, user, action, payload) {
+        try {
+            const type = payload.mimeType || 'application/octet-stream';
+            const body = payload.buffer
+                ? new Blob([payload.buffer], { type })
+                : payload.blob || (payload.data ? new Blob([_b64ToBytes(payload.data)], { type }) : null);
+            if (!body) return { success: false, message: 'No file data' };
+            const safe = String(payload.filename || 'file').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80);
+            const folder = action === 'uploadAudio' ? 'audio' : 'media';
+            const path = `${user.id}/${folder}/${Date.now().toString(36)}_${safe}`;
+            const { error } = await sb.storage.from(MEDIA_BUCKET).upload(path, body, { contentType: type, upsert: true });
+            if (error) { _storageWarn(error); return { success: false, message: error.message }; }
+            const url = 'drive:sb~' + path;
+            if (action === 'uploadAudio' && payload.aff_id != null) {
+                try { await sb.from('vision_affirmations').update({ audio_url: url }).eq('id', String(payload.aff_id)); } catch (e) { }
+            }
+            return { success: true, url, file_id: 'sb~' + path };
+        } catch (e) { _storageWarn(e); return { success: false, message: e.message }; }
+    }
+    async function _storageDownload(sb, fileId, as) {
+        try {
+            const id = String(fileId || '');
+            if (!id.startsWith('sb~')) return null;          // an old Google Drive file — gone with that backend
+            const { data, error } = await sb.storage.from(MEDIA_BUCKET).download(id.slice(3));
+            if (error || !data) { _storageWarn(error || 'empty'); return null; }
+            const buffer = await data.arrayBuffer();
+            const out = { success: true, mimeType: data.type || 'application/octet-stream', buffer };
+            if (as !== 'buffer') out.data = _bytesToB64(new Uint8Array(buffer));   // older callers read base64
+            return out;
+        } catch (e) { _storageWarn(e); return null; }
+    }
+
     async function supabaseApiCall(action, sheet, payload = {}, id = null) {
         const sb = window.supabase;
         const user = window._currentUser;
@@ -209,6 +263,24 @@
                     } catch (e) { /* best-effort cleanup */ }
 
                     return { success: true, idMap: {} };
+                }
+
+                // ─────────────────────────────────────────────────────
+                // Photos, videos and voice recordings. These used to go to Google
+                // Drive through the old Apps Script backend; since the move to
+                // Supabase nothing handled them, so files stayed on the device
+                // that added them. They now live in the private 'vision-media'
+                // Storage bucket, under the user's own folder.
+                // Refs keep the old "drive:" shape ("drive:sb~<path>") so every
+                // existing reader works unchanged.
+                case 'uploadMedia':
+                case 'uploadAudio': {
+                    if (!user) throw new Error('Not authenticated');
+                    return await _storageUpload(sb, user, action, payload || {});
+                }
+                case 'downloadMedia':
+                case 'downloadAudio': {
+                    return await _storageDownload(sb, (payload || {}).file_id, (payload || {}).as);
                 }
 
                 default:
