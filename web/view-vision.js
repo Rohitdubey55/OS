@@ -8093,6 +8093,28 @@ window.v2StoryOpen = async function (goalId, index) {
   await v2StoryShow();
 };
 
+/* Keep the screen on while a story is open. The browser drops the lock
+   whenever the tab is hidden (switching apps, locking the phone), so it is
+   asked for again each time the story comes back into view. */
+const v2Wake = { lock: null, want: false };
+async function v2WakeOn() {
+  v2Wake.want = true;
+  if (!('wakeLock' in navigator) || v2Wake.lock || document.visibilityState !== 'visible') return;
+  try {
+    v2Wake.lock = await navigator.wakeLock.request('screen');
+    v2Wake.lock.addEventListener('release', () => { v2Wake.lock = null; });
+    if (!v2Wake.want) v2WakeOff();             // closed while the request was in flight
+  } catch (e) { v2Wake.lock = null; }
+}
+function v2WakeOff() {
+  v2Wake.want = false;
+  const l = v2Wake.lock; v2Wake.lock = null;
+  if (l) l.release().catch(() => { });
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && v2Wake.want) v2WakeOn();
+});
+
 function v2StoryMount() {
   let el = document.getElementById('v2Story');
   if (!el) {
@@ -8126,6 +8148,7 @@ function v2StoryMount() {
     <button class="v2s-nav next" onclick="v2StoryGroupStep(1)" aria-label="Next vision">›</button>`;
   el.classList.add('open');
   document.body.style.overflow = 'hidden';
+  v2WakeOn();
 
   const taps = document.getElementById('v2sTaps');
   taps.addEventListener('pointerdown', v2StoryDown);
@@ -8306,6 +8329,7 @@ window.v2StoryOpenVision = function () {
 };
 
 window.v2StoryClose = function () {
+  v2WakeOff();
   v2MusicStop();
   if (v2Preview) { v2Preview.stop(); v2Preview = null; }
   cancelAnimationFrame(v2s.raf);
