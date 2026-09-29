@@ -7158,6 +7158,118 @@ function v2ListHTML(goals, phone) {
   </div>`;
 }
 
+/* ── Phone feed: each vision is a post ────────────────────────────────────
+   Grid view on a phone reads like a social feed: scroll down through
+   visions, swipe sideways through a vision's photos and videos. Tapping a
+   photo opens the story there. The caption carries the vision's details —
+   the note, its 3-month goals, horizon counts, habits and progress. */
+
+function v2PlainNote(g) {
+  return v2NoteText(g).split(/\r?\n/)
+    .map(l => l.replace(/^\s*(#{1,6}\s+|[-*•]\s+|\d+[.)]\s+)/, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim())
+    .filter(Boolean).join(' · ');
+}
+
+function v2PostHTML(g) {
+  const media = v2MediaOf(g);
+  const col = v2CatColor(g.category);
+  const cover = v2CoverSync(g);
+  const prog = v2Progress(g).pct;
+  const hz = v2HorizonStats(g);
+  const picked = v2Sel.ids.has(String(g.id));
+  const id = v2Js(g.id);
+  const note = v2PlainNote(g);
+  const habits = state.data.habits || [];
+  const links = v2LinkedHabits(g);
+  const pc = typeof vzPlanCount === 'function' ? vzPlanCount(g) : null;
+
+  const slides = media.length
+    ? media.map((m, i) => `
+        <div class="v2-post-slide" data-ref="${v2Esc(m.ref)}" data-kind="${m.kind}" onclick="v2PostTap('${id}', ${i})">
+          ${m.kind === 'video' ? '<span class="v2-post-vid">▶</span>' : ''}
+        </div>`).join('')
+    : `<div class="v2-post-slide v2-post-empty" style="background:linear-gradient(135deg, ${col}, ${col}aa)" onclick="${v2Sel.on ? `v2TogglePick('${id}')` : `v2Open('${id}')`}">
+        <span>${v2Esc((g.title || '?').trim().charAt(0).toUpperCase())}</span><em>+ Add photos or video</em></div>`;
+
+  const hzLine = V2_HORIZONS.map(x => `<span class="${hz[x.key].total ? '' : 'none'}"><b>${x.short}</b> ${hz[x.key].total ? `${hz[x.key].done}/${hz[x.key].total}` : '—'}</span>`).join('');
+
+  const habitLines = links.slice(0, 3).map(link => {
+    const h = habits.find(x => String(x.id) === String(link.id));
+    if (!h) return '';
+    const st = v2HabitStats(h, link);
+    return `<li><span class="v2-post-hname">${v2Esc(h.habit_name || h.name || 'Habit')}</span>
+      <span>${st.dueNow ? `${st.hitNow}/${st.dueNow} days` : 'not due yet'}${st.streak ? ` · 🔥${st.streak}` : ''}</span></li>`;
+  }).join('');
+
+  return `
+  <article class="v2-post ${picked ? 'picked' : ''}" data-id="${v2Esc(g.id)}">
+    <header class="v2-post-head" onclick="${v2Sel.on ? `v2TogglePick('${id}')` : `v2Open('${id}')`}">
+      <span class="v2-post-av ${media.length && !v2StorySeenAll(g) ? 'ring' : ''}"><i style="${cover ? `background-image:url('${v2Esc(cover)}')` : `background:${col}`}">${cover ? '' : v2Esc((g.title || '?').charAt(0))}</i></span>
+      <span class="v2-post-who"><b>${v2Esc(g.title || 'Untitled')}</b><span><i style="background:${col}"></i>${v2Esc(g.category || 'Other')}${g.status === 'achieved' ? ' · Achieved' : ''}</span></span>
+      ${v2Sel.on ? `<span class="v2-check ${picked ? 'on' : ''}">✓</span>` : `<span class="v2-post-more" aria-hidden="true">›</span>`}
+    </header>
+    <div class="v2-post-media">
+      <div class="v2-post-track" onscroll="v2PostDots(this)">${slides}</div>
+      ${media.length > 1 ? `<span class="v2-post-count">1/${media.length}</span>
+        <div class="v2-post-dots">${media.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}
+    </div>
+    <div class="v2-post-acts">
+      ${media.length ? `<button class="v2-post-story" onclick="v2StoryOpen('${id}', 0)">▶ Story</button>` : ''}
+      <span class="v2-post-ring" style="--p:${prog};--c:${col}"><em>${prog}%</em></span>
+      ${links.length ? `<span class="v2-post-stat">${links.length} habit${links.length === 1 ? '' : 's'}</span>` : ''}
+      ${pc && pc.total ? `<span class="v2-post-stat">Plan ${pc.done}/${pc.total}</span>` : ''}
+      <span style="flex:1"></span>
+      <button class="v2-post-open" onclick="v2Open('${id}')">Open</button>
+    </div>
+    <div class="v2-post-cap">
+      ${note ? `<p class="v2-post-note" onclick="this.classList.toggle('open')"><b>${v2Esc(g.title || '')}</b> ${v2Esc(note)}</p>` : ''}
+      ${v2Goals3mHTML(g, 4) ? `<div class="v2-post-sec"><span class="v2-post-lbl">Next 3 months</span>${v2Goals3mHTML(g, 4)}</div>` : ''}
+      <div class="v2-post-hz">${hzLine}</div>
+      ${habitLines ? `<div class="v2-post-sec"><span class="v2-post-lbl">Habits · last 30 days</span><ul class="v2-post-habits">${habitLines}</ul></div>` : ''}
+      ${!note && !v2Goals3mHTML(g, 4) ? `<p class="v2-post-hint" onclick="v2Open('${id}')">Add a note and 3-month goals to fill this in →</p>` : ''}
+    </div>
+  </article>`;
+}
+
+function v2FeedHTML(goals) {
+  return `<div class="v2-feed">${goals.map(v2PostHTML).join('')}</div>`;
+}
+
+window.v2PostTap = function (id, i) {
+  if (v2Sel.on) { v2TogglePick(id); return; }
+  v2StoryOpen(id, i);
+};
+window.v2PostDots = function (track) {
+  const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+  const box = track.parentElement;
+  box.querySelectorAll('.v2-post-dots i').forEach((d, k) => d.classList.toggle('on', k === i));
+  const c = box.querySelector('.v2-post-count');
+  if (c) c.textContent = `${i + 1}/${box.querySelectorAll('.v2-post-slide').length}`;
+  v2FeedPlayVisible();
+};
+
+// Videos in the feed play silently while they're on screen, like a feed does.
+let v2FeedObs = null;
+function v2FeedPlayVisible() {
+  document.querySelectorAll('.v2-feed video').forEach(v => v2FeedObs && v2FeedObs.observe(v));
+}
+function v2FeedWire(root) {
+  if (!('IntersectionObserver' in window)) return;
+  if (v2FeedObs) v2FeedObs.disconnect();
+  v2FeedObs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      const v = e.target;
+      if (e.isIntersecting && e.intersectionRatio > 0.6) {
+        v.muted = true; v.loop = true;
+        if (v.src.includes('#t=')) v.src = v.src.split('#')[0];
+        v.play().catch(() => { });
+      } else v.pause();
+    });
+  }, { threshold: [0, 0.6, 1] });
+  (root || document).querySelectorAll('.v2-feed video').forEach(v => v2FeedObs.observe(v));
+}
+
 function v2HomeHTML() {
   const all = state.data.vision || [];
   const active = all.filter(g => g.status !== 'achieved');
@@ -7194,15 +7306,18 @@ function v2HomeHTML() {
     </section>`;
   }).join('');
 
+  const byCat = list => cats.flatMap(c => list.filter(g => (g.category || 'Other') === c));
   const content = view === 'list'
     ? v2ListHTML(shown, phone)
-    : (grid(shown, false) || `<p class="v2-none">No visions match this filter.</p>`);
+    : phone
+      ? (shown.length ? v2FeedHTML(byCat(shown)) : `<p class="v2-none">No visions match this filter.</p>`)
+      : (grid(shown, false) || `<p class="v2-none">No visions match this filter.</p>`);
 
   const done = shownDone.length ? `
     <details class="v2-cat v2-achieved">
       <summary><h2>Achieved</h2><span class="v2-cat-meta">${shownDone.length}</span></summary>
       ${view === 'list' ? v2ListHTML(shownDone, phone)
-        : phone ? `<div class="v2-grid v2-grid-phone">${shownDone.map(v2CardHTML).join('')}</div>`
+        : phone ? v2FeedHTML(byCat(shownDone))
         : `<div class="v2-grid">${shownDone.map(v2CardHTML).join('')}</div>`}
     </details>` : '';
 
@@ -7248,7 +7363,7 @@ window.v2ToggleSelect = function () {
 window.v2TogglePick = function (id) {
   const k = String(id);
   if (v2Sel.ids.has(k)) v2Sel.ids.delete(k); else v2Sel.ids.add(k);
-  const card = document.querySelector(`.v2-card[data-id="${CSS.escape(k)}"], .v2-row[data-id="${CSS.escape(k)}"], .v2-table tr[data-id="${CSS.escape(k)}"]`);
+  const card = document.querySelector(`.v2-card[data-id="${CSS.escape(k)}"], .v2-post[data-id="${CSS.escape(k)}"], .v2-row[data-id="${CSS.escape(k)}"], .v2-table tr[data-id="${CSS.escape(k)}"]`);
   if (card) {
     card.classList.toggle('picked', v2Sel.ids.has(k));
     card.querySelector('.v2-check')?.classList.toggle('on', v2Sel.ids.has(k));
@@ -8657,7 +8772,7 @@ async function renderVision() {
     const active = (state.data.vision || []).filter(x => x.status !== 'achieved');
     v2PaintHeaderSlot(!g && !v2Phone() ? v2TopItemsHTML(active, active.filter(x => v2MediaOf(x).length)) : '');
   }
-  v2Hydrate(main);
+  v2Hydrate(main).then(() => { if (!g && v2Phone()) v2FeedWire(main); });
   v2LastPhone = v2Phone();
 }
 window.renderVision = renderVision;
@@ -9154,6 +9269,66 @@ function v2InjectCSS() {
     .v2s-edit { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px); }
     .v2s-edit-card { max-height: 100%; }
   }
+  /* phone feed */
+  .v2-feed { display: flex; flex-direction: column; gap: 18px; margin: 0 -16px; }
+  .v2-post { background: var(--surface-1); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); }
+  .v2-post.picked { outline: 2px solid var(--primary); outline-offset: -2px; }
+  .v2-post-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; }
+  .v2-post-av { flex: none; width: 38px; height: 38px; border-radius: 50%; padding: 2px; background: var(--border-color); }
+  .v2-post-av.ring { background: linear-gradient(135deg, #F59E0B, #EC4899 55%, #8B5CF6); }
+  .v2-post-av i { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--surface-1);
+    box-sizing: border-box; background-size: cover; background-position: center; color: #fff; font-style: normal; font-weight: 800; font-size: 14px; }
+  .v2-post-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .v2-post-who b { font-size: 14.5px; font-weight: 800; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .v2-post-who span { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); font-weight: 600; }
+  .v2-post-who span i { width: 7px; height: 7px; border-radius: 50%; }
+  .v2-post-more { font-size: 24px; color: var(--text-3); line-height: 1; padding: 0 4px; }
+  .v2-post-head .v2-check { position: static; border-color: var(--border-color); }
+  .v2-post-media { position: relative; background: #111; }
+  .v2-post-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  .v2-post-track::-webkit-scrollbar { display: none; }
+  .v2-post-slide { position: relative; flex: 0 0 100%; aspect-ratio: 4 / 5; scroll-snap-align: center; scroll-snap-stop: always;
+    background: #1f2937 center / cover no-repeat; overflow: hidden; cursor: pointer; }
+  .v2-post-slide video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .v2-post-slide.missing::before { content: 'Syncing from your other device…'; position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; color: rgba(255,255,255,.7); font-size: 13px; font-weight: 700; }
+  .v2-post-vid { position: absolute; right: 12px; bottom: 12px; z-index: 1; width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,.5);
+    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .v2-post-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; aspect-ratio: 16 / 10; }
+  .v2-post-empty span { font-size: 64px; font-weight: 850; color: rgba(255,255,255,.85); }
+  .v2-post-empty em { font-style: normal; font-size: 13px; font-weight: 800; color: #fff; background: rgba(0,0,0,.2); padding: 7px 14px; border-radius: 99px; }
+  .v2-post-count { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff;
+    font-size: 12px; font-weight: 750; pointer-events: none; }
+  .v2-post-dots { position: absolute; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 5px; pointer-events: none; }
+  .v2-post-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.5); transition: background .2s, transform .2s; }
+  .v2-post-dots i.on { background: #fff; transform: scale(1.15); }
+  .v2-post-acts { display: flex; align-items: center; gap: 10px; padding: 10px 14px 4px; }
+  .v2-post-story { height: 32px; padding: 0 13px; border: none; border-radius: 99px; background: linear-gradient(135deg, #F59E0B, #EC4899 55%, #8B5CF6);
+    color: #fff; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+  .v2-post-ring { position: relative; width: 34px; height: 34px; border-radius: 50%; flex: none;
+    background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--surface-3, #e5e7eb) 0); }
+  .v2-post-ring::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--surface-1); }
+  .v2-post-ring em { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; font-style: normal;
+    font-size: 10px; font-weight: 850; color: var(--text-1); }
+  .v2-post-stat { font-size: 12.5px; font-weight: 700; color: var(--text-2); }
+  .v2-post-open { height: 32px; padding: 0 14px; border: 1px solid var(--border-color); border-radius: 99px; background: var(--surface-1);
+    color: var(--text-1); font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; }
+  .v2-post-cap { padding: 6px 14px 14px; display: flex; flex-direction: column; gap: 9px; }
+  .v2-post-note { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-1); display: -webkit-box; -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .v2-post-note.open { -webkit-line-clamp: unset; display: block; }
+  .v2-post-note b { font-weight: 800; }
+  .v2-post-sec { display: flex; flex-direction: column; gap: 4px; }
+  .v2-post-lbl { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+  .v2-post-sec .v2-3m { margin: 0; }
+  .v2-post .v2-3m-i { font-size: 13px; }
+  .v2-post-hz { display: flex; gap: 14px; font-size: 12.5px; color: var(--text-2); font-weight: 600; }
+  .v2-post-hz b { color: var(--text-3); font-weight: 800; margin-right: 2px; }
+  .v2-post-hz .none { color: var(--text-3); }
+  .v2-post-habits { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+  .v2-post-habits li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text-2); }
+  .v2-post-hname { font-weight: 700; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .v2-post-hint { margin: 0; font-size: 13px; color: var(--primary); font-weight: 700; cursor: pointer; }
   `;
   document.head.appendChild(st);
 }
