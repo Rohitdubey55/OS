@@ -8159,6 +8159,26 @@ function v2PageHTML(g) {
    remembered on this device, so the tray's rings go grey like the real thing. */
 
 const V2_PHOTO_MS = 5000;
+const V2_PHOTO_CHOICES = [3, 5, 7, 10, 15, 20];
+// How long each photo stays up in a story. One value for every story. It is
+// kept on the settings row (so every device gets it) and on this device, so
+// it still works before the settings column exists.
+function v2PhotoMs() {
+  const st = (state.data.settings && state.data.settings[0]) || {};
+  let sec = Number(st.story_photo_seconds);
+  if (!(sec > 0)) { try { sec = Number(localStorage.getItem('os.vision.photoSec')); } catch (e) { } }
+  return sec >= 1 && sec <= 60 ? sec * 1000 : V2_PHOTO_MS;
+}
+async function v2SetPhotoSeconds(sec) {
+  sec = Math.max(1, Math.min(60, Math.round(Number(sec) || 5)));
+  try { localStorage.setItem('os.vision.photoSec', String(sec)); } catch (e) { }
+  if (!state.data.settings) state.data.settings = [];
+  const st = state.data.settings[0];
+  if (st) {
+    st.story_photo_seconds = sec;
+    if (st.id) { try { await apiCall('update', 'settings', { story_photo_seconds: sec }, st.id); } catch (e) { } }
+  }
+}
 const v2s = { groups: [], gi: 0, ii: 0, t0: 0, elapsed: 0, raf: 0, paused: false, muted: false, holdTimer: 0, held: false, sx: 0, sy: 0 };
 
 function v2SeenSet() {
@@ -8230,6 +8250,30 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && v2Wake.want) v2WakeOn();
 });
 
+/* How much of the top and bottom of the screen belongs to the phone (status
+   bar / notch / Dynamic Island, home bar). The CSS safe-area values are the
+   right answer, but some home-screen and app wrappers on iPhone report 0
+   while still drawing the page under the status bar — so if they come back
+   empty there, fall back to the iPhone's real sizes. */
+function v2SafeInsets() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;' +
+    'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  let top = parseFloat(cs.paddingTop) || 0, bot = parseFloat(cs.paddingBottom) || 0;
+  probe.remove();
+  const ios = /iPhone|iPod/.test(navigator.userAgent) || (/iPad|Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  const wrapped = navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches)
+    || !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  if (ios && wrapped) {
+    const tall = Math.max(screen.width, screen.height) >= 812;          // notch / Dynamic Island models
+    if (top < 20) top = tall ? 54 : 20;
+    if (bot < 1 && tall) bot = 28;
+  }
+  return { top, bot };
+}
+
 function v2StoryMount() {
   let el = document.getElementById('v2Story');
   if (!el) {
@@ -8261,6 +8305,9 @@ function v2StoryMount() {
       </div>
     </div>
     <button class="v2s-nav next" onclick="v2StoryGroupStep(1)" aria-label="Next vision">›</button>`;
+  const ins = v2SafeInsets();
+  el.style.setProperty('--v2s-top', ins.top + 'px');
+  el.style.setProperty('--v2s-bot', ins.bot + 'px');
   el.classList.add('open');
   document.body.style.overflow = 'hidden';
   v2WakeOn();
@@ -8315,6 +8362,12 @@ async function v2StoryShow() {
   v2MarkSeen(it.ref);
 
   if (it.kind === 'video') {
+    if (cover) {
+      const fill = document.createElement('div');
+      fill.className = 'v2s-fill';
+      fill.style.backgroundImage = `url('${cover}')`;
+      box.appendChild(fill);
+    }
     const v = document.createElement('video');
     v.src = it.url; v.playsInline = true; v.muted = v2s.muted; v.preload = 'auto';
     v.addEventListener('ended', () => v2StoryNext());
@@ -8327,8 +8380,14 @@ async function v2StoryShow() {
     if (v2s.paused) v.pause();
   } else {
     v2MusicDuck(false);
+    // Show the whole photo at its own shape; a soft blurred copy fills the
+    // bars around it instead of cropping or stretching the photo itself.
+    const fill = document.createElement('div');
+    fill.className = 'v2s-fill';
+    fill.style.backgroundImage = `url('${it.url}')`;
     const img = document.createElement('img');
     img.src = it.url; img.alt = '';
+    box.appendChild(fill);
     box.appendChild(img);
     v2s.t0 = performance.now();
     if (!v2s.paused) v2StoryTick();
@@ -8347,8 +8406,9 @@ function v2StoryBar(frac) {
 function v2StoryTick() {
   const f = () => {
     const t = v2s.elapsed + (performance.now() - v2s.t0);
-    v2StoryBar(t / V2_PHOTO_MS);
-    if (t >= V2_PHOTO_MS) { v2StoryNext(); return; }
+    const dur = v2PhotoMs();
+    v2StoryBar(t / dur);
+    if (t >= dur) { v2StoryNext(); return; }
     v2s.raf = requestAnimationFrame(f);
   };
   v2s.raf = requestAnimationFrame(f);
@@ -8658,9 +8718,16 @@ window.v2StoryEdit = function () {
   panel.className = 'v2s-edit';
   panel.id = 'v2sEdit';
   panel.innerHTML = `
-    <div class="v2s-edit-card" role="dialog" aria-label="Story music">
-      <div class="v2s-edit-head"><b>Story music</b><span>${v2Esc(g.title || '')}</span>
+    <div class="v2s-edit-card" role="dialog" aria-label="Story settings">
+      <div class="v2s-edit-head"><b>Story settings</b><span>${v2Esc(g.title || '')}</span>
         <button class="v2s-ic dark" onclick="v2StoryEditClose(false)" aria-label="Close">✕</button></div>
+      <div class="v2s-sec-lbl">Every story</div>
+      <div class="v2s-edit-row v2s-time"><span>Photo time</span>
+        <div class="v2s-chips" id="v2sTime">
+          ${V2_PHOTO_CHOICES.map(n => `<button type="button" class="${Math.round(v2PhotoMs() / 1000) === n ? 'on' : ''}" onclick="v2StoryEditTime(${n})">${n}s</button>`).join('')}
+        </div></div>
+      <p class="v2s-sub">How long each photo stays on screen. Videos play to the end.</p>
+      <div class="v2s-sec-lbl">Music for this story</div>
       <div class="v2s-opts">
         ${opt('', 'No music', '')}
         ${[...new Set(V2_TRACKS.map(t => t.group))].map(grp => `
@@ -8686,7 +8753,12 @@ window.v2StoryEdit = function () {
     </div>`;
   panel.addEventListener('pointerdown', e => { if (e.target === panel) v2StoryEditClose(false); });
   v2s.editPick = cur ? { ...cur } : null;
+  v2s.editTime = 0;
   document.getElementById('v2Story').appendChild(panel);
+};
+window.v2StoryEditTime = function (n) {
+  v2s.editTime = n;
+  document.querySelectorAll('#v2sTime button').forEach(b => b.classList.toggle('on', b.textContent === n + 's'));
 };
 window.v2StoryEditPick = function (input) {
   document.querySelectorAll('.v2s-opt').forEach(l => l.classList.toggle('on', l.contains(input) && input.checked));
@@ -8729,6 +8801,7 @@ window.v2StoryEditSave = async function () {
   const vol = Math.max(0, Math.min(1, (+document.getElementById('v2sVol').value) / 100));
   let pick = v2s.editPick ? { ...v2s.editPick, vol } : null;
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  if (v2s.editTime && v2s.editTime * 1000 !== v2PhotoMs()) await v2SetPhotoSeconds(v2s.editTime);
   // Upload once, then share the finished ref, so "All visions" is one file.
   if (pick && !pick.ref.startsWith('builtin:')) pick.ref = await v2CloudRef(pick.ref, 'story_music_' + (pick.name || 'track'));
   const value = pick ? JSON.stringify(pick) : '';
@@ -9127,7 +9200,8 @@ function v2InjectCSS() {
     .v2s-nav { display: none !important; }
   }
   .v2s-media { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-  .v2s-media img, .v2s-media video { width: 100%; height: 100%; object-fit: cover; }
+  .v2s-media img, .v2s-media video { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: contain; }
+  .v2s-fill { position: absolute; inset: -30px; background: center / cover no-repeat; filter: blur(28px) brightness(.55); transform: scale(1.08); }
   .v2s-bars { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 3; display: flex; gap: 4px; }
   .v2s-bars i { flex: 1; height: 2.5px; border-radius: 2px; background: rgba(255,255,255,.35); overflow: hidden; }
   .v2s-bars em { display: block; height: 100%; background: #fff; }
@@ -9259,14 +9333,14 @@ function v2InjectCSS() {
     /* Full screen on a phone runs under the status bar / notch (the app uses
        viewport-fit=cover), where taps go to the system. The picture stays
        edge to edge; the bars, buttons and caption move into the safe area. */
-    .v2s-bars { top: calc(env(safe-area-inset-top, 0px) + 8px); }
-    .v2s-head { top: calc(env(safe-area-inset-top, 0px) + 16px); padding-top: 6px; }
-    .v2s-head::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: calc(env(safe-area-inset-top, 0px) + 16px);
+    .v2s-bars { top: calc(var(--v2s-top, 0px) + 8px); }
+    .v2s-head { top: calc(var(--v2s-top, 0px) + 16px); padding-top: 6px; }
+    .v2s-head::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: calc(var(--v2s-top, 0px) + 16px);
       background: rgba(0,0,0,.45); pointer-events: none; }
     .v2s-ic { width: 40px; height: 40px; }
-    .v2s-taps { top: calc(env(safe-area-inset-top, 0px) + 84px); bottom: calc(env(safe-area-inset-bottom, 0px) + 100px); }
-    .v2s-foot { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); }
-    .v2s-edit { padding: calc(env(safe-area-inset-top, 0px) + 12px) 12px calc(env(safe-area-inset-bottom, 0px) + 12px); }
+    .v2s-taps { top: calc(var(--v2s-top, 0px) + 84px); bottom: calc(var(--v2s-bot, 0px) + 100px); }
+    .v2s-foot { padding-bottom: calc(var(--v2s-bot, 0px) + 18px); }
+    .v2s-edit { padding: calc(var(--v2s-top, 0px) + 12px) 12px calc(var(--v2s-bot, 0px) + 12px); }
     .v2s-edit-card { max-height: 100%; }
   }
   /* phone feed */
@@ -9329,6 +9403,14 @@ function v2InjectCSS() {
   .v2-post-habits li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text-2); }
   .v2-post-hname { font-weight: 700; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .v2-post-hint { margin: 0; font-size: 13px; color: var(--primary); font-weight: 700; cursor: pointer; }
+  .v2s-sec-lbl { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #9CA3AF; margin: 4px 2px 8px; }
+  .v2s-time { margin-bottom: 4px; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .v2s-time > span { width: auto; }
+  .v2s-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .v2s-chips button { height: 32px; min-width: 42px; padding: 0 9px; border: 1px solid #E5E7EB; border-radius: 99px; background: #fff;
+    color: #374151; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+  .v2s-chips button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .v2s-sub { margin: 0 0 14px; font-size: 12px; color: #6B7280; }
   `;
   document.head.appendChild(st);
 }
