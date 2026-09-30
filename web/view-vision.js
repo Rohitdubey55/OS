@@ -7199,8 +7199,109 @@ function v2ListHTML(goals, phone) {
    photo opens the story there. The caption carries the vision's details —
    the note, its 3-month goals, horizon counts, habits and progress. */
 
+/* ── Comments ───────────────────────────────────────────────────────────
+   Comments live inside the vision's note, at the end, so they're part of the
+   same text everywhere (and editable with it):
+       ## Comments
+       ### 30 Sep 2026
+       - 1:53 PM · Body fat down to 22%
+   One heading per day; each comment is a line with its time. */
+const V2_COMMENTS_RE = /^##\s+Comments\s*$/m;
+function v2NoteBody(g) {
+  const t = v2NoteText(g);
+  const m = t.match(V2_COMMENTS_RE);
+  return (m ? t.slice(0, m.index) : t).replace(/\s+$/, '');
+}
+function v2Comments(g) {
+  const t = v2NoteText(g);
+  const m = t.match(V2_COMMENTS_RE);
+  if (!m) return [];
+  const out = [];
+  let date = '';
+  t.slice(m.index + m[0].length).split(/\r?\n/).forEach(line => {
+    const h = line.match(/^###\s+(.+?)\s*$/);
+    if (h) { date = h[1]; return; }
+    const c = line.match(/^\s*[-*]\s+(?:(\d{1,2}:\d{2}\s*[AP]M)\s*·\s*)?(.+)$/i);
+    if (c && c[2].trim()) out.push({ date, time: c[1] || '', text: c[2].trim() });
+  });
+  return out;                                   // oldest first
+}
+function v2CommentStamp(d) {
+  return {
+    date: `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]}, ${d.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getFullYear()}`,
+    time: d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  };
+}
+window.v2AddComment = async function (goalId, input) {
+  const g = v2Goal(goalId);
+  const text = String(input && input.value || '').replace(/\s+/g, ' ').trim();
+  if (!g || !text) return;
+  input.value = '';
+  const { date, time } = v2CommentStamp(new Date());
+  let note = v2NoteText(g).replace(/\s+$/, '');
+  const line = `- ${time} · ${text}`;
+  const list = v2Comments(g);
+  if (!V2_COMMENTS_RE.test(note)) note = (note ? note + '\n\n' : '') + `## Comments\n\n### ${date}\n${line}`;
+  else if (list.length && list[list.length - 1].date === date) note += `\n${line}`;
+  else note += `\n\n### ${date}\n${line}`;
+  g.notes = note;
+  v2RepaintVision(g.id, true);
+  await v2Save(g, { notes: note });
+};
+// Refresh just this vision where it's on screen (feed post / page note), keeping scroll.
+function v2RepaintVision(goalId, keepComposer) {
+  const g = v2Goal(goalId);
+  if (!g) return;
+  const post = document.querySelector(`.v2-post[data-id="${CSS.escape(String(g.id))}"]`);
+  if (post) {
+    const open = post.querySelector('.v2-post-cmts.open');
+    const tmp = document.createElement('div');
+    tmp.innerHTML = v2PostHTML(g).trim();
+    const el = tmp.firstElementChild;
+    if (open) el.querySelector('.v2-post-cmts')?.classList.add('open');
+    post.replaceWith(el);
+    v2Hydrate(el).then(() => v2FeedWire(document));
+    if (keepComposer) el.querySelector('.v2-cmt-input')?.focus();
+  }
+  if (String(v2.page) === String(g.id)) {
+    const n = document.getElementById('v2Note');
+    if (n && !v2.editingNote) n.outerHTML = v2NoteHTML(g);
+    const c = document.getElementById('v2Cmts');
+    if (c) c.outerHTML = v2CommentsHTML(g, true);
+  }
+}
+function v2CommentsHTML(g, page) {
+  const list = v2Comments(g).slice().reverse();         // newest first
+  const id = v2Js(g.id);
+  const shown = page ? list : list.slice(0, 2);
+  // Group by day for the page; the feed shows the latest two with their day.
+  let lastDay = null;
+  const rows = shown.map(c => {
+    const dayHead = page && c.date !== lastDay ? `<div class="v2-cmt-day">${v2Esc(c.date)}</div>` : '';
+    lastDay = c.date;
+    return `${dayHead}<div class="v2-cmt"><span class="v2-cmt-text">${v2Esc(c.text)}</span>
+      <span class="v2-cmt-when">${page ? v2Esc(c.time) : v2Esc([c.date, c.time].filter(Boolean).join(' · '))}</span></div>`;
+  }).join('');
+  const composer = `<form class="v2-cmt-form" onsubmit="event.preventDefault(); v2AddComment('${id}', this.querySelector('input'))">
+      <input class="v2-cmt-input" maxlength="500" placeholder="Add a comment…" enterkeyhint="send" autocomplete="off">
+      <button class="v2-cmt-send" type="submit" aria-label="Post comment">Post</button>
+    </form>`;
+  if (page) return `
+  <section class="v2-sec v2-cmts-page" id="v2Cmts">
+    <div class="v2-sec-head"><h4>Comments${list.length ? ` · ${list.length}` : ''}</h4></div>
+    ${composer}
+    ${rows || '<p class="v2-cmt-empty">Log progress, wins or thoughts here. Each one is saved into the note with its date and time.</p>'}
+  </section>`;
+  return `
+  <div class="v2-post-cmts">
+    ${list.length > 2 ? `<button class="v2-cmt-all" onclick="v2Open('${id}')">View all ${list.length} comments</button>` : ''}
+    ${rows}
+    ${composer}
+  </div>`;
+}
+
 function v2PlainNote(g) {
-  return v2NoteText(g).split(/\r?\n/)
+  return v2NoteBody(g).split(/\r?\n/)
     .map(l => l.replace(/^\s*(#{1,6}\s+|[-*•]\s+|\d+[.)]\s+)/, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim())
     .filter(Boolean).join(' · ');
@@ -7218,6 +7319,8 @@ function v2PostHTML(g) {
   const habits = state.data.habits || [];
   const links = v2LinkedHabits(g);
   const pc = typeof vzPlanCount === 'function' ? vzPlanCount(g) : null;
+  const cmtCount = v2Comments(g).length;
+  const goals3m = v2Goals3mHTML(g, 4);
 
   const slides = media.length
     ? media.map((m, i) => `
@@ -7233,8 +7336,11 @@ function v2PostHTML(g) {
     const h = habits.find(x => String(x.id) === String(link.id));
     if (!h) return '';
     const st = v2HabitStats(h, link);
+    const rate = st.dueNow ? Math.round(st.hitNow / st.dueNow * 100) : 0;
     return `<li><span class="v2-post-hname">${v2Esc(h.habit_name || h.name || 'Habit')}</span>
-      <span>${st.dueNow ? `${st.hitNow}/${st.dueNow} days` : 'not due yet'}${st.streak ? ` · 🔥${st.streak}` : ''}</span></li>`;
+      <span class="v2-post-hbar"><i style="width:${rate}%;background:${col}"></i></span>
+      <span class="v2-post-hnum">${st.dueNow ? `${st.hitNow}/${st.dueNow}` : '—'}</span>
+      ${st.streak ? `<span class="v2-post-streak">🔥 ${st.streak}</span>` : ''}</li>`;
   }).join('');
 
   return `
@@ -7251,17 +7357,30 @@ function v2PostHTML(g) {
     </div>
     <div class="v2-post-acts">
       <span class="v2-post-ring" style="--p:${prog};--c:${col}"><em>${prog}%</em></span>
-      ${links.length ? `<span class="v2-post-stat">${links.length} habit${links.length === 1 ? '' : 's'}</span>` : ''}
-      ${pc && pc.total ? `<span class="v2-post-stat">Plan ${pc.done}/${pc.total}</span>` : ''}
-      <span style="flex:1"></span>
+      <span class="v2-post-sum">
+        <b>${prog ? `${prog}% there` : 'Just started'}</b>
+        <span>${[links.length ? `${links.length} habit${links.length === 1 ? '' : 's'}` : '', pc && pc.total ? `Plan ${pc.done}/${pc.total}` : ''].filter(Boolean).join(' · ') || v2Esc(g.category || '')}</span>
+      </span>
+      <button class="v2-post-iconbtn" onclick="v2PostFocusComment('${id}')" aria-label="Comment" title="Comment">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.4A8.5 8.5 0 1 1 21 12z"/></svg>
+        ${cmtCount ? `<em>${cmtCount}</em>` : ''}</button>
       <button class="v2-post-open" onclick="v2Open('${id}')">Open</button>
     </div>
     <div class="v2-post-cap">
       ${note ? `<p class="v2-post-note" onclick="this.classList.toggle('open')"><b>${v2Esc(g.title || '')}</b> ${v2Esc(note)}</p>` : ''}
-      ${v2Goals3mHTML(g, 4) ? `<div class="v2-post-sec"><span class="v2-post-lbl">Next 3 months</span>${v2Goals3mHTML(g, 4)}</div>` : ''}
-      <div class="v2-post-hz">${hzLine}</div>
-      ${habitLines ? `<div class="v2-post-sec"><span class="v2-post-lbl">Habits · last 30 days</span><ul class="v2-post-habits">${habitLines}</ul></div>` : ''}
-      ${!note && !v2Goals3mHTML(g, 4) ? `<p class="v2-post-hint" onclick="v2Open('${id}')">Add a note and 3-month goals to fill this in →</p>` : ''}
+      <div class="v2-post-box">
+        <div class="v2-post-hzgrid">
+          ${V2_HORIZONS.map(x => {
+            const st = hz[x.key], pct = st.total ? Math.round(st.done / st.total * 100) : 0;
+            return `<div class="v2-post-hzc ${st.total ? '' : 'none'}"><span>${x.label}</span><b>${st.total ? `${st.done}/${st.total}` : '—'}</b>
+              <i><em style="width:${pct}%;background:${col}"></em></i></div>`;
+          }).join('')}
+        </div>
+        ${goals3m ? `<div class="v2-post-sec"><span class="v2-post-lbl">Next 3 months</span>${goals3m}</div>` : ''}
+      </div>
+      ${habitLines ? `<div class="v2-post-box"><div class="v2-post-sec"><span class="v2-post-lbl">Habits · last 30 days</span><ul class="v2-post-habits">${habitLines}</ul></div></div>` : ''}
+      ${!note && !goals3m ? `<p class="v2-post-hint" onclick="v2Open('${id}')">Add a note and 3-month goals to fill this in →</p>` : ''}
+      ${v2CommentsHTML(g, false)}
     </div>
   </article>`;
 }
@@ -7271,6 +7390,11 @@ function v2FeedHTML(goals) {
 }
 
 // Tapping a post's photo opens that vision (the one Story button lives at the top).
+window.v2PostFocusComment = function (id) {
+  const post = document.querySelector(`.v2-post[data-id="${CSS.escape(String(id))}"]`);
+  const inp = post && post.querySelector('.v2-cmt-input');
+  if (inp) { inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); inp.focus({ preventScroll: true }); }
+};
 window.v2PostTap = function (id) {
   if (v2Sel.on) { v2TogglePick(id); return; }
   v2Open(id);
@@ -7684,6 +7808,7 @@ window.v2ManualProgress = function (val) {
 
 function v2NoteHTML(g) {
   const text = v2NoteText(g);
+  const body = v2NoteBody(g);
   if (v2.editingNote) {
     return `
     <section class="v2-sec v2-note editing" id="v2Note">
@@ -7705,8 +7830,8 @@ function v2NoteHTML(g) {
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button>
     </div>
-    ${text.trim()
-      ? `<div class="v2-note-body">${v2RenderNote(text)}</div>`
+    ${body.trim()
+      ? `<div class="v2-note-body">${v2RenderNote(body)}</div>`
       : `<button class="v2-empty-cta" onclick="v2NoteEdit()">Write what this vision looks like when it's real — the details make it pull.</button>`}
   </section>`;
 }
@@ -7714,6 +7839,8 @@ function v2RepaintNote() {
   const g = v2Goal(v2.page);
   const el = document.getElementById('v2Note');
   if (g && el) el.outerHTML = v2NoteHTML(g);
+  const c = document.getElementById('v2Cmts');
+  if (g && c) c.outerHTML = v2CommentsHTML(g, true);
 }
 window.v2NoteEdit = function () {
   v2.editingNote = true; v2RepaintNote();
@@ -8178,6 +8305,7 @@ function v2PageHTML(g) {
           ${V2_HORIZONS.map(x => v2HorizonColHTML(g, x).replace('class="v2-hz"', `class="v2-hz ${x.key === tab ? 'shown' : ''}"`)).join('')}
         </div>
         ${v2NoteHTML(g)}
+        ${v2CommentsHTML(g, true)}
         ${v2HabitsHTML(g)}
         <div class="v2-sec v2-sec-wrap">${tasks}</div>
         <div class="v2-sec v2-sec-wrap">${affs}</div>
@@ -8202,6 +8330,7 @@ function v2PageHTML(g) {
           <div class="v2-hz-grid">${V2_HORIZONS.map(x => v2HorizonColHTML(g, x)).join('')}</div>
         </section>
         ${v2NoteHTML(g)}
+        ${v2CommentsHTML(g, true)}
         <div class="v2-sec v2-sec-wrap">${tasks}</div>
         <div class="v2-sec v2-sec-wrap">${affs}</div>
         ${v2ActionsHTML(g)}
@@ -8416,7 +8545,7 @@ async function v2StoryShow() {
   // Caption: the vision's affirmations take turns, else the note's first line.
   const affs = (state.data.vision_affirmations || []).filter(a => String(a.vision_id) === String(g.id) && a.text);
   const cap = affs.length ? affs[v2s.ii % affs.length].text
-    : (v2NoteText(g).split(/\r?\n/).map(s => s.replace(/^[#\-*•\d.)\s]+/, '').trim()).find(Boolean) || '');
+    : (v2NoteBody(g).split(/\r?\n/).map(s => s.replace(/^[#\-*•\d.)\s]+/, '').trim()).find(Boolean) || '');
   document.getElementById('v2sCaption').textContent = cap;
 
   // The media itself
@@ -9510,6 +9639,52 @@ function v2InjectCSS() {
   .v2-media-hint { margin: -4px 0 10px; font-size: 12px; color: var(--text-3); font-weight: 600; }
   .v2s-skip { width: 100%; height: 40px; margin-bottom: 4px; border: 1px solid #E5E7EB; border-radius: 12px; background: #fff; color: #B91C1C;
     font: inherit; font-size: 13.5px; font-weight: 750; cursor: pointer; }
+  /* feed post — organized caption */
+  .v2-post-acts { gap: 11px !important; padding: 12px 14px 6px !important; }
+  .v2-post-ring { width: 40px !important; height: 40px !important; }
+  .v2-post-sum { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+  .v2-post-sum b { font-size: 14px; font-weight: 800; color: var(--text-1); }
+  .v2-post-sum span { font-size: 12px; font-weight: 600; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .v2-post-iconbtn { position: relative; flex: none; width: 38px; height: 38px; border: none; border-radius: 50%; background: none;
+    color: var(--text-1); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .v2-post-iconbtn em { position: absolute; top: 3px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px;
+    background: var(--primary); color: #fff; font-style: normal; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+  .v2-post-cap { gap: 10px !important; padding: 4px 14px 14px !important; }
+  .v2-post-box { border: 1px solid var(--border-color); border-radius: 14px; padding: 11px 12px; display: flex; flex-direction: column; gap: 10px;
+    background: var(--surface-2, #F8FAFC); }
+  .v2-post-hzgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .v2-post-hzc { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .v2-post-hzc span { font-size: 10.5px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+  .v2-post-hzc b { font-size: 15px; font-weight: 800; color: var(--text-1); }
+  .v2-post-hzc.none b { color: var(--text-3); font-weight: 700; }
+  .v2-post-hzc i { height: 4px; border-radius: 99px; background: var(--surface-3, #E5E7EB); overflow: hidden; }
+  .v2-post-hzc i em { display: block; height: 100%; border-radius: 99px; }
+  .v2-post-box .v2-post-sec { border-top: 1px solid var(--border-color); padding-top: 9px; }
+  .v2-post-box > .v2-post-sec:first-child { border-top: none; padding-top: 0; }
+  .v2-post-habits li { display: grid !important; grid-template-columns: minmax(0, 1fr) 64px auto auto; align-items: center; gap: 9px; }
+  .v2-post-hbar { height: 5px; border-radius: 99px; background: var(--surface-3, #E5E7EB); overflow: hidden; }
+  .v2-post-hbar i { display: block; height: 100%; border-radius: 99px; }
+  .v2-post-hnum { font-size: 12.5px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .v2-post-streak { font-size: 11.5px; font-weight: 800; color: #C2410C; background: rgba(249,115,22,.12); padding: 2px 7px; border-radius: 99px; }
+  /* comments */
+  .v2-post-cmts { display: flex; flex-direction: column; gap: 6px; }
+  .v2-cmt-all { align-self: flex-start; border: none; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-3); cursor: pointer; }
+  .v2-cmt { display: flex; flex-direction: column; gap: 1px; }
+  .v2-cmt-text { font-size: 13.5px; color: var(--text-1); line-height: 1.4; word-break: break-word; }
+  .v2-cmt-when { font-size: 11.5px; color: var(--text-3); font-weight: 600; }
+  .v2-cmt-form { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border-color); padding-top: 9px; margin-top: 2px; }
+  .v2-cmt-input { flex: 1; min-width: 0; height: 36px; border: none !important; background: transparent !important; box-shadow: none !important;
+    font: inherit; font-size: 14px; color: var(--text-1); padding: 0 !important; outline: none; }
+  .v2-post-cmts .v2-cmt-input:focus { outline: none !important; box-shadow: none !important; border: none !important; }
+  .v2-cmt-send { flex: none; border: none; background: none; font: inherit; font-size: 13.5px; font-weight: 800; color: var(--primary); cursor: pointer; padding: 6px 2px; }
+  .v2-cmts-page .v2-cmt-form { border: 1px solid var(--border-color); border-radius: 12px; padding: 4px 6px 4px 12px; margin: 0 0 10px; }
+  .v2-cmts-page .v2-cmt { flex-direction: row; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border-color); }
+  .v2-cmts-page .v2-cmt:last-child { border-bottom: none; }
+  .v2-cmts-page .v2-cmt-text { flex: 1; }
+  .v2-cmts-page .v2-cmt-when { flex: none; }
+  .v2-cmt-day { margin-top: 10px; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+  .v2-cmt-day:first-of-type { margin-top: 0; }
+  .v2-cmt-empty { margin: 0; font-size: 13px; color: var(--text-3); }
   `;
   document.head.appendChild(st);
 }
