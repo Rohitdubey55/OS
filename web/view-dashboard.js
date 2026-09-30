@@ -2007,6 +2007,78 @@ window.toggleHgWeekly = function () {
     if (typeof renderDashboard === 'function') renderDashboard();
 };
 
+/* ── Phone layouts for the Habits and Food — 7 Days tiles ──────────────────
+   A 7-column grid can't fit a phone, so under 640px each tile shows one day
+   at a time: a week strip to pick the day, then that day as a readable list.
+   The desktop grids are untouched (they're hidden on phones, and vice versa). */
+window._hgmPick = function (iso) { window._hgmDay = iso; if (typeof renderDashboard === 'function') renderDashboard(); };
+window._fwmPick = function (iso) { window._fwmDay = iso; if (typeof renderDashboard === 'function') renderDashboard(); };
+(function injectDashPhoneCSS() {
+  if (document.getElementById('dashPhoneCSS')) return;
+  const st = document.createElement('style');
+  st.id = 'dashPhoneCSS';
+  st.textContent = `
+  .hgm, .fwm { display: none; }
+  @media (max-width: 640px) {
+    .habits-grid-widget .hg-scroll, .habits-grid-widget .hg-header { display: none !important; }
+    .fw-desk { display: none !important; }
+    .hgm, .fwm { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+  }
+  .hgm, .fwm { font-family: inherit; color: var(--text-1); }
+  .hgm-head, .fwm-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px 8px; }
+  .hgm-title, .fwm-title { font-size: 16px; font-weight: 800; letter-spacing: -.01em; flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; }
+  .hgm-sub, .fwm-sub { display: block; font-size: 12px; font-weight: 600; color: var(--text-3); margin-top: 1px; }
+  .hgm-iconbtn { height: 32px; padding: 0 11px; border: 1px solid var(--border-color); border-radius: 10px; background: var(--surface-1);
+    color: var(--text-2); font: inherit; font-size: 12.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .hgm-iconbtn.on { border-color: color-mix(in srgb, var(--primary) 45%, transparent); color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface-1)); }
+  .hgm-iconbtn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .hgm-ring { --p: 0; --c: var(--primary); position: relative; flex: none; width: 44px; height: 44px; border-radius: 50%;
+    background: conic-gradient(var(--c) calc(var(--p) * 1%), var(--surface-3, #E5E7EB) 0); }
+  .hgm-ring::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--surface-1); }
+  .hgm-ring b { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 850; }
+  .dpm-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; padding: 0 12px 8px; }
+  .dpm-day { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0 6px; border: 1px solid transparent; border-radius: 12px;
+    background: none; font: inherit; color: var(--text-2); cursor: pointer; min-width: 0; }
+  .dpm-day em { font-style: normal; font-size: 10.5px; font-weight: 750; letter-spacing: .03em; text-transform: uppercase; color: var(--text-3); }
+  .dpm-day b { font-size: 15px; font-weight: 800; line-height: 1.1; }
+  .dpm-day i { width: 6px; height: 6px; border-radius: 50%; background: var(--surface-3, #E5E7EB); }
+  .dpm-day.today em, .dpm-day.today b { color: var(--primary); }
+  .dpm-day.on { background: var(--surface-2); border-color: var(--border-color); box-shadow: 0 1px 2px rgba(16,24,40,.06); }
+  .dpm-day.past { opacity: .7; }
+  .dpm-day i.hi { background: #10B981; } .dpm-day i.mid { background: #F59E0B; } .dpm-day i.lo { background: #EF4444; }
+  .hgm-list { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border-color); }
+  .hgm-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--border-color); }
+  .hgm-row:last-child { border-bottom: none; }
+  .hgm-ico { flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--surface-2); color: var(--text-2);
+    display: flex; align-items: center; justify-content: center; }
+  .hgm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .hgm-name { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hgm-dots { display: flex; gap: 4px; align-items: center; }
+  .hgm-dots i { width: 7px; height: 7px; border-radius: 2px; background: var(--surface-3, #E5E7EB); }
+  .hgm-dots i.done { background: #10B981; } .hgm-dots i.off { background: transparent; border: 1px dashed var(--border-color); box-sizing: border-box; }
+  .hgm-dots i.sel { outline: 1.5px solid var(--text-3); outline-offset: 1px; }
+  .hgm-dots span { margin-left: 6px; font-size: 11.5px; font-weight: 650; color: var(--text-3); }
+  .hgm-row .hg-cell { flex: none; padding: 0; border: 0; background: none; min-height: 0; width: auto; }
+  .hgm-row .hg-check { width: 30px; height: 30px; border-radius: 9px; }
+  .hgm-off { flex: none; font-size: 11.5px; font-weight: 700; color: var(--text-3); }
+  .hgm-empty { padding: 26px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
+  .fwm-list { flex: 1; min-height: 0; overflow: auto; border-top: 1px solid var(--border-color); }
+  .fwm-row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--border-color); }
+  .fwm-row:last-child { border-bottom: none; }
+  .fwm-emo { flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 17px; }
+  .fwm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .fwm-slot { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); }
+  .fwm-food { font-size: 14px; font-weight: 650; color: var(--text-1); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35; }
+  .fwm-food.none { color: var(--text-3); font-weight: 500; }
+  .fwm-food.skip { text-decoration: line-through; color: var(--text-3); }
+  .fwm-tag { flex: none; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 99px; background: var(--surface-2); color: var(--text-3); white-space: nowrap; }
+  .fwm-tag.ok { background: rgba(16,185,129,.12); color: #047857; }
+  .fwm-tag.alt { background: rgba(245,158,11,.14); color: #B45309; }
+  .fwm-tag.tpl { background: rgba(16,185,129,.07); color: #16A34A; }
+  `;
+  document.head.appendChild(st);
+})();
+
 window._tileHabitToggle = async function (cellEl, habitId, iso) {
     // iso defaults to today for backward compatibility with callers that
     // don't pass a date. The Habits Grid widget passes the specific row's
@@ -2041,6 +2113,22 @@ window._tileHabitToggle = async function (cellEl, habitId, iso) {
             scoreEl.classList.remove('is-zero', 'is-low', 'is-mid', 'is-high');
             scoreEl.classList.add(cls);
         }
+    }
+    // Phone habits tile: refresh its ring, count and today's history dot.
+    const hgm = cellEl.closest('.hgm');
+    if (hgm) {
+        const all = hgm.querySelectorAll('.hgm-list .hg-check');
+        const dn = hgm.querySelectorAll('.hgm-list .hg-check.is-done').length;
+        const pc = all.length ? Math.round(dn / all.length * 100) : 0;
+        const ring = hgm.querySelector('.hgm-ring');
+        if (ring) {
+            ring.style.setProperty('--p', pc);
+            ring.style.setProperty('--c', pc === 0 ? 'var(--text-3)' : pc < 40 ? '#EF4444' : pc < 70 ? '#F59E0B' : '#10B981');
+            ring.querySelector('b').textContent = pc + '%';
+        }
+        const n = hgm.querySelector('.hgm-n'); if (n) n.textContent = dn;
+        const dot = cellEl.closest('.hgm-row')?.querySelector('.hgm-dots i.sel');
+        if (dot) dot.classList.toggle('done', goingDone);
     }
     // Habit — Month tile: keep the "n/m done" footer in sync without re-rendering.
     const hmcCard = cellEl.closest('.hmc-card');
@@ -3265,13 +3353,49 @@ function renderDashboard() {
         return `<div style="display:contents"><div style="display:flex;align-items:center;justify-content:center;font-size:11px;">${emo}</div>${cells}</div>`;
       }).join('');
 
+      // ── Phone: pick a day, read its meals ──
+      const fSel = days.includes(window._fwmDay) ? window._fwmDay : today;
+      const fStrip = days.map(dt => {
+        const d = parse(dt);
+        const md = (data.meal_day || []).find(r => r.date === dt);
+        const planned = slots.filter(([sl]) => effective(dt, sl).text).length;
+        const dot = isH(md) ? 'hi' : planned ? '' : '';
+        return `<button class="dpm-day ${dt === fSel ? 'on' : ''} ${dt === today ? 'today' : dt < today ? 'past' : ''}"
+                  onclick="event.stopPropagation(); _fwmPick('${dt}')">
+          <em>${d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3)}</em><b>${d.getDate()}</b><i class="${dot}"></i></button>`;
+      }).join('');
+      const slotName = { breakfast: 'Breakfast', lunch: 'Lunch', snacks: 'Snacks', dinner: 'Dinner' };
+      const fRows = slots.map(([slot, emo]) => {
+        const eff = effective(fSel, slot);
+        const st = (eff.mp && eff.mp.status) || '';
+        let food = eff.text, cls = '', tag = '';
+        if (st === 'as_planned') tag = '<span class="fwm-tag ok">✓ Eaten</span>';
+        else if (st === 'different') { food = (eff.mp.eaten && String(eff.mp.eaten).trim()) || 'Ate something else'; tag = '<span class="fwm-tag alt">Changed</span>'; }
+        else if (st === 'skipped') { cls = 'skip'; tag = '<span class="fwm-tag">Skipped</span>'; }
+        else if (eff.text && eff.fromTemplate) tag = '<span class="fwm-tag tpl">Weekly plan</span>';
+        if (!food) { food = 'Nothing planned'; cls = 'none'; }
+        return `<div class="fwm-row"><span class="fwm-emo">${emo}</span>
+          <span class="fwm-main"><span class="fwm-slot">${slotName[slot]}</span><span class="fwm-food ${cls}">${escapeHtml(food)}</span></span>${tag}</div>`;
+      }).join('');
+      const selLabel = fSel === today ? 'Today' : parse(fSel).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+      const fPhone = `
+        <div class="fwm">
+          <div class="fwm-head">
+            <div class="fwm-title">${ICON.replace('width:26px;height:26px', 'width:34px;height:34px')}<span>Food plan<span class="fwm-sub">${selLabel}</span></span></div>
+            <span class="fwm-tag ok">${healthy}/7 healthy</span>
+          </div>
+          <div class="dpm-strip">${fStrip}</div>
+          <div class="fwm-list">${fRows}</div>
+        </div>`;
+
       return `
       <div class="widget-card" onclick="routeTo('meals')" style="height:100%;cursor:pointer;display:flex;flex-direction:column;background:var(--surface-1);border:1px solid var(--border-color);border-radius:18px;box-shadow:0 4px 15px rgba(0,0,0,.05);overflow:hidden;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px 6px;">
+        ${fPhone}
+        <div class="fw-desk" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 13px 6px;">
           <div style="display:flex;align-items:center;gap:8px;font-weight:800;color:var(--text-1);font-size:14px;min-width:0;">${ICON}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Food — 7 Days</span></div>
           <span style="font-size:11.5px;font-weight:800;color:#16a34a;white-space:nowrap;">${healthy}/7 healthy</span>
         </div>
-        <div style="flex:1;min-height:0;overflow:auto;padding:0 12px 10px;">
+        <div class="fw-desk" style="flex:1;min-height:0;overflow:auto;padding:0 12px 10px;">
           <div style="display:grid;grid-template-columns:16px repeat(7,minmax(0,1fr));gap:4px;align-items:center;">
             <div></div>${head}
             ${body}
@@ -3686,8 +3810,60 @@ function renderDashboard() {
           </div>`;
       }).join('');
 
+      // ── Phone: one day at a time ──
+      const selIso = dayRows.some(d => d.iso === window._hgmDay) ? window._hgmDay : dayRows[0].iso;
+      const selDay = dayRows.find(d => d.iso === selIso);
+      const strip = [...dayRows].reverse().map(day => {
+        const sh = habits.filter(h => _sched(h, day.date));
+        const dn = sh.filter(h => isDone(h.id, day.iso)).length;
+        const pc = sh.length ? Math.round(dn / sh.length * 100) : 0;
+        const dot = !sh.length || pc === 0 ? '' : pc < 40 ? 'lo' : pc < 70 ? 'mid' : 'hi';
+        return `<button class="dpm-day ${day.iso === selIso ? 'on' : ''} ${day.iso === dayRows[0].iso ? 'today' : 'past'}"
+                  onclick="event.stopPropagation(); _hgmPick('${day.iso}')" aria-label="${day.label}">
+          <em>${day.date.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3)}</em><b>${day.date.getDate()}</b><i class="${dot}"></i></button>`;
+      }).join('');
+      const selSched = habits.filter(h => _sched(h, selDay.date));
+      const selDone = selSched.filter(h => isDone(h.id, selIso)).length;
+      const selPct = selSched.length ? Math.round(selDone / selSched.length * 100) : 0;
+      const ringCol = selPct === 0 ? 'var(--text-3)' : selPct < 40 ? '#EF4444' : selPct < 70 ? '#F59E0B' : '#10B981';
+      const checkSvg = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      const mRows = habits.map(h => {
+        const name = h.habit_name || h.name || '';
+        const iconHTML = (typeof habitIconHTML === 'function') ? habitIconHTML(h.emoji, 17) : (h.emoji || '✦');
+        const hist = [...dayRows].reverse();
+        let doneN = 0, dueN = 0;
+        const dots = hist.map(day => {
+          const due = _sched(h, day.date), dn = due && isDone(h.id, day.iso);
+          if (due) dueN++; if (dn) doneN++;
+          return `<i class="${!due ? 'off' : dn ? 'done' : ''} ${day.iso === selIso ? 'sel' : ''}"></i>`;
+        }).join('');
+        const due = _sched(h, selDay.date), done = due && isDone(h.id, selIso);
+        return `<div class="hgm-row">
+          <span class="hgm-ico">${iconHTML}</span>
+          <span class="hgm-main"><span class="hgm-name">${escapeHtml(name)}</span>
+            <span class="hgm-dots">${dots}<span>${doneN}/${dueN}</span></span></span>
+          ${due ? `<div class="hg-cell hg-cell--clickable" onclick="event.stopPropagation(); _tileHabitToggle(this, '${h.id}', '${selIso}');">
+              <span class="hg-check ${done ? 'is-done' : ''}">${done ? checkSvg : ''}</span></div>`
+            : `<span class="hgm-off">Not today</span>`}
+        </div>`;
+      }).join('');
+      const phoneHTML = `
+          <div class="hgm">
+            <div class="hgm-head">
+              <span class="hgm-ring" style="--p:${selPct};--c:${ringCol}"><b>${selPct}%</b></span>
+              <div class="hgm-title"><span>Habits<span class="hgm-sub">${selDay.label} · <span class="hgm-n">${selDone}</span> of ${selSched.length} done</span></span></div>
+              <button class="hgm-iconbtn ${showWeekly ? 'on' : ''}" onclick="event.stopPropagation();toggleHgWeekly()" title="Show weekly habits">Weekly</button>
+              <button class="hgm-iconbtn primary" onclick="event.stopPropagation();_dashOpenModal('habits','openHabitModal')" aria-label="New habit">+</button>
+            </div>
+            <div class="dpm-strip">${strip}</div>
+            <div class="hgm-list">
+              ${mRows || '<div class="hgm-empty">No habits to show.</div>'}
+            </div>
+          </div>`;
+
       return `
         <div class="widget-card habits-grid-widget" data-widget-id="habitsGrid">
+          ${phoneHTML}
           <div class="hg-header">
             <span class="hg-title">Habits</span>
             <div style="display:flex; align-items:center; gap:8px;">
