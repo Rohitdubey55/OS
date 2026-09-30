@@ -7250,7 +7250,6 @@ function v2PostHTML(g) {
         <div class="v2-post-dots">${media.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     </div>
     <div class="v2-post-acts">
-      ${v2StoryMediaOf(g).length ? `<button class="v2-post-story" onclick="v2StoryOpen('${id}', 0)">▶ Story</button>` : ''}
       <span class="v2-post-ring" style="--p:${prog};--c:${col}"><em>${prog}%</em></span>
       ${links.length ? `<span class="v2-post-stat">${links.length} habit${links.length === 1 ? '' : 's'}</span>` : ''}
       ${pc && pc.total ? `<span class="v2-post-stat">Plan ${pc.done}/${pc.total}</span>` : ''}
@@ -7271,12 +7270,26 @@ function v2FeedHTML(goals) {
   return `<div class="v2-feed">${goals.map(v2PostHTML).join('')}</div>`;
 }
 
-window.v2PostTap = function (id, i) {
+// Tapping a post's photo opens that vision (the one Story button lives at the top).
+window.v2PostTap = function (id) {
   if (v2Sel.on) { v2TogglePick(id); return; }
-  const g = v2Goal(id);
-  if (g && !v2StoryMediaOf(g).length) { v2Open(id); return; }   // everything skipped: open the vision instead
-  v2StoryOpen(id, i);
+  v2Open(id);
 };
+
+/* The feed's order changes once a day, so you don't meet your visions in the
+   same sequence every morning — but it holds still for the rest of that day
+   (a reload or coming back from a vision doesn't reshuffle it). */
+function v2DailyShuffle(list) {
+  const d = new Date();
+  const day = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const rank = x => {                      // stable pseudo-random number per (day, vision)
+    let h = 2166136261;
+    const str = day + '|' + x.id;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  };
+  return [...list].sort((a, b) => rank(a) - rank(b));
+}
 window.v2PostDots = function (track) {
   const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
   const box = track.parentElement;
@@ -7347,14 +7360,14 @@ function v2HomeHTML() {
   const content = view === 'list'
     ? v2ListHTML(shown, phone)
     : phone
-      ? (shown.length ? v2FeedHTML(byCat(shown)) : `<p class="v2-none">No visions match this filter.</p>`)
+      ? (shown.length ? v2FeedHTML(v2DailyShuffle(shown)) : `<p class="v2-none">No visions match this filter.</p>`)
       : (grid(shown, false) || `<p class="v2-none">No visions match this filter.</p>`);
 
   const done = shownDone.length ? `
     <details class="v2-cat v2-achieved">
       <summary><h2>Achieved</h2><span class="v2-cat-meta">${shownDone.length}</span></summary>
       ${view === 'list' ? v2ListHTML(shownDone, phone)
-        : phone ? v2FeedHTML(byCat(shownDone))
+        : phone ? v2FeedHTML(v2DailyShuffle(shownDone))
         : `<div class="v2-grid">${shownDone.map(v2CardHTML).join('')}</div>`}
     </details>` : '';
 
