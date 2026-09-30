@@ -6836,6 +6836,41 @@ function v2MediaOf(g) {
   return out;
 }
 
+/* Which photos/videos play in the story. Stored per vision as a JSON list of
+   skipped media ids (story_skip). The id is the file's own key, so it stays
+   the same when the file later gains its cloud copy. */
+function v2MediaId(m) { const p = v2RefParts(m.ref); return p ? p.key : String(m.ref); }
+function v2SkipSet(g) {
+  try { return new Set(JSON.parse((g && g.story_skip) || '[]').map(String)); } catch (e) { return new Set(); }
+}
+function v2InStory(g, m) { return !v2SkipSet(g).has(v2MediaId(m)); }
+function v2StoryMediaOf(g) { const skip = v2SkipSet(g); return v2MediaOf(g).filter(m => !skip.has(v2MediaId(m))); }
+// A position in the full media list → the matching position in the story
+// (the next photo that is in the story, if that one is skipped).
+function v2StoryIndexFor(g, fullIndex) {
+  const all = v2MediaOf(g), skip = v2SkipSet(g);
+  let n = 0;
+  for (let i = 0; i < all.length; i++) {
+    const inS = !skip.has(v2MediaId(all[i]));
+    if (i >= fullIndex && inS) return n;
+    if (inS) n++;
+  }
+  return 0;
+}
+window.v2ToggleInStory = async function (goalId, fullIndex) {
+  const g = v2Goal(goalId);
+  const m = g && v2MediaOf(g)[fullIndex];
+  if (!m) return;
+  const skip = v2SkipSet(g), id = v2MediaId(m);
+  if (skip.has(id)) skip.delete(id); else skip.add(id);
+  // Drop ids of files that no longer exist, so the list doesn't grow forever.
+  const live = new Set(v2MediaOf(g).map(v2MediaId));
+  const next = [...skip].filter(x => live.has(x));
+  await v2Save(g, { story_skip: next.length ? JSON.stringify(next) : '' });
+  if (typeof v2RepaintMedia === 'function' && String(v2.page) === String(g.id)) v2RepaintMedia();
+  showToast(skip.has(id) ? 'Skipped in story' : 'Back in the story');
+};
+
 // Resolve a stored ref to something a <img>/<video> can load. '' when the file
 // only exists on another device and has no cloud copy — callers skip those.
 async function v2Resolve(ref) {
@@ -7215,7 +7250,7 @@ function v2PostHTML(g) {
         <div class="v2-post-dots">${media.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}
     </div>
     <div class="v2-post-acts">
-      ${media.length ? `<button class="v2-post-story" onclick="v2StoryOpen('${id}', 0)">▶ Story</button>` : ''}
+      ${v2StoryMediaOf(g).length ? `<button class="v2-post-story" onclick="v2StoryOpen('${id}', 0)">▶ Story</button>` : ''}
       <span class="v2-post-ring" style="--p:${prog};--c:${col}"><em>${prog}%</em></span>
       ${links.length ? `<span class="v2-post-stat">${links.length} habit${links.length === 1 ? '' : 's'}</span>` : ''}
       ${pc && pc.total ? `<span class="v2-post-stat">Plan ${pc.done}/${pc.total}</span>` : ''}
@@ -7238,6 +7273,8 @@ function v2FeedHTML(goals) {
 
 window.v2PostTap = function (id, i) {
   if (v2Sel.on) { v2TogglePick(id); return; }
+  const g = v2Goal(id);
+  if (g && !v2StoryMediaOf(g).length) { v2Open(id); return; }   // everything skipped: open the vision instead
   v2StoryOpen(id, i);
 };
 window.v2PostDots = function (track) {
@@ -7277,7 +7314,7 @@ function v2HomeHTML() {
   const cats = v2Cats();
   const hzDone = active.reduce((n, g) => n + Object.values(v2HorizonStats(g)).reduce((a, s) => a + s.done, 0), 0);
   const hzTotal = active.reduce((n, g) => n + Object.values(v2HorizonStats(g)).reduce((a, s) => a + s.total, 0), 0);
-  const withMedia = active.filter(g => v2MediaOf(g).length);
+  const withMedia = active.filter(g => v2StoryMediaOf(g).length);
   const phone = v2Phone();
   const view = v2GetView();
   const f = v2.filter || 'all';
@@ -7767,22 +7804,35 @@ window.v2UnlinkHabit = async function (habitId) {
 
 function v2MediaHTML(g, big) {
   const media = v2MediaOf(g);
-  const tiles = media.map((m, i) => `
-    <div class="v2-tile ${m.kind} ${m.source === 'cover' ? 'cover' : ''}" data-ref="${v2Esc(m.ref)}" data-kind="${m.kind}"
+  const skip = v2SkipSet(g);
+  const tiles = media.map((m, i) => {
+    const off = skip.has(v2MediaId(m));
+    return `
+    <div class="v2-tile ${m.kind} ${m.source === 'cover' ? 'cover' : ''} ${off ? 'skipped' : ''}" data-ref="${v2Esc(m.ref)}" data-kind="${m.kind}"
          onclick="v2StoryOpen('${v2Js(g.id)}', ${i})">
       ${m.kind === 'video' ? '<span class="v2-play">▶</span>' : ''}
+      <button class="v2-eye ${off ? 'off' : ''}" onclick="event.stopPropagation(); v2ToggleInStory('${v2Js(g.id)}', ${i})"
+              title="${off ? 'Skipped in story — tap to include' : 'In story — tap to skip'}" aria-label="${off ? 'Include in story' : 'Skip in story'}">
+        ${off
+          ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7c1.8 0 3.4-.5 4.8-1.3"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>'
+          : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>'}
+      </button>
+      ${off ? '<span class="v2-skip-tag">Not in story</span>' : ''}
       ${m.source === 'cover' ? '<span class="v2-cover-tag">Cover</span>' : ''}
       <span class="v2-tile-acts" onclick="event.stopPropagation()">
         <button class="rm" onclick="v2RemoveMedia(${i})" title="Remove" aria-label="Remove">${v2Phone() ? '×' : 'Remove'}</button>
         ${m.source === 'gallery' ? `<button onclick="v2MakeCover('${v2Js(m.rowId)}')">${v2Phone() ? 'Cover' : 'Make cover'}</button>` : ''}
       </span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  const inStory = media.filter(m => !skip.has(v2MediaId(m))).length;
   return `
   <section class="v2-sec" id="v2Media">
     <div class="v2-sec-head">
       <h4>Photos &amp; video</h4>
-      ${media.length ? `<button class="v2-link" onclick="v2StoryOpen('${v2Js(g.id)}', 0)">Play as story</button>` : ''}
+      ${inStory ? `<button class="v2-link" onclick="v2StoryOpen('${v2Js(g.id)}', 0)">Play as story</button>` : ''}
     </div>
+    ${media.length ? `<p class="v2-media-hint">${inStory === media.length ? 'All' : `${inStory} of ${media.length}`} in the story · tap the eye on a photo to skip or include it</p>` : ''}
     <div class="v2-tiles ${big ? 'big' : ''}">
       ${tiles}
       <label class="v2-tile v2-tile-add">
@@ -8192,16 +8242,16 @@ function v2MarkSeen(ref) {
 }
 function v2StorySeenAll(g) {
   const seen = v2SeenSet();
-  const m = v2MediaOf(g);
+  const m = v2StoryMediaOf(g);
   return m.length > 0 && m.every(x => seen.has(x.ref));
 }
 
 function v2StoryGroups() {
   const cats = v2Cats();
   return (state.data.vision || [])
-    .filter(g => g.status !== 'achieved' && v2MediaOf(g).length)
+    .filter(g => g.status !== 'achieved' && v2StoryMediaOf(g).length)
     .sort((a, b) => cats.indexOf(a.category || 'Other') - cats.indexOf(b.category || 'Other'))
-    .map(g => ({ goal: g, items: v2MediaOf(g).map(m => ({ ...m, url: null })), resolved: false }));
+    .map(g => ({ goal: g, items: v2StoryMediaOf(g).map(m => ({ ...m, url: null })), resolved: false }));
 }
 
 async function v2StoryResolve(group) {
@@ -8222,7 +8272,9 @@ window.v2StoryOpen = async function (goalId, index) {
     gi = Math.max(0, v2s.groups.findIndex(g => g.items.some(i => !seen.has(i.ref))));
   }
   v2s.gi = gi;
-  v2s.ii = Math.max(0, index || 0);
+  // Callers pass a position in the vision's full media list; skipped photos
+  // aren't in the story, so map it onto the story's own list.
+  v2s.ii = goalId && index ? v2StoryIndexFor(v2s.groups[gi].goal, index) : 0;
   v2s.paused = false;
   v2StoryMount();
   await v2StoryShow();
@@ -8727,6 +8779,9 @@ window.v2StoryEdit = function () {
           ${V2_PHOTO_CHOICES.map(n => `<button type="button" class="${Math.round(v2PhotoMs() / 1000) === n ? 'on' : ''}" onclick="v2StoryEditTime(${n})">${n}s</button>`).join('')}
         </div></div>
       <p class="v2s-sub">How long each photo stays on screen. Videos play to the end.</p>
+      <div class="v2s-sec-lbl">This photo</div>
+      <button type="button" class="v2s-skip" onclick="v2StorySkipCurrent()">Skip this ${(v2s.groups[v2s.gi].items[v2s.ii] || {}).kind === 'video' ? 'video' : 'photo'} in stories</button>
+      <p class="v2s-sub">You can bring it back from the vision's Photos &amp; video section.</p>
       <div class="v2s-sec-lbl">Music for this story</div>
       <div class="v2s-opts">
         ${opt('', 'No music', '')}
@@ -8755,6 +8810,27 @@ window.v2StoryEdit = function () {
   v2s.editPick = cur ? { ...cur } : null;
   v2s.editTime = 0;
   document.getElementById('v2Story').appendChild(panel);
+};
+window.v2StorySkipCurrent = async function () {
+  const group = v2s.groups[v2s.gi];
+  const it = group && group.items[v2s.ii];
+  if (!it) return;
+  const g = group.goal;
+  const full = v2MediaOf(g).findIndex(m => v2MediaId(m) === v2MediaId(it));
+  document.getElementById('v2sEdit')?.remove();
+  if (full >= 0) await v2ToggleInStory(g.id, full);
+  // Take it out of the running story and carry on from the same spot.
+  group.items.splice(v2s.ii, 1);
+  if (!v2s.editWasPaused) { v2s.paused = false; v2s.pausedAt = false; v2StoryIcons(); }
+  if (!group.items.length) {
+    v2s.groups.splice(v2s.gi, 1);
+    if (!v2s.groups.length) { v2StoryClose(); return; }
+    if (v2s.gi >= v2s.groups.length) { v2StoryClose(); return; }
+    v2s.ii = 0;
+  } else if (v2s.ii >= group.items.length) {
+    if (v2s.gi < v2s.groups.length - 1) { v2s.gi++; v2s.ii = 0; } else { v2StoryClose(); return; }
+  }
+  v2StoryShow();
 };
 window.v2StoryEditTime = function (n) {
   v2s.editTime = n;
@@ -8843,7 +8919,7 @@ async function renderVision() {
   v2BackfillMedia();
   if (state.view === 'vision') {
     const active = (state.data.vision || []).filter(x => x.status !== 'achieved');
-    v2PaintHeaderSlot(!g && !v2Phone() ? v2TopItemsHTML(active, active.filter(x => v2MediaOf(x).length)) : '');
+    v2PaintHeaderSlot(!g && !v2Phone() ? v2TopItemsHTML(active, active.filter(x => v2StoryMediaOf(x).length)) : '');
   }
   v2Hydrate(main).then(() => { if (!g && v2Phone()) v2FeedWire(main); });
   v2LastPhone = v2Phone();
@@ -9411,6 +9487,16 @@ function v2InjectCSS() {
     color: #374151; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
   .v2s-chips button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
   .v2s-sub { margin: 0 0 14px; font-size: 12px; color: #6B7280; }
+  .v2-eye { position: absolute; top: 6px; right: 6px; z-index: 3; width: 30px; height: 30px; border: none; border-radius: 50%;
+    background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .v2-eye.off { background: rgba(255,255,255,.92); color: #111827; }
+  .v2-tile.skipped::after { content: ''; position: absolute; inset: 0; background: rgba(15,23,42,.55); z-index: 1; pointer-events: none; }
+  .v2-phone .v2-eye { right: auto; left: 5px; top: 5px; width: 28px; height: 28px; }
+  .v2-skip-tag { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; z-index: 2; padding: 3px 8px; border-radius: 99px; background: rgba(255,255,255,.92);
+    color: #111827; font-size: 11px; font-weight: 800; pointer-events: none; }
+  .v2-media-hint { margin: -4px 0 10px; font-size: 12px; color: var(--text-3); font-weight: 600; }
+  .v2s-skip { width: 100%; height: 40px; margin-bottom: 4px; border: 1px solid #E5E7EB; border-radius: 12px; background: #fff; color: #B91C1C;
+    font: inherit; font-size: 13.5px; font-weight: 750; cursor: pointer; }
   `;
   document.head.appendChild(st);
 }
