@@ -345,15 +345,11 @@ const LUMIA_TILE_CATALOG = [
     // Widget tiles — distinct icons that aren't reused elsewhere
     { id: 'widget-greeting',     kind: 'widget', widget: 'morning',      icon: 'sunrise',    label: 'Greeting',       category: 'Widgets', minW: 3, minH: 2 },
     { id: 'widget-aiBriefing',   kind: 'widget', widget: 'aiBriefing',   icon: 'coffee',     label: 'Daily Briefing', category: 'Widgets', minW: 3, minH: 2 },
-    { id: 'widget-yearProgress', kind: 'widget', widget: 'yearProgress', icon: 'calendar',   label: 'Year Progress',  category: 'Widgets', minW: 2, minH: 2, route: 'lifeCalendar' },
     { id: 'widget-habitsGrid',   kind: 'widget', widget: 'habitsGrid',   icon: 'grid',       label: 'Habits Grid',    category: 'Widgets', minW: 4, minH: 3, route: 'habits' },
     { id: 'widget-tasksList',    kind: 'widget', widget: 'tasksList',    icon: 'list',       label: 'Tasks List',     category: 'Widgets', minW: 3, minH: 3, route: 'tasks' },
-    { id: 'widget-dailyTools',   kind: 'widget', widget: 'dailyTools',   icon: 'layers',     label: 'Daily Tools',    category: 'Widgets', minW: 3, minH: 2 },
-    { id: 'widget-vision',       kind: 'widget', widget: 'vision',       icon: 'goals',      label: 'Vision Banner',  category: 'Widgets', minW: 3, minH: 2, route: 'vision' },
-    { id: 'widget-cashflow',     kind: 'widget', widget: 'cashflow',     icon: 'insights',   label: 'Cashflow',       category: 'Widgets', minW: 3, minH: 2, route: 'finance' },
     { id: 'widget-pomodoroStats',kind: 'widget', widget: 'pomodoroStats',icon: 'focus',      label: 'Focus Stats',    category: 'Widgets', minW: 2, minH: 2, route: 'pomodoro' },
     { id: 'widget-image',        kind: 'widget', widget: 'image',        icon: 'image',      label: 'Image',          category: 'Widgets', minW: 2, minH: 2 },
-    { id: 'widget-tdp',          kind: 'widget', widget: 'tdp',          icon: 'goals',      label: '10-Day Plan',    category: 'Widgets', minW: 2, minH: 2, route: 'vision' },
+    { id: 'widget-tdp',          kind: 'widget', widget: 'tdp',          icon: 'goals',      label: '10 Days Plan',    category: 'Widgets', minW: 2, minH: 2, route: 'tdp' },
     { id: 'widget-meals',        kind: 'widget', widget: 'meals',        icon: 'sprout',     label: 'Food Planner',   category: 'Widgets', minW: 2, minH: 2, route: 'meals' },
     { id: 'widget-mealsWeek',    kind: 'widget', widget: 'mealsWeek',    icon: 'cake',       label: 'Food — 7 Days',  category: 'Widgets', minW: 4, minH: 2, route: 'meals' },
 
@@ -373,7 +369,7 @@ const LUMIA_TILE_CATALOG = [
     { id: 'add-habit',    kind: 'add', icon: 'streak',   label: 'Add Habit',   category: 'Quick Add', minW: 1, minH: 1, action: 'openHabitModal' },
     { id: 'add-event',    kind: 'add', icon: 'calendar', label: 'Add Event',   category: 'Quick Add', minW: 1, minH: 1, action: '_addEventToday' },
     { id: 'add-note',     kind: 'add', icon: 'entries',  label: 'Add Note',    category: 'Quick Add', minW: 1, minH: 1, action: '_addNoteQuick' },
-    { id: 'add-goal',     kind: 'add', icon: 'goals',    label: 'Add Goal',    category: 'Quick Add', minW: 1, minH: 1, action: 'openVisionModal' },
+    { id: 'add-goal',     kind: 'add', icon: 'goals',    label: 'Add Vision',    category: 'Quick Add', minW: 1, minH: 1, action: 'openVisionModal' },
     { id: 'add-person',   kind: 'add', icon: 'chat',     label: 'Add Person',  category: 'Quick Add', minW: 1, minH: 1, action: 'openPersonModal' },
     { id: 'add-book',     kind: 'add', icon: 'open',     label: 'Add Book',    category: 'Quick Add', minW: 1, minH: 1, action: 'openBookSuggestionModal' },
 
@@ -399,7 +395,6 @@ const LUMIA_TILE_CATALOG = [
     // ─────────────────────────────────────────────────────────────────
     // ACTION LAUNCH — tap the tile to start a session
     // ─────────────────────────────────────────────────────────────────
-    { id: 'action-startFocus',     kind: 'add', icon: 'focus',   label: 'Start Focus',     category: 'Actions', minW: 1, minH: 1, action: '_startFocusSession' },
     { id: 'action-startMeditate',  kind: 'add', icon: 'goals',   label: 'Start Meditate',  category: 'Actions', minW: 1, minH: 1, action: '_startMeditate' },
     { id: 'action-startManifest',  kind: 'add', icon: 'sparkle', label: 'Start Manifest',  category: 'Actions', minW: 1, minH: 1, action: '_startManifest' },
 
@@ -458,12 +453,8 @@ function _computeWidgetCompact(cat) {
         case 'tdp': {
             const active = (data.vision_tdp || []).find(p => p.status === 'active');
             if (!active) return { value: '—', sub: 'No plan' };
-            let total = 0, completed = 0;
-            try {
-                const c = typeof active.categories_json === 'string' ? JSON.parse(active.categories_json) : (active.categories_json || {});
-                Object.values(c).forEach(it => (it || []).forEach(x => { total++; if (x.completed) completed++; }));
-            } catch (e) {}
-            return { value: (total ? Math.round(completed / total * 100) : 0) + '%', sub: '10-day plan' };
+            const { total, completed } = _dashTdpCounts(active);
+            return { value: (total ? Math.round(completed / total * 100) : 0) + '%', sub: '10 Days Plan' };
         }
         case 'meals': {
             const today = (() => { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
@@ -514,6 +505,26 @@ window._dashOpenTDP = function () {
     if (typeof routeTo === 'function') routeTo('tdp');
 };
 
+// Tiles retired from the catalog (they no longer made sense). Saved layouts
+// that still contain one simply drop it — see getLumiaConfig.
+//   widget-vision (Vision banner: "primary focus" + target date no longer exist)
+//   widget-cashflow (collapsed empty chart), widget-dailyTools (duplicates the
+//   tool tiles), widget-yearProgress (duplicate of the Year Progress KPI),
+//   action-startFocus (identical to the Focus tile).
+// 10 Days Plan progress. Plan items are Tasks now (tasks.tdp_plan_id); a plan
+// that hasn't been converted yet still has them in categories_json.
+function _dashTdpCounts(plan) {
+    const data = window.state?.data || {};
+    const items = (data.tasks || []).filter(t => String(t.tdp_plan_id || '') === String(plan.id) && t.status !== 'cancelled');
+    if (items.length) return { total: items.length, completed: items.filter(t => t.status === 'completed').length };
+    let total = 0, completed = 0;
+    try {
+        const c = typeof plan.categories_json === 'string' ? JSON.parse(plan.categories_json) : (plan.categories_json || {});
+        Object.values(c).forEach(it => { if (Array.isArray(it)) it.forEach(x => { total++; if (x.completed) completed++; }); });
+    } catch (e) {}
+    return { total, completed };
+}
+
 // Helper to look up catalog entry
 function getCatalogEntry(catalogId) {
     return LUMIA_TILE_CATALOG.find(c => c.id === catalogId) || null;
@@ -562,7 +573,7 @@ const WIDGET_RENDERERS = {
     'add-habit':    (t, c) => _renderAddTile(c, 'New habit',    'Build a routine'),
     'add-event':    (t, c) => _renderAddTile(c, 'New event',    'Schedule something'),
     'add-note':     (t, c) => _renderAddTile(c, 'Quick note',   'Jot it down'),
-    'add-goal':     (t, c) => _renderAddTile(c, 'New goal',     'What do you want?'),
+    'add-goal':     (t, c) => _renderAddTile(c, 'New vision',   'What do you want?'),
     'add-person':   (t, c) => _renderAddTile(c, 'New contact',  'Add to your circle'),
     'add-book':     (t, c) => _renderAddTile(c, 'Add a book',   'Track your reading'),
     'action-startFocus':    (t, c) => _renderAddTile(c, 'Focus',    'Start a Pomodoro'),
@@ -647,7 +658,7 @@ const WIDGET_RENDERERS = {
             const preview = (e.content || '').replace(/<[^>]+>/g, '').slice(0, 60);
             return `
                 <button class="lw-row" onclick="event.stopPropagation();(typeof openEditDiary === 'function' ? openEditDiary('${e.id}') : routeTo('diary'))">
-                    <span class="lw-row__emoji">${moodEmoji[e.mood] || '✨'}</span>
+                    <span class="lw-row__emoji">${moodEmoji[e.mood] || (_dashMoodNum(e) != null ? _dashMoodEmoji(_dashMoodNum(e)) : '✨')}</span>
                     <span class="lw-row__main">
                         <span class="lw-row__title">${escapeHtml(preview || 'Untitled entry')}</span>
                         <span class="lw-row__sub">${_shortDate(e.date)}</span>
@@ -703,7 +714,8 @@ const WIDGET_RENDERERS = {
         if (events.length === 0) return _listShell(c, 0, _emptyState("Today's schedule is clear."));
         const rows = events.map(e => {
             const d = new Date(e.start_datetime);
-            const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const hasTime = !isNaN(d.getTime()) && /T\d/.test(String(e.start_datetime));
+            const time = hasTime ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'All day';
             return `
                 <button class="lw-row" onclick="event.stopPropagation();routeTo('calendar')">
                     <span class="lw-row__time">${time}</span>
@@ -754,15 +766,18 @@ const WIDGET_RENDERERS = {
     },
 
     'status-activeGoals': (t, c) => {
-        const goals = (state.data.vision_board || []).filter(g => g.status === 'in_progress' || g.status === 'active' || !g.status || g.status === 'open');
+        // Visions live in state.data.vision (vision_board is the table name); progress is
+        // earned from the vision's horizon goals when the Vision page has loaded.
+        const goals = (state.data.vision || state.data.vision_board || []).filter(g => g.status === 'in_progress' || g.status === 'active' || !g.status || g.status === 'open');
         if (goals.length === 0) return _listShell(c, 0, _emptyState('No active goals.'));
         const rows = goals.slice(0, 10).map(g => {
-            const pct = Math.max(0, Math.min(100, Number(g.progress) || 0));
+            let pct = Math.max(0, Math.min(100, Number(g.progress) || 0));
+            try { if (typeof v2Progress === 'function') pct = v2Progress(g).pct; } catch (e) { }
             return `
                 <button class="lw-row" onclick="event.stopPropagation();routeTo('vision')">
                     <span class="lw-row__main">
                         <span class="lw-row__title">${escapeHtml(g.title || 'Untitled goal')}</span>
-                        <span class="lw-row__sub">${escapeHtml(g.category || '')} ${g.target_date ? '· ' + _shortDate(g.target_date) : ''}</span>
+                        <span class="lw-row__sub">${escapeHtml(g.category || '')}</span>
                         <div class="lw-progress"><div class="lw-progress__bar" style="width:${pct}%"></div></div>
                     </span>
                     <span class="lw-row__amt">${pct}%</span>
@@ -921,20 +936,23 @@ const WIDGET_RENDERERS = {
         const logs = state.data.habit_logs || [];
         const ranked = habits.map(h => {
             // Walk back from today, count consecutive completion days
+            // Consecutive due-days done; today not done yet doesn't break it.
             let streak = 0;
             const cursor = new Date();
             for (let i = 0; i < 365; i++) {
                 const iso = cursor.toISOString().slice(0, 10);
+                const due = typeof window.habitScheduledOn !== 'function' || window.habitScheduledOn(h, cursor);
                 const done = logs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(iso));
-                if (done) { streak++; cursor.setDate(cursor.getDate() - 1); }
-                else break;
+                if (done) streak++;
+                else if (due && i > 0) break;
+                cursor.setDate(cursor.getDate() - 1);
             }
             return { h, streak };
         }).filter(r => r.streak > 0).sort((a, b) => b.streak - a.streak).slice(0, 5);
         if (ranked.length === 0) return _listShell(c, 0, _emptyState('No active streaks yet. Start one today!'));
         const rows = ranked.map(({ h, streak }) => `
             <div class="lw-row lw-row--static">
-                <span class="lw-row__emoji">${h.emoji || h.icon || '🔥'}</span>
+                <span class="lw-row__emoji">${typeof habitIconHTML === 'function' ? habitIconHTML(h.emoji, 16) : (h.emoji || '🔥')}</span>
                 <span class="lw-row__main">
                     <span class="lw-row__title">${escapeHtml(h.habit_name || h.name || 'Habit')}</span>
                 </span>
@@ -1067,12 +1085,17 @@ window._hmcNav = function (uid, delta) {
 };
 
 // Quick-Add tile template
+// One-word names for the smallest (1×1) tiles, where "New expense" won't fit.
+const _ADD_SHORT = { 'add-task': 'Task', 'add-expense': 'Expense', 'add-journal': 'Journal', 'add-habit': 'Habit',
+    'add-event': 'Event', 'add-note': 'Note', 'add-goal': 'Vision', 'add-person': 'Contact', 'add-book': 'Book',
+    'action-startMeditate': 'Meditate', 'action-startManifest': 'Manifest' };
 function _renderAddTile(cat, title, hint) {
     return `
         <div class="lw-addtile">
             <div class="lw-addtile__icon">${renderIcon(cat.icon || 'sparkle', null, 'style="width:24px;height:24px"')}</div>
             <div class="lw-addtile__plus">+</div>
             <div class="lw-addtile__title">${title}</div>
+            <div class="lw-addtile__short">${_ADD_SHORT[cat.id] || title}</div>
             <div class="lw-addtile__hint">${hint}</div>
         </div>`;
 }
@@ -1210,7 +1233,7 @@ function getLumiaConfig() {
         if (!raw) return null;
         try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (e) { return null; }
     };
-    const normalize = (arr) => (Array.isArray(arr) ? arr.map(_normalizeTile).filter(Boolean) : null);
+    const normalize = (arr) => (Array.isArray(arr) ? arr.map(_normalizeTile).filter(t => t && getCatalogEntry(t.catalogId)) : null);
     const k = _layoutKeys();
     // 1. Settings (source of truth — per-device column)
     const settings = state.data?.settings?.[0];
@@ -1421,7 +1444,7 @@ function renderLumiaTile(tile, sectionRenderers, isMobile) {
     const resizeHandle = `<div class="lumia-tile__resize" title="Drag to resize" aria-label="Resize tile"></div>`;
 
     return `
-        <div class="lumia-tile ${colored ? 'lumia-tile--colored' : 'lumia-tile--plain'} ${(isWidget && fitsFull && !colored) ? 'lumia-tile--mode-full' : 'lumia-tile--mode-compact'} lumia-tile--kind-${cat.kind}"
+        <div class="lumia-tile lumia-tile--w${w} lumia-tile--h${h} ${colored ? 'lumia-tile--colored' : 'lumia-tile--plain'} ${(isWidget && fitsFull && !colored) ? 'lumia-tile--mode-full' : 'lumia-tile--mode-compact'} lumia-tile--kind-${cat.kind}"
              data-tile-uid="${tile.uid}"
              data-tile-kind="${cat.kind}"
              data-tile-catalog="${cat.id}"
@@ -2075,6 +2098,71 @@ window._fwmPick = function (iso) { window._fwmDay = iso; if (typeof renderDashbo
   .fwm-tag.ok { background: rgba(16,185,129,.12); color: #047857; }
   .fwm-tag.alt { background: rgba(245,158,11,.14); color: #B45309; }
   .fwm-tag.tpl { background: rgba(16,185,129,.07); color: #16A34A; }
+
+  /* ═══ PHONE DASHBOARD LAYER ══════════════════════════════════════════════
+     Keeps the Lumia tile framework as it is and tidies how tiles behave and
+     read on a phone. Desktop is untouched (everything is under 767px). */
+  .lw-addtile__short { display: none; }
+  @media (hover: none) {
+    .lumia-tile:hover { transform: none !important; }
+    .lw-addtile:hover { box-shadow: var(--sh-sm, 0 1px 3px rgba(0,0,0,0.06)); }
+  }
+  @media (max-width: 767px) {
+    .lumia-tile { -webkit-tap-highlight-color: transparent; }
+    .lumia-tile:active:not(.lumia-tile--mode-full) { transform: scale(.98); transition: transform 90ms ease; }
+
+    /* Widgets fill their tile — no dead space under a short card. */
+    .lumia-tile--mode-full .lumia-tile__body > * { flex: 1 1 auto; min-height: 0; }
+    .lumia-tile__body > .morning-hero { height: 100% !important; margin: 0 !important; box-sizing: border-box; }
+
+    /* KPI: icon + label on one line, the number big at the bottom. */
+    .lumia-tile__body .kpi-card.kpi-tile {
+      display: grid !important; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto 1fr auto auto;
+      align-items: center; column-gap: 9px; row-gap: 0 !important; padding: 14px !important; justify-content: stretch !important;
+      border-radius: 18px !important;
+    }
+    .lumia-tile__body .kpi-tile .kpi-icon { grid-column: 1; grid-row: 1; width: 30px !important; height: 30px !important; border-radius: 9px !important; margin: 0 !important; }
+    .lumia-tile__body .kpi-tile .kpi-icon svg { width: 16px !important; height: 16px !important; }
+    .lumia-tile__body .kpi-tile .kpi-label { grid-column: 2; grid-row: 1; margin: 0 !important; font-size: 10.5px !important; letter-spacing: .05em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lumia-tile__body .kpi-tile .kpi-value { grid-column: 1 / -1; grid-row: 3; align-self: end; margin: 0 !important; line-height: 1.05;
+      font-size: clamp(22px, 16cqw, 36px) !important; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lumia-tile__body .kpi-tile .kpi-sub { grid-column: 1 / -1; grid-row: 4; margin: 3px 0 0 !important; font-size: 11.5px !important;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Quick-add, one row tall: icon · title · + in a line. */
+    .lumia-tile--h1 .lw-addtile { flex-direction: row !important; align-items: center; justify-content: flex-start; gap: 10px; padding: 10px 12px !important; }
+    .lumia-tile--h1 .lw-addtile__title { margin: 0 !important; font-size: 13.5px !important; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lumia-tile--h1 .lw-addtile__hint { display: none !important; }
+    .lumia-tile--h1 .lw-addtile__plus { position: static !important; margin-left: auto; font-size: 18px; }
+    /* 1×1: icon over a one-word name. */
+    .lumia-tile--w1.lumia-tile--h1 .lw-addtile { flex-direction: column !important; justify-content: center; align-items: center !important; gap: 5px; padding: 8px 4px !important; }
+    .lumia-tile--w1.lumia-tile--h1 .lw-addtile__plus,
+    .lumia-tile--w1.lumia-tile--h1 .lw-addtile__title { display: none !important; }
+    .lumia-tile--w1.lumia-tile--h1 .lw-addtile__short { display: block; font-size: 11px; font-weight: 700; color: var(--saas-text, #0F172A);
+      max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lumia-tile--colored.lumia-tile--w1 .lw-addtile__short { color: #fff; }
+
+    /* Lists scroll inside their tile; a soft fade shows there's more. */
+    .lumia-tile__body .lw-card { border-radius: 18px !important; }
+    .lumia-tile__body .lw-card__body { overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+      -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent); }
+    .lumia-tile__body .lw-row { min-height: 44px; }
+
+    /* Edit mode: calm, smaller controls that don't cover the tile. */
+    body.tiles-editing .lumia-tile { animation: none !important; }
+    body.tiles-editing .lumia-tile::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 5;
+      border: 1.5px dashed color-mix(in srgb, var(--saas-accent, var(--primary, #4F46E5)) 55%, transparent); }
+    body.tiles-editing .lumia-tile__body { opacity: .78; }
+    .lumia-tile__edit-handle, .lumia-tile__remove-handle { width: 26px !important; height: 26px !important; top: 5px !important; border-width: 1.5px !important; }
+    .lumia-tile__edit-handle { right: 35px !important; }
+    .lumia-tile__remove-handle { right: 5px !important; }
+    .lumia-tile__edit-handle svg, .lumia-tile__remove-handle svg { width: 12px; height: 12px; }
+    body.tiles-editing .lumia-tile__remove-handle::before { animation: none !important; opacity: 0 !important; }
+    body.tiles-editing .lumia-tile--w1 .lumia-tile__edit-handle { display: none !important; }   /* tapping the tile opens the editor */
+    .lumia-tile__resize { width: 22px !important; height: 22px !important; right: 3px !important; bottom: 3px !important; opacity: .9 !important; border-radius: 7px !important; }
+    .lumia-tile--w1 .lumia-tile__resize, .lumia-tile--h1 .lumia-tile__resize { width: 18px !important; height: 18px !important; right: 2px !important; bottom: 2px !important; }
+  }
   `;
   document.head.appendChild(st);
 })();
@@ -2460,7 +2548,7 @@ function computeBentoStat(statId) {
             const total = expenses
                 .filter(e => (e.type || 'expense') === 'expense' && e.date && e.date.startsWith(monthKey))
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-            return { value: '₹' + total.toLocaleString('en-IN'), sub: monthKey };
+            return { value: '₹' + total.toLocaleString('en-IN'), sub: new Date().toLocaleDateString('en-US', { month: 'long' }) };
         }
         case 'weeklySpend': {
             // Mirror the Finance Weekly tab: Monday–Sunday of the current week, and
@@ -2478,15 +2566,19 @@ function computeBentoStat(statId) {
                 .filter(e => (e.type || 'expense') === 'expense' && e.budget_scope === 'weekly' && e.date)
                 .filter(e => { const d = new Date(e.date); return d >= monday && d <= sunday; })
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-            return { value: '₹' + total.toLocaleString('en-IN'), sub: 'weekly budget' };
+            const wb = Number(s.settings?.[0]?.weekly_budget) || 0;
+            return { value: '₹' + total.toLocaleString('en-IN'), sub: wb ? `of ₹${wb.toLocaleString('en-IN')} this week` : 'day-to-day, this week' };
         }
         case 'habits': {
-            const total = habits.length;
+            // Only habits that are due today count (a weekly habit on its off-day doesn't).
+            const now = new Date();
+            const due = habits.filter(h => typeof window.habitScheduledOn !== 'function' || window.habitScheduledOn(h, now));
+            const dueIds = new Set(due.map(h => String(h.id)));
             const seen = new Set();
             habitLogs.forEach(l => {
-                if (l.date && l.date.startsWith(today)) seen.add(String(l.habit_id));
+                if (l.date && l.date.startsWith(today) && dueIds.has(String(l.habit_id))) seen.add(String(l.habit_id));
             });
-            return { value: `${seen.size}/${total}`, sub: 'today' };
+            return { value: `${seen.size}/${due.length}`, sub: 'done today' };
         }
         case 'habitScore': {
             const last7 = [];
@@ -2494,20 +2586,31 @@ function computeBentoStat(statId) {
                 const d = new Date(); d.setDate(d.getDate() - i);
                 last7.push(d.toISOString().slice(0, 10));
             }
-            const total7 = habits.length * 7;
-            const done7 = habitLogs.filter(l => l.date && last7.some(d => l.date.startsWith(d))).length;
+            // Due-days only, so weekly habits don't drag the score down on their off-days.
+            let total7 = 0, done7 = 0;
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(); d.setDate(d.getDate() - i);
+                const iso = last7[i];
+                habits.forEach(h => {
+                    if (typeof window.habitScheduledOn === 'function' && !window.habitScheduledOn(h, d)) return;
+                    total7++;
+                    if (habitLogs.some(l => String(l.habit_id) === String(h.id) && (l.date || '').startsWith(iso))) done7++;
+                });
+            }
             const pct = total7 ? Math.round((done7 / total7) * 100) : 0;
             return { value: pct + '%', sub: 'last 7 days' };
         }
         case 'streak': {
             const dates = new Set(diary.map(d => (d.date || '').slice(0, 10)).filter(Boolean));
+            // Today not written yet doesn't break the streak — it's still running.
             let streak = 0;
             let cursor = new Date();
+            if (!dates.has(cursor.toISOString().slice(0, 10))) cursor.setDate(cursor.getDate() - 1);
             while (dates.has(cursor.toISOString().slice(0, 10))) {
                 streak++;
                 cursor.setDate(cursor.getDate() - 1);
             }
-            return { value: String(streak), sub: 'days journaling' };
+            return { value: String(streak), sub: streak === 1 ? 'day of journaling' : 'days of journaling' };
         }
         case 'yearProgress': {
             const start = new Date(new Date().getFullYear(), 0, 1);
@@ -2519,7 +2622,7 @@ function computeBentoStat(statId) {
         }
         case 'netWorth': {
             const assets = (s.assets || []).reduce((sum, a) => sum + (Number(a.value) || 0), 0);
-            const funds = (s.funds || []).reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+            const funds = (s.funds || []).reduce((sum, f) => sum + (Number(f.current_amount ?? f.balance ?? f.amount) || 0), 0);
             return { value: '₹' + (assets + funds).toLocaleString('en-IN'), sub: 'assets + funds' };
         }
         default:
@@ -3228,7 +3331,7 @@ function renderDashboard() {
       if (!active) {
         return `
         <div class="widget-card" style="height:100%; display:flex; flex-direction:column; background:var(--surface-1); border:1px solid var(--border-color); border-radius:18px; box-shadow:0 4px 15px rgba(0,0,0,.05); overflow:hidden;">
-          <div style="display:flex; align-items:center; gap:9px; font-weight:800; color:var(--text-1); font-size:15px; padding:15px 16px 0;">${ICON}10-Day Plan</div>
+          <div style="display:flex; align-items:center; gap:9px; font-weight:800; color:var(--text-1); font-size:15px; padding:15px 16px 0;">${ICON}10 Days Plan</div>
           <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:8px 16px 16px; text-align:center;">
             <div style="font-size:14px; font-weight:700; color:var(--text-1);">No active plan</div>
             <div style="font-size:12px; color:var(--text-muted); max-width:210px;">Start a 10-day sprint across your vision categories.</div>
@@ -3236,11 +3339,7 @@ function renderDashboard() {
           </div>
         </div>`;
       }
-      let total = 0, completed = 0;
-      try {
-        const cats = typeof active.categories_json === 'string' ? JSON.parse(active.categories_json) : (active.categories_json || {});
-        Object.values(cats).forEach(items => (items || []).forEach(it => { total++; if (it.completed) completed++; }));
-      } catch (e) {}
+      const { total, completed } = _dashTdpCounts(active);
       const pct = total ? Math.round(completed / total * 100) : 0;
       const t0 = new Date(); t0.setHours(0, 0, 0, 0);
       const sd = new Date(active.start_date); sd.setHours(0, 0, 0, 0);
@@ -3250,7 +3349,7 @@ function renderDashboard() {
       return `
       <div class="widget-card" onclick="event.stopPropagation(); _dashOpenTDP()" style="height:100%; cursor:pointer; display:flex; flex-direction:column; background:var(--surface-1); border:1px solid var(--border-color); border-radius:18px; box-shadow:0 4px 15px rgba(0,0,0,.05); overflow:hidden;">
         <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 16px 0;">
-          <div style="display:flex; align-items:center; gap:9px; font-weight:800; color:var(--text-1); font-size:15px;">${ICON}10-Day Plan</div>
+          <div style="display:flex; align-items:center; gap:9px; font-weight:800; color:var(--text-1); font-size:15px;">${ICON}10 Days Plan</div>
           <span style="font-size:12px; font-weight:700; color:var(--text-muted);">Day ${day}/10</span>
         </div>
         <div style="flex:1; display:flex; flex-direction:column; justify-content:center; gap:10px; padding:10px 16px 16px;">
