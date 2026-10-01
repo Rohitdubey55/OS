@@ -2030,6 +2030,11 @@ window.drpSearchInput = function (v) {
 
 // Start an entry: optional mood preset, optional "speak" (opens the mic), optional date.
 window.drpStart = function (mood, speak, dateStr) {
+  if (_drIsPhone()) {
+    openDiaryChat(dateStr || undefined, mood);
+    if (speak) setTimeout(() => { try { drcMic(); } catch (e) { } }, 300);
+    return;
+  }
   openDiaryModal(dateStr || undefined);
   if (mood != null) drpSetMood(mood);
   if (speak && typeof toggleSpeechToText === 'function') setTimeout(() => { try { toggleSpeechToText(); } catch (e) { } }, 250);
@@ -2236,3 +2241,352 @@ const DRP_CSS = `<style>
 .drp-ed-moods, .drp-ed-prompt, .drp-ed-starters, .drp-ed-tags, .drp-ed-del { display: none; }
 @media (max-width: 768px) { .drp-ed-moods { display: grid; } .drp-ed-prompt, .drp-ed-starters, .drp-ed-tags { display: flex; } .drp-ed-del { display: block; } }
 </style>`;
+
+/* ═══ JOURNAL CHAT (phone) ══════════════════════════════════════════════════
+   New entries on a phone are written as a conversation: the journal asks,
+   you answer in a message bar that sits on top of the keyboard, and the
+   questions scroll away above — so the space to write never shrinks. Your
+   answers become the entry (the first answer leads, later ones keep their
+   question above them). The draft is kept on this device until you save, so
+   closing by accident loses nothing. "Editor" switches to the full editor
+   with everything written so far. */
+
+const drc = { date: '', mood: null, turns: [], asked: [], pending: null, tags: [], rec: null };
+function _drcDraftKey(d) { return 'os.diary.chat.' + d; }
+function _drcSaveDraft() { try { localStorage.setItem(_drcDraftKey(drc.date), JSON.stringify({ mood: drc.mood, turns: drc.turns, asked: drc.asked, tags: drc.tags })); } catch (e) { } }
+function _drcClearDraft() { try { localStorage.removeItem(_drcDraftKey(drc.date)); } catch (e) { } }
+
+// Questions drawn from the day first, then the daily prompt, then a reflective set.
+function _drcQuestions() {
+  const ctx = typeof getContextData === 'function' ? getContextData(drc.date) : {};
+  const qs = [];
+  if (ctx.tasks && ctx.tasks.length) qs.push(ctx.tasks.length === 1 ? `You finished “${ctx.tasks[0].title}”. How did that feel?` : `You finished ${ctx.tasks.length} tasks. Which one mattered most?`);
+  if (ctx.habits && ctx.habits.length) qs.push(`${ctx.habits.length} habit${ctx.habits.length === 1 ? '' : 's'} done today. Which one was hardest to show up for?`);
+  if (ctx.expenses > 0) qs.push(`You spent ₹${Math.round(ctx.expenses).toLocaleString('en-IN')} today. Anything you'd rather not have bought?`);
+  _drpPrompts().forEach(q => qs.push(q));
+  qs.push("What's one thing you want tomorrow to have?");
+  return qs;
+}
+function _drcNextQuestion() {
+  return _drcQuestions().find(q => !drc.asked.includes(q)) || 'Anything else on your mind?';
+}
+
+function _drcBubbles() {
+  const name = (state.data.settings && state.data.settings[0] && state.data.settings[0].name) || '';
+  const first = String(name).split(' ')[0];
+  const isToday = drc.date === diaryLocalDate();
+  const dayWord = isToday ? 'today' : _drpParse(drc.date).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' });
+  const out = [];
+  out.push({ who: 'bot', html: `${_drpEsc(getGreeting())}${first ? ', ' + _drpEsc(first) : ''} 👋<br>How was ${_drpEsc(dayWord)}?` });
+  if (drc.mood == null) {
+    out.push({ who: 'chips', html: DRP_MOODS.map(m => `<button class="drc-chip mood" style="--c:${m.c}" onclick="drcMood(${m.v})">${m.e} ${m.l}</button>`).join('') });
+  } else {
+    const f = _drpFace(drc.mood);
+    out.push({ who: 'me', html: `${f.e} ${f.l}` });
+  }
+  drc.turns.forEach(t => {
+    if (t.q) out.push({ who: 'bot', html: _drpEsc(t.q) });
+    out.push({ who: 'me', html: _drpEsc(t.a).replace(/\n/g, '<br>'), edit: t.id });
+  });
+  if (drc.pending) out.push({ who: 'bot', html: _drpEsc(drc.pending.q) + (drc.pending.ctx ? `<div class="drc-ctx">${drc.pending.ctx}</div>` : '') });
+  if (drc.turns.length) out.push({ who: 'chips', html: `
+      <button class="drc-chip" onclick="drcAnother()">↻ Ask me another</button>
+      <button class="drc-chip done" onclick="drcDone()">✓ That's it for ${isToday ? 'today' : 'this day'}</button>` });
+  return out;
+}
+
+function _drcRender(scroll = true) {
+  const box = document.getElementById('drcThread');
+  if (!box) return;
+  box.innerHTML = _drcBubbles().map(b =>
+    b.who === 'chips' ? `<div class="drc-chips">${b.html}</div>`
+      : `<div class="drc-msg ${b.who}"${b.edit ? ` onclick="drcEditTurn('${b.edit}')"` : ''}>${b.html}</div>`).join('');
+  const words = drc.turns.map(t => t.a).join(' ').trim();
+  const n = words ? words.split(/\s+/).length : 0;
+  const wc = document.getElementById('drcWords');
+  if (wc) wc.textContent = n ? `${n} word${n === 1 ? '' : 's'}` : '';
+  if (scroll) requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+}
+
+function _drcFirstQuestion() {
+  const ctx = typeof getContextData === 'function' ? getContextData(drc.date) : {};
+  const bits = [];
+  if (ctx.tasks && ctx.tasks.length) bits.push(`✓ ${ctx.tasks.length} task${ctx.tasks.length === 1 ? '' : 's'} done`);
+  if (ctx.habits && ctx.habits.length) bits.push(`◎ ${ctx.habits.length} habit${ctx.habits.length === 1 ? '' : 's'}`);
+  if (ctx.expenses > 0) bits.push(`₹${Math.round(ctx.expenses).toLocaleString('en-IN')} spent`);
+  const lead = drc.mood == null ? '' : drc.mood <= 4 ? 'Sorry it was a hard one. ' : drc.mood >= 8 ? 'Love that. ' : '';
+  return { q: lead + 'What happened? Start anywhere.', ctx: bits.length ? bits.map(b => `<span>${_drpEsc(b)}</span>`).join('') : '', first: true };
+}
+
+window.openDiaryChat = function (dateStr, mood) {
+  drc.date = dateStr || diaryLocalDate();
+  drc.mood = null; drc.turns = []; drc.asked = []; drc.tags = []; drc.pending = null;
+  let restored = false;
+  try {
+    const d = JSON.parse(localStorage.getItem(_drcDraftKey(drc.date)) || 'null');
+    if (d && (d.turns || []).length) { Object.assign(drc, { mood: d.mood, turns: d.turns, asked: d.asked || [], tags: d.tags || [] }); restored = true; }
+  } catch (e) { }
+  if (mood != null && drc.mood == null) drc.mood = mood;
+  drc.pending = drc.turns.length ? { q: restored ? 'Picked up where you left off. Anything to add?' : _drcNextQuestion() } : _drcFirstQuestion();
+
+  const settings = state.data.settings?.[0] || {};
+  const modal = document.getElementById('universalModal');
+  const box = modal.querySelector('.modal-box');
+  const tagCount = {};
+  (state.data.diary || []).forEach(e => String(e.tags || '').split(/[,\s]+/).map(t => t.replace(/^#+/, '').trim()).filter(Boolean).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([t]) => t);
+  box.innerHTML = `
+    <div class="drc">
+      <div class="drc-bar">
+        <button class="drc-x" onclick="drcClose()" aria-label="Close">✕</button>
+        <label class="drc-date"><input type="date" id="drcDate" value="${drc.date}" onchange="drcChangeDate(this.value)"><span id="drcDateLbl">${_drpEsc(_drpParse(drc.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' }))}</span> ▾</label>
+        <span class="drc-words" id="drcWords"></span>
+        <button class="drc-editor" onclick="drcToEditor()">Editor</button>
+        <button class="drc-save" onclick="drcDone()">Save</button>
+      </div>
+      <div class="drc-thread" id="drcThread"></div>
+      <div class="drc-tags" id="drcTags" hidden>
+        ${topTags.map(t => `<button class="drc-tag ${drc.tags.includes(t) ? 'on' : ''}" onclick="drcTag('${_drpEsc(t).replace(/'/g, "\\'")}', this)">#${_drpEsc(t)}</button>`).join('') || '<span class="drc-note">Type #word in a message to tag it.</span>'}
+      </div>
+      <div class="drc-starters">
+        <button onclick="drcToggleTags()" class="drc-st-tag">#</button>
+        ${DRP_STARTERS.map(s => `<button onmousedown="event.preventDefault()" onclick="drcStarter(${JSON.stringify(s).replace(/"/g, '&quot;')})">${_drpEsc(s.trim())}…</button>`).join('')}
+      </div>
+      <form class="drc-composer" onsubmit="event.preventDefault(); drcSend();">
+        <button type="button" class="drc-mic" id="drcMic" onclick="drcMic()" aria-label="Speak">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg></button>
+        <textarea id="drcInput" rows="1" placeholder="Type your answer…" oninput="drcGrow(this)" onkeydown="if(event.key==='Enter' && !event.shiftKey && window.innerWidth > 768){event.preventDefault(); drcSend();}"></textarea>
+        <button type="submit" class="drc-send" aria-label="Send">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+      </form>
+      <!-- the existing save action reads these -->
+      <div hidden>
+        <div id="mDiaryText"></div>
+        <input id="mMoodScore" value="${settings.diary_default_mood || 5}">
+        <input id="mDiaryTags" value="">
+        <input id="mDiaryDate" value="${drc.date}">
+        <button id="drcSaveBtn" data-action="save-diary-modal"></button>
+      </div>
+    </div>`;
+  modal.classList.remove('hidden');
+  _drcFitViewport(true);
+  _drcRender();
+  setTimeout(() => { if (drc.mood != null || drc.turns.length) document.getElementById('drcInput')?.focus(); }, 250);
+};
+
+window.drcMood = function (v) {
+  drc.mood = v;
+  if (drc.pending && drc.pending.first) drc.pending = _drcFirstQuestion();
+  _drcSaveDraft(); _drcRender();
+  setTimeout(() => document.getElementById('drcInput')?.focus(), 60);
+};
+window.drcGrow = function (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; };
+window.drcStarter = function (s) {
+  const el = document.getElementById('drcInput'); if (!el) return;
+  el.value = (el.value && !/\s$/.test(el.value) ? el.value + ' ' : el.value) + s;
+  el.focus(); el.setSelectionRange(el.value.length, el.value.length); drcGrow(el);
+};
+window.drcSend = function () {
+  const el = document.getElementById('drcInput');
+  const text = String(el && el.value || '').trim();
+  if (!text) return;
+  // #words in a message become tags
+  (text.match(/#([\w-]+)/g) || []).forEach(h => { const t = h.slice(1); if (!drc.tags.includes(t)) drc.tags.push(t); });
+  const q = drc.pending && !drc.pending.first && !/^Picked up/.test(drc.pending.q) ? drc.pending.q : '';
+  drc.turns.push({ id: 't' + Date.now().toString(36), q, a: text });
+  if (drc.pending && drc.pending.q) drc.asked.push(drc.pending.q);
+  const nq = _drcNextQuestion();
+  drc.pending = { q: nq };
+  el.value = ''; drcGrow(el);
+  _drcSaveDraft(); _drcRender();
+  el.focus();
+};
+window.drcAnother = function () {
+  if (drc.pending && drc.pending.q) drc.asked.push(drc.pending.q);
+  drc.pending = { q: _drcNextQuestion() };
+  _drcRender();
+  document.getElementById('drcInput')?.focus();
+};
+window.drcEditTurn = function (id) {
+  const t = drc.turns.find(x => x.id === id);
+  if (!t) return;
+  const v = prompt('Edit your answer (leave empty to remove it):', t.a);
+  if (v === null) return;
+  if (!v.trim()) drc.turns = drc.turns.filter(x => x.id !== id); else t.a = v.trim();
+  _drcSaveDraft(); _drcRender(false);
+};
+window.drcToggleTags = function () { const t = document.getElementById('drcTags'); if (t) t.hidden = !t.hidden; };
+window.drcTag = function (t, btn) {
+  if (drc.tags.includes(t)) drc.tags = drc.tags.filter(x => x !== t); else drc.tags.push(t);
+  btn.classList.toggle('on', drc.tags.includes(t));
+  _drcSaveDraft();
+};
+window.drcChangeDate = function (v) {
+  if (!v) return;
+  _drcClearDraft(); drc.date = v; _drcSaveDraft();
+  const l = document.getElementById('drcDateLbl');
+  if (l) l.textContent = _drpParse(v).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+  const d = document.getElementById('mDiaryDate'); if (d) d.value = v;
+};
+function _drcText() {
+  return drc.turns.map((t, i) => (t.q && i > 0 ? `— ${t.q}\n` : (t.q && i === 0 ? `— ${t.q}\n` : '')) + t.a).join('\n\n').trim();
+}
+window.drcDone = function () {
+  // Anything still in the message bar counts.
+  const el = document.getElementById('drcInput');
+  if (el && el.value.trim()) drcSend();
+  const text = _drcText();
+  if (!text) { showToast('Write at least one line first'); return; }
+  _drcStopMic();
+  document.getElementById('mDiaryText').textContent = text;
+  document.getElementById('mMoodScore').value = drc.mood != null ? drc.mood : (document.getElementById('mMoodScore').value || 5);
+  document.getElementById('mDiaryTags').value = drc.tags.join(', ');
+  document.getElementById('mDiaryDate').value = drc.date;
+  _drcClearDraft();
+  _drcFitViewport(false);
+  document.getElementById('drcSaveBtn').click();     // same save path as the editor
+};
+window.drcClose = function () {
+  _drcStopMic();
+  _drcFitViewport(false);
+  document.getElementById('universalModal').classList.add('hidden');
+  if (drc.turns.length) showToast('Draft kept — open the journal to finish it');
+};
+window.drcToEditor = function () {
+  const el = document.getElementById('drcInput');
+  if (el && el.value.trim()) drcSend();
+  const text = _drcText();
+  const mood = drc.mood, date = drc.date, tags = drc.tags.join(', ');
+  _drcStopMic(); _drcFitViewport(false);
+  _drcForceEditor = true;
+  try { openDiaryModal(date, _drpEsc(text).replace(/\n/g, '<br>')); } finally { _drcForceEditor = false; }
+  if (mood != null) drpSetMood(mood);
+  const t = document.getElementById('mDiaryTags'); if (t) t.value = tags;
+  _drcClearDraft();
+};
+
+// Voice: dictation goes into the message bar.
+function _drcStopMic() { try { if (drc.rec) drc.rec.stop(); } catch (e) { } drc.rec = null; document.getElementById('drcMic')?.classList.remove('on'); }
+window.drcMic = function () {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Voice typing isn’t supported here — use the keyboard mic'); return; }
+  if (drc.rec) { _drcStopMic(); return; }
+  const rec = new SR();
+  rec.continuous = true; rec.interimResults = false; rec.lang = navigator.language || 'en-US';
+  rec.onresult = ev => {
+    let t = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) if (ev.results[i].isFinal) t += ev.results[i][0].transcript;
+    if (t) { const el = document.getElementById('drcInput'); if (el) { el.value = (el.value ? el.value.replace(/\s*$/, ' ') : '') + t.trim(); drcGrow(el); } }
+  };
+  rec.onend = () => { drc.rec = null; document.getElementById('drcMic')?.classList.remove('on'); };
+  rec.onerror = () => { drc.rec = null; document.getElementById('drcMic')?.classList.remove('on'); };
+  drc.rec = rec; rec.start();
+  document.getElementById('drcMic')?.classList.add('on');
+  showToast('Listening… tap the mic again to stop');
+};
+
+/* Keep the writing screens inside the visible area when the keyboard is up
+   (iOS keeps the layout viewport full height and slides the keyboard over it). */
+let _drcVV = null;
+function _drcFitViewport(on) {
+  const ov = document.getElementById('universalModal');
+  const vv = window.visualViewport;
+  if (!ov || !vv) return;
+  if (_drcVV) { vv.removeEventListener('resize', _drcVV); vv.removeEventListener('scroll', _drcVV); _drcVV = null; }
+  if (!on) { ov.style.removeProperty('height'); ov.style.removeProperty('top'); return; }
+  _drcVV = () => {
+    if (!_drIsPhone()) return;
+    ov.style.height = vv.height + 'px';
+    ov.style.top = vv.offsetTop + 'px';
+    const th = document.getElementById('drcThread');
+    if (th && document.activeElement && document.activeElement.id === 'drcInput') th.scrollTop = th.scrollHeight;
+  };
+  vv.addEventListener('resize', _drcVV); vv.addEventListener('scroll', _drcVV);
+  _drcVV();
+}
+// The classic editor: hide the extras while typing and keep it above the keyboard.
+document.addEventListener('focusin', e => {
+  if (!_drIsPhone() || !e.target || e.target.id !== 'mDiaryText') return;
+  const m = e.target.closest('.dr-modal'); if (m) m.classList.add('typing');
+  _drcFitViewport(true);
+});
+document.addEventListener('focusout', e => {
+  if (!e.target || e.target.id !== 'mDiaryText') return;
+  const m = e.target.closest('.dr-modal');
+  setTimeout(() => { if (m && document.activeElement !== e.target) m.classList.remove('typing'); }, 150);
+});
+// Any close of the shared modal releases the viewport fit.
+(function () {
+  const ov = document.getElementById('universalModal');
+  if (!ov || !window.MutationObserver) return;
+  new MutationObserver(() => { if (ov.classList.contains('hidden')) { _drcStopMic(); _drcFitViewport(false); } }).observe(ov, { attributes: true, attributeFilter: ['class'] });
+})();
+
+const DRC_CSS = `<style>
+@media (max-width: 768px) {
+  .modal-overlay:has(.drc) { padding: 0 !important; align-items: stretch !important; }
+  .modal-overlay:has(.drc) .modal-box { width: 100% !important; max-width: none !important; height: 100% !important; max-height: none !important; margin: 0 !important;
+    border-radius: 0 !important; padding: 0 !important; display: flex; flex-direction: column; overflow: hidden; background: var(--surface-base, #F7F8FA) !important; }
+  /* classic editor while typing: only the text, the toolbar and Save */
+  .dr-modal.typing .dr-side, .dr-modal.typing .drp-ed-tags, .dr-modal.typing .drp-ed-del { display: none !important; }
+  .dr-modal.typing .dr-modal-bar { padding-bottom: 6px !important; }
+}
+.drc { flex: 1; min-height: 0; display: flex; flex-direction: column; color: var(--text-1); padding: 0 !important; margin: 0 !important; width: 100%; }
+.modal-overlay:has(.drc) .modal-box::before { display: none !important; }
+.drc button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.drc-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px; background: var(--surface-1); border-bottom: 1px solid var(--border-color); }
+.drc-x { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--surface-2); color: var(--text-2); font-size: 15px; cursor: pointer; }
+.drc-date { position: relative; flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 12px; border-radius: 99px; background: var(--surface-2); font-size: 13.5px; font-weight: 750; color: var(--text-1); cursor: pointer; }
+.drc-date input { position: absolute; inset: 0; opacity: 0; width: 100%; }
+.drc-words { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.drc-editor { height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--surface-1); color: var(--text-2); font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.drc-save { height: 36px; padding: 0 16px; border-radius: 99px; border: none; background: var(--primary); color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; }
+.drc-thread { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 16px 14px 10px; display: flex; flex-direction: column; gap: 8px; }
+.drc-msg { max-width: 84%; padding: 10px 14px; border-radius: 18px; font-size: 15.5px; line-height: 1.45; word-wrap: break-word; animation: drcIn .18s ease-out; }
+@keyframes drcIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.drc-msg.bot { align-self: flex-start; background: var(--surface-1); border: 1px solid var(--border-color); border-bottom-left-radius: 6px; font-weight: 600; }
+.drc-msg.me { align-self: flex-end; background: var(--primary); color: #fff; border-bottom-right-radius: 6px; cursor: pointer; }
+.drc-ctx { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.drc-ctx span { font-size: 12px; font-weight: 700; color: var(--text-2); background: var(--surface-2); padding: 3px 9px; border-radius: 99px; }
+.drc-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 4px; }
+.drc-chip { height: 36px; padding: 0 13px; border-radius: 99px; border: 1px solid var(--border-color); background: var(--surface-1); color: var(--text-1); font-size: 13.5px; font-weight: 700; cursor: pointer; }
+.drc-chip.mood { border-color: color-mix(in srgb, var(--c) 45%, transparent); background: color-mix(in srgb, var(--c) 9%, var(--surface-1)); }
+.drc-chip.done { background: var(--text-1); color: var(--surface-1); border-color: var(--text-1); }
+.drc-chip:active { transform: scale(.96); }
+.drc-tags { flex: none; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 8px 12px 0; }
+.drc-tags[hidden] { display: none; }
+.drc-tag { flex: none; height: 30px; padding: 0 11px; border-radius: 99px; border: 1px solid var(--border-color); background: var(--surface-1); color: var(--primary); font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.drc-tag.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+.drc-note { font-size: 12.5px; color: var(--text-3); }
+.drc-starters { flex: none; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 8px 12px 6px; }
+.drc-starters::-webkit-scrollbar, .drc-tags::-webkit-scrollbar { display: none; }
+.drc-starters button { flex: none; height: 30px; padding: 0 11px; border-radius: 99px; border: 1px solid var(--border-color); background: var(--surface-1); color: var(--text-2); font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.drc-starters .drc-st-tag { color: var(--primary); font-weight: 850; min-width: 34px; }
+.drc-composer { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 6px 10px calc(env(safe-area-inset-bottom, 0px) + 8px); background: var(--surface-1); border-top: 1px solid var(--border-color); }
+.drc-composer textarea { flex: 1; min-width: 0; resize: none; max-height: 160px; min-height: 42px; box-sizing: border-box; padding: 10px 14px !important; border-radius: 21px !important;
+  border: 1px solid var(--border-color) !important; background: var(--surface-2) !important; color: var(--text-1); font: inherit; font-size: 16px; line-height: 1.4; outline: none; box-shadow: none !important; }
+.drc-mic, .drc-send { flex: none; width: 42px; height: 42px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.drc-mic { background: var(--surface-2); color: var(--text-2); }
+.drc-mic.on { background: #EF4444; color: #fff; animation: drcPulse 1.2s ease-in-out infinite; }
+@keyframes drcPulse { 50% { box-shadow: 0 0 0 6px rgba(239,68,68,.2); } }
+.drc-send { background: var(--primary); color: #fff; }
+</style>`;
+
+// Chat + writing-screen styles live in <head> so the chat works from anywhere
+// (dashboard "New entry", the page header), not only the journal page.
+(function () {
+  if (document.getElementById('drcStyles')) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = DRC_CSS + DRP_CSS;
+  [...holder.querySelectorAll('style')].forEach((st, i) => { st.id = i ? 'drpStyles' : 'drcStyles'; document.head.appendChild(st); });
+})();
+// On a phone a new entry is the chat; the full editor opens when there's
+// already text to edit (templates, "Editor" from the chat) or it's asked for.
+let _drcForceEditor = false;
+(function () {
+  const classic = window.openDiaryModal;
+  window.openDiaryModal = function (dateStr, templateContent = '') {
+    if (_drIsPhone() && !templateContent && !_drcForceEditor) return openDiaryChat(dateStr);
+    return classic(dateStr, templateContent);
+  };
+})();
