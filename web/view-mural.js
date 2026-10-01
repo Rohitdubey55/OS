@@ -99,7 +99,7 @@ async function renderMuralDashboard() {
         await loadMuralDashboardData();
     }
 
-    let filtered = muralProjects;
+    let filtered = muralProjects.filter(p => !_muralParentOf(p));
     if (muralActiveCategory !== 'all') {
         filtered = filtered.filter(p => p.category === muralActiveCategory);
     }
@@ -119,7 +119,7 @@ async function renderMuralDashboard() {
             <div class="mural-header">
                 <div class="mural-header-left">
                     <h2 class="mural-h2">Projects</h2>
-                    <span class="mural-count-badge">${muralProjects.length}</span>
+                    <span class="mural-count-badge">${muralProjects.filter(p => !_muralParentOf(p)).length}</span>
                 </div>
                 <div class="mural-header-actions">
                     <div class="mural-tool-cluster">
@@ -294,12 +294,19 @@ async function renderMuralCanvasView() {
             <!-- Top Bar -->
             <div class="mural-topbar">
                 <div class="mural-topbar-left">
-                    <button class="mural-back-btn" onclick="exitMuralProject()" title="Back to all boards" aria-label="Back to all boards">
-                        <i data-lucide="arrow-left" style="width:18px;height:18px"></i><span class="mural-back-label">Boards</span>
-                    </button>
+                    ${(() => { const par = _muralParentOf(project); const lbl = par ? (par.title || 'Back') : 'Boards';
+                        return `<button class="mural-back-btn" onclick="muralGoBack()" title="Back to ${escapeHtml(lbl)}" aria-label="Back to ${escapeHtml(lbl)}">
+                        <i data-lucide="arrow-left" style="width:18px;height:18px"></i><span class="mural-back-label">${escapeHtml(lbl.length > 18 ? lbl.slice(0, 17) + '…' : lbl)}</span>
+                    </button>`; })()}
                     <div class="mural-project-title-bar">${escapeHtml(project ? project.title : 'Project')}</div>
                 </div>
                 <div class="mural-topbar-right">
+                    <button class="mural-multi-btn ${muralMultiSelect ? 'active' : ''}" id="muralMultiBtn" onclick="toggleMuralMultiSelect()" title="Select multiple — tap items to add or remove them">
+                        ${MURAL_ARR_ICONS.multi}<span class="mural-tb-label">Select</span>
+                    </button>
+                    <button class="mural-arrange-btn" id="muralArrangeBtn" onclick="toggleMuralArrangeMenu(event)" title="Arrange selected items" disabled>
+                        ${MURAL_ARR_ICONS.arrange}<span class="mural-tb-label">Arrange</span><span class="mural-arr-count" id="muralArrCount"></span>
+                    </button>
                     <div class="mural-zoom-controls-wrapper ${muralZoomExpanded ? 'expanded' : ''}" id="muralZoomWrapper">
                         <button class="mural-zoom-toggle" onclick="toggleMuralZoomMenu()" title="Zoom Controls">
                             <i data-lucide="zoom-in"></i>
@@ -494,6 +501,7 @@ async function renderMuralCanvasView() {
 
 function exitMuralProject() {
     muralSpacePan = null;
+    closeMuralArrangeMenu();
     muralActiveProjectId = null;
     muralElements = [];
     muralTransform = { x: 0, y: 0, scale: 1 };
@@ -631,6 +639,18 @@ function createMuralElementDOM(data) {
     if (data.text_align) content.style.textAlign = data.text_align;
     div.appendChild(content);
 
+    // Element that opens its own board (sub-mural)
+    if (data.link_project_id) {
+        div.classList.add('has-board');
+        const link = document.createElement('button');
+        link.className = 'mural-el-board-link';
+        link.title = 'Open this board';
+        link.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M8 7h9v9"/></svg>';
+        ['pointerdown', 'mousedown', 'touchstart', 'dblclick'].forEach(t => link.addEventListener(t, ev => ev.stopPropagation()));
+        link.addEventListener('click', ev => { ev.stopPropagation(); ev.preventDefault(); muralOpenLinkedBoard(data.id); });
+        div.appendChild(link);
+    }
+
     // Content: Icons use <i> tags, Others use text
     if (elType === 'icon') {
         content.contentEditable = false;
@@ -709,7 +729,7 @@ function createMuralElementDOM(data) {
             return;
         }
 
-        if (e.shiftKey || e.metaKey || e.ctrlKey) {
+        if (e.shiftKey || e.metaKey || e.ctrlKey || muralMultiSelect) {
             // Toggle selection
             if (muralSelectedElementIds.includes(data.id)) {
                 muralSelectedElementIds = muralSelectedElementIds.filter(id => id !== data.id);
@@ -775,6 +795,7 @@ function highlightMuralElements(ids) {
     // so any connectors in the selection (e.g. from a marquee) pick up the selected style.
     if (typeof renderAllMuralConnectors === 'function') renderAllMuralConnectors();
     updateSelectionBoundingBox();
+    updateMuralArrangeBtn();
 }
 
 /* ═══════════════════════════════════════
@@ -1034,6 +1055,16 @@ function showMuralContextMenu(x, y, elementId) {
         <button class="mural-context-item" onclick="showMuralColorPicker(${x}, ${y}, '${elementId}')">
             <i data-lucide="palette"></i> Change Color
         </button>`}
+        ${(!isMultiple && el && el.type !== 'connector' && el.type !== 'line') ? (el.link_project_id ? `
+        <button class="mural-context-item" onclick="dismissMuralPopups(); muralOpenLinkedBoard('${elementId}');">
+            <i data-lucide="external-link"></i> Open board
+        </button>
+        <button class="mural-context-item" onclick="dismissMuralPopups(); muralUnlinkBoard('${elementId}');">
+            <i data-lucide="unlink"></i> Unlink board
+        </button>` : `
+        <button class="mural-context-item" onclick="dismissMuralPopups(); muralTurnIntoBoard('${elementId}');">
+            <i data-lucide="layout-dashboard"></i> Turn into board
+        </button>`) : ''}
         <button class="mural-context-item" onclick="duplicateMuralElement('${elementId}'); dismissMuralPopups();">
             <i data-lucide="copy"></i> Duplicate
         </button>
@@ -1161,7 +1192,313 @@ function dismissMuralPopups() {
     if (shapeMenu) shapeMenu.classList.remove('visible');
     const bgPanel = document.getElementById('muralBgPanel');
     if (bgPanel) bgPanel.remove();
+    closeMuralArrangeMenu();
 }
+
+/* ═══════════════════════════════════════
+   SUB-BOARDS — turn an element into its own mural
+   The element keeps link_project_id; the new board keeps parent_id, so its
+   back button returns to the board it came from.
+   ═══════════════════════════════════════ */
+function _muralParentOf(project) {
+    if (!project || !project.parent_id) return null;
+    return muralProjects.find(p => String(p.id) === String(project.parent_id)) || null;
+}
+
+function _muralElText(el) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(el.content || '');
+    return (tmp.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+async function muralTurnIntoBoard(elementId) {
+    const el = muralElements.find(e => String(e.id) === String(elementId));
+    if (!el) return;
+    if (el.link_project_id) return muralOpenLinkedBoard(elementId);
+    const parent = muralProjects.find(p => String(p.id) === String(muralActiveProjectId));
+    let title = _muralElText(el);
+    if (!title) {
+        title = (prompt('Name for the new board:', '') || '').trim();
+        if (!title) return;
+    }
+    try {
+        const res = await apiPost({ action: 'create', sheet: 'mural_projects', payload: {
+            title: title.slice(0, 120),
+            category: (parent && parent.category) || 'Uncategorized',
+            parent_id: String(muralActiveProjectId),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        } });
+        const newId = res && (res.id || (res.data && res.data.id));
+        if (!newId) throw new Error('No id returned');
+        muralProjects.push(res.data || { id: newId, title, parent_id: String(muralActiveProjectId) });
+        state.data.mural_projects = muralProjects;
+        el.link_project_id = String(newId);
+        const old = document.getElementById(`mural-el-${el.id}`);
+        if (old) old.replaceWith(createMuralElementDOM(el));
+        highlightMuralElements(muralSelectedElementIds);
+        await manualMuralSync(); // persist the link right away
+        toast(`“${title}” is now a board — tap ↗ on it to open`);
+    } catch (err) {
+        console.error(err);
+        toast('Could not create the board');
+    }
+}
+window.muralTurnIntoBoard = muralTurnIntoBoard;
+
+async function muralOpenLinkedBoard(elementId) {
+    const el = muralElements.find(e => String(e.id) === String(elementId));
+    if (!el || !el.link_project_id) return;
+    const target = muralProjects.find(p => String(p.id) === String(el.link_project_id));
+    if (!target) { toast('That board no longer exists'); return; }
+    try { await manualMuralSync(); } catch (_) {} // don't lose edits on this board
+    dismissMuralPopups();
+    hideMuralAppChrome(false);
+    openMuralProject(target.id);
+}
+window.muralOpenLinkedBoard = muralOpenLinkedBoard;
+
+function muralUnlinkBoard(elementId) {
+    const el = muralElements.find(e => String(e.id) === String(elementId));
+    if (!el || !el.link_project_id) return;
+    _muralReleaseSubBoard(el.link_project_id);
+    el.link_project_id = null;
+    const old = document.getElementById(`mural-el-${el.id}`);
+    if (old) old.replaceWith(createMuralElementDOM(el));
+    highlightMuralElements(muralSelectedElementIds);
+    manualMuralSync();
+    toast('Unlinked — the board is now in your Projects list');
+}
+window.muralUnlinkBoard = muralUnlinkBoard;
+
+// A sub-board whose element is gone goes back to the main Projects list.
+function _muralReleaseSubBoard(projectId) {
+    const p = muralProjects.find(q => String(q.id) === String(projectId));
+    if (!p) return;
+    p.parent_id = null;
+    apiPost({ action: 'update', sheet: 'mural_projects', id: p.id, payload: { parent_id: null } }).catch(() => {});
+}
+
+function muralGoBack() {
+    const project = muralProjects.find(p => String(p.id) === String(muralActiveProjectId));
+    const parent = _muralParentOf(project);
+    if (!parent) return exitMuralProject();
+    dismissMuralPopups();
+    closeMuralArrangeMenu();
+    muralSpacePan = null;
+    hideMuralAppChrome(false);
+    openMuralProject(parent.id);
+}
+window.muralGoBack = muralGoBack;
+
+/* ═══════════════════════════════════════
+   MULTI-SELECT + ARRANGE (align / distribute / line up)
+   Works like Google Docs drawings: pick several items, then Arrange.
+   ═══════════════════════════════════════ */
+let muralMultiSelect = false;
+
+const _mSvg = (body) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const MURAL_ARR_ICONS = {
+    multi:   _mSvg('<rect x="3" y="3" width="8" height="8" rx="1.5" stroke-dasharray="2 2"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M15 9l2-2 2 2M17 7v4"/>'),
+    arrange: _mSvg('<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>'),
+    left:    _mSvg('<path d="M4 3v18"/><rect x="7" y="6" width="12" height="4" rx="1"/><rect x="7" y="14" width="7" height="4" rx="1"/>'),
+    hcenter: _mSvg('<path d="M12 3v18"/><rect x="5" y="6" width="14" height="4" rx="1"/><rect x="8" y="14" width="8" height="4" rx="1"/>'),
+    right:   _mSvg('<path d="M20 3v18"/><rect x="5" y="6" width="12" height="4" rx="1"/><rect x="10" y="14" width="7" height="4" rx="1"/>'),
+    top:     _mSvg('<path d="M3 4h18"/><rect x="6" y="7" width="4" height="12" rx="1"/><rect x="14" y="7" width="4" height="7" rx="1"/>'),
+    vmiddle: _mSvg('<path d="M3 12h18"/><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="8" width="4" height="8" rx="1"/>'),
+    bottom:  _mSvg('<path d="M3 20h18"/><rect x="6" y="5" width="4" height="12" rx="1"/><rect x="14" y="10" width="4" height="7" rx="1"/>'),
+    disth:   _mSvg('<path d="M3 4v16M21 4v16"/><rect x="7" y="8" width="3" height="8" rx="1"/><rect x="14" y="6" width="3" height="12" rx="1"/>'),
+    distv:   _mSvg('<path d="M4 3h16M4 21h16"/><rect x="8" y="7" width="8" height="3" rx="1"/><rect x="6" y="14" width="12" height="3" rx="1"/>'),
+    row:     _mSvg('<rect x="2" y="8" width="5" height="8" rx="1"/><rect x="9.5" y="8" width="5" height="8" rx="1"/><rect x="17" y="8" width="5" height="8" rx="1"/>'),
+    col:     _mSvg('<rect x="8" y="2" width="8" height="5" rx="1"/><rect x="8" y="9.5" width="8" height="5" rx="1"/><rect x="8" y="17" width="8" height="5" rx="1"/>'),
+    grid:    _mSvg('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
+    all:     _mSvg('<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/>'),
+    clear:   _mSvg('<path d="M18 6L6 18M6 6l12 12"/>')
+};
+
+function _muralArrangeItems() {
+    return muralSelectedElementIds
+        .map(id => muralElements.find(e => String(e.id) === String(id)))
+        .filter(el => el && el.type !== 'connector' && el.type !== 'line')
+        .map(el => {
+            const dom = document.getElementById(`mural-el-${el.id}`);
+            return {
+                el, dom,
+                x: el.x || 0, y: el.y || 0,
+                w: (dom && dom.offsetWidth) || el.w || 150,
+                h: (dom && dom.offsetHeight) || el.h || 150
+            };
+        });
+}
+
+function toggleMuralMultiSelect(force) {
+    muralMultiSelect = typeof force === 'boolean' ? force : !muralMultiSelect;
+    const btn = document.getElementById('muralMultiBtn');
+    if (btn) btn.classList.toggle('active', muralMultiSelect);
+    if (muralMultiSelect && typeof showToast === 'function') showToast('Tap items to add them to the selection');
+}
+window.toggleMuralMultiSelect = toggleMuralMultiSelect;
+
+function updateMuralArrangeBtn() {
+    const btn = document.getElementById('muralArrangeBtn');
+    if (!btn) return;
+    const n = _muralArrangeItems().length;
+    btn.disabled = n < 2;
+    btn.classList.toggle('ready', n >= 2);
+    const c = document.getElementById('muralArrCount');
+    if (c) c.textContent = n >= 2 ? n : '';
+    const menu = document.getElementById('muralArrangeMenu');
+    if (menu) {
+        if (n < 2) { /* keep menu so "Select all" stays reachable */ }
+        menu.querySelectorAll('[data-min]').forEach(b => { b.disabled = n < Number(b.dataset.min); });
+        const hd = menu.querySelector('.mural-arr-head span');
+        if (hd) hd.textContent = n ? `${n} selected` : 'Nothing selected';
+    }
+}
+
+function closeMuralArrangeMenu() {
+    const m = document.getElementById('muralArrangeMenu');
+    if (m) m.remove();
+    document.removeEventListener('pointerdown', _muralArrOutside, true);
+}
+function _muralArrOutside(e) {
+    const m = document.getElementById('muralArrangeMenu');
+    const btn = document.getElementById('muralArrangeBtn');
+    if (!m) return;
+    if (m.contains(e.target) || (btn && btn.contains(e.target))) return;
+    closeMuralArrangeMenu();
+}
+
+function toggleMuralArrangeMenu(ev) {
+    if (ev) ev.stopPropagation();
+    if (document.getElementById('muralArrangeMenu')) { closeMuralArrangeMenu(); return; }
+    const btn = document.getElementById('muralArrangeBtn');
+    const item = (mode, icon, label, min = 2) =>
+        `<button class="mural-arr-item" data-min="${min}" onclick="muralArrange('${mode}')">${MURAL_ARR_ICONS[icon]}<span>${label}</span></button>`;
+    const menu = document.createElement('div');
+    menu.id = 'muralArrangeMenu';
+    menu.className = 'mural-arr-menu';
+    menu.innerHTML = `
+        <div class="mural-arr-head"><span></span>
+            <button class="mural-arr-link" onclick="muralSelectAllShapes()">${MURAL_ARR_ICONS.all}Select all</button>
+        </div>
+        <div class="mural-arr-sec">Line up</div>
+        <div class="mural-arr-grid3">
+            ${item('row', 'row', 'Horizontally')}
+            ${item('col', 'col', 'Vertically')}
+            ${item('grid', 'grid', 'Grid', 3)}
+        </div>
+        <div class="mural-arr-sec">Align</div>
+        <div class="mural-arr-grid3">
+            ${item('left', 'left', 'Left')}
+            ${item('hcenter', 'hcenter', 'Center')}
+            ${item('right', 'right', 'Right')}
+            ${item('top', 'top', 'Top')}
+            ${item('vmiddle', 'vmiddle', 'Middle')}
+            ${item('bottom', 'bottom', 'Bottom')}
+        </div>
+        <div class="mural-arr-sec">Distribute evenly</div>
+        <div class="mural-arr-grid2">
+            ${item('disth', 'disth', 'Horizontally', 3)}
+            ${item('distv', 'distv', 'Vertically', 3)}
+        </div>
+        <button class="mural-arr-clear" onclick="muralClearSelection()">${MURAL_ARR_ICONS.clear}Clear selection</button>`;
+    document.body.appendChild(menu);
+    // Place under the button, kept on screen.
+    const r = btn ? btn.getBoundingClientRect() : { left: 16, bottom: 60, right: 300 };
+    const mw = menu.offsetWidth;
+    let left = Math.min(window.innerWidth - mw - 8, Math.max(8, r.right - mw));
+    menu.style.left = left + 'px';
+    menu.style.top = (r.bottom + 8) + 'px';
+    updateMuralArrangeBtn();
+    setTimeout(() => document.addEventListener('pointerdown', _muralArrOutside, true), 0);
+}
+window.toggleMuralArrangeMenu = toggleMuralArrangeMenu;
+
+function muralSelectAllShapes() {
+    muralSelectedConnectorId = null;
+    muralSelectedElementIds = muralElements
+        .filter(el => el.type !== 'connector' && el.type !== 'line')
+        .map(el => el.id);
+    highlightMuralElements(muralSelectedElementIds);
+}
+window.muralSelectAllShapes = muralSelectAllShapes;
+
+function muralClearSelection() {
+    muralSelectedElementIds = [];
+    muralSelectedConnectorId = null;
+    highlightMuralElements([]);
+    if (typeof removeSelectionBoundingBox === 'function') removeSelectionBoundingBox();
+    closeMuralArrangeMenu();
+}
+window.muralClearSelection = muralClearSelection;
+
+const MURAL_ARR_GAP = 24;
+
+function muralArrange(mode) {
+    const items = _muralArrangeItems();
+    if (items.length < 2) return;
+    if ((mode === 'disth' || mode === 'distv' || mode === 'grid') && items.length < 3) return;
+    snapshotElementsForUndo(items.map(i => i.el.id), 'move');
+
+    const minX = Math.min(...items.map(i => i.x));
+    const minY = Math.min(...items.map(i => i.y));
+    const maxX = Math.max(...items.map(i => i.x + i.w));
+    const maxY = Math.max(...items.map(i => i.y + i.h));
+    const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
+
+    if (mode === 'left') items.forEach(i => { i.x = minX; });
+    else if (mode === 'hcenter') items.forEach(i => { i.x = midX - i.w / 2; });
+    else if (mode === 'right') items.forEach(i => { i.x = maxX - i.w; });
+    else if (mode === 'top') items.forEach(i => { i.y = minY; });
+    else if (mode === 'vmiddle') items.forEach(i => { i.y = midY - i.h / 2; });
+    else if (mode === 'bottom') items.forEach(i => { i.y = maxY - i.h; });
+    else if (mode === 'disth') {
+        const s = [...items].sort((a, b) => a.x - b.x);
+        const gap = ((maxX - minX) - s.reduce((t, i) => t + i.w, 0)) / (s.length - 1);
+        let x = minX; s.forEach(i => { i.x = x; x += i.w + gap; });
+    } else if (mode === 'distv') {
+        const s = [...items].sort((a, b) => a.y - b.y);
+        const gap = ((maxY - minY) - s.reduce((t, i) => t + i.h, 0)) / (s.length - 1);
+        let y = minY; s.forEach(i => { i.y = y; y += i.h + gap; });
+    } else if (mode === 'row') {
+        // Side by side, left → right in their current order, tops aligned.
+        const s = [...items].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+        let x = minX; s.forEach(i => { i.x = x; i.y = minY; x += i.w + MURAL_ARR_GAP; });
+    } else if (mode === 'col') {
+        // Stacked, top → bottom in their current order, left edges aligned.
+        const s = [...items].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+        let y = minY; s.forEach(i => { i.y = y; i.x = minX; y += i.h + MURAL_ARR_GAP; });
+    } else if (mode === 'grid') {
+        // Reading order (rows by y, then x), packed into a near-square grid.
+        const s = [...items].sort((a, b) => (Math.abs(a.y - b.y) > 40 ? a.y - b.y : a.x - b.x));
+        const cols = Math.ceil(Math.sqrt(s.length));
+        const cw = Math.max(...s.map(i => i.w)), rows = Math.ceil(s.length / cols);
+        const rh = [];
+        for (let r = 0; r < rows; r++) rh.push(Math.max(...s.slice(r * cols, r * cols + cols).map(i => i.h)));
+        s.forEach((i, k) => {
+            const r = Math.floor(k / cols), c = k % cols;
+            i.x = minX + c * (cw + MURAL_ARR_GAP);
+            i.y = minY + rh.slice(0, r).reduce((t, h) => t + h + MURAL_ARR_GAP, 0);
+        });
+    }
+
+    items.forEach(i => {
+        i.el.x = Math.round(i.x);
+        i.el.y = Math.round(i.y);
+        if (i.dom) {
+            i.dom.style.transition = 'left .22s ease, top .22s ease';
+            i.dom.style.left = i.el.x + 'px';
+            i.dom.style.top = i.el.y + 'px';
+            setTimeout(() => { if (i.dom) i.dom.style.transition = ''; updateConnectorsForElement(i.el.id); updateSelectionBoundingBox(); }, 240);
+        }
+        updateConnectorsForElement(i.el.id);
+    });
+    updateSelectionBoundingBox();
+    showSaveIndicator('saving');
+    closeMuralArrangeMenu();
+}
+window.muralArrange = muralArrange;
 
 /* ═══════════════════════════════════════
    BACKGROUND OPTIONS PANEL
@@ -2791,6 +3128,7 @@ async function deleteMuralElement(id) {
 
     // Push to undo stack
     pushMuralUndo({ action: 'delete', snapshots: [{ ...el }] });
+    if (el.link_project_id) _muralReleaseSubBoard(el.link_project_id);
 
     // Optimistic: remove from DOM immediately
     const dom = document.getElementById(`mural-el-${id}`);
