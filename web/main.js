@@ -488,7 +488,7 @@ const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js?v=20261003b', render: 'renderDashboard' },
     calendar:      { src: 'view-calendar.js?v=20260929a', render: 'renderCalendar' },
     tasks:         { src: 'view-tasks.js?v=20260930a', render: 'renderTasks' },
-    finance:       { src: 'view-finance.js?v=20260619c', render: 'renderFinance' },
+    finance:       { src: 'view-finance.js?v=20261004a', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20260619', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20261003d', render: 'renderVision' },
@@ -686,9 +686,19 @@ async function routeTo(viewName) {
             return match ? match[1] : null;
         })();
 
-        el.classList.toggle('active', target === viewName);
+        // The time tracker's button is keyed 'pomodoro' (that's its Tab visibility id).
+        el.classList.toggle('active', target === viewName || (target === 'pomodoro' && viewName === 'timeTracker'));
 
     });
+    // Keep the active button in view on the phone bar when it scrolls sideways.
+    try {
+        const act = document.querySelector('.mobile-nav .mob-item.active');
+        const bar = act && act.parentElement;
+        if (act && bar && bar.scrollWidth > bar.clientWidth + 4) {
+            const left = act.offsetLeft - (bar.clientWidth - act.offsetWidth) / 2;
+            bar.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+        }
+    } catch (e) { }
 
 
 

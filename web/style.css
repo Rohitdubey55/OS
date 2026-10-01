@@ -6379,3 +6379,25 @@ input:checked+.slider:before {
 .habit-action-row .btn.secondary {
   flex: 1;
 }
+
+/* Phone bottom bar: swipe sideways when more tabs are switched on than fit,
+   instead of squeezing every button to a sliver. */
+@media (max-width: 2000px) {
+  .mobile-nav {
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    justify-content: flex-start;
+    scroll-snap-type: x proximity;
+  }
+  .mobile-nav .mob-item {
+    flex: 1 0 auto;
+    min-width: 46px;
+    padding-left: 3px;
+    padding-right: 3px;
+    white-space: nowrap;
+    scroll-snap-align: start;
+  }
+}

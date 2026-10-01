@@ -134,12 +134,90 @@ function renderFinance() {
 
 function switchFinTab(tab) {
   finState = tab;
+  finOffset = 0;
   _finResetTxControls();
   renderFinance();
 }
 
+/* ── Period navigation (Expenses) ────────────────────────────────────────
+   finOffset steps back through weeks / months / years from the current one
+   (0 = now, -1 = previous …). Everything on the Expenses tab is computed from
+   one "as of" date, so a past period is shown as if it had just ended: the
+   whole month counts as elapsed, last-month comparisons use the month before
+   it, and so on. */
+let finOffset = 0;
+function _finAsOf() {
+  const now = new Date();
+  if (!finOffset) return now;
+  if (finRange === 'week') {
+    const d = new Date(now); d.setDate(d.getDate() + finOffset * 7);
+    const b = getWeekBounds(d);
+    return new Date(b.end.getTime());                       // Sunday 23:59 of that week
+  }
+  if (finRange === 'year') return new Date(now.getFullYear() + finOffset, 11, 31, 23, 59, 59);
+  return new Date(now.getFullYear(), now.getMonth() + finOffset + 1, 0, 23, 59, 59);   // last day of that month
+}
+function _finPeriodLabel(asOf) {
+  if (finRange === 'week') {
+    const b = getWeekBounds(asOf);
+    const f = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep');
+    return `${f(b.start)} – ${f(b.end)}`;
+  }
+  if (finRange === 'year') return String(asOf.getFullYear());
+  return asOf.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+// Wording for the period on screen vs the one before it ("This month" / "Last
+// month" for the current one, real names when you're looking back).
+function _finThisLabel() {
+  if (!finOffset) return finRange === 'week' ? 'This week' : 'This month';
+  const a = _finAsOf();
+  return finRange === 'week' ? 'That week' : a.toLocaleDateString('en-US', { month: 'long' });
+}
+function _finPrevLabel() {
+  if (!finOffset) return finRange === 'week' ? 'Last week' : 'Last month';
+  const a = _finAsOf();
+  if (finRange === 'week') return 'Week before';
+  return new Date(a.getFullYear(), a.getMonth() - 1, 1).toLocaleDateString('en-US', { month: 'long' });
+}
+function _finProjLabel() { return finOffset ? 'Total' : 'Projected'; }
+window.finStepPeriod = function (dir) {
+  finOffset = Math.min(0, finOffset + dir);                 // no future periods
+  _finResetTxControls();
+  renderFinanceContent();
+};
+function _finPeriodNavHTML(asOf) {
+  const unit = finRange === 'week' ? 'week' : finRange === 'year' ? 'year' : 'month';
+  return `
+    <div class="fin-period">
+      <button class="fin-period-btn" onclick="finStepPeriod(-1)" aria-label="Previous ${unit}">‹</button>
+      <div class="fin-period-label">
+        <b>${_finPeriodLabel(asOf)}</b>
+        ${finOffset ? `<button class="fin-period-now" onclick="finOffset=0; finStepPeriod(0)">Back to this ${unit}</button>` : `<span>This ${unit}</span>`}
+      </div>
+      <button class="fin-period-btn" onclick="finStepPeriod(1)" aria-label="Next ${unit}" ${finOffset ? '' : 'disabled'}>›</button>
+    </div>`;
+}
+(function finPeriodCSS() {
+  if (document.getElementById('finPeriodCSS')) return;
+  const st = document.createElement('style');
+  st.id = 'finPeriodCSS';
+  st.textContent = `
+  .fin-period { display: flex; align-items: center; justify-content: center; gap: 10px; margin: -6px auto 18px; max-width: 420px; }
+  .fin-period-btn { flex: none; width: 38px; height: 38px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--surface-1);
+    color: var(--text-1); font-size: 22px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding-bottom: 3px; }
+  .fin-period-btn:disabled { opacity: .35; cursor: default; }
+  .fin-period-btn:not(:disabled):active { transform: scale(.94); }
+  .fin-period-label { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .fin-period-label b { font-size: 16px; font-weight: 800; color: var(--text-1); white-space: nowrap; }
+  .fin-period-label span { font-size: 11.5px; font-weight: 600; color: var(--text-3, var(--text-muted)); }
+  .fin-period-now { border: none; background: none; padding: 0; font: inherit; font-size: 11.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
+  `;
+  document.head.appendChild(st);
+})();
+
 function switchFinRange(range) {
   finRange = range;
+  finOffset = 0;
   _finResetTxControls();
   renderFinanceContent();
 }
@@ -384,7 +462,7 @@ function _finWeeklyRailHTML(s, totalExp, weeklyBudget) {
         ? `<div style="font-size:22px; font-weight:800; color:var(--text-1); line-height:1">₹${Math.round(s.safePerDay).toLocaleString()}<span style="font-size:12px; font-weight:600; color:var(--text-muted)"> /day</span></div>
            <div style="font-size:12px; color:var(--text-muted); margin-top:2px">safe to spend for ${s.daysLeft} more day${s.daysLeft > 1 ? 's' : ''}</div>`
         : `<div style="font-size:13px; color:var(--text-muted)">Week complete</div>`}
-      <div style="margin-top:10px; font-size:12.5px; color:var(--text-muted)">Projected: <b style="color:${onTrack ? 'var(--success)' : 'var(--danger)'}">₹${s.projected.toLocaleString()}</b> / ₹${weeklyBudget.toLocaleString()}</div>
+      <div style="margin-top:10px; font-size:12.5px; color:var(--text-muted)">${_finProjLabel()}: <b style="color:${onTrack ? 'var(--success)' : 'var(--danger)'}">₹${s.projected.toLocaleString()}</b> / ₹${weeklyBudget.toLocaleString()}</div>
       <div style="margin-top:8px"><span style="display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:${onTrack ? 'color-mix(in srgb, var(--success) 16%, transparent)' : 'color-mix(in srgb, var(--danger) 16%, transparent)'}; color:${onTrack ? 'var(--success)' : 'var(--danger)'}">${onTrack ? 'On track' : 'Over pace'}</span></div>
     </div>`;
 
@@ -412,21 +490,21 @@ function _finWeeklyRailHTML(s, totalExp, weeklyBudget) {
     const diff = totalExp - s.lastWeekTotal;
     const pct = Math.round(Math.abs(diff) / s.lastWeekTotal * 100);
     const down = diff <= 0;
-    trendLine = `<div style="margin-top:8px; font-size:13px; font-weight:700; color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'} ${pct}% ${down ? 'less' : 'more'} than last week</div>`;
+    trendLine = `<div style="margin-top:8px; font-size:13px; font-weight:700; color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'} ${pct}% ${down ? 'less' : 'more'} than ${_finPrevLabel().toLowerCase()}</div>`;
   } else {
     trendLine = `<div style="margin-top:8px; font-size:12px; color:var(--text-muted)">No data last week</div>`;
   }
   const trendCard = `
     <div class="finr-card">
-      <div class="finr-h">vs last week</div>
-      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px"><span style="color:var(--text-muted)">This week</span><b>₹${Math.round(totalExp).toLocaleString()}</b></div>
-      <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted)">Last week</span><b>₹${Math.round(s.lastWeekTotal).toLocaleString()}</b></div>
+      <div class="finr-h">vs ${_finPrevLabel().toLowerCase()}</div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px"><span style="color:var(--text-muted)">${_finThisLabel()}</span><b>₹${Math.round(totalExp).toLocaleString()}</b></div>
+      <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted)">${_finPrevLabel()}</span><b>₹${Math.round(s.lastWeekTotal).toLocaleString()}</b></div>
       ${trendLine}
     </div>`;
 
   const biggestCard = `
     <div class="finr-card">
-      <div class="finr-h">Biggest this week</div>
+      <div class="finr-h">Biggest ${finOffset ? 'that' : 'this'} week</div>
       ${s.biggest.length
         ? s.biggest.map(e => `<div class="finr-cat"><div class="finr-cat-top"><span>${escapeHtml(e.category || 'Uncategorized')}${e.description ? ' · ' + escapeHtml(e.description) : ''}</span><b>₹${Number(e.amount).toLocaleString()}</b></div></div>`).join('')
         : '<div class="finr-empty">No spending yet.</div>'}
@@ -440,7 +518,7 @@ function renderFinExpenses(container) {
   if (finRange === 'fy') finRange = 'month';
   const allExpenses = state.data.expenses || [];
   const settings = state.data.settings?.[0] || {};
-  const now = new Date();
+  const now = _finAsOf();                   // "today", or the last day of the period being viewed
   const weekBounds = getWeekBounds(now);
 
   // Parse Budgets - use separate fields, not calculated from categories
@@ -506,7 +584,7 @@ function renderFinExpenses(container) {
       <div class="fin-kpi"><div class="k-l">Spent</div><div class="k-v" style="color:#B42318">₹${totalExp.toLocaleString()}</div></div>
       <div class="fin-kpi"><div class="k-l">Left</div><div class="k-v" style="color:${wk.left >= 0 ? 'var(--success,#10B981)' : '#B42318'}">${wk.left < 0 ? '-' : ''}₹${Math.abs(Math.round(wk.left)).toLocaleString()}</div></div>
       <div class="fin-kpi"><div class="k-l">Daily avg</div><div class="k-v">₹${Math.round(wk.dailyAvg).toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Projected</div><div class="k-v" style="color:${(weeklyBudget <= 0 || wk.projected <= weeklyBudget) ? 'var(--success,#10B981)' : '#B42318'}">₹${wk.projected.toLocaleString()}</div></div>`
+      <div class="fin-kpi"><div class="k-l">${_finProjLabel()}</div><div class="k-v" style="color:${(weeklyBudget <= 0 || wk.projected <= weeklyBudget) ? 'var(--success,#10B981)' : '#B42318'}">₹${wk.projected.toLocaleString()}</div></div>`
     : `
       <div class="fin-kpi"><div class="k-l">Spent</div><div class="k-v" style="color:#B42318">₹${totalExp.toLocaleString()}</div></div>
       <div class="fin-kpi"><div class="k-l">Income</div><div class="k-v" style="color:var(--success,#10B981)">₹${totalInc.toLocaleString()}</div></div>
@@ -529,12 +607,13 @@ function renderFinExpenses(container) {
         <button class="range-btn ${finRange === 'year' ? 'active' : ''}" onclick="switchFinRange('year')">Yearly</button>
       </div>
     </div>
+    ${_finPeriodNavHTML(now)}
 
     <div class="fin-kpis">${kpisHTML}</div>
 
     <div class="fin-workspace">
       <div class="fin-main">
-        ${(finRange === 'month' || finRange === 'week') ? `<div style="margin-bottom:18px;">${finRange === 'month' ? renderMonthlyOverview(totalExp, monthlyBudget, catSpent, categoryBudgets) : renderWeeklyOverview(totalExp, weeklyBudget, catSpent, categoryBudgets)}</div>` : ''}
+        ${(finRange === 'month' || finRange === 'week') ? `<div style="margin-bottom:18px;">${finRange === 'month' ? renderMonthlyOverview(totalExp, monthlyBudget, catSpent, categoryBudgets) : renderWeeklyOverview(totalExp, weeklyBudget, catSpent, categoryBudgets, now)}</div>` : ''}
         ${mo ? renderMonthlyInsights(mo) : ''}
         ${_finTxListHTML(expenseItems)}
       </div>
@@ -673,7 +752,7 @@ function renderMonthlyInsights(mo) {
   }).join('');
   const catCard = mo.catRows.length ? `
     <div class="dash-card">
-      <div style="display:flex; align-items:baseline; gap:8px;"><div class="fin-sec-h">Where your money goes</div><span class="fin-tx-count">change vs all of last month</span></div>
+      <div style="display:flex; align-items:baseline; gap:8px;"><div class="fin-sec-h">Where your money goes</div><span class="fin-tx-count">change vs all of ${finOffset ? _finPrevLabel() : 'last month'}</span></div>
       <div class="fin-donut-wrap">
         <div class="fin-donut-box"><canvas id="finChCat"></canvas><div class="fin-donut-center"><div class="dc-v">${fmt(mo.totalExp)}</div><div class="dc-l">spent</div></div></div>
         <div class="fin-donut-legend">${rows}</div>
@@ -695,7 +774,7 @@ function _finMonthRailHTML(mo) {
       <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px">Day ${mo.today} of ${mo.daysInMonth}</div>
       <div style="font-size:22px; font-weight:800; color:var(--text-1); line-height:1">${fmt(mo.dailyAvg)}<span style="font-size:12px; font-weight:600; color:var(--text-muted)"> /day</span></div>
       <div style="font-size:12px; color:var(--text-muted); margin-top:2px">daily average${daysLeft > 0 ? ` · ${daysLeft} day${daysLeft > 1 ? 's' : ''} left` : ''}</div>
-      <div style="margin-top:10px; font-size:12.5px; color:var(--text-muted)">Projected: <b style="color:${onTrack ? 'var(--success)' : 'var(--danger)'}">${fmt(mo.projected)}</b>${mo.monthlyBudget > 0 ? ` / ${fmt(mo.monthlyBudget)}` : ''}</div>
+      <div style="margin-top:10px; font-size:12.5px; color:var(--text-muted)">${_finProjLabel()}: <b style="color:${onTrack ? 'var(--success)' : 'var(--danger)'}">${fmt(mo.projected)}</b>${mo.monthlyBudget > 0 ? ` / ${fmt(mo.monthlyBudget)}` : ''}</div>
       ${mo.monthlyBudget > 0 ? `<div style="margin-top:8px"><span style="display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:${onTrack ? 'color-mix(in srgb, var(--success) 16%, transparent)' : 'color-mix(in srgb, var(--danger) 16%, transparent)'}; color:${onTrack ? 'var(--success)' : 'var(--danger)'}">${onTrack ? 'On track' : 'Over pace'}</span></div>` : ''}
     </div>`;
 
@@ -704,15 +783,15 @@ function _finMonthRailHTML(mo) {
     const diff = mo.totalExp - mo.lastMonthSame;
     const pct = Math.round(Math.abs(diff) / mo.lastMonthSame * 100);
     const down = diff <= 0;
-    trendLine = `<div style="margin-top:8px; font-size:13px; font-weight:700; color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'} ${pct}% ${down ? 'less' : 'more'} than last month</div>`;
+    trendLine = `<div style="margin-top:8px; font-size:13px; font-weight:700; color:${down ? 'var(--success)' : 'var(--danger)'}">${down ? '▼' : '▲'} ${pct}% ${down ? 'less' : 'more'} than ${finOffset ? _finPrevLabel() : 'last month'}</div>`;
   } else {
-    trendLine = `<div style="margin-top:8px; font-size:12px; color:var(--text-muted)">No data last month</div>`;
+    trendLine = `<div style="margin-top:8px; font-size:12px; color:var(--text-muted)">No data for ${finOffset ? _finPrevLabel() : 'last month'}</div>`;
   }
   const trendCard = `
     <div class="finr-card">
-      <div class="finr-h">vs last month · first ${mo.today} days</div>
-      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px"><span style="color:var(--text-muted)">This month</span><b>${fmt(mo.totalExp)}</b></div>
-      <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted)">Last month</span><b>${fmt(mo.lastMonthSame)}</b></div>
+      <div class="finr-h">vs ${_finPrevLabel().toLowerCase()} · first ${mo.today} days</div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px"><span style="color:var(--text-muted)">${_finThisLabel()}</span><b>${fmt(mo.totalExp)}</b></div>
+      <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted)">${_finPrevLabel()}</span><b>${fmt(mo.lastMonthSame)}</b></div>
       ${trendLine}
     </div>`;
 
@@ -942,8 +1021,8 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
     </div>`;
 }
 
-function renderWeeklyOverview(totalExp, limit, catSpent = {}, catLimits = {}) {
-  const now = new Date();
+function renderWeeklyOverview(totalExp, limit, catSpent = {}, catLimits = {}, asOf) {
+  const now = asOf || new Date();
   const weekBounds = getWeekBounds(now);
   const mondayStr = weekBounds.start.toLocaleDateString('default', { month: 'short', day: 'numeric' });
   const sundayStr = weekBounds.end.toLocaleDateString('default', { month: 'short', day: 'numeric' });
@@ -2331,7 +2410,7 @@ window.generateFinanceInsight = async function () {
 
 window.showCategoryExpenses = function (category) {
   const allExpenses = state.data.expenses || [];
-  const now = new Date();
+  const now = finState === 'expenses' && finRange === 'month' ? _finAsOf() : new Date();   // the month on screen
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
@@ -2369,7 +2448,7 @@ window.showCategoryExpenses = function (category) {
       Total: ₹${filtered.reduce((s, e) => s + Number(e.amount), 0).toLocaleString()} (${filtered.length} items)
     </div>
     <div class="transactions-list" style="padding:0">
-      ${filtered.length === 0 ? '<div class="empty-state">No transactions this month</div>' : ''}
+      ${filtered.length === 0 ? `<div class="empty-state">No transactions in ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>` : ''}
       ${filtered.map(renderTransactionCard).join('')}
     </div>
   `;
