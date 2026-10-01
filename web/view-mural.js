@@ -1982,16 +1982,41 @@ async function createMuralProject() {
     }
 }
 
+// Board ids to remove: the board plus every sub-board nested under it.
+function _muralBoardFamily(id) {
+    const out = [String(id)];
+    for (let i = 0; i < out.length; i++) {
+        muralProjects.filter(p => p.parent_id && String(p.parent_id) === out[i] && !out.includes(String(p.id)))
+            .forEach(p => out.push(String(p.id)));
+    }
+    return out;
+}
+
+async function _muralDeleteBoards(ids) {
+    for (const pid of ids) {
+        const res = await apiPost({ action: 'deleteMuralProject', id: pid });
+        if (!res || !res.success) throw new Error((res && res.message) || 'Delete failed');
+    }
+    const gone = new Set(ids.map(String));
+    muralProjects = muralProjects.filter(p => !gone.has(String(p.id)));
+    state.data.mural_projects = muralProjects;
+    if (Array.isArray(state.data.mural_elements)) {
+        state.data.mural_elements = state.data.mural_elements.filter(e => !gone.has(String(e.project_id)));
+    }
+}
+
 async function deleteMuralProject(id) {
-    if (!confirm('Delete this project and all its elements?')) return;
+    const project = muralProjects.find(p => String(p.id) === String(id));
+    const family = _muralBoardFamily(id);
+    const extra = family.length > 1 ? ` and its ${family.length - 1} sub-board${family.length > 2 ? 's' : ''}` : '';
+    if (!confirm(`Delete “${(project && project.title) || 'this board'}”${extra} and everything on ${family.length > 1 ? 'them' : 'it'}?`)) return;
     try {
-        const res = await apiPost({ action: 'deleteMuralProject', id });
-        if (res.success) {
-            toast('Project deleted');
-            renderMuralDashboard();
-        }
+        await _muralDeleteBoards(family);
+        toast('Board deleted');
+        renderMuralDashboard();
     } catch (err) {
-        toast('Error deleting project');
+        console.error(err);
+        toast('Could not delete the board');
     }
 }
 
@@ -3352,7 +3377,14 @@ async function deleteMuralElement(id) {
 
     // Push to undo stack
     pushMuralUndo({ action: 'delete', snapshots: [{ ...el }] });
-    if (el.link_project_id) _muralReleaseSubBoard(el.link_project_id);
+    if (el.link_project_id) {
+        const sub = muralProjects.find(p => String(p.id) === String(el.link_project_id));
+        if (sub && confirm(`Also delete the “${sub.title || 'linked'}” board inside it?\n\nOK = delete the board too · Cancel = keep the board (it moves to your Projects list)`)) {
+            _muralDeleteBoards(_muralBoardFamily(sub.id)).catch(() => toast('Could not delete the linked board'));
+        } else {
+            _muralReleaseSubBoard(el.link_project_id);
+        }
+    }
 
     // Optimistic: remove from DOM immediately
     const dom = document.getElementById(`mural-el-${id}`);

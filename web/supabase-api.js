@@ -221,6 +221,18 @@
                 // and calls this once on "Save". We upsert every element (ids are TEXT,
                 // so client-generated ids persist as-is — connector from_id/to_id stay
                 // valid, no remap needed) and delete anything removed locally.
+                // Delete a Mural board and everything on it.
+                case 'deleteMuralProject': {
+                    if (!user) throw new Error('Not authenticated');
+                    if (!id) throw new Error('Missing id for delete');
+                    const pid = String(id);
+                    const e1 = await sb.from('mural_elements').delete().eq('project_id', pid);
+                    if (e1.error) throw e1.error;
+                    const e2 = await sb.from('mural_projects').delete().eq('id', pid);
+                    if (e2.error) throw e2.error;
+                    return { success: true };
+                }
+
                 case 'syncMuralElements': {
                     if (!user) throw new Error('Not authenticated');
                     const projectId = payload && payload.project_id != null ? String(payload.project_id) : null;
