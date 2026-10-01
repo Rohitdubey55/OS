@@ -636,7 +636,7 @@ function createMuralElementDOM(data) {
     if (data.font_size) content.style.fontSize = `${data.font_size}px`;
     if (data.text_color) content.style.color = data.text_color;
     if (data.bold === true || data.bold === 'true') content.style.fontWeight = '700';
-    if (data.text_align) content.style.textAlign = data.text_align;
+    if (data.text_align) _muralApplyTextAlign(content, data.text_align);
     div.appendChild(content);
 
     // Element that opens its own board (sub-mural)
@@ -2594,6 +2594,13 @@ window.applyMuralRadius = function (val) {
     });
     _muralPersistStyle();
 };
+// Text sits in a flex column (shapes centre it with align-items), so text-align
+// alone can't move a single line. Set the flex alignment too.
+function _muralApplyTextAlign(content, align) {
+    const a = align === 'left' || align === 'right' ? align : 'center';
+    content.style.textAlign = a;
+    content.style.alignItems = a === 'left' ? 'flex-start' : a === 'right' ? 'flex-end' : 'center';
+}
 window.applyMuralText = function (prop, value) {
     const els = _muralSelectedEls().filter(el => el.type !== 'connector');
     if (!els.length) { if (typeof showToast === 'function') showToast('Select an item first'); return; }
@@ -2607,7 +2614,7 @@ window.applyMuralText = function (prop, value) {
             if (el.font_size) content.style.fontSize = el.font_size + 'px';
             if (el.text_color) content.style.color = el.text_color;
             content.style.fontWeight = (el.bold === true || el.bold === 'true') ? '700' : '';
-            if (el.text_align) content.style.textAlign = el.text_align;
+            if (el.text_align) _muralApplyTextAlign(content, el.text_align);
         }
     });
     _muralPersistStyle();
