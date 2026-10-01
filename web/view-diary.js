@@ -1628,7 +1628,7 @@ function getContextData(dateStr) {
   context.habits = habits.filter(h => (h.date || '').startsWith(dateStr));
 
   const expenses = state.data.expenses || [];
-  const dayExpenses = expenses.filter(e => (e.date || '').startsWith(dateStr));
+  const dayExpenses = expenses.filter(e => (e.type || 'expense') === 'expense' && (e.date || '').startsWith(dateStr));
   context.expenses = dayExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
   return context;

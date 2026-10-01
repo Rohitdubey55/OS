@@ -303,7 +303,7 @@
         tasks: new Set(['id','user_id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','completed_at','duration','subtasks','pomodoro_estimate','pomodoro_length','tdp_plan_id','tdp_carried_from','comments_json']),
         habits: new Set(['id','user_id','habit_name','frequency','streak','reminder_time','emoji','pomodoro_sessions','pomodoro_length','alarm_enabled','routine','duration','category']),
         habit_logs: new Set(['id','user_id','habit_id','date','status','pomodoro_completed']),
-        expenses: new Set(['id','user_id','date','amount','category','description','type','payment_mode','budget_scope']),
+        expenses: new Set(['id','user_id','date','amount','category','description','type','payment_mode','budget_scope','recurrence']),
         diary: new Set(['id','user_id','date','content','mood','tags']),
         planner_events: new Set(['id','user_id','title','start_datetime','end_datetime','category','color']),
         vision_board: new Set(['id','user_id','category','title','description','image_url','target_date','progress','status','notes','linked_habits','video_url','month_focus','color','display_mode','horizon','horizon_goals_json','story_music','story_skip']),

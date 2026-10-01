@@ -582,7 +582,7 @@ const WIDGET_RENDERERS = {
 
     // ─────── RECENT / LIST (kind: 'list') ───────
     'list-recentTransactions': (t, c) => {
-        const tx = [...(state.data.expenses || [])]
+        const tx = [...(state.data.expenses || [])].filter(e => e.type !== 'upcoming')   // planned bills aren't transactions yet
             .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
             .slice(0, 10);
         const total = tx.reduce((s, e) => s + Number(e.amount || 0), 0);

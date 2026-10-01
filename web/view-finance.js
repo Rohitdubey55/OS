@@ -168,6 +168,7 @@ function _finPeriodLabel(asOf) {
 }
 // Wording for the period on screen vs the one before it ("This month" / "Last
 // month" for the current one, real names when you're looking back).
+function _finIsFuture() { return finOffset > 0; }
 function _finThisLabel() {
   if (!finOffset) return finRange === 'week' ? 'This week' : 'This month';
   const a = _finAsOf();
@@ -180,8 +181,155 @@ function _finPrevLabel() {
   return new Date(a.getFullYear(), a.getMonth() - 1, 1).toLocaleDateString('en-US', { month: 'long' });
 }
 function _finProjLabel() { return finOffset ? 'Total' : 'Projected'; }
+
+/* ── Upcoming expenses ────────────────────────────────────────────────────
+   Bills you know are coming, stored as expenses with type 'upcoming' so no
+   spending total anywhere counts them until they're paid (every total in the
+   app sums type === 'expense'). One-off items have a due date; monthly ones
+   (recurrence = 'monthly') keep their NEXT due date and show up in every
+   month from there on. "Mark paid" turns a one-off into a normal expense dated
+   today; for a monthly one it records the payment and moves the due date on. */
+function _finUpcomingItems() { return (state.data.expenses || []).filter(e => e.type === 'upcoming'); }
+function _finIso(d) { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+function _finParse(str) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(str || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(str); }
+function _finUpcomingIn(start, end) {
+  const out = [];
+  _finUpcomingItems().forEach(item => {
+    const due = _finParse(item.date);
+    if (isNaN(due)) return;
+    if (item.recurrence === 'monthly') {
+      const dom = due.getDate();
+      for (let i = 0; i < 400; i++) {
+        const y = due.getFullYear(), m = due.getMonth() + i;
+        const last = new Date(y, m + 1, 0).getDate();
+        const d = new Date(y, m, Math.min(dom, last));
+        if (d > end) break;
+        if (d >= start) out.push({ item, date: d, recurring: true, next: i === 0 });
+      }
+    } else if (due >= start && due <= end) {
+      out.push({ item, date: due, recurring: false, next: true });
+    }
+  });
+  return out.sort((a, b) => a.date - b.date);
+}
+function _finUpcomingRange(asOf) {
+  if (finRange === 'year') return [new Date(asOf.getFullYear(), 0, 1), new Date(asOf.getFullYear(), 11, 31, 23, 59, 59)];
+  return [new Date(asOf.getFullYear(), asOf.getMonth(), 1), new Date(asOf.getFullYear(), asOf.getMonth() + 1, 0, 23, 59, 59)];
+}
+function _finUpcomingCardHTML(occ, asOf) {
+  const total = occ.reduce((s, o) => s + (Number(o.item.amount) || 0), 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const rows = occ.map(o => {
+    const it = o.item, overdue = o.date < today;
+    const title = it.description || it.category || 'Upcoming bill';
+    return `
+      <div class="fin-up-row ${overdue ? 'overdue' : ''}" onclick="openUpcomingModal('${it.id}')">
+        <div class="fin-up-date"><b>${o.date.getDate()}</b><span>${o.date.toLocaleDateString('en-US', { month: 'short' })}</span></div>
+        <div class="fin-up-main">
+          <b>${escapeHtml(title)}</b>
+          <span>${[it.description && it.category ? escapeHtml(it.category) : '', o.recurring ? '↻ Monthly' : '', overdue ? '<em>Overdue</em>' : ''].filter(Boolean).join(' · ') || 'One-off'}</span>
+        </div>
+        <div class="fin-up-amt">₹${Number(it.amount || 0).toLocaleString()}</div>
+        ${o.next ? `<button class="fin-up-paid" onclick="event.stopPropagation(); finMarkUpcomingPaid('${it.id}')">Paid</button>` : `<span class="fin-up-sched" title="Pay the earlier one first">Scheduled</span>`}
+      </div>`;
+  }).join('');
+  return `
+    <div class="fin-up-card">
+      <div class="fin-up-head">
+        <div><div class="fin-sec-h">Upcoming</div><span class="fin-tx-count">${occ.length ? `${occ.length} bill${occ.length === 1 ? '' : 's'} · ₹${total.toLocaleString()}` : 'Nothing planned yet'}</span></div>
+        <button class="fin-up-add" onclick="openUpcomingModal()">+ Add upcoming</button>
+      </div>
+      ${rows || `<div class="fin-up-empty">Add rent, EMIs, subscriptions or a planned purchase — they count toward this ${finRange === 'year' ? 'year' : 'month'}'s expected spend, not what you've spent.</div>`}
+    </div>`;
+}
+window.openUpcomingModal = function (id) {
+  const it = id ? _finUpcomingItems().find(e => String(e.id) === String(id)) : null;
+  const asOf = _finAsOf(), now = new Date();
+  const defDate = it ? String(it.date).slice(0, 10)
+    : (finOffset > 0 ? _finIso(new Date(asOf.getFullYear(), asOf.getMonth(), 1)) : _finIso(now));
+  const cats = (typeof getAllFinanceCategories === 'function' ? getAllFinanceCategories() : []);
+  const esc = v => escapeHtml(String(v == null ? '' : v)).replace(/"/g, '&quot;');
+  const modal = document.getElementById('universalModal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <div class="fin-up-modal">
+      <h3>${it ? 'Edit upcoming' : 'Add upcoming expense'}</h3>
+      <p class="fin-up-sub">It shows in that month as expected spend and doesn't count as spent until you mark it paid.</p>
+      <label>What is it?<input class="input" id="upDesc" placeholder="e.g. Rent, Car EMI, Netflix" value="${esc(it && it.description)}"></label>
+      <div class="fin-up-2">
+        <label>Amount (₹)<input class="input" id="upAmt" type="number" inputmode="decimal" placeholder="0" value="${esc(it && it.amount)}"></label>
+        <label>${it && it.recurrence === 'monthly' ? 'Next due' : 'Due date'}<input class="input" id="upDate" type="date" value="${defDate}"></label>
+      </div>
+      <label>Category<input class="input" id="upCat" list="upCats" placeholder="e.g. Bills" value="${esc(it && it.category)}">
+        <datalist id="upCats">${cats.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
+      <label class="fin-up-check"><input type="checkbox" id="upRepeat" ${it && it.recurrence === 'monthly' ? 'checked' : ''}> Repeats every month</label>
+      <div class="fin-up-acts">
+        ${it ? `<button class="btn" style="color:var(--danger)" onclick="finDeleteUpcoming('${it.id}')">Delete</button>` : ''}
+        <span style="flex:1"></span>
+        <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+        <button class="btn primary" onclick="finSaveUpcoming(${it ? `'${it.id}'` : 'null'})">${it ? 'Save' : 'Add'}</button>
+      </div>
+    </div>`;
+  modal.classList.remove('hidden');
+  setTimeout(() => { if (!it) document.getElementById('upDesc')?.focus(); }, 60);
+};
+window.finSaveUpcoming = async function (id) {
+  const desc = (document.getElementById('upDesc')?.value || '').trim();
+  const amount = Number(document.getElementById('upAmt')?.value || 0);
+  const date = document.getElementById('upDate')?.value;
+  const category = (document.getElementById('upCat')?.value || '').trim() || 'Bills';
+  const repeat = !!document.getElementById('upRepeat')?.checked;
+  if (!amount || !date) { showToast('Add an amount and a due date'); return; }
+  const payload = { type: 'upcoming', amount, date, category, description: desc, budget_scope: 'monthly', recurrence: repeat ? 'monthly' : '' };
+  document.getElementById('universalModal').classList.add('hidden');
+  if (id) {
+    const it = (state.data.expenses || []).find(e => String(e.id) === String(id));
+    if (it) Object.assign(it, payload);
+    renderFinanceContent();
+    await apiCall('update', 'expenses', payload, id);
+  } else {
+    showToast('Adding upcoming…');
+    await apiCall('create', 'expenses', payload);
+  }
+  await refreshData('finance');
+  if (repeat) {
+    const saved = _finUpcomingItems().find(e => (id ? String(e.id) === String(id) : (e.description === desc && Number(e.amount) === amount)));
+    if (saved && saved.recurrence !== 'monthly') showToast('Saved as one-off — run the expense-recurrence migration in Supabase for monthly repeats');
+  }
+};
+window.finDeleteUpcoming = async function (id) {
+  if (!confirm('Delete this upcoming expense?')) return;
+  document.getElementById('universalModal').classList.add('hidden');
+  state.data.expenses = (state.data.expenses || []).filter(e => String(e.id) !== String(id));
+  renderFinanceContent();
+  await apiCall('delete', 'expenses', {}, id);
+};
+window.finMarkUpcomingPaid = async function (id) {
+  const it = _finUpcomingItems().find(e => String(e.id) === String(id));
+  if (!it) return;
+  const todayStr = _finIso(new Date());
+  if (it.recurrence === 'monthly') {
+    // Record this month's payment, then move the due date on a month.
+    const due = _finParse(it.date);
+    const dom = due.getDate();
+    const nxt = new Date(due.getFullYear(), due.getMonth() + 1, 1);
+    nxt.setDate(Math.min(dom, new Date(nxt.getFullYear(), nxt.getMonth() + 1, 0).getDate()));
+    it.date = _finIso(nxt);
+    renderFinanceContent();
+    showToast('Paid — next one is due ' + nxt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+    await apiCall('create', 'expenses', { type: 'expense', amount: Number(it.amount) || 0, category: it.category || 'Bills', description: it.description || '', date: todayStr, budget_scope: 'monthly' });
+    await apiCall('update', 'expenses', { date: it.date }, it.id);
+  } else {
+    it.type = 'expense'; it.date = todayStr;
+    renderFinanceContent();
+    showToast('Marked paid');
+    await apiCall('update', 'expenses', { type: 'expense', date: todayStr }, it.id);
+  }
+  await refreshData('finance');
+};
+const FIN_MAX_AHEAD = { week: 8, month: 12, year: 1 };   // upcoming bills can be planned ahead
 window.finStepPeriod = function (dir) {
-  finOffset = Math.min(0, finOffset + dir);                 // no future periods
+  finOffset = Math.min(FIN_MAX_AHEAD[finRange] || 0, finOffset + dir);
   _finResetTxControls();
   renderFinanceContent();
 };
@@ -194,7 +342,7 @@ function _finPeriodNavHTML(asOf) {
         <b>${_finPeriodLabel(asOf)}</b>
         ${finOffset ? `<button class="fin-period-now" onclick="finOffset=0; finStepPeriod(0)">Back to this ${unit}</button>` : `<span>This ${unit}</span>`}
       </div>
-      <button class="fin-period-btn" onclick="finStepPeriod(1)" aria-label="Next ${unit}" ${finOffset ? '' : 'disabled'}>›</button>
+      <button class="fin-period-btn" onclick="finStepPeriod(1)" aria-label="Next ${unit}" ${finOffset >= (FIN_MAX_AHEAD[finRange] || 0) ? 'disabled' : ''}>›</button>
     </div>`;
 }
 (function finPeriodCSS() {
@@ -202,6 +350,32 @@ function _finPeriodNavHTML(asOf) {
   const st = document.createElement('style');
   st.id = 'finPeriodCSS';
   st.textContent = `
+  .fin-up-card { background: var(--surface-1); border: 1px solid var(--border-color); border-radius: 16px; padding: 14px 14px 6px; margin-bottom: 18px; }
+  .fin-up-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .fin-up-head .fin-sec-h { margin: 0; }
+  .fin-up-add { flex: none; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--surface-1); color: var(--primary); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+  .fin-up-row { display: flex; align-items: center; gap: 11px; padding: 10px 0; border-top: 1px solid var(--border-color); cursor: pointer; }
+  .fin-up-date { flex: none; width: 42px; height: 46px; border-radius: 11px; background: rgba(245,158,11,.12); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .fin-up-date b { font-size: 16px; font-weight: 850; line-height: 1; color: var(--text-1); }
+  .fin-up-date span { font-size: 10px; font-weight: 800; text-transform: uppercase; color: #B54708; margin-top: 2px; }
+  .fin-up-row.overdue .fin-up-date { background: rgba(239,68,68,.12); }
+  .fin-up-row.overdue .fin-up-date span { color: #B42318; }
+  .fin-up-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .fin-up-main b { font-size: 14px; font-weight: 750; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fin-up-main span { font-size: 12px; color: var(--text-3); font-weight: 600; }
+  .fin-up-main em { font-style: normal; color: #B42318; font-weight: 800; }
+  .fin-up-amt { flex: none; font-size: 14.5px; font-weight: 800; color: var(--text-1); font-variant-numeric: tabular-nums; }
+  .fin-up-paid { flex: none; height: 30px; padding: 0 11px; border-radius: 99px; border: 1px solid rgba(16,185,129,.4); background: rgba(16,185,129,.1); color: #047857; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+  .fin-up-sched { flex: none; font-size: 11.5px; font-weight: 700; color: var(--text-3); padding: 0 4px; }
+  .fin-up-empty { font-size: 13px; color: var(--text-3); padding: 6px 0 12px; line-height: 1.45; }
+  .fin-up-modal { display: flex; flex-direction: column; gap: 12px; }
+  .fin-up-modal h3 { margin: 0; font-size: 18px; font-weight: 800; }
+  .fin-up-sub { margin: -6px 0 2px; font-size: 13px; color: var(--text-3); }
+  .fin-up-modal label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; font-weight: 700; color: var(--text-2); }
+  .fin-up-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .fin-up-modal .fin-up-check { flex-direction: row; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; color: var(--text-1); }
+  .fin-up-check input { width: 18px; height: 18px; accent-color: var(--primary); }
+  .fin-up-acts { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
   .fin-period { display: flex; align-items: center; justify-content: center; gap: 10px; margin: -6px auto 18px; max-width: 420px; }
   .fin-period-btn { flex: none; width: 38px; height: 38px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--surface-1);
     color: var(--text-1); font-size: 22px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding-bottom: 3px; }
@@ -569,6 +743,10 @@ function renderFinExpenses(container) {
   // Weekly mode swaps the generic KPIs (Income/Net/Savings are meaningless for a
   // day-to-day budget) for budget-pace metrics, and swaps the rail for evaluation
   // cards. Monthly/Yearly keep the original KPIs + rail.
+  // Upcoming bills in the period on screen (month or year view).
+  const upOcc = finRange === 'week' ? [] : _finUpcomingIn(..._finUpcomingRange(now));
+  const upTotal = upOcc.reduce((s, o) => s + (Number(o.item.amount) || 0), 0);
+
   const wk = finRange === 'week'
     ? _finWeeklyStats(expenseItems, totalExp, weeklyBudget, weekBounds, now, allExpenses)
     : null;
@@ -587,15 +765,15 @@ function renderFinExpenses(container) {
       <div class="fin-kpi"><div class="k-l">${_finProjLabel()}</div><div class="k-v" style="color:${(weeklyBudget <= 0 || wk.projected <= weeklyBudget) ? 'var(--success,#10B981)' : '#B42318'}">₹${wk.projected.toLocaleString()}</div></div>`
     : `
       <div class="fin-kpi"><div class="k-l">Spent</div><div class="k-v" style="color:#B42318">₹${totalExp.toLocaleString()}</div></div>
+      <div class="fin-kpi"><div class="k-l">Upcoming</div><div class="k-v" style="color:${upTotal ? '#B54708' : 'var(--text-3)'}">₹${upTotal.toLocaleString()}</div></div>
       <div class="fin-kpi"><div class="k-l">Income</div><div class="k-v" style="color:var(--success,#10B981)">₹${totalInc.toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Net</div><div class="k-v" style="color:${net >= 0 ? 'var(--success,#10B981)' : '#B42318'}">${net < 0 ? '-' : ''}₹${Math.abs(net).toLocaleString()}</div></div>
-      <div class="fin-kpi"><div class="k-l">Savings</div><div class="k-v">₹${fundsTotal.toLocaleString()}</div></div>`;
+      <div class="fin-kpi"><div class="k-l">Net</div><div class="k-v" style="color:${net >= 0 ? 'var(--success,#10B981)' : '#B42318'}">${net < 0 ? '-' : ''}₹${Math.abs(net).toLocaleString()}</div></div>`;
 
-  const savingsCard = `<div class="finr-card"><div class="finr-h">Savings</div>${fundsRail || '<div class="finr-empty">No funds yet.</div>'}</div>`;
+  const savingsCard = '';   // fund balances aren't about this period — they live on the Funds tab
   const railHTML = (finRange === 'week')
     ? _finWeeklyRailHTML(wk, totalExp, weeklyBudget)
     : (finRange === 'month')
-      ? _finMonthRailHTML(mo) + savingsCard
+      ? (_finIsFuture() ? '' : _finMonthRailHTML(mo)) + savingsCard
       : `<div class="finr-card"><div class="finr-h">Top categories</div>${catBars || '<div class="finr-empty">No spending in this period.</div>'}</div>` + savingsCard;
 
   // Render
@@ -613,9 +791,10 @@ function renderFinExpenses(container) {
 
     <div class="fin-workspace">
       <div class="fin-main">
-        ${(finRange === 'month' || finRange === 'week') ? `<div style="margin-bottom:18px;">${finRange === 'month' ? renderMonthlyOverview(totalExp, monthlyBudget, catSpent, categoryBudgets) : renderWeeklyOverview(totalExp, weeklyBudget, catSpent, categoryBudgets, now)}</div>` : ''}
-        ${mo ? renderMonthlyInsights(mo) : ''}
-        ${_finTxListHTML(expenseItems)}
+        ${(finRange === 'month' || finRange === 'week') ? `<div style="margin-bottom:18px;">${finRange === 'month' ? renderMonthlyOverview(totalExp, monthlyBudget, catSpent, categoryBudgets, upTotal) : renderWeeklyOverview(totalExp, weeklyBudget, catSpent, categoryBudgets, now)}</div>` : ''}
+        ${finRange !== 'week' ? _finUpcomingCardHTML(upOcc, now) : ''}
+        ${mo && !_finIsFuture() ? renderMonthlyInsights(mo) : ''}
+        ${_finIsFuture() && !expenseItems.length ? '' : _finTxListHTML(expenseItems)}
       </div>
       <aside class="fin-rail">${railHTML}</aside>
     </div>
@@ -956,8 +1135,10 @@ function _finInitMonthCharts(mo, attempt = 0) {
   }
 }
 
-function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
+function renderMonthlyOverview(totalExp, limit, catSpent, catLimits, upcoming = 0) {
   const pct = limit > 0 ? Math.min(100, (totalExp / limit) * 100) : 0;
+  const upPct = limit > 0 ? Math.max(0, Math.min(100 - pct, (upcoming / limit) * 100)) : 0;
+  const expected = Number(totalExp) + Number(upcoming || 0);
   const color = pct > 100 ? 'var(--danger)' : (pct > 80 ? 'var(--warning)' : 'var(--success)');
 
   // Get all categories from both limits and spending
@@ -990,8 +1171,8 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
         </div>`;
   }).join('');
 
-  // Balance = budget − spend (how much is left this month).
-  const balance = Number(limit) - Number(totalExp);
+  // Balance = budget − spend − what's still coming (how much is really left).
+  const balance = Number(limit) - expected;
   const balColor = balance >= 0 ? 'var(--success)' : 'var(--danger)';
   const balText = balance >= 0 ? `₹${balance.toLocaleString()} left` : `₹${Math.abs(balance).toLocaleString()} over`;
 
@@ -1003,11 +1184,14 @@ function renderMonthlyOverview(totalExp, limit, catSpent, catLimits) {
         </div>
 
         <div class="progress-bg" style="height:10px; margin-bottom:10px; background:var(--surface-3); border-radius:5px; overflow:hidden">
-             <div class="progress-fill" style="width:${pct}%; background:${color}; transition: width 0.3s"></div>
+             <div class="progress-fill" style="width:${pct}%; background:${color}; transition: width 0.3s; display:inline-block; vertical-align:top"></div>${upPct ? `<div title="Upcoming" style="display:inline-block; vertical-align:top; height:100%; width:${upPct}%; background:repeating-linear-gradient(45deg, rgba(245,158,11,.75) 0 6px, rgba(245,158,11,.4) 6px 12px)"></div>` : ''}
         </div>
+        ${upcoming ? `<div style="display:flex; justify-content:space-between; align-items:baseline; margin:-2px 0 10px; font-size:12.5px; color:var(--text-muted)">
+             <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#F59E0B;margin-right:6px"></span>Upcoming ₹${Number(upcoming).toLocaleString()}</span>
+             <span>Expected <b style="color:var(--text-1)">₹${expected.toLocaleString()}</b></span></div>` : ''}
 
         <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:16px;">
-             <span style="font-size:12.5px; color:var(--text-muted)">Balance</span>
+             <span style="font-size:12.5px; color:var(--text-muted)">${upcoming ? 'Left after upcoming' : 'Balance'}</span>
              <span style="font-size:17px; font-weight:700; color:${balColor}">${balText}</span>
         </div>
 
