@@ -244,8 +244,11 @@
                             // A not-yet-migrated column (e.g. text_color, from_rx) fails the
                             // whole batch — strip it from every row and retry so the save
                             // still succeeds; that field just isn't persisted until migrated.
-                            const probe = _stripMissingCol(res.error, rows[0]);
-                            const missing = probe ? Object.keys(rows[0]).find((k) => !(k in probe)) : null;
+                            // Find the column from the error itself — the first row may not even
+                            // carry it (e.g. only one element has link_project_id set).
+                            const _m = String(res.error.message || '') + ' ' + String(res.error.details || '');
+                            const _mm = _m.match(/Could not find the '([^']+)' column/) || _m.match(/column "([^"]+)"/) || _m.match(/'([^']+)' column/);
+                            const missing = _mm && rows.some((r) => Object.prototype.hasOwnProperty.call(r, _mm[1])) ? _mm[1] : null;
                             if (!missing) break;
                             rows = rows.map((r) => { const c = { ...r }; delete c[missing]; return c; });
                         } while (++tries < 10);
