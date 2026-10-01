@@ -294,8 +294,8 @@ async function renderMuralCanvasView() {
             <!-- Top Bar -->
             <div class="mural-topbar">
                 <div class="mural-topbar-left">
-                    <button class="mural-back-btn" onclick="exitMuralProject()" title="Back to Dashboard">
-                        <i data-lucide="arrow-left" style="width:18px;height:18px"></i>
+                    <button class="mural-back-btn" onclick="exitMuralProject()" title="Back to all boards" aria-label="Back to all boards">
+                        <i data-lucide="arrow-left" style="width:18px;height:18px"></i><span class="mural-back-label">Boards</span>
                     </button>
                     <div class="mural-project-title-bar">${escapeHtml(project ? project.title : 'Project')}</div>
                 </div>
@@ -333,6 +333,10 @@ async function renderMuralCanvasView() {
             <div class="mural-save-indicator" id="muralSaveIndicator">
                 <span id="muralSaveText">Saved</span>
             </div>
+
+            <!-- Scrollbars (show where you are on the board; drag to scroll) -->
+            <div class="mural-sb mural-sb-y" id="muralSbY"><div class="mural-sb-thumb" data-axis="y"></div></div>
+            <div class="mural-sb mural-sb-x" id="muralSbX"><div class="mural-sb-thumb" data-axis="x"></div></div>
 
             <!-- Canvas -->
             <div class="mural-canvas" id="muralCanvas">
@@ -483,7 +487,9 @@ async function renderMuralCanvasView() {
 
     initMuralCanvas();
     initMuralToolbarDrag();
+    initMuralScrollbars();
     await loadMuralElements();
+    updateMuralScrollbars();
 }
 
 function exitMuralProject() {
@@ -1684,6 +1690,98 @@ function applyMuralTransform() {
         page.style.backgroundSize = `${gs}px ${gs}px`;
         page.style.backgroundPosition = `${muralTransform.x}px ${muralTransform.y}px`;
     }
+    updateMuralScrollbars();
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────
+   The board is an infinite canvas, so the "document" is the union of the
+   content (plus a margin) and whatever is on screen right now. The thumbs
+   show where the viewport sits inside that area; dragging a thumb pans. */
+const MURAL_SB_PAD = 400;
+let muralSbDrag = null;
+
+function _muralWorldBounds() {
+    const page = document.getElementById('muralPage');
+    if (!page) return null;
+    const W = page.clientWidth, H = page.clientHeight, s = muralTransform.scale;
+    const view = { x0: -muralTransform.x / s, y0: -muralTransform.y / s };
+    view.x1 = view.x0 + W / s; view.y1 = view.y0 + H / s;
+    let b = { x0: view.x0, y0: view.y0, x1: view.x1, y1: view.y1 };
+    (muralElements || []).forEach(el => {
+        const x = el.x || 0, y = el.y || 0;
+        b.x0 = Math.min(b.x0, x - MURAL_SB_PAD); b.y0 = Math.min(b.y0, y - MURAL_SB_PAD);
+        b.x1 = Math.max(b.x1, x + (el.w || 150) + MURAL_SB_PAD);
+        b.y1 = Math.max(b.y1, y + (el.h || 150) + MURAL_SB_PAD);
+    });
+    return { b, view, W, H };
+}
+
+function updateMuralScrollbars() {
+    const wb = _muralWorldBounds();
+    if (!wb) return;
+    const { b, view } = wb;
+    [['x', 'muralSbX', b.x0, b.x1, view.x0, view.x1], ['y', 'muralSbY', b.y0, b.y1, view.y0, view.y1]]
+        .forEach(([axis, id, a0, a1, v0, v1]) => {
+            const track = document.getElementById(id);
+            if (!track) return;
+            const thumb = track.firstElementChild;
+            const len = axis === 'x' ? track.clientWidth : track.clientHeight;
+            const total = Math.max(1, a1 - a0);
+            const size = Math.max(28, len * (v1 - v0) / total);
+            const pos = (len - size) * ((v0 - a0) / Math.max(1, total - (v1 - v0)));
+            const full = (v1 - v0) / total > 0.995;
+            track.classList.toggle('is-full', full);
+            if (axis === 'x') { thumb.style.width = size + 'px'; thumb.style.transform = `translateX(${pos || 0}px)`; }
+            else { thumb.style.height = size + 'px'; thumb.style.transform = `translateY(${pos || 0}px)`; }
+        });
+    const page = document.getElementById('muralPage');
+    if (page) {
+        page.classList.add('mural-sb-active');
+        clearTimeout(updateMuralScrollbars._t);
+        updateMuralScrollbars._t = setTimeout(() => { if (!muralSbDrag) page.classList.remove('mural-sb-active'); }, 1200);
+    }
+}
+
+function initMuralScrollbars() {
+    ['muralSbX', 'muralSbY'].forEach(id => {
+        const track = document.getElementById(id);
+        if (!track) return;
+        const axis = id === 'muralSbX' ? 'x' : 'y';
+        const stop = e => { e.stopPropagation(); };
+        ['mousedown', 'touchstart', 'click', 'dblclick'].forEach(t => track.addEventListener(t, stop, { passive: true }));
+        track.addEventListener('pointerdown', e => {
+            e.stopPropagation(); e.preventDefault();
+            const wb = _muralWorldBounds(); if (!wb) return;
+            const len = axis === 'x' ? track.clientWidth : track.clientHeight;
+            const total = axis === 'x' ? wb.b.x1 - wb.b.x0 : wb.b.y1 - wb.b.y0;
+            const thumb = track.firstElementChild;
+            if (e.target !== thumb) {
+                // Click on the track: jump so the viewport centres on that spot.
+                const r = track.getBoundingClientRect();
+                const frac = axis === 'x' ? (e.clientX - r.left) / len : (e.clientY - r.top) / len;
+                const s = muralTransform.scale;
+                const target = (axis === 'x' ? wb.b.x0 : wb.b.y0) + frac * total;
+                const half = (axis === 'x' ? wb.W : wb.H) / s / 2;
+                if (axis === 'x') muralTransform.x = -(target - half) * s; else muralTransform.y = -(target - half) * s;
+                applyMuralTransform();
+            }
+            muralSbDrag = { axis, start: axis === 'x' ? e.clientX : e.clientY, t0: axis === 'x' ? muralTransform.x : muralTransform.y, ratio: total / len };
+            track.setPointerCapture && track.setPointerCapture(e.pointerId);
+            track.classList.add('dragging');
+        });
+        track.addEventListener('pointermove', e => {
+            if (!muralSbDrag || muralSbDrag.axis !== axis) return;
+            e.stopPropagation();
+            const d = (axis === 'x' ? e.clientX : e.clientY) - muralSbDrag.start;
+            const v = muralSbDrag.t0 - d * muralSbDrag.ratio * muralTransform.scale;
+            if (axis === 'x') muralTransform.x = v; else muralTransform.y = v;
+            applyMuralTransform();
+        });
+        const end = e => { if (muralSbDrag && muralSbDrag.axis === axis) { muralSbDrag = null; track.classList.remove('dragging'); updateMuralScrollbars(); } };
+        track.addEventListener('pointerup', end);
+        track.addEventListener('pointercancel', end);
+    });
+    updateMuralScrollbars();
 }
 
 function updateMuralZoomBadge() {
@@ -1987,11 +2085,19 @@ function onMuralWheel(e) {
     e.preventDefault();
     // Trackpad pinch arrives as wheel + ctrlKey with deltaY proportional to the
     // pinch — scale it smoothly and gently instead of in big aggressive jumps.
-    if (e.ctrlKey) {
-        zoomMural(Math.exp(-e.deltaY * 0.0075), e.clientX, e.clientY);
-    } else {
-        zoomMural(e.deltaY > 0 ? 0.96 : 1.04, e.clientX, e.clientY);
+    if (e.ctrlKey || e.metaKey) {
+        // Trackpad pinch, or Ctrl/⌘ + mouse wheel → zoom around the pointer.
+        const k = Math.abs(e.deltaY) > 40 ? 0.0025 : 0.0075;
+        zoomMural(Math.exp(-e.deltaY * k), e.clientX, e.clientY);
+        return;
     }
+    // Plain wheel / two-finger swipe scrolls the board (Shift + wheel = sideways).
+    let dx = e.deltaX, dy = e.deltaY;
+    if (e.deltaMode === 1) { dx *= 16; dy *= 16; }
+    if (e.shiftKey && !dx) { dx = dy; dy = 0; }
+    muralTransform.x -= dx;
+    muralTransform.y -= dy;
+    applyMuralTransform();
 }
 
 function zoomMural(factor, centerX, centerY) {

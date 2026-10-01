@@ -501,7 +501,7 @@ const VIEW_MAP = {
     pomodoro:      { src: 'view-pomodoro.js?v=20260929a', render: 'renderPomodoro' },
     books:         { src: 'view-books.js?v=20260619c', render: 'renderBooks' },
     reader:        { src: 'view-reader.js',        render: 'renderReader' },
-    mural:         { src: 'view-mural.js?v=20260621c', render: 'renderMural' },
+    mural:         { src: 'view-mural.js?v=20261007a', render: 'renderMural' },
     tutor:         { src: 'view-tutor.js',         render: 'renderTutor' },
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js?v=20260924a', render: 'renderDailyTools' },
