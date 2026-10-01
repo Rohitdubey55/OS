@@ -371,7 +371,7 @@ async function renderMuralCanvasView() {
                 <button class="mural-tool active" data-tool="select" onclick="setMuralTool('select')" data-tooltip="Select & Move (V)">
                     <i data-lucide="mouse-pointer-2"></i>
                 </button>
-                <button class="mural-tool" data-tool="hand" onclick="setMuralTool('hand')" data-tooltip="Hand Tool / Pan (H)">
+                <button class="mural-tool" data-tool="hand" onclick="setMuralTool('hand')" data-tooltip="Hand Tool / Pan (H, or hold Space)">
                     <i data-lucide="hand"></i>
                 </button>
                 <button class="mural-tool" data-tool="sticky" onclick="addMuralSticky()" data-tooltip="Sticky Note">
@@ -493,6 +493,7 @@ async function renderMuralCanvasView() {
 }
 
 function exitMuralProject() {
+    muralSpacePan = null;
     muralActiveProjectId = null;
     muralElements = [];
     muralTransform = { x: 0, y: 0, scale: 1 };
@@ -1599,6 +1600,7 @@ function initMuralCanvas() {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', onMuralKeyDown);
+    document.addEventListener('keyup', onMuralKeyUp);
 
     // Click canvas background to deselect
     canvas.addEventListener('click', (e) => {
@@ -1816,6 +1818,7 @@ function onMuralPointerDown(e) {
     if (muralActiveTool === 'hand') {
         const canvas = document.getElementById('muralCanvas');
         if (canvas) canvas.style.cursor = 'grabbing';
+        if (muralSpacePan) { e.preventDefault(); page_grabbing(true); }
         muralIsDragging = true;
         muralDragStart = { x: e.clientX, y: e.clientY };
         muralDragInitialTransform = { ...muralTransform };
@@ -2004,6 +2007,10 @@ function onMuralPointerUp(e) {
         const canvas = document.getElementById('muralCanvas');
         if (canvas) canvas.style.cursor = 'grab';
         muralIsDragging = false;
+        if (muralSpacePan) {
+            page_grabbing(false);
+            if (muralSpacePan.releasePending) _muralSpacePanEnd();
+        }
         return;
     }
 
@@ -2445,8 +2452,58 @@ window.openMuralShortcutsModal = function() {
         openMuralShortcutsModal();
     };
 };
+/* ── Hold Space + drag = temporary hand tool (like Figma / Miro) ──
+   Space switches to panning while held; releasing it returns to whatever
+   tool was active. If Space is released mid-drag, the drag finishes first. */
+let muralSpacePan = null; // { prevTool, releasePending }
+
+function _muralIsTypingTarget(t) {
+    return !!(t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT'));
+}
+
+function _muralSpacePanStart() {
+    if (muralSpacePan) return;
+    muralSpacePan = { prevTool: muralActiveTool, releasePending: false };
+    muralActiveTool = 'hand';
+    const canvas = document.getElementById('muralCanvas');
+    if (canvas) canvas.style.cursor = 'grab';
+    const page = document.getElementById('muralPage');
+    if (page) page.classList.add('mural-space-pan');
+}
+
+function _muralSpacePanEnd() {
+    if (!muralSpacePan) return;
+    if (muralIsDragging) { muralSpacePan.releasePending = true; return; }
+    const prev = muralSpacePan.prevTool || 'select';
+    muralSpacePan = null;
+    const page = document.getElementById('muralPage');
+    if (page) page.classList.remove('mural-space-pan', 'mural-space-grabbing');
+    if (document.getElementById('muralCanvas')) setMuralTool(prev); else muralActiveTool = prev;
+}
+
+function page_grabbing(on) {
+    const page = document.getElementById('muralPage');
+    if (page) page.classList.toggle('mural-space-grabbing', !!on);
+}
+
+function onMuralKeyUp(e) {
+    if (e.code !== 'Space' && e.key !== ' ') return;
+    if (!muralSpacePan) return;
+    e.preventDefault();
+    _muralSpacePanEnd();
+}
+window.addEventListener('blur', () => { if (muralSpacePan) { muralIsDragging = false; _muralSpacePanEnd(); } });
+
 function onMuralKeyDown(e) {
     if (!muralActiveProjectId) return;
+
+    if ((e.code === 'Space' || e.key === ' ') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (_muralIsTypingTarget(e.target) || _muralIsTypingTarget(document.activeElement)) return;
+        if (!document.getElementById('muralPage')) return;
+        e.preventDefault(); // no page scroll, and don't "click" a focused button
+        if (!e.repeat) _muralSpacePanStart();
+        return;
+    }
 
     // Arrow-key nudge for the current selection. Works regardless of the shortcut
     // toggle, but is ignored while typing in a field or editing element text.

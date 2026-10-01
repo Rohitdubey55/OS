@@ -2203,3 +2203,12 @@ body:has(.mural-page) .sidebar {
     .mural-sb-x { height: 4px; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); }
     .mural-page.mural-sb-active .mural-sb { opacity: .8; }
 }
+
+/* Hold Space = hand tool: show the hand everywhere on the board, even over items */
+.mural-page.mural-space-pan,
+.mural-page.mural-space-pan .mural-canvas,
+.mural-page.mural-space-pan .mural-canvas * { cursor: grab !important; }
+.mural-page.mural-space-grabbing,
+.mural-page.mural-space-grabbing .mural-canvas,
+.mural-page.mural-space-grabbing .mural-canvas * { cursor: grabbing !important; }
+.mural-page.mural-space-pan .mural-canvas * { user-select: none !important; }
