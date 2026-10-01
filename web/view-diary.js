@@ -456,6 +456,12 @@ function renderDiary() {
 }
 </style>`;
 
+  if (_drIsPhone()) {
+    document.getElementById('main').innerHTML = DIARY_CSS + DRP_CSS + renderDiaryPhoneHTML(entries, sorted, streak);
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+    return;
+  }
+
   document.getElementById('main').innerHTML = `
     ${DIARY_CSS}
     <div class="dr-shell dr-pro">
@@ -1438,6 +1444,7 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
 
   const templates = state.data.diary_templates || [];
   const contextData = getContextData(defaultDate);
+  const ex = drpEditorExtrasHTML(null, false);
 
   box.innerHTML = `
     <div class="dr-modal">
@@ -1449,6 +1456,8 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
       </div>
 
       <div class="dr-side">
+        ${ex.moods}
+        ${ex.prompt}
         ${templates.length > 0 ? `
         <select class="dr-template-select" id="templateSelect" onchange="loadTemplateInModal(this.value)">
           <option value="">Use a template...</option>
@@ -1492,12 +1501,13 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
           </button>
         </div>
         <div class="rich-editor dr-zone-editor" id="mDiaryText" contenteditable="true"
-             placeholder="What's on your mind...">${templateContent}</div>
+             placeholder="${_drIsPhone() ? 'Write freely — one line is enough.' : "What's on your mind..."}">${templateContent}</div>
         <div class="dr-zone-footer">
           <input class="dr-zone-tags" id="mDiaryTags" placeholder="#tags (comma separated)">
           <span class="dr-zone-wc" id="diaryWordCount">0 words</span>
         </div>
       </div>
+      ${ex.tags}
     </div>
   `;
 
@@ -1546,6 +1556,7 @@ window.openEditDiary = function (id) {
   const modal = document.getElementById('universalModal');
   const box = modal.querySelector('.modal-box');
   const score = _drMood(e) != null ? _drMood(e) : 5;
+  const ex = drpEditorExtrasHTML(_drMood(e), true);
 
   box.innerHTML = `
     <div class="dr-modal">
@@ -1557,6 +1568,7 @@ window.openEditDiary = function (id) {
       </div>
 
       <div class="dr-side">
+        ${ex.moods}
         <div class="dr-side-label">Mood</div>
         <!-- Compact Mood Strip -->
         <div class="dr-mood-strip">
@@ -1590,6 +1602,8 @@ window.openEditDiary = function (id) {
           <span class="dr-zone-wc" id="diaryWordCount">${e.content ? e.content.split(/\s+/).length : 0} words</span>
         </div>
       </div>
+      ${ex.tags}
+      <button type="button" class="drp-ed-del" onclick="document.getElementById('universalModal').classList.add('hidden'); deleteEntry('${e.id}')">Delete entry</button>
     </div>
   `;
 
@@ -1805,3 +1819,420 @@ window.exportDiary = function () {
   a.click();
   URL.revokeObjectURL(url);
 };
+
+/* ═══ PHONE JOURNAL ═════════════════════════════════════════════════════════
+   Under 769px the journal gets its own layout: a "Today" card that starts an
+   entry with one tap (pick a mood face, or Write / Speak), a mood-coloured
+   week strip, compact stats, pill tabs and month-grouped entry cards. Search
+   sits behind an icon instead of a bar that fights the bottom navigation.
+   The writing screen goes full screen with mood faces, a prompt and sentence
+   starters you can tap in. Desktop keeps its own layout. */
+
+const DRP_MOODS = [
+  { v: 2, e: '😢', l: 'Awful', c: '#EF4444' },
+  { v: 4, e: '😕', l: 'Low', c: '#F97316' },
+  { v: 6, e: '😐', l: 'Okay', c: '#EAB308' },
+  { v: 8, e: '🙂', l: 'Good', c: '#22C55E' },
+  { v: 10, e: '😄', l: 'Great', c: '#10B981' },
+];
+const DRP_STARTERS = [
+  "Today I'm proud that ",
+  'I kept thinking about ',
+  "I'm grateful for ",
+  'What drained me today was ',
+  'Tomorrow will be good if ',
+  'One thing I learned: ',
+];
+let _drpSearchOpen = false;
+let _drpPromptIdx = null;
+
+function _drIsPhone() { try { return window.matchMedia('(max-width: 768px)').matches; } catch (e) { return false; } }
+function _drpEsc(s) { return typeof escapeHtml === 'function' ? escapeHtml(String(s == null ? '' : s)) : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function _drpFace(score) {
+  if (score == null) return null;
+  return DRP_MOODS.reduce((best, m) => Math.abs(m.v - score) < Math.abs(best.v - score) ? m : best, DRP_MOODS[0]);
+}
+function _drpParse(dateStr) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(dateStr); }
+function _drpPrompts() {
+  // The rotating daily prompt first, then a few that make you look at the day.
+  const base = getDailyPrompt();
+  return [base, 'What gave you energy today, and what took it?', 'What would you do differently if today happened again?',
+    'What are you avoiding right now?', 'Who made your day better?', 'What small win deserves credit?', 'What is one worry you can let go of?'];
+}
+function _drpPrompt() {
+  const list = _drpPrompts();
+  if (_drpPromptIdx == null) _drpPromptIdx = 0;
+  return list[_drpPromptIdx % list.length];
+}
+
+function renderDiaryPhoneHTML(entries, sorted, streak) {
+  const todayStr = diaryLocalDate();
+  const todayEntry = entries.find(e => (e.date || '').slice(0, 10) === todayStr);
+  const now = new Date();
+  const dayLabel = now.toLocaleDateString('en-US', { weekday: 'long' }) + ' · ' + now.getDate() + ' ' + now.toLocaleDateString('en-US', { month: 'short' });
+  const name = (state.data.settings && state.data.settings[0] && state.data.settings[0].name) || '';
+
+  // ── Today card ──
+  let todayCard;
+  if (todayEntry) {
+    const f = _drpFace(_drMood(todayEntry));
+    const txt = _drStripMd(todayEntry.content);
+    todayCard = `
+    <section class="drp-today done" onclick="openEditDiary('${todayEntry.id}')">
+      <div class="drp-today-top"><span>${_drpEsc(dayLabel)}</span><span class="drp-done-pill">✓ Written today</span></div>
+      <div class="drp-today-entry">
+        ${f ? `<span class="drp-today-face" style="--c:${f.c}">${f.e}</span>` : ''}
+        <p>${_drpEsc(txt.slice(0, 160))}${txt.length > 160 ? '…' : ''}</p>
+      </div>
+      <button class="drp-btn ghost" onclick="event.stopPropagation(); openEditDiary('${todayEntry.id}')">Continue writing</button>
+    </section>`;
+  } else {
+    todayCard = `
+    <section class="drp-today">
+      <div class="drp-today-top"><span>${_drpEsc(dayLabel)}</span><span>${_drpEsc(getGreeting())}${name ? ', ' + _drpEsc(String(name).split(' ')[0]) : ''}</span></div>
+      <h2 class="drp-prompt">${_drpEsc(_drpPrompt())}</h2>
+      <div class="drp-faces" role="group" aria-label="How was today?">
+        ${DRP_MOODS.map(m => `<button class="drp-face" style="--c:${m.c}" onclick="drpStart(${m.v})" aria-label="${m.l}"><span>${m.e}</span><em>${m.l}</em></button>`).join('')}
+      </div>
+      <div class="drp-today-acts">
+        <button class="drp-btn primary" onclick="drpStart()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg> Write</button>
+        <button class="drp-btn" onclick="drpStart(null, true)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v5"/></svg> Speak</button>
+      </div>
+    </section>`;
+  }
+
+  // ── Stats ──
+  const weekStart = new Date(now); weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));   // Monday
+  const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
+  const written = weekDays.filter(d => entries.some(e => (e.date || '').slice(0, 10) === diaryLocalDate(d))).length;
+  const since = new Date(now); since.setDate(since.getDate() - 30);
+  const recentMoods = entries.filter(e => _drpParse(e.date) >= since).map(_drMood).filter(v => v != null);
+  const avg = recentMoods.length ? recentMoods.reduce((a, b) => a + b, 0) / recentMoods.length : null;
+  const avgFace = _drpFace(avg);
+  const stats = `
+    <div class="drp-stats">
+      <div class="drp-stat"><b>🔥 ${streak}</b><span>day streak</span></div>
+      <div class="drp-stat"><b>${written}<small>/7</small></b><span>this week</span></div>
+      <div class="drp-stat"><b>${avgFace ? avgFace.e + ' ' : ''}${avg != null ? avg.toFixed(1) : '—'}</b><span>mood · 30d</span></div>
+    </div>`;
+
+  // ── Week strip ──
+  const week = `
+    <div class="drp-week">
+      ${weekDays.map(d => {
+        const ds = diaryLocalDate(d);
+        const e = entries.find(x => (x.date || '').slice(0, 10) === ds);
+        const f = e ? _drpFace(_drMood(e)) : null;
+        const isToday = ds === todayStr, future = d > now;
+        return `<button class="drp-day ${isToday ? 'today' : ''} ${e ? 'has' : ''} ${future ? 'future' : ''}" ${future ? 'disabled' : ''}
+                  onclick="${e ? `openEditDiary('${e.id}')` : `drpStart(null, false, '${ds}')`}">
+          <em>${d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 1)}</em>
+          <span class="drp-day-dot" style="${f ? `--c:${f.c}` : ''}">${f ? f.e : (e ? '•' : d.getDate())}</span>
+        </button>`;
+      }).join('')}
+    </div>`;
+
+  // ── Tabs + search ──
+  const tabs = [['list', 'Entries'], ['calendar', 'Calendar'], ['insights', 'Insights'], ['yearly', 'Year'], ['tags', 'Tags']];
+  const tabBar = `
+    <div class="drp-tabsrow">
+      <div class="drp-tabs">${tabs.map(([k, l]) => `<button class="${currentDiaryView === k ? 'on' : ''}" onclick="switchDiaryView('${k}')">${l}</button>`).join('')}</div>
+      ${currentDiaryView === 'list' ? `<button class="drp-iconbtn ${_drpSearchOpen || currentSearchQuery ? 'on' : ''}" onclick="drpToggleSearch()" aria-label="Search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>` : ''}
+    </div>
+    ${currentDiaryView === 'list' && (_drpSearchOpen || currentSearchQuery || currentDateFilter !== 'all') ? `
+    <div class="drp-search">
+      <div class="drp-search-box">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="drpSearch" value="${_drpEsc(currentSearchQuery)}" placeholder="Search your journal" oninput="drpSearchInput(this.value)" autocomplete="off">
+        ${currentSearchQuery ? `<button onclick="handleDiarySearch('')" aria-label="Clear">×</button>` : ''}
+      </div>
+      <div class="drp-chips">
+        ${[['all', 'All time'], ['week', 'This week'], ['last7', 'Last 7 days'], ['month', 'This month']].map(([k, l]) => `<button class="${currentDateFilter === k ? 'on' : ''}" onclick="handleDateFilter('${k}')">${l}</button>`).join('')}
+      </div>
+    </div>` : ''}`;
+
+  // ── Body ──
+  let body = '';
+  if (currentDiaryView === 'list') body = _drpListHTML(sorted);
+  else if (currentDiaryView === 'calendar') body = renderCalendarView(entries);
+  else if (currentDiaryView === 'yearly') body = renderYearlyView(entries);
+  else if (currentDiaryView === 'insights') body = renderInsightsView(entries);
+  else if (currentDiaryView === 'tags') body = renderTagsView();
+
+  return `<div class="drp">${todayCard}${stats}${week}${tabBar}<div class="drp-body drp-view-${currentDiaryView}">${body}</div></div>`;
+}
+
+function _drpListHTML(sorted) {
+  if (!sorted.length) {
+    return `<div class="drp-empty"><div>📖</div><b>${currentSearchQuery || currentDateFilter !== 'all' ? 'Nothing matches' : 'Your journal starts today'}</b>
+      <span>${currentSearchQuery || currentDateFilter !== 'all' ? 'Try another word or time range.' : 'Tap a mood above — one line is enough.'}</span></div>`;
+  }
+  let out = '', month = '';
+  sorted.forEach(e => {
+    const d = _drpParse(e.date);
+    const m = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    if (m !== month) {
+      const n = sorted.filter(x => _drpParse(x.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) === m).length;
+      out += `<div class="drp-month"><b>${m}</b><span>${n} ${n === 1 ? 'entry' : 'entries'}</span></div>`;
+      month = m;
+    }
+    out += _drpCardHTML(e, d);
+  });
+  return `<div class="drp-list">${out}</div>`;
+}
+
+function _drpCardHTML(e, d) {
+  const f = _drpFace(_drMood(e));
+  const txt = _drStripMd(e.content);
+  const firstStop = txt.search(/[.!?](\s|$)/);
+  const title = firstStop > 8 && firstStop < 90 ? txt.slice(0, firstStop + 1) : (txt.length > 70 ? txt.slice(0, 70).replace(/\s+\S*$/, '') + '…' : txt);
+  const rest = txt.slice(title.replace(/…$/, '').length).trim();
+  const words = txt ? txt.split(/\s+/).length : 0;
+  const tags = String(e.tags || '').split(/[,\s]+/).map(t => t.replace(/^#+/, '').trim()).filter(Boolean);
+  const isToday = (e.date || '').slice(0, 10) === diaryLocalDate();
+  return `
+    <article class="drp-card" onclick="openEditDiary('${e.id}')" style="${f ? `--c:${f.c}` : ''}">
+      <div class="drp-date ${isToday ? 'today' : ''}"><b>${d.getDate()}</b><span>${d.toLocaleDateString('en-US', { weekday: 'short' })}</span></div>
+      <div class="drp-card-main">
+        <div class="drp-card-top">
+          <h3>${_drpEsc(title || 'Untitled')}</h3>
+          ${f ? `<span class="drp-mood" title="${_drMood(e)}/10">${f.e}</span>` : ''}
+        </div>
+        ${rest ? `<p>${_drpEsc(rest.slice(0, 160))}</p>` : ''}
+        <div class="drp-card-meta">
+          ${tags.slice(0, 3).map(t => `<span class="drp-tag">#${_drpEsc(t)}</span>`).join('')}
+          ${tags.length > 3 ? `<span class="drp-tag">+${tags.length - 3}</span>` : ''}
+          <span class="drp-words">${words} word${words === 1 ? '' : 's'}</span>
+        </div>
+      </div>
+    </article>`;
+}
+
+window.drpToggleSearch = function () {
+  _drpSearchOpen = !_drpSearchOpen;
+  if (!_drpSearchOpen) { currentSearchQuery = ''; currentDateFilter = 'all'; }
+  renderDiary();
+  if (_drpSearchOpen) setTimeout(() => document.getElementById('drpSearch')?.focus(), 30);
+};
+let _drpSearchT = 0;
+window.drpSearchInput = function (v) {
+  clearTimeout(_drpSearchT);
+  _drpSearchT = setTimeout(() => {
+    handleDiarySearch(v);
+    const el = document.getElementById('drpSearch');
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 250);
+};
+
+// Start an entry: optional mood preset, optional "speak" (opens the mic), optional date.
+window.drpStart = function (mood, speak, dateStr) {
+  openDiaryModal(dateStr || undefined);
+  if (mood != null) drpSetMood(mood);
+  if (speak && typeof toggleSpeechToText === 'function') setTimeout(() => { try { toggleSpeechToText(); } catch (e) { } }, 250);
+  else setTimeout(() => document.getElementById('mDiaryText')?.focus(), 200);
+};
+
+/* ── Writing screen extras (phone) ── */
+function drpEditorExtrasHTML(score, isEdit) {
+  const sel = _drpFace(score);
+  const tagCount = {};
+  (state.data.diary || []).forEach(e => String(e.tags || '').split(/[,\s]+/).map(t => t.replace(/^#+/, '').trim()).filter(Boolean).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([t]) => t);
+  return {
+    moods: `
+      <div class="drp-ed-moods" role="group" aria-label="Mood">
+        ${DRP_MOODS.map(m => `<button type="button" class="drp-ed-face ${sel && sel.v === m.v && score != null ? 'on' : ''}" data-v="${m.v}" style="--c:${m.c}" onclick="drpSetMood(${m.v})"><span>${m.e}</span><em>${m.l}</em></button>`).join('')}
+      </div>`,
+    prompt: isEdit ? '' : `
+      <div class="drp-ed-prompt">
+        <button type="button" class="drp-ed-q" onclick="drpInsertText(this.dataset.q + '\\n')" data-q="${_drpEsc(_drpPrompt())}" id="drpEdQ">${_drpEsc(_drpPrompt())}</button>
+        <button type="button" class="drp-ed-shuffle" onclick="drpShufflePrompt()" aria-label="Another question">↻</button>
+      </div>
+      <div class="drp-ed-starters">
+        ${DRP_STARTERS.map(s => `<button type="button" onmousedown="event.preventDefault()" onclick="drpInsertText(${JSON.stringify(s).replace(/"/g, '&quot;')})">${_drpEsc(s.trim())}…</button>`).join('')}
+      </div>`,
+    tags: topTags.length ? `<div class="drp-ed-tags">${topTags.map(t => `<button type="button" onclick="drpAddTag('${_drpEsc(t).replace(/'/g, "\\'")}')">#${_drpEsc(t)}</button>`).join('')}</div>` : ''
+  };
+}
+window.drpSetMood = function (v) {
+  const inp = document.getElementById('mMoodScore');
+  if (inp) inp.value = v;
+  if (typeof updateMoodDisplay === 'function') updateMoodDisplay(v);
+  document.querySelectorAll('.drp-ed-face').forEach(b => b.classList.toggle('on', +b.dataset.v === +v));
+};
+window.drpShufflePrompt = function () {
+  _drpPromptIdx = (_drpPromptIdx || 0) + 1;
+  const q = _drpPrompt(), el = document.getElementById('drpEdQ');
+  if (el) { el.textContent = q; el.dataset.q = q; }
+};
+window.drpInsertText = function (text) {
+  const ed = document.getElementById('mDiaryText');
+  if (!ed) return;
+  ed.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !ed.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false); sel.removeAllRanges(); sel.addRange(r);
+  }
+  const needsBreak = (ed.innerText || '').trim().length > 0 && !/\n$/.test(ed.innerText);
+  document.execCommand('insertText', false, (needsBreak ? '\n' : '') + text);
+  ed.dispatchEvent(new Event('input'));
+};
+window.drpAddTag = function (t) {
+  const inp = document.getElementById('mDiaryTags');
+  if (!inp) return;
+  const list = inp.value.split(',').map(x => x.trim()).filter(Boolean);
+  if (!list.map(x => x.replace(/^#/, '')).includes(t)) list.push(t);
+  inp.value = list.join(', ');
+};
+
+// Re-render when the window crosses the phone/desktop line.
+(function () {
+  let wasPhone = _drIsPhone();
+  window.addEventListener('resize', () => {
+    const p = _drIsPhone();
+    if (p !== wasPhone) { wasPhone = p; if (state.view === 'diary' && document.getElementById('universalModal')?.classList.contains('hidden') !== false) renderDiary(); }
+  });
+})();
+
+const DRP_CSS = `<style>
+.drp { display: flex; flex-direction: column; gap: 14px; padding: 4px 0 24px; color: var(--text-1); -webkit-font-smoothing: antialiased; }
+.drp button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.drp-today { position: relative; overflow: hidden; border-radius: 22px; padding: 18px 18px 16px; color: #fff;
+  background: radial-gradient(120% 140% at 0% 0%, #6366F1 0%, #4F46E5 38%, #312E81 100%); box-shadow: 0 10px 30px rgba(49,46,129,.28); }
+.drp-today::after { content: ''; position: absolute; right: -60px; top: -60px; width: 200px; height: 200px; border-radius: 50%; background: rgba(255,255,255,.08); pointer-events: none; }
+.drp-today-top { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; font-weight: 700; opacity: .85; position: relative; z-index: 1; }
+.drp-prompt { position: relative; z-index: 1; margin: 12px 0 16px; font-size: 21px; line-height: 1.3; font-weight: 800; letter-spacing: -.02em; }
+.drp-faces { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 14px; }
+.drp-face { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 0 7px; border-radius: 14px; border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.1); color: #fff; cursor: pointer; transition: transform .12s, background .15s; }
+.drp-face span { font-size: 26px; line-height: 1; }
+.drp-face em { font-style: normal; font-size: 11px; font-weight: 700; opacity: .9; }
+.drp-face:active { transform: scale(.92); background: rgba(255,255,255,.22); }
+.drp-today-acts { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.drp-btn { height: 44px; border-radius: 13px; border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.12); color: #fff; font-size: 14.5px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; }
+.drp-btn.primary { background: #fff; color: #312E81; border-color: #fff; }
+.drp-btn:active { transform: scale(.97); }
+.drp-today.done { cursor: pointer; }
+.drp-done-pill { background: rgba(255,255,255,.18); padding: 3px 10px; border-radius: 99px; opacity: 1 !important; }
+.drp-today-entry { position: relative; z-index: 1; display: flex; gap: 12px; align-items: flex-start; margin: 12px 0 14px; }
+.drp-today-face { flex: none; width: 46px; height: 46px; border-radius: 14px; background: rgba(255,255,255,.16); display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.drp-today-entry p { margin: 0; font-size: 15px; line-height: 1.5; font-weight: 600; opacity: .95; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.drp-btn.ghost { width: 100%; }
+
+.drp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.drp-stat { background: var(--surface-1); border: 1px solid var(--border-color); border-radius: 16px; padding: 12px 12px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.drp-stat b { font-size: 19px; font-weight: 850; letter-spacing: -.02em; white-space: nowrap; }
+.drp-stat b small { font-size: 13px; color: var(--text-3); font-weight: 700; }
+.drp-stat span { font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+
+.drp-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; background: var(--surface-1); border: 1px solid var(--border-color); border-radius: 18px; padding: 10px 8px; }
+.drp-day { display: flex; flex-direction: column; align-items: center; gap: 6px; border: none; background: none; padding: 2px 0; cursor: pointer; }
+.drp-day em { font-style: normal; font-size: 10.5px; font-weight: 800; color: var(--text-3); }
+.drp-day-dot { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800;
+  color: var(--text-2); background: var(--surface-2); border: 1.5px solid transparent; box-sizing: border-box; }
+.drp-day.has .drp-day-dot { font-size: 19px; background: color-mix(in srgb, var(--c, var(--primary)) 16%, var(--surface-1)); border-color: color-mix(in srgb, var(--c, var(--primary)) 45%, transparent); }
+.drp-day.today .drp-day-dot { border: 2px solid var(--primary); }
+.drp-day.today em { color: var(--primary); }
+.drp-day.future { opacity: .4; cursor: default; }
+
+.drp-tabsrow { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.drp-tabs { flex: 1; min-width: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 3px; background: var(--surface-2); border-radius: 13px; }
+.drp-tabs::-webkit-scrollbar { display: none; }
+.drp-tabs button { flex: 1 0 auto; height: 34px; padding: 0 12px; border: none; border-radius: 10px; background: none; color: var(--text-3); font-size: 13.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.drp-tabs button.on { background: var(--surface-1); color: var(--text-1); box-shadow: 0 1px 3px rgba(16,24,40,.1); }
+.drp-iconbtn { flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--surface-1); color: var(--text-2);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.drp-iconbtn.on { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 45%, transparent); }
+.drp-search { display: flex; flex-direction: column; gap: 8px; }
+.drp-search-box { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border-radius: 13px; border: 1px solid var(--border-color); background: var(--surface-1); color: var(--text-3); }
+.drp-search-box input { flex: 1; min-width: 0; border: none !important; background: transparent !important; outline: none; box-shadow: none !important; font: inherit; font-size: 15px; color: var(--text-1); padding: 0 !important; height: 100%; }
+.drp-search-box button { border: none; background: none; font-size: 20px; color: var(--text-3); cursor: pointer; padding: 0 2px; }
+.drp-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.drp-chips::-webkit-scrollbar { display: none; }
+.drp-chips button { flex: none; height: 32px; padding: 0 13px; border-radius: 99px; border: 1px solid var(--border-color); background: var(--surface-1); color: var(--text-2); font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.drp-chips button.on { background: var(--text-1); border-color: var(--text-1); color: var(--surface-1); }
+
+.drp-list { display: flex; flex-direction: column; gap: 10px; }
+.drp-month { display: flex; align-items: baseline; justify-content: space-between; padding: 8px 2px 0; }
+.drp-month b { font-size: 15px; font-weight: 850; letter-spacing: -.01em; }
+.drp-month span { font-size: 12px; font-weight: 600; color: var(--text-3); }
+.drp-card { display: flex; gap: 12px; padding: 13px 14px; border-radius: 18px; background: var(--surface-1); border: 1px solid var(--border-color); cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16,24,40,.04); transition: transform .12s; }
+.drp-card:active { transform: scale(.985); }
+.drp-date { flex: none; width: 46px; height: 52px; border-radius: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--c, #94A3B8) 13%, var(--surface-1)); color: var(--text-1); }
+.drp-date b { font-size: 19px; font-weight: 850; line-height: 1; }
+.drp-date span { font-size: 10.5px; font-weight: 800; color: var(--text-3); text-transform: uppercase; margin-top: 3px; }
+.drp-date.today { background: var(--primary); color: #fff; }
+.drp-date.today span { color: rgba(255,255,255,.8); }
+.drp-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.drp-card-top { display: flex; align-items: flex-start; gap: 8px; }
+.drp-card-top h3 { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 750; line-height: 1.35; letter-spacing: -.01em;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.drp-mood { flex: none; font-size: 20px; line-height: 1; }
+.drp-card-main p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.drp-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.drp-tag { font-size: 11.5px; font-weight: 700; color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, transparent); padding: 2px 8px; border-radius: 99px; }
+.drp-words { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--text-3); }
+.drp-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 34px 20px; text-align: center; color: var(--text-3); font-size: 13.5px; }
+.drp-empty div { font-size: 34px; }
+.drp-empty b { color: var(--text-1); font-size: 15px; }
+.drp-body > * { max-width: 100%; }
+.drp-view-calendar .dr-cal, .drp-view-insights > *, .drp-view-yearly > *, .drp-view-tags > * { padding-left: 0 !important; padding-right: 0 !important; }
+
+/* ── Writing screen, phone ── */
+@media (max-width: 768px) {
+  .modal-overlay:has(.dr-modal) { padding: 0 !important; align-items: stretch !important; }
+  .modal-overlay:has(.dr-modal) .modal-box { width: 100% !important; max-width: none !important; height: 100% !important; max-height: none !important; margin: 0 !important;
+    border-radius: 0 !important; padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px calc(env(safe-area-inset-bottom, 0px) + 10px) !important; box-sizing: border-box;
+    display: flex; flex-direction: column; overflow: hidden; animation: drpUp .22s ease-out; }
+  @keyframes drpUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .dr-modal { flex: 1; min-height: 0; display: flex !important; flex-direction: column; gap: 12px; }
+  .dr-modal-bar { margin: 0 !important; padding: 4px 0 10px !important; flex: none; }
+  .dr-modal-dismiss { font-size: 15px !important; }
+  .dr-modal-date-chip { font-size: 13.5px !important; }
+  .dr-modal-save-top { border-radius: 99px !important; padding: 9px 20px !important; min-height: 40px !important; }
+  .dr-side { display: flex; flex-direction: column; gap: 10px; flex: none; }
+  .dr-mood-strip { display: none !important; }
+  .dr-template-select { order: 5; }
+  .dr-context-chips { order: 4; }
+  .drp-ed-moods { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .drp-ed-face { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 6px; border-radius: 14px; border: 1.5px solid var(--border-color);
+    background: var(--surface-1); cursor: pointer; transition: transform .12s, border-color .15s, background .15s; }
+  .drp-ed-face span { font-size: 24px; line-height: 1; filter: grayscale(.35); transition: filter .15s; }
+  .drp-ed-face em { font-style: normal; font-size: 10.5px; font-weight: 800; color: var(--text-3); }
+  .drp-ed-face.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, var(--surface-1)); }
+  .drp-ed-face.on span { filter: none; }
+  .drp-ed-face.on em { color: var(--text-1); }
+  .drp-ed-face:active { transform: scale(.93); }
+  .drp-ed-prompt { display: flex; align-items: stretch; gap: 6px; }
+  .drp-ed-q { flex: 1; text-align: left; border: 1px dashed color-mix(in srgb, var(--primary) 45%, transparent); background: color-mix(in srgb, var(--primary) 6%, var(--surface-1));
+    color: var(--text-1); border-radius: 13px; padding: 10px 12px; font: inherit; font-size: 14px; font-weight: 700; line-height: 1.35; cursor: pointer; }
+  .drp-ed-q::before { content: 'PROMPT · TAP TO ADD'; display: block; font-size: 10px; letter-spacing: .06em; font-weight: 800; color: var(--primary); margin-bottom: 3px; }
+  .drp-ed-shuffle { flex: none; width: 42px; border-radius: 13px; border: 1px solid var(--border-color); background: var(--surface-1); font-size: 18px; color: var(--text-2); cursor: pointer; }
+  .drp-ed-starters { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .drp-ed-starters::-webkit-scrollbar { display: none; }
+  .drp-ed-starters button { flex: none; height: 32px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--border-color); background: var(--surface-1);
+    color: var(--text-2); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .dr-write-zone { flex: 1; min-height: 0; margin: 0 !important; border-radius: 16px !important; display: flex; flex-direction: column; }
+  .dr-zone-toolbar { order: 3; border-top: 1px solid var(--border-color); border-bottom: none !important; padding: 6px 8px !important; gap: 2px; }
+  .dr-zone-editor { order: 1; flex: 1; min-height: 0 !important; font-size: 17px !important; line-height: 1.65 !important; padding: 14px 16px !important; }
+  .dr-zone-footer { order: 2; padding: 8px 14px !important; gap: 8px; border-top: 1px solid var(--border-color); background: var(--surface-1) !important; }
+  .dr-zone-tags { font-size: 14px !important; background: transparent !important; }
+  .dr-zone-toolbar { background: var(--surface-1) !important; }
+  #speechBtn { margin-left: auto !important; width: 40px; height: 40px; border-radius: 50% !important; background: var(--primary) !important; color: #fff !important; }
+  #speechBtn svg, #speechBtn i { color: #fff !important; stroke: #fff !important; }
+  .drp-ed-tags { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex: none; }
+  .drp-ed-tags::-webkit-scrollbar { display: none; }
+  .drp-ed-tags button { flex: none; height: 28px; padding: 0 10px; border-radius: 99px; border: none; background: color-mix(in srgb, var(--primary) 9%, transparent);
+    color: var(--primary); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .drp-ed-del { flex: none; height: 40px; border: none; background: none; color: #DC2626; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+}
+.drp-ed-moods, .drp-ed-prompt, .drp-ed-starters, .drp-ed-tags, .drp-ed-del { display: none; }
+@media (max-width: 768px) { .drp-ed-moods { display: grid; } .drp-ed-prompt, .drp-ed-starters, .drp-ed-tags { display: flex; } .drp-ed-del { display: block; } }
+</style>`;
