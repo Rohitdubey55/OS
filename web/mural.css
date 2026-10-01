@@ -2305,3 +2305,32 @@ body:has(.mural-page) .sidebar {
 @media (hover: none) and (pointer: coarse) {
     .mural-el-board-link { width: 30px; height: 30px; top: 3px; right: 3px; }
 }
+
+/* ══════════════════════════════════════
+   EXPORT
+   ══════════════════════════════════════ */
+.mural-export-btn {
+    height: 36px; padding: 0 11px; border-radius: 10px; border: none;
+    background: var(--surface-2); color: var(--text-2);
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    transition: var(--mural-transition); -webkit-tap-highlight-color: transparent;
+}
+.mural-export-btn:hover { background: var(--mural-accent-soft); color: var(--mural-accent); }
+.mural-export-btn.busy { opacity: .6; pointer-events: none; }
+.mural-export-btn.busy svg { animation: muralExpPulse 1s ease-in-out infinite; }
+@keyframes muralExpPulse { 50% { transform: translateY(2px); } }
+@media (max-width: 640px) { .mural-export-btn { padding: 0 9px; } }
+.mural-exp-menu { width: 270px; }
+.mural-exp-scope { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; margin: 0 0 8px; border-radius: 10px; background: var(--surface-2); }
+.mural-exp-scope button { border: none; background: none; padding: 7px 6px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.mural-exp-scope button.on { background: var(--surface-1); color: var(--text-1); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.mural-exp-item {
+    width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
+    padding: 10px; border: none; border-radius: 10px; background: none; color: var(--text-1); cursor: pointer;
+}
+.mural-exp-item:hover { background: var(--mural-accent-soft); }
+.mural-exp-item svg { flex-shrink: 0; color: var(--mural-accent); }
+.mural-exp-item span { display: flex; flex-direction: column; gap: 1px; }
+.mural-exp-item b { font-size: 13.5px; font-weight: 650; }
+.mural-exp-item small { font-size: 11.5px; color: var(--text-3); }

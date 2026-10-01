@@ -329,6 +329,9 @@ async function renderMuralCanvasView() {
                     <button class="mural-bg-btn" id="muralBgBtn" onclick="toggleMuralBgPanel(event)" title="Canvas Background">
                         <i data-lucide="palette" style="width:16px;height:16px"></i>
                     </button>
+                    <button class="mural-export-btn" id="muralExportBtn" onclick="toggleMuralExportMenu(event)" title="Export as image, PDF or PowerPoint">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span class="mural-tb-label">Export</span>
+                    </button>
                     <button class="mural-save-btn" id="muralManualSaveBtn" onclick="manualMuralSync()">
                         Save
                     </button>
@@ -501,6 +504,7 @@ async function renderMuralCanvasView() {
 
 function exitMuralProject() {
     muralSpacePan = null;
+    closeMuralExportMenu();
     closeMuralArrangeMenu();
     muralActiveProjectId = null;
     muralElements = [];
@@ -1193,7 +1197,220 @@ function dismissMuralPopups() {
     const bgPanel = document.getElementById('muralBgPanel');
     if (bgPanel) bgPanel.remove();
     closeMuralArrangeMenu();
+    closeMuralExportMenu();
 }
+
+/* ═══════════════════════════════════════
+   EXPORT — PNG image / PDF / PowerPoint
+   The board (or just the selection) is rendered to a canvas with
+   html-to-image, then saved directly or wrapped by jsPDF / PptxGenJS.
+   Libraries load on first use only.
+   ═══════════════════════════════════════ */
+const MURAL_EXPORT_LIBS = {
+    img:  'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js',
+    pdf:  'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+    pptx: 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+};
+const _muralLibPromises = {};
+function _muralLoadLib(key) {
+    if (!_muralLibPromises[key]) {
+        _muralLibPromises[key] = new Promise((resolve, reject) => {
+            const sc = document.createElement('script');
+            sc.src = MURAL_EXPORT_LIBS[key];
+            sc.onload = resolve;
+            sc.onerror = () => { delete _muralLibPromises[key]; reject(new Error('Could not load ' + key)); };
+            document.head.appendChild(sc);
+        });
+    }
+    return _muralLibPromises[key];
+}
+
+function closeMuralExportMenu() {
+    const m = document.getElementById('muralExportMenu');
+    if (m) m.remove();
+    document.removeEventListener('pointerdown', _muralExpOutside, true);
+}
+function _muralExpOutside(e) {
+    const m = document.getElementById('muralExportMenu');
+    const btn = document.getElementById('muralExportBtn');
+    if (!m || m.contains(e.target) || (btn && btn.contains(e.target))) return;
+    closeMuralExportMenu();
+}
+
+function toggleMuralExportMenu(ev) {
+    if (ev) ev.stopPropagation();
+    if (document.getElementById('muralExportMenu')) { closeMuralExportMenu(); return; }
+    closeMuralArrangeMenu();
+    const nSel = _muralArrangeItems().length;
+    const scope = (window._muralExportScope === 'sel' && nSel) ? 'sel' : 'all';
+    const ic = (b) => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${b}</svg>`;
+    const menu = document.createElement('div');
+    menu.id = 'muralExportMenu';
+    menu.className = 'mural-arr-menu mural-exp-menu';
+    menu.innerHTML = `
+        <div class="mural-arr-head"><span>Export</span></div>
+        ${nSel ? `<div class="mural-exp-scope">
+            <button class="${scope === 'all' ? 'on' : ''}" onclick="_muralSetExportScope('all')">Whole board</button>
+            <button class="${scope === 'sel' ? 'on' : ''}" onclick="_muralSetExportScope('sel')">Selected (${nSel})</button>
+        </div>` : ''}
+        <button class="mural-exp-item" onclick="muralExport('png')">${ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>')}<span><b>Image</b><small>PNG, high resolution</small></span></button>
+        <button class="mural-exp-item" onclick="muralExport('pdf')">${ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/>')}<span><b>PDF</b><small>One page, sized to the board</small></span></button>
+        <button class="mural-exp-item" onclick="muralExport('pptx')">${ic('<rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8M12 18v3"/>')}<span><b>PowerPoint</b><small>Widescreen slide (.pptx)</small></span></button>`;
+    document.body.appendChild(menu);
+    const btn = document.getElementById('muralExportBtn');
+    const r = btn ? btn.getBoundingClientRect() : { right: window.innerWidth - 8, bottom: 60 };
+    menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, Math.max(8, r.right - menu.offsetWidth)) + 'px';
+    menu.style.top = (r.bottom + 8) + 'px';
+    setTimeout(() => document.addEventListener('pointerdown', _muralExpOutside, true), 0);
+}
+window.toggleMuralExportMenu = toggleMuralExportMenu;
+
+function _muralSetExportScope(v) {
+    window._muralExportScope = v;
+    closeMuralExportMenu();
+    toggleMuralExportMenu();
+}
+window._muralSetExportScope = _muralSetExportScope;
+
+function _muralConnInSel(connId, selIds) {
+    if (selIds.has(String(connId))) return true;
+    const c = muralElements.find(x => String(x.id) === String(connId));
+    return !!(c && c.from_id && c.to_id && selIds.has(String(c.from_id)) && selIds.has(String(c.to_id)));
+}
+
+// World-space box around what we export (elements + connector paths), with a margin.
+function _muralExportBounds(onlySel) {
+    const selIds = new Set(muralSelectedElementIds.map(String));
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const grow = (a, b, c, d) => { x0 = Math.min(x0, a); y0 = Math.min(y0, b); x1 = Math.max(x1, c); y1 = Math.max(y1, d); };
+    document.querySelectorAll('#muralCanvas .mural-element').forEach(dom => {
+        const id = dom.id.replace('mural-el-', '');
+        if (onlySel && !selIds.has(id)) return;
+        grow(dom.offsetLeft, dom.offsetTop, dom.offsetLeft + dom.offsetWidth, dom.offsetTop + dom.offsetHeight);
+    });
+    document.querySelectorAll('#muralConnectorSvg [data-connector-id]').forEach(path => {
+        if (onlySel && !_muralConnInSel(path.getAttribute('data-connector-id'), selIds)) return;
+        try { const b = path.getBBox(); if (b.width || b.height) grow(b.x, b.y, b.x + b.width, b.y + b.height); } catch (_) {}
+    });
+    if (!isFinite(x0)) return null;
+    const pad = 48;
+    return { x: Math.floor(x0 - pad), y: Math.floor(y0 - pad), w: Math.ceil(x1 - x0 + pad * 2), h: Math.ceil(y1 - y0 + pad * 2) };
+}
+
+async function _muralRenderToCanvas(onlySel) {
+    await _muralLoadLib('img');
+    const canvasEl = document.getElementById('muralCanvas');
+    const page = document.getElementById('muralPage');
+    if (!canvasEl || !window.htmlToImage) throw new Error('Renderer not ready');
+    const box = _muralExportBounds(onlySel);
+    if (!box) throw new Error('empty');
+    const selIds = new Set(muralSelectedElementIds.map(String));
+    // Stay under browser canvas limits (Safari ≈ 16.7M px).
+    const ratio = Math.max(0.5, Math.min(2.5, Math.sqrt(16e6 / (box.w * box.h))));
+    let bg = getComputedStyle(page).backgroundColor;
+    if (!bg || bg === 'rgba(0, 0, 0, 0)' || bg === 'transparent') bg = '#ffffff';
+    // Hide selection chrome while capturing.
+    const selected = [...document.querySelectorAll('#muralCanvas .mural-element.selected')];
+    selected.forEach(n => n.classList.remove('selected'));
+    const keepOut = ['mural-el-board-link', 'mural-selection-box', 'mural-sel-handle', 'mural-resize-handle', 'mural-anchor', 'mural-marquee'];
+    try {
+        const opts = {
+            width: box.w, height: box.h, pixelRatio: ratio, backgroundColor: bg, cacheBust: true,
+            style: { transform: `translate(${-box.x}px, ${-box.y}px)`, left: '0px', top: '0px', cursor: 'default', willChange: 'auto' },
+            filter: (n) => {
+                if (!n || !n.getAttribute) return true;
+                if (n.getAttribute('data-connector-hit')) return false;
+                const cid = n.getAttribute('data-connector-id');
+                if (cid && onlySel) return _muralConnInSel(cid, selIds);
+                const cl = n.classList;
+                if (cl && keepOut.some(k => cl.contains(k))) return false;
+                if (onlySel && cl && cl.contains('mural-element')) return selIds.has(n.id.replace('mural-el-', ''));
+                return true;
+            }
+        };
+        // Safari sometimes paints fonts/images only on the second pass.
+        if (/^((?!chrome|android).)*safari/i.test(navigator.userAgent)) { try { await htmlToImage.toCanvas(canvasEl, opts); } catch (_) {} }
+        const out = await htmlToImage.toCanvas(canvasEl, opts);
+        return { canvas: out, box, bg };
+    } finally {
+        selected.forEach(n => n.classList.add('selected'));
+    }
+}
+
+function _muralExportName(ext) {
+    const p = muralProjects.find(q => String(q.id) === String(muralActiveProjectId));
+    const base = ((p && p.title) || 'Mural').replace(/[\\/:*?"<>|]+/g, '').trim() || 'Mural';
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return `${base} ${stamp}.${ext}`;
+}
+
+async function _muralDeliver(blob, name) {
+    // Phones / home-screen apps: hand the file to the share sheet (Save to Files, AirDrop…)
+    const touch = window.matchMedia && window.matchMedia('(hover: none)').matches;
+    if (touch && navigator.canShare) {
+        try {
+            const file = new File([blob], name, { type: blob.type });
+            if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; }
+        } catch (err) { if (err && err.name === 'AbortError') return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function _muralCssToHex(c) {
+    const m = String(c || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (m) return [m[1], m[2], m[3]].map(v => Number(v).toString(16).padStart(2, '0')).join('').toUpperCase();
+    const h = String(c || '').match(/^#([0-9a-f]{6})$/i);
+    return h ? h[1].toUpperCase() : null;
+}
+
+async function muralExport(kind) {
+    closeMuralExportMenu();
+    const onlySel = window._muralExportScope === 'sel' && _muralArrangeItems().length > 0;
+    if (!muralElements.length) { toast('Nothing on the board to export yet'); return; }
+    const btn = document.getElementById('muralExportBtn');
+    if (btn) btn.classList.add('busy');
+    toast(kind === 'png' ? 'Preparing image…' : kind === 'pdf' ? 'Preparing PDF…' : 'Preparing PowerPoint…');
+    try {
+        const { canvas, box, bg } = await _muralRenderToCanvas(onlySel);
+        if (kind === 'png') {
+            const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+            await _muralDeliver(blob, _muralExportName('png'));
+        } else if (kind === 'pdf') {
+            await _muralLoadLib('pdf');
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: box.w >= box.h ? 'landscape' : 'portrait', unit: 'pt', format: [box.w, box.h], compress: true });
+            doc.addImage(canvas.toDataURL('image/jpeg', 0.93), 'JPEG', 0, 0, box.w, box.h);
+            await _muralDeliver(doc.output('blob'), _muralExportName('pdf'));
+        } else if (kind === 'pptx') {
+            await _muralLoadLib('pptx');
+            const pptx = new window.PptxGenJS();
+            pptx.layout = 'LAYOUT_WIDE'; // 13.33 × 7.5 in
+            const p = muralProjects.find(q => String(q.id) === String(muralActiveProjectId));
+            pptx.title = (p && p.title) || 'Mural';
+            const slide = pptx.addSlide();
+            const hex = _muralCssToHex(bg);
+            if (hex) slide.background = { color: hex };
+            const SW = 13.333, SH = 7.5, M = 0.25;
+            const k = Math.min((SW - 2 * M) / box.w, (SH - 2 * M) / box.h);
+            const w = box.w * k, h = box.h * k;
+            slide.addImage({ data: canvas.toDataURL('image/png'), x: (SW - w) / 2, y: (SH - h) / 2, w, h });
+            const out = await pptx.write({ outputType: 'blob' });
+            const blob = out instanceof Blob ? out : new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+            await _muralDeliver(blob, _muralExportName('pptx'));
+        }
+    } catch (err) {
+        console.error('Mural export failed', err);
+        toast(err && err.message === 'empty' ? 'Nothing to export' : 'Export failed — check your connection and try again');
+    } finally {
+        if (btn) btn.classList.remove('busy');
+    }
+}
+window.muralExport = muralExport;
 
 /* ═══════════════════════════════════════
    SUB-BOARDS — turn an element into its own mural
