@@ -2372,3 +2372,29 @@ body:has(.mural-page) .sidebar {
 .mural-element.drawing-el .mural-resize-handle { pointer-events: auto; }
 .mural-element.drawing-el.selected { outline: 1.5px dashed var(--mural-accent, #6366f1); outline-offset: 3px; }
 .mural-page.pen-tool-active .mural-drawing-svg path { pointer-events: none; }
+
+/* ══════════════════════════════════════
+   IMPORT
+   ══════════════════════════════════════ */
+.mural-exp-import { display: none; }
+@media (max-width: 640px) {
+    .mural-import-btn { display: none; }
+    .mural-exp-import { display: flex; border-bottom: 1px solid var(--border-color); border-radius: 10px 10px 0 0; margin-bottom: 4px; }
+}
+.mural-imp { display: flex; flex-direction: column; gap: 10px; width: min(560px, 100%); }
+.mural-imp-sub { margin: 0; color: var(--text-3); font-size: 13.5px; }
+.mural-imp-text {
+    width: 100%; min-height: 260px; max-height: 52vh; resize: vertical; box-sizing: border-box;
+    padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-color);
+    background: var(--surface-2); color: var(--text-1);
+    font: 13.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.mural-imp-text:focus { outline: none; border-color: var(--mural-accent, #6366f1); box-shadow: 0 0 0 3px var(--mural-accent-soft); }
+.mural-imp-status { font-size: 13px; font-weight: 600; color: var(--mural-accent, #6366f1); }
+.mural-imp-status.bad { color: #DC2626; }
+.mural-imp-help { font-size: 12.5px; color: var(--text-2); }
+.mural-imp-help summary { cursor: pointer; font-weight: 600; color: var(--text-2); }
+.mural-imp-help ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.mural-imp-help code { font-size: 11.5px; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); }
+.mural-imp-actions { display: flex; gap: 10px; align-items: center; }
+.mural-imp-actions .btn { padding: 10px 16px; border-radius: 10px; font-weight: 600; }

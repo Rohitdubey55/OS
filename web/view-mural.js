@@ -329,6 +329,9 @@ async function renderMuralCanvasView() {
                     <button class="mural-bg-btn" id="muralBgBtn" onclick="toggleMuralBgPanel(event)" title="Canvas Background">
                         <i data-lucide="palette" style="width:16px;height:16px"></i>
                     </button>
+                    <button class="mural-export-btn mural-import-btn" id="muralImportBtn" onclick="openMuralImportModal()" title="Import items from an outline">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg><span class="mural-tb-label">Import</span>
+                    </button>
                     <button class="mural-export-btn" id="muralExportBtn" onclick="toggleMuralExportMenu(event)" title="Export as image, PDF or PowerPoint">
                         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg><span class="mural-tb-label">Export</span>
                     </button>
@@ -1382,6 +1385,322 @@ function _muralPenUp() {
 }
 
 /* ═══════════════════════════════════════
+   IMPORT — paste an outline (or JSON) and the board builds itself
+   Outline format (one item per line):
+     # Section title {yellow}        ← heading; braces set defaults for its items
+     Pitchdeck {board}                ← item; {board} also makes it a sub-board
+     One Pager
+                                      ← blank line = new row
+     Website {green}
+     Pitchdeck -> One Pager           ← arrow between two items
+   JSON format: { sections:[{title,color,shape,rows:[[item,…],…]}], links:[{from,to}] }
+   where an item is "text" or { text, color, shape, bold, board:{…same format…} }.
+   ═══════════════════════════════════════ */
+const MURAL_IMPORT_COLORS = {
+    yellow: '#E3D46F', green: '#A7D8B5', blue: '#A9BEDE', pink: '#DDB3CC', purple: '#CFC6DD',
+    lilac: '#CFC6DD', orange: '#F3C48B', red: '#F2A7A7', gray: '#D9DCE1', grey: '#D9DCE1',
+    teal: '#9ED9D6', white: '#FFFFFF', black: '#1F2937', none: 'transparent'
+};
+const MURAL_IMPORT_SHAPES = { rect: 'rect', box: 'rect', rectangle: 'rect', rounded: 'rounded', round: 'rounded',
+    circle: 'circle', ellipse: 'ellipse', oval: 'ellipse', diamond: 'diamond', triangle: 'triangle', hexagon: 'hexagon',
+    pentagon: 'pentagon', octagon: 'octagon', star: 'star', parallelogram: 'parallelogram',
+    sticky: 'sticky', note: 'sticky', text: 'text' };
+
+function _muralImpColor(v) {
+    if (!v) return null;
+    const s = String(v).trim().toLowerCase();
+    if (/^#[0-9a-f]{3,8}$/.test(s) || s.startsWith('rgb')) return v;
+    return MURAL_IMPORT_COLORS[s] || null;
+}
+
+// "Pitchdeck {board, yellow}" → { text, opts }
+function _muralImpParseMods(line) {
+    const opts = {};
+    const text = line.replace(/\{([^}]*)\}/g, (_, inner) => {
+        inner.split(/[,\s]+/).filter(Boolean).forEach(tok => {
+            const t = tok.toLowerCase();
+            if (t === 'board' || t === 'subboard' || t === 'sub-board') opts.board = true;
+            else if (t === 'bold') opts.bold = true;
+            else if (MURAL_IMPORT_SHAPES[t]) opts.shape = MURAL_IMPORT_SHAPES[t];
+            else if (_muralImpColor(t)) opts.color = _muralImpColor(t);
+        });
+        return '';
+    }).trim();
+    return { text, opts };
+}
+
+// Outline text → spec object
+function _muralImpParseOutline(src) {
+    const spec = { sections: [], links: [] };
+    let sec = null, row = null;
+    const ensureSec = () => { if (!sec) { sec = { title: '', rows: [] }; spec.sections.push(sec); } return sec; };
+    String(src).replace(/\r/g, '').split('\n').forEach(raw => {
+        const line = raw.trim();
+        if (!line) { row = null; return; }
+        if (/^(\/\/|;)/.test(line)) return;
+        const arrow = line.match(/^(.+?)\s*(?:->|→|=>)\s*(.+)$/);
+        if (arrow && !/^#/.test(line)) { spec.links.push({ from: arrow[1].replace(/^[-*•]\s*/, '').trim(), to: arrow[2].trim() }); return; }
+        const h = line.match(/^#{1,3}\s*(.*)$/);
+        if (h) {
+            const { text, opts } = _muralImpParseMods(h[1]);
+            sec = { title: text, color: opts.color, shape: opts.shape, rows: [] };
+            spec.sections.push(sec); row = null; return;
+        }
+        const { text, opts } = _muralImpParseMods(line.replace(/^([-*•]|\d+[.)])\s+/, ''));
+        if (!text) return;
+        ensureSec();
+        if (!row) { row = []; sec.rows.push(row); }
+        row.push({ text, ...opts });
+    });
+    return spec;
+}
+
+function _muralImpSpec(src) {
+    const t = String(src || '').trim();
+    if (!t) return null;
+    if (t[0] === '{' || t[0] === '[') {
+        const j = JSON.parse(t);
+        return Array.isArray(j) ? { sections: [{ title: '', rows: [j] }], links: [] } : j;
+    }
+    return _muralImpParseOutline(t);
+}
+
+function _muralImpCount(spec, acc = { items: 0, sections: 0, links: 0, boards: 0 }) {
+    (spec.sections || []).forEach(s => {
+        if (s.title) acc.sections++;
+        (s.rows || []).forEach(r => (r || []).forEach(it => {
+            acc.items++;
+            if (it && typeof it === 'object' && (it.board)) { acc.boards++; if (typeof it.board === 'object') _muralImpCount(it.board, acc); }
+        }));
+    });
+    acc.links += (spec.links || []).length;
+    (spec.items || []).forEach(() => acc.items++);
+    return acc;
+}
+
+// Spec → element objects laid out from (ox, oy). Returns { els, boardsToMake:[{el, spec}] }
+function _muralImpLayout(spec, projectId, ox, oy) {
+    const els = [], boards = [], byText = {};
+    const uid = () => `temp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+    let y = oy, z = (muralElements.length || 0) + 1;
+    const GAP_X = 20, GAP_Y = 16, SEC_GAP = 64, PER_ROW = 8;
+    (spec.sections || []).forEach(sec => {
+        if (sec.title) {
+            const t = { id: uid(), project_id: projectId, type: 'text', x: ox, y, w: Math.max(240, sec.title.length * 13 + 40), h: 40,
+                content: sec.title, color: 'transparent', font_size: 22, bold: true, z_index: z++ };
+            els.push(t); y += 52;
+        }
+        const secColor = _muralImpColor(sec.color);
+        const secShape = MURAL_IMPORT_SHAPES[String(sec.shape || '').toLowerCase()] || sec.shape;
+        (sec.rows || []).forEach(rowIn => {
+            const row = (rowIn || []).map(it => typeof it === 'string' ? { text: it } : (it || {}));
+            for (let i = 0; i < row.length; i += PER_ROW) {
+                let x = ox, rowH = 0;
+                row.slice(i, i + PER_ROW).forEach(it => {
+                    const text = String(it.text || it.title || '').trim();
+                    const shape = MURAL_IMPORT_SHAPES[String(it.shape || it.type || '').toLowerCase()] || secShape || 'rect';
+                    const w = Number(it.w) || Math.max(150, Math.min(260, text.length * 8 + 44));
+                    const lines = Math.max(1, Math.ceil((text.length * 7.6) / (w - 28)));
+                    const h = Number(it.h) || (shape === 'sticky' ? Math.max(120, lines * 20 + 40) : Math.max(60, lines * 20 + 26));
+                    const color = _muralImpColor(it.color) || secColor || (shape === 'text' ? 'transparent' : MURAL_IMPORT_COLORS.purple);
+                    let el;
+                    if (shape === 'sticky') el = { type: 'sticky' };
+                    else if (shape === 'text') el = { type: 'text' };
+                    else el = { type: 'shape', shape };
+                    Object.assign(el, { id: uid(), project_id: projectId, x, y, w, h, content: text, color, z_index: z++ });
+                    if (shape === 'rounded') el.border_radius = 14;
+                    if (it.bold) el.bold = true;
+                    if (it.size) el.font_size = Number(it.size);
+                    els.push(el);
+                    if (text && !byText[text.toLowerCase()]) byText[text.toLowerCase()] = el;
+                    if (it.id) byText['#' + it.id] = el;
+                    if (it.board) boards.push({ el, spec: typeof it.board === 'object' ? it.board : null });
+                    x += w + GAP_X; rowH = Math.max(rowH, h);
+                });
+                y += rowH + GAP_Y;
+            }
+        });
+        y += SEC_GAP - GAP_Y;
+    });
+    // Free-placed items (JSON with explicit x/y relative to the import origin)
+    (spec.items || []).forEach(it => {
+        const shape = MURAL_IMPORT_SHAPES[String(it.shape || it.type || '').toLowerCase()] || 'rect';
+        const el = shape === 'sticky' ? { type: 'sticky' } : shape === 'text' ? { type: 'text' } : { type: 'shape', shape };
+        Object.assign(el, { id: uid(), project_id: projectId, x: ox + (Number(it.x) || 0), y: oy + (Number(it.y) || 0),
+            w: Number(it.w) || 170, h: Number(it.h) || 60, content: String(it.text || ''), color: _muralImpColor(it.color) || (shape === 'text' ? 'transparent' : MURAL_IMPORT_COLORS.purple), z_index: z++ });
+        if (it.bold) el.bold = true;
+        if (it.size) el.font_size = Number(it.size);
+        els.push(el);
+        if (it.text) byText[String(it.text).toLowerCase()] = byText[String(it.text).toLowerCase()] || el;
+        if (it.id) byText['#' + it.id] = el;
+        if (it.board) boards.push({ el, spec: typeof it.board === 'object' ? it.board : null });
+    });
+    // Arrows — match by item text (or "#id"), also against items already on this board
+    const existing = projectId === muralActiveProjectId ? muralElements : [];
+    const find = (k) => {
+        const key = String(k || '').trim().toLowerCase();
+        return byText[key] || byText['#' + key] || existing.find(e => e.type !== 'connector' && _muralElText(e).toLowerCase() === key) || null;
+    };
+    let missing = 0;
+    (spec.links || []).forEach(l => {
+        const a = find(l.from), b = find(l.to);
+        if (!a || !b || a === b) { missing++; return; }
+        els.push({ id: uid(), project_id: projectId, type: 'connector', from_id: a.id, to_id: b.id, from_side: null, to_side: null,
+            color: _muralImpColor(l.color) || '#6366F1', connector_style: 'bezier', x: 0, y: 0, w: 0, h: 0, content: l.label || '', z_index: 0 });
+    });
+    return { els, boards, missing };
+}
+
+function openMuralImportModal() {
+    closeMuralExportMenu();
+    const modal = document.getElementById('universalModal');
+    const box = modal && modal.querySelector('.modal-box');
+    if (!box) return;
+    let draft = '';
+    try { draft = localStorage.getItem('os.mural.importDraft') || ''; } catch (_) {}
+    box.innerHTML = `
+        <div class="mural-imp">
+            <h3 style="margin:0 0 4px">Import to this board</h3>
+            <p class="mural-imp-sub">Paste an outline — one item per line. New items go below what's already here.</p>
+            <textarea id="muralImpText" class="mural-imp-text" spellcheck="false" placeholder="# Marketing collateral {yellow}
+Pitchdeck {board}
+One Pager
+Brochure
+
+# Digital {green}
+Website
+Videos
+
+Pitchdeck -> One Pager">${escapeHtml(draft)}</textarea>
+            <div class="mural-imp-status" id="muralImpStatus">Nothing to import yet</div>
+            <details class="mural-imp-help">
+                <summary>Format tips</summary>
+                <ul>
+                    <li><code># Title</code> starts a section (a heading on the board).</li>
+                    <li>Each line is one item; a <b>blank line</b> starts a new row.</li>
+                    <li>Add options in braces: <code>{yellow}</code> <code>{green}</code> <code>{blue}</code> <code>{pink}</code> <code>{purple}</code> <code>{orange}</code> <code>{gray}</code> or <code>{#hex}</code>,
+                        shapes <code>{sticky}</code> <code>{rounded}</code> <code>{circle}</code> <code>{text}</code>, and <code>{bold}</code>.</li>
+                    <li>Braces on a <code>#</code> line apply to every item in that section.</li>
+                    <li><code>{board}</code> also turns the item into its own sub-board.</li>
+                    <li><code>A -> B</code> draws an arrow between two items.</li>
+                    <li>JSON from Claude works too — just paste it as is.</li>
+                </ul>
+            </details>
+            <div class="mural-imp-actions">
+                <button class="btn secondary" onclick="muralImportPaste()">Paste</button>
+                <span style="flex:1"></span>
+                <button class="btn secondary" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
+                <button class="btn primary" id="muralImpGo" onclick="muralRunImport()" disabled>Import</button>
+            </div>
+        </div>`;
+    modal.classList.remove('hidden');
+    const ta = document.getElementById('muralImpText');
+    ta.addEventListener('input', _muralImpPreview);
+    ta.addEventListener('keydown', ev => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') muralRunImport(); ev.stopPropagation(); });
+    _muralImpPreview();
+    setTimeout(() => ta.focus(), 80);
+}
+window.openMuralImportModal = openMuralImportModal;
+
+async function muralImportPaste() {
+    try {
+        const t = await navigator.clipboard.readText();
+        const ta = document.getElementById('muralImpText');
+        if (ta && t) { ta.value = t; _muralImpPreview(); }
+    } catch (_) { toast('Press ⌘V / Ctrl+V in the box to paste'); }
+}
+window.muralImportPaste = muralImportPaste;
+
+function _muralImpPreview() {
+    const ta = document.getElementById('muralImpText');
+    const st = document.getElementById('muralImpStatus');
+    const go = document.getElementById('muralImpGo');
+    if (!ta || !st) return;
+    try { localStorage.setItem('os.mural.importDraft', ta.value); } catch (_) {}
+    let spec = null, err = '';
+    try { spec = _muralImpSpec(ta.value); } catch (e) { err = 'That JSON has an error — check brackets and commas.'; }
+    if (!spec) { st.textContent = err || 'Nothing to import yet'; st.classList.toggle('bad', !!err); if (go) go.disabled = true; return; }
+    const c = _muralImpCount(spec);
+    const parts = [`${c.items} item${c.items === 1 ? '' : 's'}`];
+    if (c.sections) parts.push(`${c.sections} section${c.sections === 1 ? '' : 's'}`);
+    if (c.links) parts.push(`${c.links} arrow${c.links === 1 ? '' : 's'}`);
+    if (c.boards) parts.push(`${c.boards} sub-board${c.boards === 1 ? '' : 's'}`);
+    st.textContent = c.items ? 'Will add ' + parts.join(' · ') : 'Nothing to import yet';
+    st.classList.remove('bad');
+    if (go) go.disabled = !c.items;
+}
+
+async function _muralImpMakeBoards(boards, parentId) {
+    for (const { el, spec } of boards) {
+        const parent = muralProjects.find(p => String(p.id) === String(parentId));
+        const title = (el.content || 'Board').slice(0, 120);
+        const res = await apiPost({ action: 'create', sheet: 'mural_projects', payload: {
+            title, category: (parent && parent.category) || 'Uncategorized', parent_id: String(parentId),
+            created_at: new Date().toISOString(), updated_at: new Date().toISOString() } });
+        const newId = res && (res.id || (res.data && res.data.id));
+        if (!newId) continue;
+        muralProjects.push(res.data || { id: newId, title, parent_id: String(parentId) });
+        el.link_project_id = String(newId);
+        if (spec) {
+            const inner = _muralImpLayout(spec, String(newId), 100, 100);
+            await _muralImpMakeBoards(inner.boards, newId);
+            await apiPost({ action: 'syncMuralElements', sheet: 'mural_elements', payload: { project_id: String(newId), elements: inner.els } });
+        }
+    }
+    state.data.mural_projects = muralProjects;
+}
+
+async function muralRunImport() {
+    const ta = document.getElementById('muralImpText');
+    const go = document.getElementById('muralImpGo');
+    let spec;
+    try { spec = _muralImpSpec(ta ? ta.value : ''); } catch (_) { toast('That JSON has an error'); return; }
+    if (!spec) return;
+    if (go) { go.disabled = true; go.textContent = 'Importing…'; }
+    try {
+        // Place below the current content, lined up with its left edge.
+        const shapes = muralElements.filter(e => e.type !== 'connector');
+        let ox = 100, oy = 100;
+        if (shapes.length) {
+            // Use where items actually sit on screen (DOM), falling back to stored values.
+            const box = e => { const d = document.getElementById('mural-el-' + e.id);
+                return d ? { x: d.offsetLeft, b: d.offsetTop + d.offsetHeight } : { x: e.x || 0, b: (e.y || 0) + (e.h || 150) }; };
+            ox = Math.min(...shapes.map(e => box(e).x));
+            oy = Math.max(...shapes.map(e => box(e).b)) + 100;
+        }
+        const { els, boards, missing } = _muralImpLayout(spec, muralActiveProjectId, ox, oy);
+        if (!els.length) { toast('Nothing to import'); return; }
+        await _muralImpMakeBoards(boards, muralActiveProjectId);
+        const canvas = document.getElementById('muralCanvas');
+        els.forEach(el => {
+            muralElements.push(el);
+            if (el.type === 'connector') muralConnectors.push(el);
+            else if (canvas) canvas.appendChild(createMuralElementDOM(el));
+        });
+        renderAllMuralConnectors();
+        pushMuralUndo({ action: 'create', snapshots: els.map(e => ({ ...e })) });
+        muralSelectedElementIds = els.filter(e => e.type !== 'connector').map(e => e.id);
+        highlightMuralElements(muralSelectedElementIds);
+        // Bring the new block into view.
+        const s = muralTransform.scale;
+        muralTransform.x = 80 - ox * s;
+        muralTransform.y = 90 - oy * s;
+        applyMuralTransform();
+        document.getElementById('universalModal').classList.add('hidden');
+        try { localStorage.removeItem('os.mural.importDraft'); } catch (_) {}
+        await manualMuralSync();
+        const n = els.filter(e => e.type !== 'connector').length;
+        toast(`Imported ${n} item${n === 1 ? '' : 's'}${missing ? ` · ${missing} arrow${missing === 1 ? '' : 's'} skipped (item not found)` : ''}`);
+    } catch (err) {
+        console.error('Mural import failed', err);
+        toast('Import failed — nothing was lost, try again');
+    } finally {
+        if (go) { go.disabled = false; go.textContent = 'Import'; }
+    }
+}
+window.muralRunImport = muralRunImport;
+
+/* ═══════════════════════════════════════
    EXPORT — PNG image / PDF / PowerPoint
    The board (or just the selection) is rendered to a canvas with
    html-to-image, then saved directly or wrapped by jsPDF / PptxGenJS.
@@ -1429,6 +1748,7 @@ function toggleMuralExportMenu(ev) {
     menu.id = 'muralExportMenu';
     menu.className = 'mural-arr-menu mural-exp-menu';
     menu.innerHTML = `
+        <button class="mural-exp-item mural-exp-import" onclick="openMuralImportModal()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg><span><b>Import…</b><small>Paste an outline to add items</small></span></button>
         <div class="mural-arr-head"><span>Export</span></div>
         ${nSel ? `<div class="mural-exp-scope">
             <button class="${scope === 'all' ? 'on' : ''}" onclick="_muralSetExportScope('all')">Whole board</button>
