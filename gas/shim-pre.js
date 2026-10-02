@@ -62,6 +62,10 @@ function _m2Delta(pid, list) {
 async function apiGet(key) {
     var rows = await _m2run('mural2Get', key);
     rows = (rows || []).map(_m2Clean);
+    // one object per id (older saves could duplicate rows)
+    var seenIds = {}, uniq = [];
+    for (var i = rows.length - 1; i >= 0; i--) { var k = String(rows[i].id); if (seenIds[k]) continue; seenIds[k] = true; uniq.unshift(rows[i]); }
+    rows = uniq;
     if (key === 'mural_elements') rows.forEach(_m2SetBase);
     return rows;
 }

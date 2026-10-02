@@ -42,6 +42,7 @@ HOST_CSS = """
   --danger: #DC2626; --danger-soft: rgba(220, 38, 38, 0.15);
 }
 .mural-page { z-index: 200 !important; }
+body:has(.mural-page) aside, body:has(.mural-page) #main-header { display: none !important; }
 body:has(.mural-page) .view-section, body:has(.mural-page) main { transform: none !important; filter: none !important; }
 #view-mural .mural-dashboard { height: 100%; overflow-y: auto; box-sizing: border-box; }
 #universalModal .modal-box:has(.mural-imp) { max-width: 640px; padding: 28px; }

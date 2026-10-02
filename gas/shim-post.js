@@ -2,7 +2,7 @@
 // Team editing: auto-save changes every few seconds and pull other
 // people's changes when the board's version moves on.
 // =====================================================================
-var _m2Saving = false, _m2Pulling = false;
+var _m2Saving = false, _m2Pulling = false, _m2LastSig = '', _m2LastSigAt = 0;
 
 function _m2Busy() {
     return (typeof muralPointerDown !== 'undefined' && muralPointerDown) ||
@@ -18,6 +18,10 @@ async function _m2AutoSave() {
     var pid = String(muralActiveProjectId);
     var d = _m2Delta(pid, muralElements);
     if (!d.upserts.length && !d.deletes.length) return;
+    // Safety: never send the exact same change twice in a row (stops any save loop)
+    var sig = JSON.stringify([d.upserts.map(_m2Key), d.deletes]);
+    if (sig === _m2LastSig && Date.now() - _m2LastSigAt < 60000) return;
+    _m2LastSig = sig; _m2LastSigAt = Date.now();
     _m2Saving = true;
     try {
         if (typeof showSaveIndicator === 'function') showSaveIndicator('saving');
@@ -34,6 +38,7 @@ async function _m2Pull(pid) {
         var b = await _m2run('mural2Board', pid);
         if (String(pid) !== String(muralActiveProjectId) || !document.getElementById('muralCanvas')) return;
         var remote = (b.elements || []).map(_m2Clean);
+        var rs = {}; remote = remote.filter(function (e) { var k = String(e.id); if (rs[k]) return false; rs[k] = true; return true; });
         var d = _m2Delta(pid, muralElements);
         var dirty = {}; d.upserts.forEach(function (e) { dirty[String(e.id)] = true; });
         var local = {}; muralElements.forEach(function (e) { local[String(e.id)] = e; });
