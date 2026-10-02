@@ -37,6 +37,7 @@ must("""        const res = await apiGet('mural_elements');
         state.data.mural_elements = res || [];""", """        const res = await _m2BoardElements(muralActiveProjectId);""")
 must("const fresh = await apiGet('mural_elements');", "const fresh = await _m2BoardElements(muralActiveProjectId, true);")
 must("const all = await apiGet('mural_elements');", "const all = await _m2FamilyElements(ids);")
+must("try { await manualMuralSync(); } catch (_) {} // don't lose edits on this board", "/* GAS: unsaved changes are sent by openMuralProject (no waiting) */")
 
 if '</script' in js.lower():
     sys.exit('build: view-mural.js contains </script — would break the HTML file')

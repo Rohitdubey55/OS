@@ -160,3 +160,20 @@ window.addEventListener('error', function (ev) {
     var m = ev && (ev.error && ev.error.stack || ev.message);
     if (m && /mural|_m2/i.test(m)) toast('Mural error: ' + String(ev.message || m).slice(0, 160), 'error');
 });
+
+// Leaving a board (open another / go back) → send its unsaved changes right away,
+// without making the person wait for the save to finish.
+function _m2SaveNow() {
+    if (!muralActiveProjectId) return;
+    var pid = String(muralActiveProjectId);
+    var d = _m2Delta(pid, muralElements);
+    if (!d.upserts.length && !d.deletes.length) return;
+    d = { upserts: d.upserts.map(function (e) { return Object.assign({}, e); }), deletes: d.deletes.slice() };
+    _m2SendDelta(pid, d).catch(function (e) { console.warn('Mural save on leave failed', e); toast('Could not save the last change — please check the board', 'error'); });
+}
+(function () {
+    var _open = openMuralProject, _exit = exitMuralProject;
+    openMuralProject = function (id) { _m2SaveNow(); return _open.apply(this, arguments); };
+    exitMuralProject = function () { _m2SaveNow(); return _exit.apply(this, arguments); };
+    window.openMuralProject = openMuralProject; window.exitMuralProject = exitMuralProject;
+})();
