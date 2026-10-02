@@ -391,6 +391,13 @@ async function renderMuralCanvasView() {
                     <i data-lucide="type"></i>
                 </button>
             <div class="mural-tool-group">
+                <button class="mural-tool" data-tool="pen" onclick="toggleMuralPen(event)" data-tooltip="Scribble / Pen (P)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-4 5-1 7-4s2-7 5-7 3 4 1 6-5 5-3 7 4 0 6-2"/></svg>
+                    <span class="mural-pen-dot" id="muralPenDot" style="background:${muralPen.color}"></span>
+                </button>
+                <div class="mural-tool-popover mural-pen-menu" id="muralPenMenu"></div>
+            </div>
+            <div class="mural-tool-group">
                 <button class="mural-tool" data-tool="shapes" onclick="toggleMuralShapeMenu(event)" data-tooltip="Shapes">
                     <i data-lucide="shapes"></i>
                 </button>
@@ -616,6 +623,7 @@ function createMuralElementDOM(data) {
     else if (elType === 'text') className += ' text-el';
     else if (elType === 'shape') className += ` shape-el ${data.shape || ''}`;
     else if (elType === 'icon') className += ' icon-el';
+    else if (elType === 'drawing') className += ' drawing-el';
 
     div.className = className;
     if (muralSelectedElementIds.includes(data.id)) div.classList.add('selected');
@@ -624,7 +632,7 @@ function createMuralElementDOM(data) {
     div.style.top = `${data.y || 0}px`;
     if (data.w) div.style.width = `${data.w}px`;
     if (data.h) div.style.height = `${data.h}px`;
-    if (data.color && elType !== 'icon') div.style.backgroundColor = data.color;
+    if (data.color && elType !== 'icon' && elType !== 'drawing') div.style.backgroundColor = data.color;
     if (data.color && elType === 'icon') div.style.color = data.color;
     // Adjustable corner radius for rectangles (rect = sharp default, rounded = curved)
     if (elType === 'shape' && (data.shape === 'rect' || data.shape === 'rounded')
@@ -659,6 +667,9 @@ function createMuralElementDOM(data) {
     if (elType === 'icon') {
         content.contentEditable = false;
         content.innerHTML = `<i data-lucide="${data.content || 'smile'}"></i>`;
+    } else if (elType === 'drawing') {
+        content.contentEditable = false;
+        _muralPaintDrawing(div, data);
     } else {
         content.contentEditable = true;
         content.spellcheck = false;
@@ -683,7 +694,7 @@ function createMuralElementDOM(data) {
 
     // Add connection anchors (only for non-connectors)
     const elTypeFinal = data.type || 'sticky';
-    if (elTypeFinal !== 'connector') {
+    if (elTypeFinal !== 'connector' && elTypeFinal !== 'drawing') {
         ['top', 'bottom', 'left', 'right'].forEach(side => {
             const anchor = document.createElement('div');
             anchor.className = `mural-anchor ${side}`;
@@ -697,7 +708,7 @@ function createMuralElementDOM(data) {
     }
 
     // Add resize handle for sticky notes, shapes, and icons
-    if (elType === 'sticky' || elType === 'shape' || elType === 'icon') {
+    if (elType === 'sticky' || elType === 'shape' || elType === 'icon' || elType === 'drawing') {
         const handle = document.createElement('div');
         handle.className = 'mural-resize-handle';
         handle.addEventListener('pointerdown', (e) => {
@@ -722,8 +733,8 @@ function createMuralElementDOM(data) {
         if (muralIsResizing) return;
         if (document.activeElement === div && div.contentEditable === 'true') return; // Don't drag while typing
 
-        // If hand tool is active, let the event bubble to the page for panning
-        if (muralActiveTool === 'hand') return;
+        // If hand/pen tool is active, let the event bubble to the page (pan / draw)
+        if (muralActiveTool === 'hand' || muralActiveTool === 'pen') return;
 
         e.stopPropagation();
 
@@ -1059,7 +1070,7 @@ function showMuralContextMenu(x, y, elementId) {
         <button class="mural-context-item" onclick="showMuralColorPicker(${x}, ${y}, '${elementId}')">
             <i data-lucide="palette"></i> Change Color
         </button>`}
-        ${(!isMultiple && el && el.type !== 'connector' && el.type !== 'line') ? (el.link_project_id ? `
+        ${(!isMultiple && el && el.type !== 'connector' && el.type !== 'line' && el.type !== 'drawing') ? (el.link_project_id ? `
         <button class="mural-context-item" onclick="dismissMuralPopups(); muralOpenLinkedBoard('${elementId}');">
             <i data-lucide="external-link"></i> Open board
         </button>
@@ -1182,7 +1193,7 @@ function changeMuralColor(elementId, color) {
     snapshotElementsForUndo([elementId], 'color');
     el.color = color;
     const dom = document.getElementById(`mural-el-${elementId}`);
-    if (dom) dom.style.backgroundColor = color;
+    if (dom) { if (el.type === 'drawing') _muralPaintDrawing(dom, el); else dom.style.backgroundColor = color; }
     // Removed autosave: saveMuralElement(el);
     dismissMuralPopups();
 }
@@ -1198,6 +1209,176 @@ function dismissMuralPopups() {
     if (bgPanel) bgPanel.remove();
     closeMuralArrangeMenu();
     closeMuralExportMenu();
+}
+
+/* ═══════════════════════════════════════
+   SCRIBBLE / PEN TOOL
+   Freehand strokes become their own 'drawing' elements: the stroke is
+   stored as an SVG path (relative to the element box) in `content`, so a
+   scribble moves, resizes, recolours, deletes, undoes and exports like
+   any other item. The pen stays on until you pick another tool.
+   ═══════════════════════════════════════ */
+const MURAL_PEN_COLORS = ['#0F172A', '#EF4444', '#F59E0B', '#10B981', '#3B82F6', '#6366F1', '#EC4899', '#FFFFFF'];
+const MURAL_PEN_WIDTHS = [2, 4, 8, 14];
+let muralPen = (() => {
+    try { const v = JSON.parse(localStorage.getItem('os.mural.pen') || 'null'); if (v && v.color && v.width) return v; } catch (_) {}
+    return { color: '#0F172A', width: 4 };
+})();
+let muralPenStroke = null; // { pts: [[x,y]...], pointerId, path }
+
+function _muralSavePen() { try { localStorage.setItem('os.mural.pen', JSON.stringify(muralPen)); } catch (_) {} }
+
+// Smooth path through points (quadratic curves via midpoints).
+function _muralPenPath(pts) {
+    if (!pts.length) return '';
+    const f = n => Math.round(n * 10) / 10;
+    if (pts.length < 3) {
+        const [a, b] = [pts[0], pts[pts.length - 1]];
+        return `M${f(a[0])} ${f(a[1])}L${f(b[0] + (a === b ? 0.1 : 0))} ${f(b[1])}`;
+    }
+    let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+        const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2;
+        d += `Q${f(pts[i][0])} ${f(pts[i][1])} ${f(mx)} ${f(my)}`;
+    }
+    const last = pts[pts.length - 1];
+    return d + `L${f(last[0])} ${f(last[1])}`;
+}
+
+function _muralDrawingData(el) {
+    try { const o = JSON.parse(el.content || '{}'); if (o && o.d) return o; } catch (_) {}
+    return { d: '', vw: el.w || 1, vh: el.h || 1 };
+}
+
+// Render (or re-render) the stroke inside a drawing element.
+function _muralPaintDrawing(dom, el) {
+    const content = dom && dom.querySelector('.mural-element-content');
+    if (!content) return;
+    const o = _muralDrawingData(el);
+    const sw = Number(el.stroke_width) || 4;
+    const col = (el.color && el.color !== 'transparent') ? el.color : '#0F172A';
+    content.innerHTML = `<svg class="mural-drawing-svg" viewBox="0 0 ${o.vw} ${o.vh}" preserveAspectRatio="none" width="100%" height="100%" overflow="visible">`
+        + `<path class="mural-drawing-hit" d="${o.d}" fill="none" stroke="transparent" stroke-width="${Math.max(sw, 16)}" stroke-linecap="round" stroke-linejoin="round"/>`
+        + `<path d="${o.d}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function _muralPenMenuHTML() {
+    return `
+        <div class="mural-pen-row">${MURAL_PEN_COLORS.map(c =>
+            `<button class="mural-pen-sw ${c === muralPen.color ? 'on' : ''}" style="--c:${c}" title="${c}" onclick="setMuralPen('color','${c}')"></button>`).join('')}</div>
+        <div class="mural-pen-row">${MURAL_PEN_WIDTHS.map(w =>
+            `<button class="mural-pen-w ${w === muralPen.width ? 'on' : ''}" title="${w}px" onclick="setMuralPen('width',${w})"><span style="width:${Math.min(22, w + 4)}px;height:${w}px"></span></button>`).join('')}</div>
+        <div class="mural-pen-hint">Draw on the board · V or Esc to stop</div>`;
+}
+
+function setMuralPen(prop, val) {
+    muralPen[prop] = val;
+    _muralSavePen();
+    const m = document.getElementById('muralPenMenu');
+    if (m) m.innerHTML = _muralPenMenuHTML();
+    const dot = document.getElementById('muralPenDot');
+    if (dot) dot.style.background = muralPen.color;
+    // Also restyle selected scribbles, so you can recolour/re-weight after drawing.
+    const sel = _muralSelectedEls().filter(el => el.type === 'drawing');
+    if (sel.length) {
+        snapshotElementsForUndo(sel.map(e => e.id), 'color');
+        sel.forEach(el => {
+            if (prop === 'color') el.color = val; else el.stroke_width = val;
+            _muralPaintDrawing(document.getElementById('mural-el-' + el.id), el);
+        });
+        showSaveIndicator('saving');
+    }
+}
+window.setMuralPen = setMuralPen;
+
+function toggleMuralPen(e) {
+    if (e) e.stopPropagation();
+    const menu = document.getElementById('muralPenMenu');
+    if (muralActiveTool === 'pen') {
+        // Second tap toggles the colour/width menu.
+        if (menu) { const vis = menu.classList.contains('visible'); dismissMuralPopups(); if (!vis) { menu.innerHTML = _muralPenMenuHTML(); menu.classList.add('visible'); } }
+        return;
+    }
+    dismissMuralPopups();
+    setMuralTool('pen');
+    if (menu) { menu.innerHTML = _muralPenMenuHTML(); menu.classList.add('visible'); }
+}
+window.toggleMuralPen = toggleMuralPen;
+
+function _muralPenDown(e) {
+    if (e.button && e.button !== 0) return false;
+    e.preventDefault();
+    const menu = document.getElementById('muralPenMenu');
+    if (menu) menu.classList.remove('visible');
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    const canvas = document.getElementById('muralCanvas');
+    const p = muralClientToWorld(e.clientX, e.clientY);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'mural-pen-live');
+    svg.setAttribute('width', '10000'); svg.setAttribute('height', '10000');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', muralPen.color);
+    path.setAttribute('stroke-width', muralPen.width);
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    canvas.appendChild(svg);
+    muralPenStroke = { pts: [[p.x, p.y]], pointerId: e.pointerId, svg, path };
+    path.setAttribute('d', _muralPenPath(muralPenStroke.pts));
+    const page = document.getElementById('muralPage');
+    try { page && page.setPointerCapture && page.setPointerCapture(e.pointerId); } catch (_) {}
+    return true;
+}
+
+function _muralPenMove(e) {
+    const s = muralPenStroke;
+    if (!s || e.pointerId !== s.pointerId) return;
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    const minGap = 1.2 / (muralTransform.scale || 1);
+    (evs.length ? evs : [e]).forEach(ev => {
+        const p = muralClientToWorld(ev.clientX, ev.clientY);
+        const last = s.pts[s.pts.length - 1];
+        if (Math.hypot(p.x - last[0], p.y - last[1]) >= minGap) s.pts.push([p.x, p.y]);
+    });
+    s.path.setAttribute('d', _muralPenPath(s.pts));
+}
+
+function _muralPenCancel() {
+    if (!muralPenStroke) return;
+    muralPenStroke.svg.remove();
+    muralPenStroke = null;
+}
+
+function _muralPenUp() {
+    const s = muralPenStroke;
+    if (!s) return;
+    muralPenStroke = null;
+    s.svg.remove();
+    const pts = s.pts;
+    const sw = muralPen.width;
+    const pad = sw / 2 + 2;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    pts.forEach(([x, y]) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); });
+    x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+    const w = Math.max(8, Math.ceil(x1 - x0)), h = Math.max(8, Math.ceil(y1 - y0));
+    const rel = pts.map(([x, y]) => [x - x0, y - y0]);
+    const newEl = {
+        project_id: muralActiveProjectId,
+        type: 'drawing',
+        x: Math.round(x0), y: Math.round(y0), w, h,
+        content: JSON.stringify({ v: 1, vw: w, vh: h, d: _muralPenPath(rel) }),
+        color: muralPen.color,
+        stroke_width: sw,
+        z_index: muralElements.length + 1
+    };
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    newEl.id = tempId;
+    muralElements.push(newEl);
+    const canvas = document.getElementById('muralCanvas');
+    if (canvas) canvas.appendChild(createMuralElementDOM(newEl));
+    pushMuralUndo({ action: 'create', snapshots: [{ ...newEl }] });
+    showSaveIndicator('saving');
 }
 
 /* ═══════════════════════════════════════
@@ -2210,6 +2391,7 @@ let muralTouchState = { touches: [], lastDist: 0, lastCenter: { x: 0, y: 0 }, is
 function onMuralTouchStart(e) {
     if (e.touches.length === 2) {
         e.preventDefault();
+        if (muralPenStroke) _muralPenCancel();
         muralTouchState.isPinching = true;
         muralIsDragging = false;
         const t1 = e.touches[0], t2 = e.touches[1];
@@ -2404,6 +2586,13 @@ function onMuralPointerDown(e) {
         return;
     }
 
+    // Pen / scribble — draw anywhere, even over items.
+    if (muralActiveTool === 'pen') {
+        if (muralPenStroke) { _muralPenCancel(); return; } // 2nd finger → it's a pinch
+        _muralPenDown(e);
+        return;
+    }
+
     // Line tool (#8) — drag on the canvas to draw a free line (free endpoints).
     if (muralActiveTool === 'line') {
         const { x: sx, y: sy } = muralClientToWorld(e.clientX, e.clientY);
@@ -2447,7 +2636,8 @@ function onMuralPointerDown(e) {
 }
 
 function onMuralPointerMove(e) {
-    if (muralTouchState.isPinching) return;
+    if (muralTouchState.isPinching) { if (muralPenStroke) _muralPenCancel(); return; }
+    if (muralPenStroke) { _muralPenMove(e); return; }
 
     // Line tool (#8) — stretch the free line to the cursor while drawing.
     if (muralDrawingLine) {
@@ -2550,6 +2740,10 @@ function onMuralPointerMove(e) {
 
 function onMuralPointerUp(e) {
     muralPointerDown = false;
+    if (muralPenStroke) {
+        if (e.type === 'pointercancel') _muralPenCancel(); else _muralPenUp();
+        return;
+    }
 
     // Finish dragging a free line/arrow — persist its new position.
     if (muralDraggingConnector) {
@@ -2743,11 +2937,13 @@ function setMuralTool(tool) {
     const canvas = document.getElementById('muralCanvas');
     const page = document.getElementById('muralPage');
     if (canvas) {
-        if (tool === 'connector' || tool === 'line') canvas.style.cursor = 'crosshair';
+        if (tool === 'connector' || tool === 'line' || tool === 'pen') canvas.style.cursor = 'crosshair';
         else if (tool === 'hand') canvas.style.cursor = 'grab';
         else canvas.style.cursor = 'default';
     }
+    if (tool !== 'pen') { const pm = document.getElementById('muralPenMenu'); if (pm) pm.classList.remove('visible'); }
     if (page) {
+        page.classList.toggle('pen-tool-active', tool === 'pen');
         page.classList.toggle('connector-tool-active', tool === 'connector');
     }
 }
@@ -2812,7 +3008,7 @@ window.applyMuralFill = function (color) {
     els.forEach(el => {
         el.color = color;
         const dom = document.getElementById('mural-el-' + el.id);
-        if (dom) { if (el.type === 'icon') dom.style.color = color; else dom.style.backgroundColor = (color === 'transparent' ? 'transparent' : color); }
+        if (dom) { if (el.type === 'icon') dom.style.color = color; else if (el.type === 'drawing') _muralPaintDrawing(dom, el); else dom.style.backgroundColor = (color === 'transparent' ? 'transparent' : color); }
     });
     _muralPersistStyle();
 };
@@ -2880,6 +3076,7 @@ const MURAL_DEFAULT_SHORTCUTS = {
     'undo': { key: 'z', mods: ['meta'], label: 'Undo', desc: 'Undo last action' },
     'tool_select': { key: 'v', mods: [], label: 'Select Tool', desc: 'Switch to select tool' },
     'tool_hand': { key: 'h', mods: [], label: 'Hand Tool', desc: 'Switch to hand tool for panning' },
+    'tool_pen': { key: 'p', mods: [], label: 'Pen / Scribble', desc: 'Draw freehand on the board' },
     'add_sticky': { key: 'n', mods: [], label: 'New Sticky', desc: 'Create a new sticky note' },
     'add_text': { key: 't', mods: [], label: 'New Text', desc: 'Create a text element' },
     'add_rect': { key: 'r', mods: [], label: 'New Rectangle', desc: 'Create a rectangle shape' },
@@ -2893,7 +3090,8 @@ function getMuralShortcuts() {
     const s = state.data.settings?.[0] || {};
     if (s.mural_shortcuts) {
         try {
-            return JSON.parse(s.mural_shortcuts);
+            // Saved shortcuts + any new defaults added since they were saved (e.g. pen)
+            return { ...JSON.parse(JSON.stringify(MURAL_DEFAULT_SHORTCUTS)), ...JSON.parse(s.mural_shortcuts) };
         } catch (e) {
             console.error('Failed to parse mural shortcuts:', e);
         }
@@ -3175,6 +3373,8 @@ function onMuralKeyDown(e) {
         setMuralTool('select');
     } else if (action === 'tool_hand') {
         setMuralTool('hand');
+    } else if (action === 'tool_pen') {
+        toggleMuralPen();
     } else if (action === 'add_sticky') {
         addMuralSticky();
     } else if (action === 'add_text') {
@@ -3187,6 +3387,7 @@ function onMuralKeyDown(e) {
         if (muralConnectorSource) {
             cancelMuralConnector();
         }
+        if (muralActiveTool === 'pen') { _muralPenCancel(); setMuralTool('select'); }
         // Always deselect/dismiss popups on escape
         muralSelectedElementIds = [];
         muralSelectedConnectorId = null;
@@ -3566,7 +3767,10 @@ async function muralUndo() {
                 dom.style.top = `${el.y}px`;
                 if (el.w) dom.style.width = `${el.w}px`;
                 if (el.h) dom.style.height = `${el.h}px`;
-                if (entry.action === 'color') dom.style.backgroundColor = el.color;
+                if (entry.action === 'color') {
+                    if (el.type === 'drawing') { el.stroke_width = snap.stroke_width; _muralPaintDrawing(dom, el); }
+                    else dom.style.backgroundColor = el.color;
+                }
                 if (entry.action === 'edit') {
                     const contentEl = dom.querySelector('.mural-element-content');
                     if (contentEl) contentEl.innerText = el.content || '';

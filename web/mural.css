@@ -2334,3 +2334,41 @@ body:has(.mural-page) .sidebar {
 .mural-exp-item span { display: flex; flex-direction: column; gap: 1px; }
 .mural-exp-item b { font-size: 13.5px; font-weight: 650; }
 .mural-exp-item small { font-size: 11.5px; color: var(--text-3); }
+
+/* ══════════════════════════════════════
+   SCRIBBLE / PEN
+   ══════════════════════════════════════ */
+.mural-tool[data-tool="pen"] { position: relative; }
+.mural-pen-dot {
+    position: absolute; right: 7px; bottom: 7px;
+    width: 7px; height: 7px; border-radius: 50%;
+    box-shadow: 0 0 0 1.5px var(--surface-1, #fff), 0 0 0 2.5px rgba(0,0,0,.15);
+}
+.mural-pen-menu { min-width: 0; width: 230px; gap: 8px; padding: 10px; }
+.mural-pen-row { display: flex; gap: 6px; justify-content: space-between; }
+.mural-pen-sw {
+    width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,.15);
+}
+.mural-pen-sw.on { box-shadow: 0 0 0 2px var(--surface-1, #fff), 0 0 0 4px var(--mural-accent, #6366f1); }
+.mural-pen-w {
+    flex: 1; height: 32px; border-radius: 8px; border: 1px solid transparent; cursor: pointer;
+    background: var(--surface-2); display: flex; align-items: center; justify-content: center;
+}
+.mural-pen-w span { display: block; border-radius: 99px; background: var(--text-1, #0f172a); }
+.mural-pen-w.on { border-color: var(--mural-accent, #6366f1); background: var(--mural-accent-soft); }
+.mural-pen-hint { font-size: 11px; color: var(--text-3); text-align: center; }
+
+/* Live stroke overlay while drawing */
+.mural-pen-live { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 99999; }
+.mural-page.pen-tool-active, .mural-page.pen-tool-active .mural-canvas, .mural-page.pen-tool-active .mural-element { cursor: crosshair !important; }
+.mural-page.pen-tool-active .mural-element-content { pointer-events: none; }
+
+/* A scribble only catches clicks on its ink, not its whole box */
+.mural-element.drawing-el { background: transparent !important; box-shadow: none !important; border: none !important; padding: 0 !important; pointer-events: none; }
+.mural-element.drawing-el .mural-element-content { width: 100%; height: 100%; padding: 0; cursor: move; pointer-events: none; }
+.mural-drawing-svg { display: block; overflow: visible; pointer-events: none; }
+.mural-drawing-svg path { pointer-events: stroke; cursor: move; }
+.mural-element.drawing-el .mural-resize-handle { pointer-events: auto; }
+.mural-element.drawing-el.selected { outline: 1.5px dashed var(--mural-accent, #6366f1); outline-offset: 3px; }
+.mural-page.pen-tool-active .mural-drawing-svg path { pointer-events: none; }
