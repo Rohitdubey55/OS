@@ -8033,4 +8033,14 @@ try {
 // Changes are saved within ~3 s of being made, independent of the check interval (no server call if nothing changed)
 setInterval(function () { if (!document.hidden) _m2AutoSave(); }, 3000);
 
+// Show Mural errors as a toast instead of failing silently (helps report problems)
+window.addEventListener('unhandledrejection', function (ev) {
+    var m = ev && ev.reason && (ev.reason.stack || ev.reason.message || String(ev.reason));
+    if (m && /mural|_m2/i.test(m)) toast('Mural error: ' + String(ev.reason.message || m).slice(0, 160), 'error');
+});
+window.addEventListener('error', function (ev) {
+    var m = ev && (ev.error && ev.error.stack || ev.message);
+    if (m && /mural|_m2/i.test(m)) toast('Mural error: ' + String(ev.message || m).slice(0, 160), 'error');
+});
+
 </script>
