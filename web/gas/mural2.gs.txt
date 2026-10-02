@@ -111,11 +111,17 @@ function mural2Flush_(t) {
 }
 
 function mural2Objects_(t) {
-  return t.rows.map(function (r) {
+  // Older saves could leave the same id on several rows — the last row wins (same rule as updates)
+  var byId = {}, order = [];
+  t.rows.forEach(function (r) {
     var o = {};
     t.headers.forEach(function (h, c) { if (h) o[h] = mural2Clean_(r[c]); });
-    return o;
-  }).filter(function (o) { return o.id !== '' && o.id !== null && o.id !== undefined; });
+    if (o.id === '' || o.id === null || o.id === undefined) return;
+    var k = String(o.id);
+    if (!(k in byId)) order.push(k);
+    byId[k] = o;
+  });
+  return order.map(function (k) { return byId[k]; });
 }
 
 function mural2User_() {
@@ -182,7 +188,7 @@ function mural2Post(req) {
       if (a === 'create') { p.created_at = p.created_at || stamp; p.created_by = me; }
       var id = mural2Upsert_(t, p);
       mural2Flush_(t);
-      var obj = mural2Objects_(t)[t.index[id]];
+      var obj = mural2Objects_(t).filter(function (o) { return String(o.id) === String(id); })[0];
       if (req.sheet === 'mural_projects' && obj && !obj.title && obj.name) obj.title = obj.name;
       if (req.sheet === 'mural_elements' && p.project_id) mural2BumpVersion_(p.project_id);
       return { success: true, id: id, data: obj };
