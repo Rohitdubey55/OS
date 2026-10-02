@@ -1465,9 +1465,11 @@ function _muralImpSpec(src) {
     return _muralImpParseOutline(t);
 }
 
-function _muralImpCount(spec, acc = { items: 0, sections: 0, links: 0, boards: 0 }) {
+function _muralImpCount(spec, acc = { items: 0, sections: 0, links: 0, boards: 0, attach: 0 }) {
+    (spec.attach || []).forEach(a => { acc.attach++; if (a.board) _muralImpCount(a.board, acc); });
     (spec.sections || []).forEach(s => {
         if (s.title) acc.sections++;
+        (s.items || []).forEach(() => acc.items++);
         (s.rows || []).forEach(r => (r || []).forEach(it => {
             acc.items++;
             if (it && typeof it === 'object' && (it.board)) { acc.boards++; if (typeof it.board === 'object') _muralImpCount(it.board, acc); }
@@ -1482,59 +1484,120 @@ function _muralImpCount(spec, acc = { items: 0, sections: 0, links: 0, boards: 0
 function _muralImpLayout(spec, projectId, ox, oy) {
     const els = [], boards = [], byText = {};
     const uid = () => `temp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
-    let y = oy, z = (muralElements.length || 0) + 1;
-    const GAP_X = 20, GAP_Y = 16, SEC_GAP = 64, PER_ROW = 8;
-    (spec.sections || []).forEach(sec => {
-        if (sec.title) {
-            const t = { id: uid(), project_id: projectId, type: 'text', x: ox, y, w: Math.max(240, sec.title.length * 13 + 40), h: 40,
-                content: sec.title, color: 'transparent', font_size: 22, bold: true, z_index: z++ };
-            els.push(t); y += 52;
-        }
-        const secColor = _muralImpColor(sec.color);
-        const secShape = MURAL_IMPORT_SHAPES[String(sec.shape || '').toLowerCase()] || sec.shape;
-        (sec.rows || []).forEach(rowIn => {
-            const row = (rowIn || []).map(it => typeof it === 'string' ? { text: it } : (it || {}));
-            for (let i = 0; i < row.length; i += PER_ROW) {
-                let x = ox, rowH = 0;
-                row.slice(i, i + PER_ROW).forEach(it => {
-                    const text = String(it.text || it.title || '').trim();
-                    const shape = MURAL_IMPORT_SHAPES[String(it.shape || it.type || '').toLowerCase()] || secShape || 'rect';
-                    const w = Number(it.w) || Math.max(150, Math.min(260, text.length * 8 + 44));
-                    const lines = Math.max(1, Math.ceil((text.length * 7.6) / (w - 28)));
-                    const h = Number(it.h) || (shape === 'sticky' ? Math.max(120, lines * 20 + 40) : Math.max(60, lines * 20 + 26));
-                    const color = _muralImpColor(it.color) || secColor || (shape === 'text' ? 'transparent' : MURAL_IMPORT_COLORS.purple);
-                    let el;
-                    if (shape === 'sticky') el = { type: 'sticky' };
-                    else if (shape === 'text') el = { type: 'text' };
-                    else el = { type: 'shape', shape };
-                    Object.assign(el, { id: uid(), project_id: projectId, x, y, w, h, content: text, color, z_index: z++ });
-                    if (shape === 'rounded') el.border_radius = 14;
-                    if (it.bold) el.bold = true;
-                    if (it.size) el.font_size = Number(it.size);
-                    els.push(el);
-                    if (text && !byText[text.toLowerCase()]) byText[text.toLowerCase()] = el;
-                    if (it.id) byText['#' + it.id] = el;
-                    if (it.board) boards.push({ el, spec: typeof it.board === 'object' ? it.board : null });
-                    x += w + GAP_X; rowH = Math.max(rowH, h);
-                });
-                y += rowH + GAP_Y;
-            }
-        });
-        y += SEC_GAP - GAP_Y;
-    });
-    // Free-placed items (JSON with explicit x/y relative to the import origin)
-    (spec.items || []).forEach(it => {
-        const shape = MURAL_IMPORT_SHAPES[String(it.shape || it.type || '').toLowerCase()] || 'rect';
+    let z = (muralElements.length || 0) + 1;
+    const GAP_X = 20, GAP_Y = 16, SEC_GAP = 64;
+
+    // Estimated card height for wrapped (and multi-line) text at a given width/size.
+    const estH = (text, w, shape, size) => {
+        const fs = Number(size) || 14, cw = fs * 0.54, lh = fs * 1.45;
+        const perLine = Math.max(8, Math.floor((w - 32) / cw));
+        const lines = String(text).split('\n').reduce((n, ln) => n + Math.max(1, Math.ceil(ln.length / perLine)), 0);
+        const min = shape === 'sticky' ? 120 : 56;
+        return Math.max(min, Math.ceil(lines * lh + 30));
+    };
+    const makeCard = (it, x, y, defaults) => {
+        const text = String(it.text || it.title || '').trim();
+        const shape = MURAL_IMPORT_SHAPES[String(it.shape || it.type || '').toLowerCase()] || defaults.shape || 'rect';
+        const w = Number(it.w) || Number(defaults.w) || Math.max(150, Math.min(260, text.length * 8 + 44));
+        const size = it.size || defaults.size;
+        const h = Number(it.h) || estH(text, w, shape, size);
+        const color = _muralImpColor(it.color) || defaults.color || (shape === 'text' ? 'transparent' : MURAL_IMPORT_COLORS.purple);
         const el = shape === 'sticky' ? { type: 'sticky' } : shape === 'text' ? { type: 'text' } : { type: 'shape', shape };
-        Object.assign(el, { id: uid(), project_id: projectId, x: ox + (Number(it.x) || 0), y: oy + (Number(it.y) || 0),
-            w: Number(it.w) || 170, h: Number(it.h) || 60, content: String(it.text || ''), color: _muralImpColor(it.color) || (shape === 'text' ? 'transparent' : MURAL_IMPORT_COLORS.purple), z_index: z++ });
-        if (it.bold) el.bold = true;
-        if (it.size) el.font_size = Number(it.size);
+        Object.assign(el, { id: uid(), project_id: projectId, x, y, w, h, content: text, color, z_index: z++ });
+        if (shape === 'rounded') el.border_radius = 14;
+        if (it.bold || defaults.bold) el.bold = true;
+        if (size) el.font_size = Number(size);
+        const align = it.align || defaults.align;
+        if (align) el.text_align = align;
+        if (it.textColor || defaults.textColor) el.text_color = it.textColor || defaults.textColor;
         els.push(el);
-        if (it.text) byText[String(it.text).toLowerCase()] = byText[String(it.text).toLowerCase()] || el;
-        if (it.id) byText['#' + it.id] = el;
+        const key = text.toLowerCase();
+        if (key && !byText[key]) byText[key] = el;
+        if (it.id) byText['#' + String(it.id).toLowerCase()] = el;
         if (it.board) boards.push({ el, spec: typeof it.board === 'object' ? it.board : null });
+        return el;
+    };
+    const heading = (title, x, y, opt = {}) => {
+        const size = opt.size || 22;
+        const el = { id: uid(), project_id: projectId, type: 'text', x, y, w: opt.w || Math.max(240, title.length * size * 0.6 + 40), h: Math.ceil(size * 1.8),
+            content: title, color: 'transparent', font_size: size, bold: true, z_index: z++ };
+        if (opt.textColor) el.text_color = opt.textColor;
+        els.push(el);
+        return el;
+    };
+    const flowLinks = [];
+    const secDefaults = (sec) => ({
+        color: _muralImpColor(sec.color),
+        shape: MURAL_IMPORT_SHAPES[String(sec.shape || '').toLowerCase()] || sec.shape,
+        w: sec.w, size: sec.size, align: sec.align, bold: sec.bold, textColor: sec.textColor
     });
+
+    let y = oy;
+    // Optional board title + subtitle on top
+    if (spec.title) { heading(String(spec.title), ox, y, { size: 30 }); y += 60; }
+    if (spec.subtitle) {
+        const sub = makeCard({ text: String(spec.subtitle), shape: 'text', align: 'left', size: 15 }, ox, y, { w: 900, color: 'transparent' });
+        y += sub.h + 16;
+    }
+
+    if (spec.kanban) {
+        // Sections become columns of cards; every `band` columns start a new band below.
+        const band = Number(spec.band) || 5, colGap = 36;
+        const secs = spec.sections || [];
+        for (let b = 0; b < secs.length; b += band) {
+            let x = ox, bandBottom = y;
+            secs.slice(b, b + band).forEach(sec => {
+                const d = secDefaults(sec);
+                const cw = Number(sec.w) || Number(spec.colWidth) || 300;
+                d.w = cw;
+                let cy = y;
+                if (sec.title) {
+                    const hdr = makeCard({ text: sec.title, bold: true, size: 16, align: 'left' }, x, cy, { w: cw, color: _muralImpColor(sec.headColor) || _muralImpColor(spec.headColor) || '#1F2937', textColor: '#FFFFFF' });
+                    hdr.h = 46; cy += 46 + 10;
+                }
+                const items = [];
+                (sec.rows || []).forEach(r => (r || []).forEach(it => items.push(typeof it === 'string' ? { text: it } : (it || {}))));
+                (sec.items || []).forEach(it => items.push(typeof it === 'string' ? { text: it } : it));
+                let prev = null;
+                items.forEach(it => {
+                    const el = makeCard(it, x, cy, d);
+                    if (sec.flow && prev) flowLinks.push([prev, el, sec.flowColor]);
+                    prev = el;
+                    cy += el.h + (sec.flow ? 26 : 10);
+                });
+                bandBottom = Math.max(bandBottom, cy);
+                x += cw + colGap;
+            });
+            y = bandBottom + SEC_GAP;
+        }
+    } else {
+        (spec.sections || []).forEach(sec => {
+            if (sec.title) { heading(sec.title, ox, y); y += 52; }
+            const d = secDefaults(sec);
+            const perRow = Number(sec.perRow) || 8;
+            let prev = null;
+            (sec.rows || []).forEach(rowIn => {
+                const row = (rowIn || []).map(it => typeof it === 'string' ? { text: it } : (it || {}));
+                for (let i = 0; i < row.length; i += perRow) {
+                    let x = ox, rowH = 0;
+                    row.slice(i, i + perRow).forEach(it => {
+                        const el = makeCard(it, x, y, d);
+                        if (sec.flow && prev) flowLinks.push([prev, el, sec.flowColor]);
+                        prev = el;
+                        x += el.w + (sec.flow ? 40 : GAP_X); rowH = Math.max(rowH, el.h);
+                    });
+                    y += rowH + GAP_Y;
+                }
+            });
+            y += SEC_GAP - GAP_Y;
+        });
+    }
+    // Free-placed items (explicit x/y relative to the import origin)
+    (spec.items || []).forEach(it => makeCard(it, ox + (Number(it.x) || 0), oy + (Number(it.y) || 0), { w: it.w || 170 }));
+
+    const mkConn = (a, b, color, label) => els.push({ id: uid(), project_id: projectId, type: 'connector', from_id: a.id, to_id: b.id, from_side: null, to_side: null,
+        color: _muralImpColor(color) || '#6366F1', connector_style: 'bezier', x: 0, y: 0, w: 0, h: 0, content: label || '', z_index: 0 });
+    flowLinks.forEach(([a, b, c]) => mkConn(a, b, c));
     // Arrows — match by item text (or "#id"), also against items already on this board
     const existing = projectId === muralActiveProjectId ? muralElements : [];
     const find = (k) => {
@@ -1545,10 +1608,66 @@ function _muralImpLayout(spec, projectId, ox, oy) {
     (spec.links || []).forEach(l => {
         const a = find(l.from), b = find(l.to);
         if (!a || !b || a === b) { missing++; return; }
-        els.push({ id: uid(), project_id: projectId, type: 'connector', from_id: a.id, to_id: b.id, from_side: null, to_side: null,
-            color: _muralImpColor(l.color) || '#6366F1', connector_style: 'bezier', x: 0, y: 0, w: 0, h: 0, content: l.label || '', z_index: 0 });
+        mkConn(a, b, l.color, l.label);
     });
     return { els, boards, missing };
+}
+
+/* Attach mode: { attach: [ { match:"Pitchdeck" | ["Content","Contnent"], row:"Decks" | "top", board:{…} } ] }
+   Fills the sub-board of an item that is ALREADY on this board (replacing what's inside),
+   creating the sub-board first if the item doesn't have one yet. */
+function _muralNorm(t) { return String(t || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+function _muralFindForAttach(entry) {
+    const names = (Array.isArray(entry.match) ? entry.match : [entry.match]).map(_muralNorm).filter(Boolean);
+    const shapes = muralElements.filter(e => e.type !== 'connector' && e.type !== 'drawing');
+    const geo = e => { const d = document.getElementById('mural-el-' + e.id);
+        return d ? { x: d.offsetLeft, y: d.offsetTop, h: d.offsetHeight } : { x: e.x || 0, y: e.y || 0, h: e.h || 60 }; };
+    let cands = shapes.filter(e => names.includes(_muralNorm(_muralElText(e))));
+    if (!cands.length) return null;
+    const row = entry.row;
+    if (row === 'top') return cands.sort((a, b) => geo(a).y - geo(b).y)[0];
+    if (row) {
+        const hdr = shapes.filter(e => _muralNorm(_muralElText(e)) === _muralNorm(row)).sort((a, b) => geo(a).x - geo(b).x)[0];
+        if (hdr) {
+            const hg = geo(hdr), hc = hg.y + hg.h / 2;
+            const inRow = cands.filter(e => e !== hdr && Math.abs((geo(e).y + geo(e).h / 2) - hc) < Math.max(30, hg.h / 2 + 8));
+            if (inRow.length) return inRow.sort((a, b) => geo(a).x - geo(b).x)[0];
+        }
+        return null;
+    }
+    return cands.sort((a, b) => geo(a).y - geo(b).y || geo(a).x - geo(b).x)[0];
+}
+
+async function _muralRunAttach(spec, statusCb) {
+    const list = spec.attach || [];
+    let done = 0, notFound = [];
+    for (const entry of list) {
+        const el = _muralFindForAttach(entry);
+        if (!el) { notFound.push(Array.isArray(entry.match) ? entry.match[0] : entry.match); continue; }
+        let pid = el.link_project_id && muralProjects.some(p => String(p.id) === String(el.link_project_id)) ? String(el.link_project_id) : null;
+        const title = entry.title || (entry.board && entry.board.title) || _muralElText(el) || 'Board';
+        if (!pid) {
+            const parent = muralProjects.find(p => String(p.id) === String(muralActiveProjectId));
+            const res = await apiPost({ action: 'create', sheet: 'mural_projects', payload: {
+                title: title.slice(0, 120), category: (parent && parent.category) || 'Uncategorized', parent_id: String(muralActiveProjectId),
+                created_at: new Date().toISOString(), updated_at: new Date().toISOString() } });
+            pid = res && (res.id || (res.data && res.data.id)) ? String(res.id || res.data.id) : null;
+            if (!pid) { notFound.push(title + ' (could not create board)'); continue; }
+            muralProjects.push(res.data || { id: pid, title, parent_id: String(muralActiveProjectId) });
+            el.link_project_id = pid;
+            const old = document.getElementById('mural-el-' + el.id);
+            if (old) old.replaceWith(createMuralElementDOM(el));
+        }
+        const inner = _muralImpLayout(entry.board || {}, pid, 100, 100);
+        await _muralImpMakeBoards(inner.boards, pid);
+        const r = await apiPost({ action: 'syncMuralElements', sheet: 'mural_elements', payload: { project_id: pid, elements: inner.els } });
+        if (r && r.success === false) { notFound.push(title + ' (save failed)'); continue; }
+        done++;
+        if (statusCb) statusCb(done, list.length);
+    }
+    state.data.mural_projects = muralProjects;
+    return { done, notFound };
 }
 
 function openMuralImportModal() {
@@ -1625,6 +1744,12 @@ function _muralImpPreview() {
     if (c.sections) parts.push(`${c.sections} section${c.sections === 1 ? '' : 's'}`);
     if (c.links) parts.push(`${c.links} arrow${c.links === 1 ? '' : 's'}`);
     if (c.boards) parts.push(`${c.boards} sub-board${c.boards === 1 ? '' : 's'}`);
+    if (c.attach) {
+        st.textContent = `Will fill ${c.attach} workflow board${c.attach === 1 ? '' : 's'} on existing items (${c.items} cards in total)`;
+        st.classList.remove('bad');
+        if (go) go.disabled = false;
+        return;
+    }
     st.textContent = c.items ? 'Will add ' + parts.join(' · ') : 'Nothing to import yet';
     st.classList.remove('bad');
     if (go) go.disabled = !c.items;
@@ -1657,6 +1782,36 @@ async function muralRunImport() {
     try { spec = _muralImpSpec(ta ? ta.value : ''); } catch (_) { toast('That JSON has an error'); return; }
     if (!spec) return;
     if (go) { go.disabled = true; go.textContent = 'Importing…'; }
+    if (spec.attach) {
+        try {
+            const st = document.getElementById('muralImpStatus');
+            const { done, notFound } = await _muralRunAttach(spec, (d, n) => { if (st) st.textContent = `Building workflow boards… ${d} / ${n}`; });
+            await manualMuralSync(); // save the new links on this board
+            highlightMuralElements(muralSelectedElementIds);
+            // Check the links really saved (needs the link_project_id column in the database).
+            try {
+                const fresh = await apiGet('mural_elements');
+                const linkedHere = muralElements.filter(e => e.link_project_id).map(e => String(e.id));
+                const savedOk = (fresh || []).some(r => linkedHere.includes(String(r.id)) && r.link_project_id);
+                if (linkedHere.length && !savedOk) {
+                    alert('The workflow boards were created, but the links could not be saved because the database is missing the new column.\n\nRun this once in Supabase → SQL editor, then — without reloading this page — press Save on the board (it re-saves the links to the boards just created):\n\nalter table public.mural_elements add column if not exists link_project_id text;\nalter table public.mural_projects add column if not exists parent_id text;');
+                }
+            } catch (_) {}
+            if (notFound.length) {
+                if (st) { st.textContent = `Filled ${done}. Not matched: ${notFound.join(', ')}`; st.classList.add('bad'); }
+            } else {
+                document.getElementById('universalModal').classList.add('hidden');
+                try { localStorage.removeItem('os.mural.importDraft'); } catch (_) {}
+            }
+            toast(`Filled ${done} workflow board${done === 1 ? '' : 's'} — tap ↗ on an item to open it`);
+        } catch (err) {
+            console.error('Mural attach import failed', err);
+            toast('Import stopped part-way — paste again to finish (it fills the rest)');
+        } finally {
+            if (go) { go.disabled = false; go.textContent = 'Import'; }
+        }
+        return;
+    }
     try {
         // Place below the current content, lined up with its left edge.
         const shapes = muralElements.filter(e => e.type !== 'connector');
