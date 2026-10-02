@@ -30,6 +30,14 @@ must("document.getElementById('main')", "muralHost()")
 must("muralProjects = state.data.mural_projects || [];",
      "muralProjects = (state.data.mural_projects || []).map(_m2Clean).map(function (p) { if (!p.title && p.name) p.title = p.name; return p; });")
 
+# speed: board-scoped loading instead of reading every board
+must("const allEls = state.data.mural_elements || await apiGet('mural_elements');", "const allEls = await _m2SummaryEls();")
+must("""        const res = await apiGet('mural_elements');
+        // Sync with global state for dashboard counts
+        state.data.mural_elements = res || [];""", """        const res = await _m2BoardElements(muralActiveProjectId);""")
+must("const fresh = await apiGet('mural_elements');", "const fresh = await _m2BoardElements(muralActiveProjectId, true);")
+must("const all = await apiGet('mural_elements');", "const all = await _m2FamilyElements(ids);")
+
 if '</script' in js.lower():
     sys.exit('build: view-mural.js contains </script — would break the HTML file')
 

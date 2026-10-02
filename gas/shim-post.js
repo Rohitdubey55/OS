@@ -31,11 +31,12 @@ async function _m2AutoSave() {
     finally { _m2Saving = false; }
 }
 
-async function _m2Pull(pid) {
+async function _m2Pull(pid, preloaded) {
     if (_m2Pulling) return;
     _m2Pulling = true;
     try {
-        var b = await _m2run('mural2Board', pid);
+        var b = preloaded || await _m2run('mural2Board', pid);
+        if (!preloaded) try { _m2Local('b.' + pid, (b.elements || []).map(_m2Clean)); } catch (_) {}
         if (String(pid) !== String(muralActiveProjectId) || !document.getElementById('muralCanvas')) return;
         var remote = (b.elements || []).map(_m2Clean);
         var rs = {}; remote = remote.filter(function (e) { var k = String(e.id); if (rs[k]) return false; rs[k] = true; return true; });
@@ -105,12 +106,29 @@ async function _m2Tick() {
     try {
         await _m2AutoSave();
         var p = await _m2run('mural2Poll', pid);
+        _m2Others = (p.viewers || []).filter(function (e) { return e && e !== p.me; }).length;
         _m2RenderViewers(p.viewers, p.me);
         if (_m2Ver[pid] === undefined) { _m2Ver[pid] = p.version; return; }
         if (p.version > _m2Ver[pid] && !_m2Busy()) await _m2Pull(pid);
     } catch (e) { /* offline or quota — try again next tick */ }
 }
-setInterval(_m2Tick, 5000);
+// Every 5 s while someone is working, every 20 s after a minute of no activity
+var _m2LastActive = Date.now(), _m2LastTick = 0;
+['pointerdown', 'keydown', 'wheel'].forEach(function (t) { document.addEventListener(t, function () { _m2LastActive = Date.now(); }, { passive: true, capture: true }); });
+// How often to check for teammates' changes:
+//   others on the board + you active → 5 s · alone → 15 s · idle 2 min → 30 s · idle 10 min → stop (resumes on any click/key)
+var _m2Others = 0;
+function _m2Interval() {
+    var idle = Date.now() - _m2LastActive;
+    if (idle > 600000) return Infinity;
+    if (idle > 120000) return 30000;
+    return _m2Others > 0 ? 5000 : 15000;
+}
+setInterval(function () {
+    if (Date.now() - _m2LastTick < _m2Interval() - 200) return;
+    _m2LastTick = Date.now();
+    _m2Tick();
+}, 1000);
 
 window.addEventListener('beforeunload', function (e) {
     if (!muralActiveProjectId) return;
@@ -129,3 +147,6 @@ try {
     var ps = window.state.data.mural_projects;
     if (Array.isArray(ps)) ps.forEach(function (p) { if (!p.title && p.name) p.title = p.name; });
 })();
+
+// Changes are saved within ~3 s of being made, independent of the check interval (no server call if nothing changed)
+setInterval(function () { if (!document.hidden) _m2AutoSave(); }, 3000);

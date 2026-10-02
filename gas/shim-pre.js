@@ -59,7 +59,78 @@ function _m2Delta(pid, list) {
     return { upserts: upserts, deletes: deletes };
 }
 
+// ---------- speed: one summary call for the projects page + local copies ----------
+function _m2Local(key, val) {
+    try {
+        if (val === undefined) { var v = localStorage.getItem('m2c.' + key); return v ? JSON.parse(v) : null; }
+        localStorage.setItem('m2c.' + key, JSON.stringify(val));
+    } catch (e) {
+        // storage full → forget old board copies and carry on
+        try { Object.keys(localStorage).filter(function (k) { return k.indexOf('m2c.b.') === 0; }).forEach(function (k) { localStorage.removeItem(k); }); } catch (_) {}
+    }
+    return null;
+}
+var _m2SumPromise = null, _m2SumAt = 0, _m2Sum = _m2Local('summary');
+function _m2GetSummary(force) {
+    if (!force && _m2SumPromise && Date.now() - _m2SumAt < 4000) return _m2SumPromise;
+    _m2SumAt = Date.now();
+    _m2SumPromise = _m2run('mural2Summary').then(function (r) {
+        r.projects = (r.projects || []).map(_m2Clean).map(function (p) { if (!p.title && p.name) p.title = p.name; return p; });
+        r.categories = (r.categories || []).map(_m2Clean);
+        _m2Sum = r; _m2Local('summary', r);
+        return r;
+    });
+    return _m2SumPromise;
+}
+// Item counts for the project cards (from the summary, not by loading every board)
+async function _m2SummaryEls() {
+    var s = _m2Sum;
+    if (!s) s = await _m2GetSummary(true);
+    else if (Date.now() - _m2SumAt > 8000) {
+        // show what we have now, refresh the counts in the background
+        _m2GetSummary(true).then(function () {
+            if (!muralActiveProjectId && document.querySelector('.mural-dashboard')) renderMuralDashboard();
+        }).catch(function () {});
+    }
+    var out = [];
+    Object.keys(s.counts || {}).forEach(function (pid) {
+        var c = s.counts[pid];
+        for (var i = 0; i < c.n; i++) out.push({ project_id: pid, color: c.colors[i % Math.max(1, c.colors.length)] });
+    });
+    return out;
+}
+// One board's items. Shows the local copy instantly, then refreshes from the server.
+async function _m2BoardElements(pid, fresh) {
+    pid = String(pid);
+    var local = fresh ? null : _m2Local('b.' + pid);
+    var fetchIt = _m2run('mural2Board', pid).then(function (b) {
+        var els = (b.elements || []).map(_m2Clean);
+        _m2Local('b.' + pid, els);
+        return { version: b.version, elements: els };
+    });
+    if (local && local.length) {
+        local.forEach(_m2SetBase);
+        fetchIt.then(function (b) { setTimeout(function () { _m2Pull(pid, b); }, 0); }).catch(function () {});
+        return local.map(function (e) { return Object.assign({}, e); });
+    }
+    var b = await fetchIt;
+    b.elements.forEach(_m2SetBase);
+    _m2Ver[pid] = b.version;
+    return b.elements;
+}
+// Items of several boards (board + sub-boards for the board-file export)
+async function _m2FamilyElements(ids) {
+    var by = await _m2run('mural2Boards', (ids || []).map(String));
+    var out = [];
+    Object.keys(by || {}).forEach(function (pid) { (by[pid] || []).forEach(function (e) { out.push(_m2Clean(e)); }); });
+    return out;
+}
+
 async function apiGet(key) {
+    if (key === 'mural_projects' || key === 'mural_categories') {
+        var sum = await _m2GetSummary(true);
+        return key === 'mural_projects' ? sum.projects : sum.categories;
+    }
     var rows = await _m2run('mural2Get', key);
     rows = (rows || []).map(_m2Clean);
     // one object per id (older saves could duplicate rows)

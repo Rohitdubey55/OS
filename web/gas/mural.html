@@ -2493,7 +2493,78 @@ function _m2Delta(pid, list) {
     return { upserts: upserts, deletes: deletes };
 }
 
+// ---------- speed: one summary call for the projects page + local copies ----------
+function _m2Local(key, val) {
+    try {
+        if (val === undefined) { var v = localStorage.getItem('m2c.' + key); return v ? JSON.parse(v) : null; }
+        localStorage.setItem('m2c.' + key, JSON.stringify(val));
+    } catch (e) {
+        // storage full → forget old board copies and carry on
+        try { Object.keys(localStorage).filter(function (k) { return k.indexOf('m2c.b.') === 0; }).forEach(function (k) { localStorage.removeItem(k); }); } catch (_) {}
+    }
+    return null;
+}
+var _m2SumPromise = null, _m2SumAt = 0, _m2Sum = _m2Local('summary');
+function _m2GetSummary(force) {
+    if (!force && _m2SumPromise && Date.now() - _m2SumAt < 4000) return _m2SumPromise;
+    _m2SumAt = Date.now();
+    _m2SumPromise = _m2run('mural2Summary').then(function (r) {
+        r.projects = (r.projects || []).map(_m2Clean).map(function (p) { if (!p.title && p.name) p.title = p.name; return p; });
+        r.categories = (r.categories || []).map(_m2Clean);
+        _m2Sum = r; _m2Local('summary', r);
+        return r;
+    });
+    return _m2SumPromise;
+}
+// Item counts for the project cards (from the summary, not by loading every board)
+async function _m2SummaryEls() {
+    var s = _m2Sum;
+    if (!s) s = await _m2GetSummary(true);
+    else if (Date.now() - _m2SumAt > 8000) {
+        // show what we have now, refresh the counts in the background
+        _m2GetSummary(true).then(function () {
+            if (!muralActiveProjectId && document.querySelector('.mural-dashboard')) renderMuralDashboard();
+        }).catch(function () {});
+    }
+    var out = [];
+    Object.keys(s.counts || {}).forEach(function (pid) {
+        var c = s.counts[pid];
+        for (var i = 0; i < c.n; i++) out.push({ project_id: pid, color: c.colors[i % Math.max(1, c.colors.length)] });
+    });
+    return out;
+}
+// One board's items. Shows the local copy instantly, then refreshes from the server.
+async function _m2BoardElements(pid, fresh) {
+    pid = String(pid);
+    var local = fresh ? null : _m2Local('b.' + pid);
+    var fetchIt = _m2run('mural2Board', pid).then(function (b) {
+        var els = (b.elements || []).map(_m2Clean);
+        _m2Local('b.' + pid, els);
+        return { version: b.version, elements: els };
+    });
+    if (local && local.length) {
+        local.forEach(_m2SetBase);
+        fetchIt.then(function (b) { setTimeout(function () { _m2Pull(pid, b); }, 0); }).catch(function () {});
+        return local.map(function (e) { return Object.assign({}, e); });
+    }
+    var b = await fetchIt;
+    b.elements.forEach(_m2SetBase);
+    _m2Ver[pid] = b.version;
+    return b.elements;
+}
+// Items of several boards (board + sub-boards for the board-file export)
+async function _m2FamilyElements(ids) {
+    var by = await _m2run('mural2Boards', (ids || []).map(String));
+    var out = [];
+    Object.keys(by || {}).forEach(function (pid) { (by[pid] || []).forEach(function (e) { out.push(_m2Clean(e)); }); });
+    return out;
+}
+
 async function apiGet(key) {
+    if (key === 'mural_projects' || key === 'mural_categories') {
+        var sum = await _m2GetSummary(true);
+        return key === 'mural_projects' ? sum.projects : sum.categories;
+    }
     var rows = await _m2run('mural2Get', key);
     rows = (rows || []).map(_m2Clean);
     // one object per id (older saves could duplicate rows)
@@ -2648,7 +2719,7 @@ async function renderMuralDashboard() {
     // Count elements per project — use preloaded data
     let elementCounts = {};
     try {
-        const allEls = state.data.mural_elements || await apiGet('mural_elements');
+        const allEls = await _m2SummaryEls();
         (allEls || []).forEach(el => {
             const pid = String(el.project_id);
             elementCounts[pid] = (elementCounts[pid] || 0) + 1;
@@ -3099,9 +3170,7 @@ window.hideMuralAppChrome = hideMuralAppChrome;
 async function loadMuralElements() {
     try {
         // Always fetch fresh data for mural elements to avoid stale UI
-        const res = await apiGet('mural_elements');
-        // Sync with global state for dashboard counts
-        state.data.mural_elements = res || [];
+        const res = await _m2BoardElements(muralActiveProjectId);
         muralElements = (res || []).filter(el => String(el.project_id) === String(muralActiveProjectId));
         renderMuralElementsDOM();
     } catch (err) {
@@ -4348,7 +4417,7 @@ async function muralRunImport() {
             highlightMuralElements(muralSelectedElementIds);
             // Check the links really saved (needs the link_project_id column in the database).
             try {
-                const fresh = await apiGet('mural_elements');
+                const fresh = await _m2BoardElements(muralActiveProjectId, true);
                 const linkedHere = muralElements.filter(e => e.link_project_id).map(e => String(e.id));
                 const savedOk = (fresh || []).some(r => linkedHere.includes(String(r.id)) && r.link_project_id);
                 if (linkedHere.length && !savedOk) {
@@ -4433,7 +4502,7 @@ async function muralExportBoardFile() {
             if (String(c.id) === String(rootId)) c.parent_id = null; // becomes a top-level board on import
             return c;
         });
-        const all = await apiGet('mural_elements');
+        const all = await _m2FamilyElements(ids);
         const elements = (all || []).filter(e => idSet.has(String(e.project_id))).map(strip);
         const root = projects.find(p => String(p.id) === String(rootId));
         const data = { muralBoardExport: 1, exported_at: new Date().toISOString(), root: String(rootId),
@@ -7844,11 +7913,12 @@ async function _m2AutoSave() {
     finally { _m2Saving = false; }
 }
 
-async function _m2Pull(pid) {
+async function _m2Pull(pid, preloaded) {
     if (_m2Pulling) return;
     _m2Pulling = true;
     try {
-        var b = await _m2run('mural2Board', pid);
+        var b = preloaded || await _m2run('mural2Board', pid);
+        if (!preloaded) try { _m2Local('b.' + pid, (b.elements || []).map(_m2Clean)); } catch (_) {}
         if (String(pid) !== String(muralActiveProjectId) || !document.getElementById('muralCanvas')) return;
         var remote = (b.elements || []).map(_m2Clean);
         var rs = {}; remote = remote.filter(function (e) { var k = String(e.id); if (rs[k]) return false; rs[k] = true; return true; });
@@ -7918,12 +7988,29 @@ async function _m2Tick() {
     try {
         await _m2AutoSave();
         var p = await _m2run('mural2Poll', pid);
+        _m2Others = (p.viewers || []).filter(function (e) { return e && e !== p.me; }).length;
         _m2RenderViewers(p.viewers, p.me);
         if (_m2Ver[pid] === undefined) { _m2Ver[pid] = p.version; return; }
         if (p.version > _m2Ver[pid] && !_m2Busy()) await _m2Pull(pid);
     } catch (e) { /* offline or quota — try again next tick */ }
 }
-setInterval(_m2Tick, 5000);
+// Every 5 s while someone is working, every 20 s after a minute of no activity
+var _m2LastActive = Date.now(), _m2LastTick = 0;
+['pointerdown', 'keydown', 'wheel'].forEach(function (t) { document.addEventListener(t, function () { _m2LastActive = Date.now(); }, { passive: true, capture: true }); });
+// How often to check for teammates' changes:
+//   others on the board + you active → 5 s · alone → 15 s · idle 2 min → 30 s · idle 10 min → stop (resumes on any click/key)
+var _m2Others = 0;
+function _m2Interval() {
+    var idle = Date.now() - _m2LastActive;
+    if (idle > 600000) return Infinity;
+    if (idle > 120000) return 30000;
+    return _m2Others > 0 ? 5000 : 15000;
+}
+setInterval(function () {
+    if (Date.now() - _m2LastTick < _m2Interval() - 200) return;
+    _m2LastTick = Date.now();
+    _m2Tick();
+}, 1000);
 
 window.addEventListener('beforeunload', function (e) {
     if (!muralActiveProjectId) return;
@@ -7942,5 +8029,8 @@ try {
     var ps = window.state.data.mural_projects;
     if (Array.isArray(ps)) ps.forEach(function (p) { if (!p.title && p.name) p.title = p.name; });
 })();
+
+// Changes are saved within ~3 s of being made, independent of the check interval (no server call if nothing changed)
+setInterval(function () { if (!document.hidden) _m2AutoSave(); }, 3000);
 
 </script>
