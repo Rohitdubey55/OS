@@ -1483,12 +1483,12 @@ function renderTemplatesList() {
         const shown = outline.slice(0, 4);
         return `
         <div class="drtp-card" style="--c:${color}" role="button" tabindex="0" title="Use this template"
-             onclick="useTemplate(${t.id})" onkeydown="if(event.key==='Enter'){useTemplate(${t.id})}">
+             onclick="useTemplate('${_drpEsc(String(t.id))}')" onkeydown="if(event.key==='Enter'){useTemplate('${_drpEsc(String(t.id))}')}">
           <div class="drtp-top">
             <span class="drtp-cat"><i data-lucide="${icon}"></i>${_drpEsc(t.category || 'general')}</span>
             <div class="drtp-acts">
-              <button class="drtp-act" title="Edit template" onclick="event.stopPropagation(); editTemplate(${t.id})"><i data-lucide="pencil"></i></button>
-              <button class="drtp-act del" title="Delete template" onclick="event.stopPropagation(); deleteTemplate(${t.id})"><i data-lucide="trash-2"></i></button>
+              <button class="drtp-act" title="Edit template" onclick="event.stopPropagation(); editTemplate('${_drpEsc(String(t.id))}')"><i data-lucide="pencil"></i></button>
+              <button class="drtp-act del" title="Delete template" onclick="event.stopPropagation(); deleteTemplate('${_drpEsc(String(t.id))}')"><i data-lucide="trash-2"></i></button>
             </div>
           </div>
           <div class="drtp-title">${_drpEsc(t.title || 'Untitled')}</div>
@@ -1504,71 +1504,108 @@ function renderTemplatesList() {
   `;
 }
 
+function _drTplById(id) { return (state.data.diary_templates || []).find(x => String(x.id) === String(id)); }
+
 window.useTemplate = function (id) {
-  const templates = state.data.diary_templates || [];
-  const t = templates.find(x => x.id === id);
+  const t = _drTplById(id);
   if (t) openDiaryModal(null, drToEditorHTML(t.content));
 };
 
 window.editTemplate = function (id) {
-  const templates = state.data.diary_templates || [];
-  const t = templates.find(x => x.id === id);
-  openTemplateModal(t);
+  const t = _drTplById(id);
+  if (t) openTemplateModal(t);
 };
 
 window.deleteTemplate = async function (id) {
-  if (confirm('Delete this template?')) {
-    await apiCall('delete', 'diary_templates', null, id);
-    await refreshData('diary_templates');
-    renderDiary();
-  }
+  const t = _drTplById(id);
+  if (!confirm(`Delete the template "${t ? t.title : ''}"? This can't be undone.`)) return;
+  await apiCall('delete', 'diary_templates', null, t ? t.id : id);
+  const m = _drwModal();
+  if (m && m.querySelector('.drw--tpl')) m.classList.add('hidden');
+  await refreshData('diary_templates');
+  if (!state.view || state.view === 'diary') renderDiary();
 };
 
+/* Template editor — same writing surface as a journal entry. */
 window.openTemplateModal = function (template = null) {
-  const modal = document.getElementById('universalModal');
-  const box = modal.querySelector('.modal-box');
+  const t = template || {};
+  const cat = String(t.category || 'reflection').toLowerCase();
+  const cats = Object.keys(DR_TPL_CATS);
+  const catList = cats.includes(cat) ? cats : [cat, ...cats];
+  const idArg = template ? `'${_drpEsc(String(t.id))}'` : 'null';
+  const html = _drwShell({
+    kind: 'tpl',
+    crumb: `<span>Templates</span><i data-lucide="chevron-right"></i><b>${template ? 'Edit template' : 'New template'}</b>`,
+    save: `<button type="button" class="drw-save" onclick="saveTemplate(${idArg})">${template ? 'Save changes' : 'Create template'}</button>`,
+    doc: `
+      <div class="drw-eyebrow"><i data-lucide="file-text"></i>Template</div>
+      <input class="drw-title" id="mTemplateTitle" placeholder="Untitled template" value="${_drpEsc(t.title || '')}" autocomplete="off">
+      <div class="dr-write-zone drw-zone">
+        ${drToolbarHTML()}
+        <div class="rich-editor drx-editor drw-editor" id="mTemplateContent" contenteditable="true" placeholder="Add headings and prompts. Type / for blocks.">${drToEditorHTML(t.content || '')}</div>
+      </div>`,
+    side: `
+      <section class="drw-sec">
+        <div class="drw-h">Category</div>
+        <input type="hidden" id="mTemplateCategory" value="${_drpEsc(cat)}">
+        <div class="drw-cats">${catList.map(c => {
+          const [col, ic] = _drTplCat(c);
+          return `<button type="button" class="drw-cat ${c === cat ? 'on' : ''}" style="--c:${col}" data-cat="${_drpEsc(c)}" onclick="drwPickCat(this)"><i data-lucide="${ic}"></i>${_drpEsc(c)}</button>`;
+        }).join('')}</div>
+      </section>
+      <section class="drw-sec">
+        <div class="drw-h">Outline</div>
+        <ol class="drw-outline" id="drwOutline"></ol>
+        <p class="drw-hint">Headings become the outline shown on the template card.</p>
+      </section>
+      ${_drwMetaHTML()}
+      ${template ? `<section class="drw-sec drw-danger"><button type="button" class="drw-del" onclick="deleteTemplate('${_drpEsc(String(t.id))}')"><i data-lucide="trash-2"></i>Delete template</button></section>` : ''}`
+  });
+  _drwMount(html, {
+    focusEnd: !!template,
+    onInput: ed => {
+      const ol = document.getElementById('drwOutline');
+      if (!ol) return;
+      const o = _drTplOutline(ed.innerHTML);
+      ol.innerHTML = o.length ? o.slice(0, 12).map(x => `<li>${_drpEsc(x)}</li>`).join('') + (o.length > 12 ? `<li class="empty">+${o.length - 12} more</li>` : '')
+        : '<li class="empty">Add a heading to start the outline</li>';
+    }
+  });
+  if (!template) setTimeout(() => document.getElementById('mTemplateTitle')?.focus(), 30);
+};
 
-  box.innerHTML = `
-    <h3>${template ? 'Edit Template' : 'New Template'}</h3>
-    <input class="input" id="mTemplateTitle" placeholder="Title" value="${_drpEsc(template?.title || '')}">
-    <select class="input" id="mTemplateCategory">
-      <option value="reflection" ${template?.category === 'reflection' ? 'selected' : ''}>Reflection</option>
-      <option value="goals" ${template?.category === 'goals' ? 'selected' : ''}>Goals</option>
-      <option value="gratitude" ${template?.category === 'gratitude' ? 'selected' : ''}>Gratitude</option>
-    </select>
-    <div class="dr-write-zone drx-tpl-zone">
-      ${drToolbarHTML()}
-      <div class="rich-editor dr-zone-editor drx-editor" id="mTemplateContent" contenteditable="true"
-           placeholder="Write the template — headings, colours and checklists are kept.">${drToEditorHTML(template?.content || '')}</div>
-    </div>
-    <div style="display:flex; gap:10px; margin-top:16px;">
-      <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-      <button class="btn primary" onclick="saveTemplate(${template?.id || 'null'})">Save</button>
-    </div>
-  `;
-  modal.classList.remove('hidden');
-  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+window.drwPickCat = function (btn) {
+  document.getElementById('mTemplateCategory').value = btn.dataset.cat;
+  btn.parentElement.querySelectorAll('.drw-cat').forEach(b => b.classList.toggle('on', b === btn));
+  _drwDirty();
 };
 
 window.saveTemplate = async function (existingId) {
-  const title = document.getElementById('mTemplateTitle').value;
-  const category = document.getElementById('mTemplateCategory').value;
+  const title = (document.getElementById('mTemplateTitle').value || '').trim();
+  const category = document.getElementById('mTemplateCategory').value || 'reflection';
   const contentEl = document.getElementById('mTemplateContent');
   const content = (contentEl && (contentEl.innerText || '').trim()) ? drRichValue(contentEl) : '';
+  if (!title) return _drwFlag('mTemplateTitle', 'Give the template a name');
+  if (!content) return _drwFlag('mTemplateContent', 'Add some content first');
 
-  if (!title || !content) return alert('Fill all fields');
-
-  const payload = { title, category, content, is_default: false, sort_order: 1 };
-
-  if (existingId && existingId !== 'null') {
-    await apiCall('update', 'diary_templates', payload, existingId);
-  } else {
-    await apiCall('create', 'diary_templates', payload);
+  const editing = existingId != null && existingId !== 'null';
+  const btn = document.querySelector('#universalModal .drw-save');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    if (editing) {
+      const t = _drTplById(existingId);
+      await apiCall('update', 'diary_templates', { title, category, content }, t ? t.id : existingId);
+    } else {
+      await apiCall('create', 'diary_templates', { title, category, content, is_default: false, sort_order: 1 });
+    }
+    _drwModal().classList.add('hidden');
+    if (typeof showToast === 'function') showToast(editing ? 'Template saved' : 'Template created');
+    await refreshData('diary_templates');
+    if (!state.view || state.view === 'diary') renderDiary();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = editing ? 'Save changes' : 'Create template'; }
+    _drwFlag(null, 'Could not save: ' + ((err && err.message) || err));
   }
-
-  document.getElementById('universalModal').classList.add('hidden');
-  await refreshData('diary_templates');
-  renderDiary();
 };
 
 window.openTagModal = function () {
@@ -1602,101 +1639,196 @@ window.filterByTag = function (tag) {
   renderDiary();
 };
 
-// Modal functions
-window.openDiaryModal = function (dateStr, templateContent = '') {
-  const modal = document.getElementById('universalModal');
-  const box = modal.querySelector('.modal-box');
-  const defaultDate = dateStr || diaryLocalDate();
+/* ═══ WRITER ═══════════════════════════════════════════════════════════════
+   One full-screen writing surface for journal entries and templates: a
+   document canvas with a sticky toolbar, and a details rail (mood, tags,
+   templates, your day) that stacks under the text on a phone. Field ids are
+   the same as before, so the save / update handlers in main.js still work. */
+function _drwModal() { return document.getElementById('universalModal'); }
+function _drwFmtDate(ds) {
+  const d = _drpParse(ds);
+  return isNaN(d) ? String(ds || '') : d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+function _drwWords(ed) { const t = ((ed && (ed.innerText || ed.textContent)) || '').trim(); return t ? t.split(/\s+/).length : 0; }
+function _drwDirty() {
+  const root = document.querySelector('#universalModal .drw');
+  if (!root) return;
+  root.dataset.dirty = '1';
+  const st = document.getElementById('drwStatus');
+  if (st) { st.classList.remove('err'); st.innerHTML = '<i></i>Unsaved changes'; }
+}
+function _drwFlag(id, msg) {
+  const el = id && document.getElementById(id);
+  if (el) { el.classList.add('drw-err'); el.focus(); setTimeout(() => el.classList.remove('drw-err'), 1600); }
+  const st = document.getElementById('drwStatus');
+  if (st) { st.textContent = msg; st.classList.add('err'); }
+}
 
-  // Get settings
-  const settings = state.data.settings?.[0] || {};
-  const defaultMood = settings.diary_default_mood || '5';
-  const showTasks = settings.diary_show_tasks !== false;
-  const showHabits = settings.diary_show_habits !== false;
-  const showExpenses = settings.diary_show_expenses !== false;
-
-  const templates = state.data.diary_templates || [];
-  const contextData = getContextData(defaultDate);
-  const ex = drpEditorExtrasHTML(null, false);
-
-  box.innerHTML = `
-    <div class="dr-modal">
-      <!-- Top Bar: Cancel / Date / Save -->
-      <div class="dr-modal-bar">
-        <button class="dr-modal-dismiss" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <input type="date" class="dr-modal-date-chip" id="mDiaryDate" value="${defaultDate}">
-        <button class="dr-modal-save-top" data-action="save-diary-modal">Save</button>
+function _drwShell({ kind, crumb, save, doc, side }) {
+  return `
+  <div class="drw drw--${kind}">
+    <header class="drw-bar">
+      <button type="button" class="drw-x" onclick="drwCancel()" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+      <div class="drw-crumb">${crumb}</div>
+      <div class="drw-bar-r">
+        <span class="drw-status" id="drwStatus"></span>
+        <span class="drw-kbd" title="Save with Cmd/Ctrl + Enter">⌘ ↵</span>
+        ${save}
       </div>
-
-      <div class="dr-side">
-        ${ex.moods}
-        ${ex.prompt}
-        ${templates.length > 0 ? `
-        <select class="dr-template-select" id="templateSelect" onchange="loadTemplateInModal(this.value)">
-          <option value="">Use a template...</option>
-          ${templates.map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
-        </select>
-        ` : ''}
-
-        ${((showTasks && contextData.tasks?.length) || (showHabits && contextData.habits?.length) || (showExpenses && contextData.expenses > 0)) ? `
-        <div class="dr-side-label">Today</div>
-        <div class="dr-context-chips">
-          ${showTasks && contextData.tasks?.length ? `<span class="dr-context-chip is-task">✓ ${contextData.tasks.length} task${contextData.tasks.length > 1 ? 's' : ''} done</span>` : ''}
-          ${showHabits && contextData.habits?.length ? `<span class="dr-context-chip is-habit">◎ ${contextData.habits.length} habit${contextData.habits.length > 1 ? 's' : ''}</span>` : ''}
-          ${showExpenses && contextData.expenses > 0 ? `<span class="dr-context-chip is-spend">💸 ₹${(contextData.expenses || 0).toFixed(2)} spent</span>` : ''}
-        </div>` : ''}
-
-        <div class="dr-side-label">Mood</div>
-        <!-- Compact Mood Strip -->
-        <div class="dr-mood-strip">
-          <span id="moodEmoji" class="dr-mood-big-emoji">${getMoodEmoji(defaultMood)}</span>
-          <div class="dr-mood-slider-col">
-            <input type="range" min="1" max="10" value="${defaultMood}" class="mood-slider dr-mood-slider" id="mMoodScore"
-              oninput="updateMoodDisplay(this.value)">
-            <div class="dr-mood-ends"><span>Awful</span><span>Amazing</span></div>
-          </div>
-          <span id="moodVal" class="dr-mood-big-num">${defaultMood}</span>
-        </div>
-      </div>
-
-      <!-- Write Zone — Full Space Editor -->
-      <div class="dr-write-zone">
-        ${drToolbarHTML({ dateStr: defaultDate })}
-        <div class="rich-editor dr-zone-editor drx-editor" id="mDiaryText" contenteditable="true"
-             placeholder="${_drIsPhone() ? 'Write freely — one line is enough.' : "What's on your mind..."}">${templateContent}</div>
-        <div class="dr-zone-footer">
-          <input class="dr-zone-tags" id="mDiaryTags" placeholder="#tags (comma separated)">
-          <span class="dr-zone-wc" id="diaryWordCount">0 words</span>
-        </div>
-      </div>
-      ${ex.tags}
+    </header>
+    <div class="drw-body">
+      <main class="drw-main"><div class="drw-doc">${doc}</div></main>
+      <aside class="drw-side">${side}</aside>
     </div>
-  `;
+  </div>`;
+}
 
-  // Word count listener
-  const editor = document.getElementById('mDiaryText');
-  editor.addEventListener('input', () => {
-    const text = editor.innerText || '';
-    const count = text.trim() ? text.trim().split(/\s+/).length : 0;
-    document.getElementById('diaryWordCount').textContent = `${count} words`;
-  });
-
+function _drwMount(html, { focusEnd = true, onInput } = {}) {
+  const modal = _drwModal();
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = html;
   modal.classList.remove('hidden');
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+  const root = box.querySelector('.drw');
+  const ed = root.querySelector('.drx-editor');
+  const sync = () => {
+    const n = _drwWords(ed);
+    const wc = document.getElementById('diaryWordCount'); if (wc) wc.textContent = `${n} ${n === 1 ? 'word' : 'words'}`;
+    const rt = document.getElementById('drwRead'); if (rt) rt.textContent = `${Math.max(1, Math.round(n / 200))} min read`;
+    if (onInput) onInput(ed);
+  };
+  ed.addEventListener('input', () => { sync(); _drwDirty(); });
+  root.querySelectorAll('.drw-side input, .drw-doc input').forEach(el => el.addEventListener('input', _drwDirty));
+  root.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); root.querySelector('.drw-save')?.click(); }
+    else if (e.key === 'Escape' && !_drxSlash) { e.preventDefault(); drwCancel(); }
+  });
+  sync();
+  if (focusEnd && !_drIsPhone()) {
+    ed.focus({ preventScroll: true });
+    const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+  return { root, ed };
+}
+
+window.drwCancel = function () {
+  const root = document.querySelector('#universalModal .drw');
+  if (root && root.dataset.dirty && !confirm('Discard your changes?')) return;
+  _drwModal().classList.add('hidden');
 };
 
-// Load template in modal
+// 1–10 → one of the five faces (5 reads as Okay, not Low)
+function _drwFace(v) { const t = Math.min(10, Math.max(2, Math.round(Number(v) / 2) * 2)); return DRP_MOODS.find(m => m.v === t) || null; }
+
+function _drwMoodHTML(score) {
+  const has = score != null && score !== '' && !isNaN(Number(score));
+  const cur = has ? Number(score) : 5;
+  const face = has ? _drwFace(cur) : null;
+  return `
+  <section class="drw-sec">
+    <div class="drw-h">Mood</div>
+    <div class="drw-mood">
+      <span id="moodEmoji" class="drw-mood-emoji">${getMoodEmoji(cur)}</span>
+      <div class="drw-mood-num"><b id="moodVal">${cur}</b><span>/ 10</span></div>
+    </div>
+    <div class="drw-faces">${DRP_MOODS.map(m => `<button type="button" class="drw-face ${face && face.v === m.v ? 'on' : ''}" data-v="${m.v}" style="--c:${m.c}" onclick="drpSetMood(${m.v})" title="${m.l}"><span>${m.e}</span><em>${m.l}</em></button>`).join('')}</div>
+    <input type="range" min="1" max="10" step="1" value="${cur}" class="drw-range" id="mMoodScore" aria-label="Mood from 1 to 10" oninput="drwMoodSlide(this.value)">
+  </section>`;
+}
+window.drwMoodSlide = function (v) {
+  v = Number(v);
+  updateMoodDisplay(v);
+  const f = _drwFace(v);
+  document.querySelectorAll('.drw-face').forEach(b => b.classList.toggle('on', f && +b.dataset.v === f.v));
+};
+
+function _drwTagsHTML(value) {
+  const tagCount = {};
+  (state.data.diary || []).forEach(e => String(e.tags || '').split(/[,\s]+/).map(t => t.replace(/^#+/, '').trim()).filter(Boolean).forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  const top = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([t]) => t);
+  return `
+  <section class="drw-sec">
+    <div class="drw-h">Tags</div>
+    <label class="drw-field"><i data-lucide="hash"></i><input id="mDiaryTags" value="${_drpEsc(value || '')}" placeholder="work, health, family" autocomplete="off"></label>
+    ${top.length ? `<div class="drw-suggest">${top.map(t => `<button type="button" onclick="drpAddTag('${_drpEsc(t).replace(/'/g, "\\'")}'); this.classList.add('on')">#${_drpEsc(t)}</button>`).join('')}</div>` : ''}
+  </section>`;
+}
+
+function _drwTplPickHTML() {
+  const ts = state.data.diary_templates || [];
+  if (!ts.length) return '';
+  return `
+  <section class="drw-sec">
+    <div class="drw-h">Start from a template</div>
+    <div class="drw-tpls">${ts.map(t => {
+      const [c, ic] = _drTplCat(t.category);
+      return `<button type="button" class="drw-tpl" style="--c:${c}" onclick="loadTemplateInModal('${_drpEsc(String(t.id))}')"><span class="drw-tpl-ic"><i data-lucide="${ic}"></i></span><span>${_drpEsc(t.title || 'Untitled')}</span></button>`;
+    }).join('')}</div>
+  </section>`;
+}
+
+function _drwContextHTML(ds) {
+  const settings = state.data.settings?.[0] || {};
+  let c = {};
+  try { c = getContextData(ds) || {}; } catch (e) { }
+  const items = [];
+  if (settings.diary_show_tasks !== false && c.tasks?.length) items.push(`<span class="drw-ctx is-task"><i data-lucide="circle-check"></i>${c.tasks.length} task${c.tasks.length > 1 ? 's' : ''} done</span>`);
+  if (settings.diary_show_habits !== false && c.habits?.length) items.push(`<span class="drw-ctx is-habit"><i data-lucide="repeat"></i>${c.habits.length} habit${c.habits.length > 1 ? 's' : ''}</span>`);
+  if (settings.diary_show_expenses !== false && c.expenses > 0) items.push(`<span class="drw-ctx is-spend"><i data-lucide="wallet"></i>₹${Number(c.expenses).toFixed(0)} spent</span>`);
+  return items.length ? `<section class="drw-sec"><div class="drw-h">From your day</div><div class="drw-ctxs">${items.join('')}</div></section>` : '';
+}
+
+function _drwMetaHTML() {
+  return `
+  <section class="drw-sec">
+    <div class="drw-h">Writing</div>
+    <div class="drw-stat"><b id="diaryWordCount">0 words</b><span id="drwRead">1 min read</span></div>
+    <p class="drw-hint">Type <kbd>/</kbd> for blocks, <kbd>#</kbd> for a heading, <kbd>-</kbd> for a list, <kbd>---</kbd> for a divider. <kbd>⌘</kbd><kbd>↵</kbd> saves.</p>
+  </section>`;
+}
+
+function _drwEntryDoc(ds, content, placeholder) {
+  return `
+    <div class="drw-eyebrow"><i data-lucide="book-open"></i>Journal</div>
+    <label class="drw-date" title="Change date">
+      <span id="drwDateLbl">${_drwFmtDate(ds)}</span><i data-lucide="chevron-down"></i>
+      <input type="date" id="mDiaryDate" value="${ds}" onchange="document.getElementById('drwDateLbl').textContent = _drwFmtDate(this.value)" onclick="try { this.showPicker(); } catch (e) { }">
+    </label>
+    <div class="dr-write-zone drw-zone">
+      ${drToolbarHTML({ dateStr: ds })}
+      <div class="rich-editor drx-editor drw-editor" id="mDiaryText" contenteditable="true" placeholder="${placeholder}">${content}</div>
+    </div>`;
+}
+
+// Modal functions
+window.openDiaryModal = function (dateStr, templateContent = '') {
+  const ds = dateStr || diaryLocalDate();
+  const settings = state.data.settings?.[0] || {};
+  const dm = settings.diary_default_mood;
+  const html = _drwShell({
+    kind: 'entry',
+    crumb: `<span>Journal</span><i data-lucide="chevron-right"></i><b>New entry</b>`,
+    save: `<button type="button" class="drw-save" data-action="save-diary-modal">Save entry</button>`,
+    doc: _drwEntryDoc(ds, templateContent, _drpEsc(_drpPrompt()) + ' Type / for blocks.'),
+    side: _drwMoodHTML(dm != null && dm !== '' ? dm : null) + _drwTagsHTML('') + _drwTplPickHTML() + _drwContextHTML(ds) + _drwMetaHTML()
+  });
+  _drwMount(html);
+};
+
+// Load a template into the open entry
 window.loadTemplateInModal = function (templateId) {
-  if (!templateId) return;
-  const templates = state.data.diary_templates || [];
-  const t = templates.find(x => x.id == templateId);
-  if (t && t.content) {
-    const editor = document.getElementById('mDiaryText');
-    if (editor) { editor.innerHTML = drToEditorHTML(t.content); editor.dispatchEvent(new Event('input', { bubbles: true })); }
-  }
+  const t = _drTplById(templateId);
+  const editor = document.getElementById('mDiaryText');
+  if (!t || !editor) return;
+  if ((editor.innerText || '').trim() && !confirm('Replace what you have written with this template?')) return;
+  editor.innerHTML = drToEditorHTML(t.content);
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+  editor.focus();
 };
 
 window.updateMoodDisplay = function (value) {
+  value = Number(value);
   const emojiEl = document.getElementById('moodEmoji');
   const valEl = document.getElementById('moodVal');
   if (emojiEl) {
@@ -1714,60 +1846,25 @@ window.formatText = function (cmd) {
 window.openEditDiary = function (id) {
   const e = (state.data.diary || []).find(x => String(x.id) === String(id));
   if (!e) return;
-
-  const modal = document.getElementById('universalModal');
-  const box = modal.querySelector('.modal-box');
-  const score = _drMood(e) != null ? _drMood(e) : 5;
-  const ex = drpEditorExtrasHTML(_drMood(e), true);
-
-  box.innerHTML = `
-    <div class="dr-modal">
-      <!-- Top Bar: Cancel / Date / Update -->
-      <div class="dr-modal-bar">
-        <button class="dr-modal-dismiss" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
-        <input type="date" class="dr-modal-date-chip" id="mDiaryDate" value="${(e.date || '').slice(0, 10)}">
-        <button class="dr-modal-save-top" data-action="update-diary-modal" data-edit-id="${e.id}">Update</button>
-      </div>
-
-      <div class="dr-side">
-        ${ex.moods}
-        <div class="dr-side-label">Mood</div>
-        <!-- Compact Mood Strip -->
-        <div class="dr-mood-strip">
-          <span id="moodEmoji" class="dr-mood-big-emoji">${getMoodEmoji(score)}</span>
-          <div class="dr-mood-slider-col">
-            <input type="range" min="1" max="10" value="${score}" class="mood-slider dr-mood-slider" id="mMoodScore"
-              oninput="updateMoodDisplay(this.value)">
-            <div class="dr-mood-ends"><span>Awful</span><span>Amazing</span></div>
-          </div>
-          <span id="moodVal" class="dr-mood-big-num">${score}</span>
-        </div>
-      </div>
-
-      <!-- Write Zone — Full Space Editor -->
-      <div class="dr-write-zone">
-        ${drToolbarHTML({ dateStr: (e.date || '').slice(0, 10) })}
-        <div class="rich-editor dr-zone-editor drx-editor" id="mDiaryText" contenteditable="true">${drToEditorHTML(e.content)}</div>
-        <div class="dr-zone-footer">
-          <input class="dr-zone-tags" id="mDiaryTags" value="${(e.tags || '')}" placeholder="#tags (comma separated)">
-          <span class="dr-zone-wc" id="diaryWordCount">${_drStripMd(e.content).split(/\s+/).filter(Boolean).length} words</span>
-        </div>
-      </div>
-      ${ex.tags}
-      <button type="button" class="drp-ed-del" onclick="document.getElementById('universalModal').classList.add('hidden'); deleteEntry('${e.id}')">Delete entry</button>
-    </div>
-  `;
-
-  const editor = document.getElementById('mDiaryText');
-  editor.addEventListener('input', () => {
-    const text = editor.innerText || '';
-    const count = text.trim() ? text.trim().split(/\s+/).length : 0;
-    const wc = document.getElementById('diaryWordCount');
-    if (wc) wc.textContent = `${count} words`;
+  const ds = (e.date || '').slice(0, 10);
+  const eid = _drpEsc(String(e.id));
+  const html = _drwShell({
+    kind: 'entry',
+    crumb: `<span>Journal</span><i data-lucide="chevron-right"></i><b>Edit entry</b>`,
+    save: `<button type="button" class="drw-save" data-action="update-diary-modal" data-edit-id="${eid}">Save changes</button>`,
+    doc: _drwEntryDoc(ds, drToEditorHTML(e.content), 'Write something… Type / for blocks.'),
+    side: _drwMoodHTML(_drMood(e)) + _drwTagsHTML(e.tags) + _drwContextHTML(ds) + _drwMetaHTML()
+      + `<section class="drw-sec drw-danger"><button type="button" class="drw-del" onclick="drwDeleteEntry('${eid}')"><i data-lucide="trash-2"></i>Delete entry</button></section>`
   });
+  _drwMount(html);
+};
 
-  modal.classList.remove('hidden');
-  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+window.drwDeleteEntry = async function (id) {
+  if (!confirm('Delete this entry? This can\'t be undone.')) return;
+  _drwModal().classList.add('hidden');
+  await apiCall('delete', 'diary', null, id);
+  await refreshData('diary');
+  if (!state.view || state.view === 'diary') renderDiary();
 };
 
 function getContextData(dateStr) {
@@ -2218,7 +2315,7 @@ window.drpSetMood = function (v) {
   const inp = document.getElementById('mMoodScore');
   if (inp) inp.value = v;
   if (typeof updateMoodDisplay === 'function') updateMoodDisplay(v);
-  document.querySelectorAll('.drp-ed-face').forEach(b => b.classList.toggle('on', +b.dataset.v === +v));
+  document.querySelectorAll('.drp-ed-face, .drw-face').forEach(b => b.classList.toggle('on', +b.dataset.v === +v));
 };
 window.drpShufflePrompt = function () {
   _drpPromptIdx = (_drpPromptIdx || 0) + 1;
@@ -2243,6 +2340,7 @@ window.drpAddTag = function (t) {
   const list = inp.value.split(',').map(x => x.trim()).filter(Boolean);
   if (!list.map(x => x.replace(/^#/, '')).includes(t)) list.push(t);
   inp.value = list.join(', ');
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
 };
 
 // Re-render when the window crosses the phone/desktop line.
@@ -2773,7 +2871,7 @@ const DRX_SENTINEL = '#010203';            // used to strip a colour back to def
 const DRX_SENTINEL_RGB = 'rgb(1, 2, 3)';
 
 /* ── Sanitiser ── */
-const DRX_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'SPAN', 'MARK', 'H2', 'H3', 'H4', 'P', 'DIV', 'BR', 'UL', 'OL', 'LI', 'BLOCKQUOTE']);
+const DRX_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'SPAN', 'MARK', 'H2', 'H3', 'H4', 'P', 'DIV', 'BR', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'HR']);
 const DRX_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'SVG', 'MATH', 'TEMPLATE', 'NOSCRIPT', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'IMG', 'VIDEO', 'AUDIO', 'CANVAS', 'FORM', 'HEAD', 'TITLE']);
 const DRX_COLOR = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*[\d.]+\s*)?\)|[a-z]{3,20})$/i;
 
@@ -2805,8 +2903,9 @@ function drSanitize(html) {
       const isCheck = tag === 'UL' && n.classList.contains('dr-check');
       const checked = tag === 'LI' && n.hasAttribute('data-checked');
       [...n.attributes].forEach(a => n.removeAttribute(a.name));
-      if (color && DRX_COLOR.test(color) && color !== DRX_SENTINEL_RGB) n.style.color = color;
-      if (bg && DRX_COLOR.test(bg) && bg !== DRX_SENTINEL_RGB && !/^rgba\([^)]*,\s*0\s*\)$/.test(bg)) n.style.backgroundColor = bg;
+      const noop = v => /^(transparent|inherit|initial|unset|currentcolor|rgba\(0,\s*0,\s*0,\s*0\))$/i.test(v);
+      if (color && DRX_COLOR.test(color) && color !== DRX_SENTINEL_RGB && !noop(color)) n.style.color = color;
+      if (bg && DRX_COLOR.test(bg) && bg !== DRX_SENTINEL_RGB && !noop(bg) && !/^rgba\([^)]*,\s*0\s*\)$/.test(bg)) n.style.backgroundColor = bg;
       if (tag === 'SPAN') {
         if (fw === 'bold' || +fw >= 600) n.style.fontWeight = '700';
         if (fs === 'italic') n.style.fontStyle = 'italic';
@@ -2822,7 +2921,7 @@ function drSanitize(html) {
 }
 
 function drIsHTML(s) {
-  return /<(b|strong|i|em|u|s|strike|del|span|mark|font|h[1-6]|p|div|br|ul|ol|li|blockquote)(\s[^>]*)?\/?>/i.test(String(s || ''));
+  return /<(b|strong|i|em|u|s|strike|del|span|mark|font|h[1-6]|p|div|br|hr|ul|ol|li|blockquote)(\s[^>]*)?\/?>/i.test(String(s || ''));
 }
 
 /* Plain text / light markdown → editor HTML */
@@ -2839,6 +2938,7 @@ function drMdToHTML(md) {
   const open = (t) => { if (list !== t) { close(); out += `<${t}>`; list = t; } };
   lines.forEach(line => {
     let m;
+    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { close(); out += '<hr>'; return; }
     if ((m = /^\s{0,3}(#{1,6})\s+(.*)$/.exec(line))) { close(); const h = m[1].length <= 2 ? 'h2' : 'h3'; out += `<${h}>${inline(m[2]) || '<br>'}</${h}>`; return; }
     if ((m = /^\s*[-*+•](?:\s+(.*))?$/.exec(line))) { open('ul'); out += `<li>${inline(m[1] || '') || '<br>'}</li>`; return; }
     if ((m = /^\s*\d+[.)](?:\s+(.*))?$/.exec(line))) { open('ol'); out += `<li>${inline(m[1] || '') || '<br>'}</li>`; return; }
@@ -2862,7 +2962,7 @@ function drRichValue(el) {
   if (!el) return '';
   const html = drSanitize(el.innerHTML).trim();
   const probe = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
-  const formatted = probe.querySelector('b,strong,i,em,u,s,strike,del,span,mark,h2,h3,h4,ul,ol,li,blockquote');
+  const formatted = probe.querySelector('b,strong,i,em,u,s,strike,del,span,mark,h2,h3,h4,ul,ol,li,blockquote,hr');
   if (!formatted) return String(el.innerText || el.textContent || '').replace(/ /g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   return html;
 }
@@ -2872,29 +2972,44 @@ window.drRichValue = drRichValue;
 
 /* ── Toolbar markup ── */
 function drToolbarHTML(opts = {}) {
-  const b = (cmd, inner, title) => `<button type="button" class="dr-toolbar-btn drx-btn" data-cmd="${cmd}" title="${title}" aria-label="${title}">${inner}</button>`;
-  const ic = n => `<i data-lucide="${n}" style="width:16px;height:16px"></i>`;
+  const b = (cmd, icon, title, hint) => `<button type="button" class="dr-toolbar-btn drx-btn" data-cmd="${cmd}" title="${title}${hint ? ' · ' + hint : ''}" aria-label="${title}">${icon}</button>`;
+  const ic = n => `<i data-lucide="${n}"></i>`;
   const sw = (kind, c, n) => `<button type="button" class="drx-sw ${kind === 'hilite' ? 'is-hl' : ''}" data-cmd="${kind}" data-val="${c}" title="${n}" aria-label="${n}" style="${kind === 'hilite' ? `background:${c}` : `--c:${c}`}">${kind === 'hilite' ? 'A' : ''}</button>`;
   return `
+    <div class="drx-tbwrap">
     <div class="dr-zone-toolbar drx-toolbar" role="toolbar" aria-label="Formatting">
-      ${b('h3', ic('heading'), 'Heading')}
-      ${b('bold', '<b>B</b>', 'Bold')}
-      ${b('italic', '<i style="font-family:Georgia,serif">I</i>', 'Italic')}
-      ${b('underline', '<u>U</u>', 'Underline')}
-      ${b('strikeThrough', '<s>S</s>', 'Strikethrough')}
+      <div class="drx-grp">
+        ${b('h2', ic('heading-1'), 'Heading', 'type # and space')}
+        ${b('h3', ic('heading-2'), 'Subheading', 'type ## and space')}
+      </div>
       <span class="drx-sep"></span>
-      <button type="button" class="dr-toolbar-btn drx-btn drx-color-btn" data-cmd="palette" title="Text colour and highlight" aria-label="Text colour and highlight">
-        <span class="drx-a">A</span><span class="drx-bar"></span>
-      </button>
+      <div class="drx-grp">
+        ${b('bold', ic('bold'), 'Bold', '⌘B')}
+        ${b('italic', ic('italic'), 'Italic', '⌘I')}
+        ${b('underline', ic('underline'), 'Underline', '⌘U')}
+        ${b('strikeThrough', ic('strikethrough'), 'Strikethrough', '⌘⇧X')}
+        <button type="button" class="dr-toolbar-btn drx-btn drx-color-btn" data-cmd="palette" title="Text colour and highlight" aria-label="Text colour and highlight">
+          <span class="drx-a">A</span><span class="drx-bar"></span>
+        </button>
+      </div>
       <span class="drx-sep"></span>
-      ${b('insertUnorderedList', ic('list'), 'Bullet list')}
-      ${b('insertOrderedList', ic('list-ordered'), 'Numbered list')}
-      ${b('check', ic('list-checks'), 'Checklist')}
-      ${b('quote', ic('quote'), 'Quote')}
-      ${b('clear', ic('remove-formatting'), 'Clear formatting')}
+      <div class="drx-grp">
+        ${b('insertUnorderedList', ic('list'), 'Bullet list', 'type - and space')}
+        ${b('insertOrderedList', ic('list-ordered'), 'Numbered list', 'type 1. and space')}
+        ${b('check', ic('list-checks'), 'Checklist', 'type [] and space')}
+      </div>
+      <span class="drx-sep"></span>
+      <div class="drx-grp">
+        ${b('quote', ic('quote'), 'Quote', 'type > and space')}
+        ${b('divider', ic('minus'), 'Divider', 'type --- and Enter')}
+        ${b('clear', ic('remove-formatting'), 'Clear formatting')}
+      </div>
       ${opts.dateStr ? `
-      <button type="button" class="dr-toolbar-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${opts.dateStr}')" title="Auto-Summarize Day">✨ Summary</button>
-      <button type="button" class="dr-toolbar-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Speak to Write" style="margin-left:4px">${ic('mic')}</button>` : ''}
+      <span class="drx-sep"></span>
+      <div class="drx-grp">
+        <button type="button" class="dr-toolbar-btn drx-btn drx-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${opts.dateStr}')" title="Summarise my day (tasks, habits, spend)">${ic('sparkles')}<span>Summary</span></button>
+        <button type="button" class="dr-toolbar-btn drx-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Dictate" aria-label="Dictate">${ic('mic')}</button>
+      </div>` : ''}
     </div>
     <div class="drx-palette" hidden>
       <div class="drx-pal-row"><span class="drx-pal-lbl">Text</span>
@@ -2905,6 +3020,7 @@ function drToolbarHTML(opts = {}) {
         <button type="button" class="drx-sw is-none" data-cmd="hilite" data-val="" title="No highlight" aria-label="No highlight">⌀</button>
         ${DRX_HILITE.map(x => sw('hilite', x.c, x.n)).join('')}
       </div>
+    </div>
     </div>`;
 }
 window.drToolbarHTML = drToolbarHTML;
@@ -2954,9 +3070,15 @@ function _drxSaveCaret(ed) {
   const sel = window.getSelection();
   if (!sel.rangeCount || !ed.contains(sel.getRangeAt(0).commonAncestorContainer)) return null;
   const r = sel.getRangeAt(0), pre = document.createRange();
+  // An empty line has no text to anchor to — let the browser keep its caret.
+  let blk = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement;
+  while (blk && blk !== ed && !/^(DIV|P|H[1-6]|LI|BLOCKQUOTE)$/.test(blk.tagName)) blk = blk.parentElement;
+  if (blk && blk !== ed && !(blk.textContent || '').length) return null;
   pre.selectNodeContents(ed); pre.setEnd(r.startContainer, r.startOffset);
   const start = pre.toString().length;
-  return { start, end: start + r.toString().length };
+  let atStart = false;
+  if (blk && blk !== ed) { const b = document.createRange(); b.selectNodeContents(blk); b.setEnd(r.startContainer, r.startOffset); atStart = b.toString().length === 0; }
+  return { start, end: start + r.toString().length, atStart };
 }
 function _drxRestoreCaret(ed, pos) {
   if (!pos) return;
@@ -2964,7 +3086,9 @@ function _drxRestoreCaret(ed, pos) {
   let n, seen = 0, sN = null, sO = 0, eN = null, eO = 0, last = null;
   while ((n = walker.nextNode())) {
     const len = n.textContent.length;
-    if (!sN && pos.start <= seen + len) { sN = n; sO = pos.start - seen; }
+    // At the very start of a line the offset equals the end of the line above, so prefer the next text node.
+    if (!sN && (pos.atStart ? pos.start < seen + len : pos.start <= seen + len)) { sN = n; sO = pos.start - seen; }
+    if (!eN && sN && pos.end === pos.start) { eN = sN; eO = sO; break; }
     if (!eN && pos.end <= seen + len) { eN = n; eO = pos.end - seen; break; }
     seen += len; last = n;
   }
@@ -2986,28 +3110,59 @@ function drxRun(cmd, val, srcEl) {
   }
   _drxEnsureSel(ed);
   try { document.execCommand('styleWithCSS', false, true); document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) { }
-  const blockCmd = ['h3', 'quote', 'check', 'insertUnorderedList', 'insertOrderedList'].includes(cmd);
+  const blockCmd = ['h2', 'h3', 'p', 'quote', 'check', 'insertUnorderedList', 'insertOrderedList'].includes(cmd);
   const caret = blockCmd ? _drxSaveCaret(ed) : null;
   switch (cmd) {
+    case 'h2':
     case 'h3': {
       if (_drxBlock(ed, 'LI')) document.execCommand(_drxBlock(ed, 'OL') ? 'insertOrderedList' : 'insertUnorderedList');
       const cur = String(document.queryCommandValue('formatBlock') || '').toLowerCase();
-      document.execCommand('formatBlock', false, cur === 'h3' || cur === 'h2' ? '<div>' : '<h3>');
+      document.execCommand('formatBlock', false, cur === cmd ? '<div>' : `<${cmd}>`);
       break;
     }
+    case 'p': {
+      if (_drxBlock(ed, 'LI')) document.execCommand(_drxBlock(ed, 'OL') ? 'insertOrderedList' : 'insertUnorderedList');
+      document.execCommand('formatBlock', false, '<div>');
+      break;
+    }
+    case 'divider':
+      _drxInsertDivider(ed);
+      break;
     case 'quote': {
       const inQ = _drxBlock(ed, 'BLOCKQUOTE');
       if (!inQ && _drxBlock(ed, 'LI')) document.execCommand(_drxBlock(ed, 'OL') ? 'insertOrderedList' : 'insertUnorderedList');
       document.execCommand('formatBlock', false, inQ ? '<div>' : '<blockquote>');
       break;
     }
+    /* Lists: switching between bullet, numbered and checklist converts the
+       list in place instead of removing it (the old toggle dropped the list
+       when you went checklist → bullet). */
     case 'check': {
       const ul = _drxBlock(ed, 'UL');
-      if (ul && ul.classList.contains('dr-check')) { document.execCommand('insertUnorderedList'); break; }
-      if (ul) { ul.classList.add('dr-check'); break; }
-      if (_drxBlock(ed, 'OL')) document.execCommand('insertOrderedList');
-      document.execCommand('insertUnorderedList');
+      if (ul && ul.classList.contains('dr-check')) { document.execCommand('insertUnorderedList'); break; }   // checklist → plain text
+      if (ul) { ul.classList.add('dr-check'); break; }                                                       // bullets → checklist
+      if (_drxBlock(ed, 'OL')) document.execCommand('insertUnorderedList');                                   // numbered → bullets
+      else document.execCommand('insertUnorderedList');                                                       // text → bullets
       const nu = _drxBlock(ed, 'UL'); if (nu) nu.classList.add('dr-check');
+      break;
+    }
+    case 'insertUnorderedList': {
+      const ul = _drxBlock(ed, 'UL');
+      if (ul && ul.classList.contains('dr-check')) {                                                          // checklist → bullets
+        ul.classList.remove('dr-check');
+        if (!ul.className) ul.removeAttribute('class');
+        ul.querySelectorAll(':scope > li[data-checked]').forEach(li => li.removeAttribute('data-checked'));
+        break;
+      }
+      document.execCommand('insertUnorderedList');
+      break;
+    }
+    case 'insertOrderedList': {
+      const ul = _drxBlock(ed, 'UL');
+      if (ul && ul.classList.contains('dr-check')) ul.querySelectorAll(':scope > li[data-checked]').forEach(li => li.removeAttribute('data-checked'));
+      document.execCommand('insertOrderedList');
+      const ol = _drxBlock(ed, 'OL');
+      if (ol) { ol.classList.remove('dr-check'); if (!ol.className) ol.removeAttribute('class'); }
       break;
     }
     case 'color':
@@ -3051,7 +3206,7 @@ function _drxSyncState() {
   const state = {
     bold: q('bold'), italic: q('italic'), underline: q('underline'), strikeThrough: q('strikeThrough'),
     insertUnorderedList: q('insertUnorderedList') && !inCheck, insertOrderedList: q('insertOrderedList'),
-    check: inCheck, h3: fb === 'h3' || fb === 'h2', quote: !!_drxBlock(ed, 'BLOCKQUOTE'),
+    check: inCheck, h2: fb === 'h2', h3: fb === 'h3', quote: !!_drxBlock(ed, 'BLOCKQUOTE'),
   };
   [zone, _drxBubbleEl].forEach(root => {
     if (!root) return;
@@ -3218,5 +3373,350 @@ function _drxPlaceBubble() {
 .drx-tpl-zone { margin: 4px 0 0; min-height: 260px; }
 .drx-tpl-zone .drx-editor { min-height: 200px; border: none; border-radius: 0; }
 `;
+  document.head.appendChild(st);
+})();
+
+/* Put the caret at the start of a line, giving an emptied line a <br> so it keeps its height. */
+function _drxWrapTop(ed, node) {
+  if (!node || node.parentNode !== ed) return null;
+  const div = document.createElement('div');
+  ed.insertBefore(div, node);
+  div.appendChild(node);
+  return div;
+}
+function _drxCaretIn(blk) {
+  if (!(blk.textContent || '').length && !blk.querySelector('br,hr')) { blk.innerHTML = ''; blk.appendChild(document.createElement('br')); }
+  let n = blk;
+  while (n.firstChild && n.firstChild.nodeType === 1 && n.firstChild.tagName !== 'BR') n = n.firstChild;
+  const r = document.createRange();
+  if (n.firstChild && n.firstChild.nodeType === 3) r.setStart(n.firstChild, 0); else r.setStart(n, 0);
+  r.collapse(true);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+/* ── Dividers ── */
+function _drxTopBlock(ed) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  let n = sel.getRangeAt(0).startContainer;
+  if (n === ed) return ed.childNodes[sel.getRangeAt(0).startOffset] || ed.lastChild;
+  while (n && n.parentNode !== ed) n = n.parentNode;
+  return n || null;
+}
+function _drxInsertDivider(ed) {
+  const blk = _drxTopBlock(ed);
+  const hr = document.createElement('hr');
+  const next = document.createElement('div');
+  next.appendChild(document.createElement('br'));
+  const isEmpty = blk && blk.nodeType === 1 && !/^(UL|OL|HR)$/.test(blk.tagName) && !(blk.textContent || '').trim();
+  if (!blk) { ed.appendChild(hr); ed.appendChild(next); }
+  else if (isEmpty) { blk.replaceWith(hr); hr.after(next); }
+  else { blk.after(hr); hr.after(next); }
+  const r = document.createRange(); r.setStart(next, 0); r.collapse(true);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+/* ── "/" block menu + markdown shortcuts at the start of a line ── */
+let _drxSlash = null;
+const DRX_SLASH = [
+  { cmd: 'p', label: 'Text', hint: 'Plain paragraph', icon: 'type', keys: 'text paragraph normal' },
+  { cmd: 'h2', label: 'Heading', hint: 'Large section title', icon: 'heading-1', keys: 'heading title h1' },
+  { cmd: 'h3', label: 'Subheading', hint: 'Smaller title', icon: 'heading-2', keys: 'subheading h2 h3' },
+  { cmd: 'insertUnorderedList', label: 'Bullet list', hint: 'A simple list', icon: 'list', keys: 'bullet list ul' },
+  { cmd: 'insertOrderedList', label: 'Numbered list', hint: '1, 2, 3', icon: 'list-ordered', keys: 'numbered ordered list ol' },
+  { cmd: 'check', label: 'Checklist', hint: 'Tick things off', icon: 'list-checks', keys: 'checklist todo task check' },
+  { cmd: 'quote', label: 'Quote', hint: 'Set a line apart', icon: 'quote', keys: 'quote blockquote' },
+  { cmd: 'divider', label: 'Divider', hint: 'A line between sections', icon: 'minus', keys: 'divider line separator hr rule' },
+];
+function _drxSlashClose() { if (_drxSlash && _drxSlash.el) _drxSlash.el.remove(); _drxSlash = null; }
+function _drxSlashQuery() {
+  const s = _drxSlash, sel = window.getSelection();
+  if (!s || !sel.rangeCount || !s.node.isConnected) return null;
+  const r = sel.getRangeAt(0);
+  if (r.startContainer !== s.node || r.startOffset <= s.offset) return null;
+  if (s.node.textContent.charAt(s.offset) !== '/') return null;
+  const q = s.node.textContent.slice(s.offset + 1, r.startOffset);
+  return (/\s/.test(q) || q.length > 20) ? null : q;
+}
+function _drxSlashRender() {
+  const q = _drxSlashQuery();
+  if (q == null) return _drxSlashClose();
+  const s = _drxSlash, ql = q.toLowerCase();
+  s.items = DRX_SLASH.filter(it => !ql || it.label.toLowerCase().includes(ql) || it.keys.includes(ql));
+  if (!s.items.length) return _drxSlashClose();
+  s.idx = Math.min(s.idx || 0, s.items.length - 1);
+  if (!s.el) {
+    s.el = document.createElement('div');
+    s.el.className = 'drx-slash';
+    s.el.setAttribute('role', 'listbox');
+    s.el.addEventListener('mousedown', e => e.preventDefault());
+    s.el.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) _drxSlashPick(+b.dataset.i); });
+    document.body.appendChild(s.el);
+  }
+  s.el.innerHTML = `<div class="drx-slash-h">${ql ? 'Matching blocks' : 'Blocks'}</div>` + s.items.map((it, i) => `
+    <button type="button" class="drx-slash-it ${i === s.idx ? 'on' : ''}" data-i="${i}" role="option">
+      <span class="drx-slash-ic"><i data-lucide="${it.icon}"></i></span><span><b>${it.label}</b><em>${it.hint}</em></span>
+    </button>`).join('');
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+  const sel = window.getSelection();
+  let rect = sel.rangeCount ? sel.getRangeAt(0).getBoundingClientRect() : null;
+  if (!rect || (!rect.top && !rect.left)) rect = (s.node.parentElement || s.ed).getBoundingClientRect();
+  const h = s.el.offsetHeight, w = s.el.offsetWidth;
+  let top = rect.bottom + 8;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 8);
+  s.el.style.top = top + 'px';
+  s.el.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8)) + 'px';
+  s.el.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
+}
+function _drxSlashPick(i) {
+  const s = _drxSlash;
+  if (!s) return;
+  const it = s.items[i], ed = s.ed, sel = window.getSelection();
+  if (sel.rangeCount && s.node.isConnected) {
+    const r = sel.getRangeAt(0), del = document.createRange();
+    del.setStart(s.node, s.offset);
+    if (r.startContainer === s.node) del.setEnd(s.node, r.startOffset); else del.setEnd(s.node, s.offset + 1);
+    del.deleteContents();
+    if (s.node.parentNode === ed) _drxWrapTop(ed, s.node);
+    let blk = s.node.parentElement;
+    while (blk && blk !== ed && !/^(DIV|P|H[1-6]|LI|BLOCKQUOTE)$/.test(blk.tagName)) blk = blk.parentElement;
+    if (blk && blk !== ed && !(blk.textContent || '').length) _drxCaretIn(blk);
+    else { const c = document.createRange(); c.setStart(s.node, s.offset); c.collapse(true); sel.removeAllRanges(); sel.addRange(c); }
+  }
+  _drxSlashClose();
+  if (it) drxRun(it.cmd, '', ed);
+}
+
+(function () {
+  if (window._drxBlocksWired) return;
+  window._drxBlocksWired = true;
+  const MD = { '#': 'h2', '##': 'h3', '###': 'h3', '-': 'insertUnorderedList', '*': 'insertUnorderedList', '1.': 'insertOrderedList', '[]': 'check', '[ ]': 'check', '>': 'quote' };
+  const blockOf = (ed, node) => {
+    let b = node.nodeType === 1 ? node : node.parentElement;
+    while (b && b !== ed && !/^(DIV|P|H[1-6]|LI|BLOCKQUOTE)$/.test(b.tagName)) b = b.parentElement;
+    return b || ed;
+  };
+  document.addEventListener('input', e => {
+    const ed = e.target;
+    if (!ed.classList || !ed.classList.contains('drx-editor')) return;
+    if (_drxSlash) { if (_drxSlash.ed !== ed) _drxSlashClose(); else _drxSlashRender(); }
+    if (e.inputType !== 'insertText' || !e.data) return;
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const r = sel.getRangeAt(0), node = r.startContainer, off = r.startOffset;
+    if (node.nodeType !== 3) return;
+    if (e.data === '/') {
+      const prev = node.textContent.charAt(off - 2);
+      if (off === 1 || /[\s ]/.test(prev)) { _drxSlash = { ed, node, offset: off - 1, idx: 0 }; _drxSlashRender(); }
+      return;
+    }
+    if (e.data === ' ') {
+      let blk = blockOf(ed, node);
+      if (blk === ed) {
+        // first line typed straight into the editor: only when nothing but this text sits before the caret
+        const head = document.createRange(); head.selectNodeContents(ed); head.setEnd(node, off);
+        if ([...head.cloneContents().childNodes].some(c => c.nodeType === 1)) return;
+        blk = _drxWrapTop(ed, node);
+        if (!blk) return;
+      }
+      const pre = document.createRange();
+      pre.selectNodeContents(blk); pre.setEnd(node, off);
+      const typed = pre.toString().replace(/ /g, ' ');
+      const m = /^(#{1,3}|-|\*|1\.|\[ ?\]|>) $/.exec(typed);
+      if (!m) return;
+      const cmd = MD[m[1]];
+      if (blk.tagName === 'LI' && cmd !== 'check') return;
+      pre.deleteContents();
+      _drxCaretIn(blk);
+      drxRun(cmd, '', ed);
+    }
+  });
+  document.addEventListener('keydown', e => {
+    const ed = e.target;
+    if (!ed.classList || !ed.classList.contains('drx-editor')) return;
+    if (_drxSlash) {
+      const n = (_drxSlash.items || []).length || 1;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); _drxSlash.idx = ((_drxSlash.idx || 0) + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; _drxSlashRender(); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); _drxSlashPick(_drxSlash.idx || 0); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _drxSlashClose(); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const blk = blockOf(ed, sel.getRangeAt(0).startContainer);
+      if (blk !== ed && blk.tagName !== 'LI' && /^(-{3,}|\*{3,}|_{3,})$/.test((blk.textContent || '').trim())) {
+        e.preventDefault();
+        blk.innerHTML = '<br>';
+        const r = document.createRange(); r.setStart(blk, 0); r.collapse(true);
+        sel.removeAllRanges(); sel.addRange(r);
+        _drxInsertDivider(ed);
+        ed.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  }, true);
+  document.addEventListener('selectionchange', () => { if (_drxSlash && _drxSlashQuery() == null) _drxSlashClose(); });
+  document.addEventListener('mousedown', e => { if (_drxSlash && !(e.target.closest && e.target.closest('.drx-slash'))) _drxSlashClose(); }, true);
+})();
+
+const DRW_CSS = `
+/* ═══ WRITER (entries + templates) ═══ */
+.modal-overlay:has(.drw) { padding:24px !important; align-items:center !important; justify-content:center !important; }
+.modal-box:has(.drw) { width:min(1180px, 100%) !important; max-width:none !important; height:min(880px, calc(100vh - 48px)) !important; max-height:none !important; padding:0 !important; margin:0 auto !important; border-radius:18px !important; overflow:hidden !important; display:flex !important; flex-direction:column !important; background:var(--surface-1) !important; box-shadow:0 30px 80px rgba(15,23,42,.28), 0 0 0 1px var(--border-color) !important; }
+.modal-box:has(.drw)::before { display:none !important; }
+.drw { flex:1; min-height:0; display:flex; flex-direction:column; color:var(--text-1); text-align:left; }
+.drw button { font-family:inherit; -webkit-tap-highlight-color:transparent; }
+.drw-bar { flex:none; height:58px; display:flex; align-items:center; gap:10px; padding:0 16px 0 12px; border-bottom:1px solid var(--border-color); background:var(--surface-1); }
+.drw-x { width:36px; height:36px; flex:none; border-radius:10px; border:none; background:transparent; color:var(--text-2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.drw-x:hover { background:var(--surface-2); color:var(--text-1); }
+.drw-x svg { width:18px; height:18px; }
+.drw-crumb { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-3); min-width:0; }
+.drw-crumb svg { width:14px; height:14px; opacity:.6; flex:none; }
+.drw-crumb b { color:var(--text-1); font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drw-bar-r { margin-left:auto; display:flex; align-items:center; gap:12px; }
+.drw-status { font-size:12.5px; color:var(--text-3); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.drw-status i { width:7px; height:7px; border-radius:50%; background:#F59E0B; display:inline-block; }
+.drw-status.err { color:#DC2626; font-weight:600; }
+.drw-kbd { font-size:11px; font-weight:650; color:var(--text-3); border:1px solid var(--border-color); border-bottom-width:2px; border-radius:6px; padding:1px 6px; white-space:nowrap; }
+.drw-save { height:36px; padding:0 18px; border-radius:10px; border:none; background:var(--primary); color:#fff; font-size:13.5px; font-weight:700; cursor:pointer; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,.1), inset 0 1px 0 rgba(255,255,255,.15); transition:filter .15s, transform .12s; }
+.drw-save:hover { filter:brightness(.94); }
+.drw-save:active { transform:scale(.98); }
+.drw-save:disabled { opacity:.6; cursor:default; }
+
+.drw-body { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) 320px; }
+.drw-main { min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+.drw-doc { max-width:780px; margin:0 auto; padding:30px 56px 120px; }
+.drw-eyebrow { display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--text-3); margin-bottom:6px; }
+.drw-eyebrow svg { width:13px; height:13px; }
+.drw-date { position:relative; display:inline-flex; align-items:center; gap:8px; font-size:30px; font-weight:780; letter-spacing:-.8px; line-height:1.25; color:var(--text-1); cursor:pointer; border-radius:10px; padding:2px 8px; margin:0 -8px 8px; transition:background .15s; }
+.drw-date:hover { background:var(--surface-2); }
+.drw-date svg { width:20px; height:20px; color:var(--text-3); flex:none; }
+.drw-date input { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; opacity:0 !important; cursor:pointer; border:none !important; padding:0 !important; margin:0 !important; }
+.drw-title { display:block; width:100% !important; border:none !important; outline:none !important; background:transparent !important; box-shadow:none !important; padding:2px 0 !important; margin:0 0 8px !important; height:auto !important; border-radius:0 !important; font-size:30px !important; font-weight:780 !important; letter-spacing:-.8px; line-height:1.25 !important; color:var(--text-1) !important; font-family:inherit; }
+.drw-title::placeholder { color:var(--text-3); opacity:.55; }
+.drw .drw-zone { border:none !important; border-radius:0 !important; box-shadow:none !important; margin:0 !important; overflow:visible !important; display:block !important; position:relative; flex:none !important; }
+
+/* toolbar */
+.drw .drx-tbwrap { position:sticky; top:0; z-index:6; padding:10px 0 16px; background:linear-gradient(var(--surface-1) 75%, transparent); }
+.drw .drx-toolbar { display:flex !important; align-items:center; gap:2px !important; padding:4px !important; width:max-content; max-width:100%; overflow-x:auto; scrollbar-width:none; background:var(--surface-1) !important; border:1px solid var(--border-color) !important; border-radius:12px !important; box-shadow:0 1px 2px rgba(15,23,42,.04), 0 6px 18px rgba(15,23,42,.06); }
+.drw .drx-toolbar::-webkit-scrollbar { display:none; }
+.drw .drx-grp { display:flex; gap:1px; flex:none; }
+.drw .drx-sep { width:1px; height:20px; background:var(--border-color); margin:0 5px; flex:none; display:block; }
+.drw .drx-btn { width:32px !important; height:32px !important; min-width:32px !important; min-height:0 !important; padding:0 !important; margin:0 !important; border:none !important; border-radius:8px !important; background:transparent !important; color:var(--text-2) !important; display:inline-flex !important; align-items:center; justify-content:center; cursor:pointer; flex:none; font-size:14px; transition:background .12s, color .12s; box-shadow:none !important; }
+.drw .drx-btn svg { width:16px; height:16px; }
+.drw .drx-btn:hover { background:var(--surface-2) !important; color:var(--text-1) !important; }
+.drw .drx-btn.on { background:color-mix(in srgb, var(--primary) 13%, transparent) !important; color:var(--primary) !important; }
+.drw .drx-ai { width:auto !important; padding:0 10px !important; gap:6px; font-size:12.5px !important; font-weight:650; color:var(--primary) !important; }
+.drw .drx-color-btn { flex-direction:column; gap:1px; }
+.drw .drx-color-btn .drx-a { font-size:14px; font-weight:800; line-height:1; }
+.drw .drx-color-btn .drx-bar { width:14px; height:3px; border-radius:2px; }
+.drw .drx-palette { position:absolute; top:calc(100% - 10px); left:0; z-index:8; width:max-content; max-width:100%; padding:12px 14px; display:flex; flex-direction:column; gap:10px; background:var(--surface-1) !important; border:1px solid var(--border-color) !important; border-radius:12px; box-shadow:0 14px 36px rgba(15,23,42,.16); }
+.drw .drx-palette[hidden] { display:none !important; }
+
+/* document */
+.drw .drw-editor { min-height:52vh; max-height:none !important; border-radius:0 !important; overflow:visible !important; padding:4px 0 40px !important; border:none !important; background:transparent !important; outline:none; font-size:16.5px !important; line-height:1.75 !important; color:var(--text-1); letter-spacing:-.05px; caret-color:var(--primary); outline:none !important; box-shadow:none !important; }
+.drw .drw-editor:focus { outline:none !important; box-shadow:none !important; border:none !important; }
+.drw .drw-editor:empty::before { content:attr(placeholder); color:var(--text-3); opacity:.75; pointer-events:none; font-style:normal; }
+.drw .drw-editor h2 { font-size:1.55em; font-weight:780; letter-spacing:-.45px; line-height:1.28; margin:1.25em 0 .3em; }
+.drw .drw-editor h3 { font-size:1.2em; font-weight:720; letter-spacing:-.2px; line-height:1.35; margin:1.05em 0 .2em; }
+.drw .drw-editor > :first-child { margin-top:0; }
+.drw .drw-editor ul, .drw .drw-editor ol { padding-left:1.55em; margin:.25em 0 .55em; }
+.drw .drw-editor li { margin:.12em 0; padding-left:.1em; }
+.drw .drw-editor li::marker { color:var(--text-3); }
+.drw .drw-editor ul.dr-check { padding-left:2px; }
+.drw .drw-editor blockquote { margin:.6em 0; padding:.1em 0 .1em 1em; border-left:3px solid var(--primary); color:var(--text-2); font-style:normal; }
+.drw .drw-editor b, .drw .drw-editor strong { font-weight:700; }
+
+/* details rail */
+.drw-side { min-width:0; min-height:0; overflow-y:auto; border-left:1px solid var(--border-color); background:color-mix(in srgb, var(--surface-2) 60%, var(--surface-1)); padding:22px 20px 28px; display:flex; flex-direction:column; gap:24px; }
+.drw-sec { display:flex; flex-direction:column; gap:10px; }
+.drw-h { font-size:11px; font-weight:750; letter-spacing:.07em; text-transform:uppercase; color:var(--text-3); }
+.drw-mood { display:flex; align-items:center; gap:12px; }
+.drw-mood-emoji { font-size:34px; line-height:1; }
+.drw-mood-num b { font-size:26px; font-weight:780; letter-spacing:-.5px; color:var(--text-1); font-variant-numeric:tabular-nums; }
+.drw-mood-num span { font-size:13px; color:var(--text-3); margin-left:3px; }
+.drw-faces { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+.drw-face { display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 0 6px; border-radius:11px; border:1px solid var(--border-color); background:var(--surface-1); cursor:pointer; transition:border-color .15s, background .15s, transform .12s; }
+.drw-face span { font-size:20px; line-height:1; filter:grayscale(.6); opacity:.8; transition:filter .15s, opacity .15s; }
+.drw-face em { font-style:normal; font-size:10.5px; font-weight:700; color:var(--text-3); }
+.drw-face:hover span, .drw-face.on span { filter:none; opacity:1; }
+.drw-face.on { border-color:var(--c); background:color-mix(in srgb, var(--c) 13%, var(--surface-1)); }
+.drw-face.on em { color:var(--text-1); }
+.drw-face:active { transform:scale(.94); }
+.drw-range { -webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:99px; background:linear-gradient(90deg,#EF4444,#F59E0B 45%,#84CC16 72%,#10B981) !important; outline:none; margin:4px 0 2px !important; padding:0 !important; border:none !important; box-shadow:none !important; }
+.drw-range::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; border:2px solid var(--text-1); box-shadow:0 1px 4px rgba(0,0,0,.2); cursor:pointer; }
+.drw-range::-moz-range-thumb { width:16px; height:16px; border-radius:50%; background:#fff; border:2px solid var(--text-1); cursor:pointer; }
+.drw-field { display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border:1px solid var(--border-color); border-radius:10px; background:var(--surface-1); transition:border-color .15s, box-shadow .15s; cursor:text; }
+.drw-field:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent); }
+.drw-field svg { width:15px; height:15px; color:var(--text-3); flex:none; }
+.drw-field input { flex:1; min-width:0; border:none !important; outline:none !important; background:transparent !important; box-shadow:none !important; padding:0 !important; margin:0 !important; height:auto !important; font-size:13.5px !important; color:var(--text-1); }
+.drw-suggest { display:flex; flex-wrap:wrap; gap:6px; }
+.drw-suggest button { height:26px; padding:0 10px; border-radius:99px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); font-size:12px; font-weight:600; cursor:pointer; }
+.drw-suggest button:hover, .drw-suggest button.on { border-color:var(--primary); color:var(--primary); background:color-mix(in srgb, var(--primary) 7%, var(--surface-1)); }
+.drw-tpls { display:flex; flex-direction:column; gap:2px; margin:0 -8px; }
+.drw-tpl { display:flex; align-items:center; gap:10px; width:100%; padding:6px 8px; border:none; border-radius:9px; background:transparent; color:var(--text-1); font-size:13px; font-weight:600; text-align:left; cursor:pointer; }
+.drw-tpl:hover { background:var(--surface-1); box-shadow:0 0 0 1px var(--border-color); }
+.drw-tpl-ic { width:26px; height:26px; flex:none; border-radius:7px; display:flex; align-items:center; justify-content:center; color:var(--c); background:color-mix(in srgb, var(--c) 13%, transparent); }
+.drw-tpl-ic svg { width:14px; height:14px; }
+.drw-tpl span:last-child { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.drw-ctxs { display:flex; flex-wrap:wrap; gap:6px; }
+.drw-ctx { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; border-radius:99px; font-size:12px; font-weight:650; background:var(--surface-1); border:1px solid var(--border-color); color:var(--text-2); }
+.drw-ctx svg { width:13px; height:13px; }
+.drw-ctx.is-task svg { color:#059669; } .drw-ctx.is-habit svg { color:#6366F1; } .drw-ctx.is-spend svg { color:#D97706; }
+.drw-stat { display:flex; align-items:baseline; justify-content:space-between; font-size:12.5px; color:var(--text-3); }
+.drw-stat b { font-size:14px; font-weight:700; color:var(--text-1); }
+.drw-hint { margin:0; font-size:12px; line-height:1.7; color:var(--text-3); }
+.drw-hint kbd { font-family:inherit; font-size:11px; font-weight:700; color:var(--text-2); background:var(--surface-1); border:1px solid var(--border-color); border-bottom-width:2px; border-radius:5px; padding:0 5px; }
+.drw-cats { display:flex; flex-wrap:wrap; gap:6px; }
+.drw-cat { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 11px 0 9px; border-radius:99px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); font-size:12.5px; font-weight:650; text-transform:capitalize; cursor:pointer; }
+.drw-cat svg { width:13px; height:13px; color:var(--c); }
+.drw-cat:hover { border-color:var(--c); }
+.drw-cat.on { border-color:var(--c); background:color-mix(in srgb, var(--c) 13%, var(--surface-1)); color:var(--text-1); box-shadow:inset 0 0 0 1px var(--c); }
+.drw-outline { margin:0; padding:0 0 0 1.4em; display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--text-2); }
+.drw-outline li::marker { color:var(--text-3); font-size:12px; }
+.drw-outline li.empty { list-style:none; margin-left:-1.4em; color:var(--text-3); font-style:italic; }
+.drw-danger { margin-top:auto; padding-top:14px; border-top:1px solid var(--border-color); }
+.drw-del { display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 12px; border-radius:9px; border:1px solid transparent; background:transparent; color:#DC2626; font-size:13px; font-weight:650; cursor:pointer; align-self:flex-start; }
+.drw-del svg { width:15px; height:15px; }
+.drw-del:hover { background:rgba(220,38,38,.07); border-color:rgba(220,38,38,.2); }
+.drw-err { animation:drwShake .35s; box-shadow:0 0 0 2px rgba(220,38,38,.35) !important; border-radius:6px; }
+@keyframes drwShake { 25% { transform:translateX(-4px); } 75% { transform:translateX(4px); } }
+
+/* "/" menu + dividers (any editor) */
+.drx-slash { position:fixed; z-index:100001; width:264px; max-height:330px; overflow-y:auto; padding:6px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 18px 44px rgba(15,23,42,.2); }
+.drx-slash-h { font-size:10.5px; font-weight:750; letter-spacing:.07em; text-transform:uppercase; color:var(--text-3); padding:6px 8px 4px; }
+.drx-slash-it { display:flex; align-items:center; gap:10px; width:100%; padding:6px 8px; border:none; border-radius:8px; background:transparent; text-align:left; cursor:pointer; font-family:inherit; }
+.drx-slash-it.on, .drx-slash-it:hover { background:var(--surface-2); }
+.drx-slash-ic { width:30px; height:30px; flex:none; border-radius:8px; border:1px solid var(--border-color); background:var(--surface-1); display:flex; align-items:center; justify-content:center; color:var(--text-2); }
+.drx-slash-ic svg { width:15px; height:15px; }
+.drx-slash-it b { display:block; font-size:13px; font-weight:650; color:var(--text-1); }
+.drx-slash-it em { display:block; font-style:normal; font-size:11.5px; color:var(--text-3); }
+.drx-editor hr { border:none; height:0; border-top:1.5px solid var(--border-color); margin:1.3em 0; }
+
+@media (max-width:1000px) and (min-width:769px) {
+  .drw-body { grid-template-columns:minmax(0,1fr) 280px; }
+  .drw-doc { padding:24px 32px 100px; }
+}
+@media (max-width:768px) {
+  .modal-overlay:has(.drw) { padding:0 !important; align-items:stretch !important; }
+  .modal-box:has(.drw) { width:100% !important; height:100% !important; border-radius:0 !important; box-shadow:none !important; }
+  .drw-bar { height:auto; padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 8px; }
+  .drw-crumb, .drw-kbd, .drw-status { display:none; }
+  .drw-save { border-radius:99px; padding:0 16px; }
+  .drw-body { display:block; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
+  .drw-main { overflow:visible; }
+  .drw-doc { padding:16px 18px 20px; }
+  .drw-date, .drw-title { font-size:24px !important; }
+  .drw .drx-tbwrap { padding:6px 0 10px; }
+  .drw .drx-toolbar { width:100%; }
+  .drw .drw-editor { min-height:38vh; font-size:17px !important; }
+  .drw-side { border-left:none; border-top:1px solid var(--border-color); padding:18px 18px calc(env(safe-area-inset-bottom,0px) + 28px); }
+  .drw-danger { margin-top:0; }
+}
+`;
+(function () {
+  document.getElementById('drwStyles')?.remove();
+  const st = document.createElement('style');
+  st.id = 'drwStyles';
+  st.textContent = DRW_CSS;
   document.head.appendChild(st);
 })();
