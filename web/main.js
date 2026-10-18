@@ -490,7 +490,7 @@ const VIEW_MAP = {
     tasks:         { src: 'view-tasks.js?v=20260930a', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20261006a', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
-    diary:         { src: 'view-diary.js?v=20261006b', render: 'renderDiary' },
+    diary:         { src: 'view-diary.js?v=20261018a', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20261003d', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260930a', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
@@ -2084,7 +2084,8 @@ document.addEventListener('click', async (e) => {
 
         // Handle rich text editor (contenteditable)
         const diaryTextEl = document.getElementById('mDiaryText');
-        const text = diaryTextEl ? diaryTextEl.innerText : '';
+        const plainText = diaryTextEl ? (diaryTextEl.innerText || diaryTextEl.textContent || '') : '';
+        const text = plainText.trim() ? (window.drRichValue ? window.drRichValue(diaryTextEl) : plainText) : '';
 
         const mood = document.getElementById('mMoodScore').value;
 
@@ -2380,7 +2381,8 @@ document.addEventListener('click', async (e) => {
         const editId = btn.dataset.editId;
         // Handle rich text editor (contenteditable)
         const diaryTextEl = document.getElementById('mDiaryText');
-        const text = diaryTextEl ? diaryTextEl.innerText : '';
+        const plainText = diaryTextEl ? (diaryTextEl.innerText || diaryTextEl.textContent || '') : '';
+        const text = plainText.trim() ? (window.drRichValue ? window.drRichValue(diaryTextEl) : plainText) : '';
         const mood = document.getElementById('mMoodScore').value;
         const tags = document.getElementById('mDiaryTags').value;
         const date = document.getElementById('mDiaryDate').value;
