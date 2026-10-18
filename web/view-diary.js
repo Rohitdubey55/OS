@@ -38,6 +38,7 @@ function getDailyPrompt() {
 function _drStripMd(s) {
   return String(s || '')
     .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
@@ -651,7 +652,7 @@ function renderEntryCard(entry) {
     <div class="dr-entry-card" style="border-left-color:${moodVal != null ? moodColor : 'var(--border-color)'}" onclick="openEditDiary('${entry.id}')">
       <div class="dr-entry-main">
         <div class="dr-entry-date">${dateStr}</div>
-        <p class="dr-entry-preview">${_drStripMd(entry.content).substring(0, 200)}</p>
+        <p class="dr-entry-preview">${_drpEsc(_drStripMd(entry.content).substring(0, 200))}</p>
       </div>
       ${hasTags ? `
         <div class="dr-entry-tags-row">
@@ -758,13 +759,13 @@ function renderTimelineView(sorted) {
     const moodBg = getMoodBg(entry.mood_score);
     const score = Number(entry.mood_score || 5);
     const dateStr = entry.date ? new Date(entry.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
-    const preview = _drStripMd(entry.content).substring(0, 200);
+    const preview = _drpEsc(_drStripMd(entry.content).substring(0, 200));
     const tags = entry.tags ? entry.tags.split(/[,\s]+/).filter(t => t).slice(0, 3) : [];
 
     return `
           <div class="timeline-entry" style="border-left-color:${moodColor}; background:${moodBg}; animation-delay:${i * 0.05}s;">
             <div class="timeline-entry-date">${dateStr}</div>
-            <div class="timeline-entry-text">${preview}${(entry.content || '').length > 200 ? '...' : ''}</div>
+            <div class="timeline-entry-text">${preview}${_drStripMd(entry.content).length > 200 ? '...' : ''}</div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:6px;">
               <div style="display:flex;gap:4px;">
                 ${tags.map(t => `<span style="font-size:10px;padding:2px 7px;background:var(--surface-2);border-radius:10px;color:var(--text-muted);">#${t}</span>`).join('')}
@@ -958,7 +959,7 @@ function renderInsightsView(entries) {
     return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear();
   });
 
-  const totalWords = entries.reduce((acc, e) => acc + (e.content ? e.content.split(/\s+/).length : 0), 0);
+  const totalWords = entries.reduce((acc, e) => acc + _drStripMd(e.content).split(/\s+/).filter(Boolean).length, 0);
 
   return `
     <div class="dr-insights">
@@ -1146,7 +1147,7 @@ function filterEntries(entries) {
   if (currentSearchQuery) {
     const query = currentSearchQuery.toLowerCase();
     filtered = filtered.filter(e =>
-      (e.content && e.content.toLowerCase().includes(query)) ||
+      (e.content && _drStripMd(e.content).toLowerCase().includes(query)) ||
       (e.tags && e.tags.toLowerCase().includes(query))
     );
   }
@@ -1324,8 +1325,8 @@ function renderTemplatesList() {
       ${templates.map(t => `
         <div class="dr-template-card">
           <div class="dr-template-cat">${t.category || 'general'}</div>
-          <div class="dr-template-title">${t.title}</div>
-          <div class="dr-template-preview">${(t.content || '').substring(0, 80)}...</div>
+          <div class="dr-template-title">${_drpEsc(t.title)}</div>
+          <div class="dr-template-preview">${_drpEsc(_drStripMd(t.content).substring(0, 90))}…</div>
           <div class="dr-template-actions">
             <button class="dr-template-btn primary" onclick="useTemplate(${t.id})">Use</button>
             <button class="dr-template-btn" onclick="editTemplate(${t.id})">Edit</button>
@@ -1340,7 +1341,7 @@ function renderTemplatesList() {
 window.useTemplate = function (id) {
   const templates = state.data.diary_templates || [];
   const t = templates.find(x => x.id === id);
-  if (t) openDiaryModal(null, t.content);
+  if (t) openDiaryModal(null, drToEditorHTML(t.content));
 };
 
 window.editTemplate = function (id) {
@@ -1363,25 +1364,31 @@ window.openTemplateModal = function (template = null) {
 
   box.innerHTML = `
     <h3>${template ? 'Edit Template' : 'New Template'}</h3>
-    <input class="input" id="mTemplateTitle" placeholder="Title" value="${template?.title || ''}">
+    <input class="input" id="mTemplateTitle" placeholder="Title" value="${_drpEsc(template?.title || '')}">
     <select class="input" id="mTemplateCategory">
       <option value="reflection" ${template?.category === 'reflection' ? 'selected' : ''}>Reflection</option>
       <option value="goals" ${template?.category === 'goals' ? 'selected' : ''}>Goals</option>
       <option value="gratitude" ${template?.category === 'gratitude' ? 'selected' : ''}>Gratitude</option>
     </select>
-    <textarea class="input" id="mTemplateContent" style="min-height:120px">${template?.content || ''}</textarea>
+    <div class="dr-write-zone drx-tpl-zone">
+      ${drToolbarHTML()}
+      <div class="rich-editor dr-zone-editor drx-editor" id="mTemplateContent" contenteditable="true"
+           placeholder="Write the template — headings, colours and checklists are kept.">${drToEditorHTML(template?.content || '')}</div>
+    </div>
     <div style="display:flex; gap:10px; margin-top:16px;">
       <button class="btn" onclick="document.getElementById('universalModal').classList.add('hidden')">Cancel</button>
       <button class="btn primary" onclick="saveTemplate(${template?.id || 'null'})">Save</button>
     </div>
   `;
   modal.classList.remove('hidden');
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 };
 
 window.saveTemplate = async function (existingId) {
   const title = document.getElementById('mTemplateTitle').value;
   const category = document.getElementById('mTemplateCategory').value;
-  const content = document.getElementById('mTemplateContent').value;
+  const contentEl = document.getElementById('mTemplateContent');
+  const content = (contentEl && (contentEl.innerText || '').trim()) ? drRichValue(contentEl) : '';
 
   if (!title || !content) return alert('Fill all fields');
 
@@ -1488,19 +1495,8 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
 
       <!-- Write Zone — Full Space Editor -->
       <div class="dr-write-zone">
-        <div class="dr-zone-toolbar">
-          <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('bold')" title="Bold"><b>B</b></button>
-          <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('italic')" title="Italic"><i>I</i></button>
-          <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertUnorderedList')" title="Bullet List">•</button>
-          <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertOrderedList')" title="Numbered List">1.</button>
-          <button type="button" class="dr-toolbar-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${defaultDate}')" title="Auto-Summarize Day">
-            ✨ Summary
-          </button>
-          <button type="button" class="dr-toolbar-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Speak to Write" style="margin-left:8px">
-            <i data-lucide="mic" style="width:16px;height:16px"></i>
-          </button>
-        </div>
-        <div class="rich-editor dr-zone-editor" id="mDiaryText" contenteditable="true"
+        ${drToolbarHTML({ dateStr: defaultDate })}
+        <div class="rich-editor dr-zone-editor drx-editor" id="mDiaryText" contenteditable="true"
              placeholder="${_drIsPhone() ? 'Write freely — one line is enough.' : "What's on your mind..."}">${templateContent}</div>
         <div class="dr-zone-footer">
           <input class="dr-zone-tags" id="mDiaryTags" placeholder="#tags (comma separated)">
@@ -1530,7 +1526,7 @@ window.loadTemplateInModal = function (templateId) {
   const t = templates.find(x => x.id == templateId);
   if (t && t.content) {
     const editor = document.getElementById('mDiaryText');
-    if (editor) editor.innerText = t.content;
+    if (editor) { editor.innerHTML = drToEditorHTML(t.content); editor.dispatchEvent(new Event('input', { bubbles: true })); }
   }
 };
 
@@ -1584,22 +1580,11 @@ window.openEditDiary = function (id) {
 
       <!-- Write Zone — Full Space Editor -->
       <div class="dr-write-zone">
-        <div class="dr-zone-toolbar">
-          <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('bold')" title="Bold"><b>B</b></button>
-          <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('italic')" title="Italic"><i>I</i></button>
-          <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertUnorderedList')" title="Bullet List">•</button>
-          <button type="button" class="dr-toolbar-btn" onmousedown="event.preventDefault();" onclick="formatText('insertOrderedList')" title="Numbered List">1.</button>
-          <button type="button" class="dr-toolbar-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${(e.date || '').slice(0, 10)}')" title="Auto-Summarize Day">
-            ✨ Summary
-          </button>
-          <button type="button" class="dr-toolbar-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Speak to Write" style="margin-left:8px">
-            <i data-lucide="mic" style="width:16px;height:16px"></i>
-          </button>
-        </div>
-        <div class="rich-editor dr-zone-editor" id="mDiaryText" contenteditable="true">${(e.content || '').replace(/</g, '<')}</div>
+        ${drToolbarHTML({ dateStr: (e.date || '').slice(0, 10) })}
+        <div class="rich-editor dr-zone-editor drx-editor" id="mDiaryText" contenteditable="true">${drToEditorHTML(e.content)}</div>
         <div class="dr-zone-footer">
           <input class="dr-zone-tags" id="mDiaryTags" value="${(e.tags || '')}" placeholder="#tags (comma separated)">
-          <span class="dr-zone-wc" id="diaryWordCount">${e.content ? e.content.split(/\s+/).length : 0} words</span>
+          <span class="dr-zone-wc" id="diaryWordCount">${_drStripMd(e.content).split(/\s+/).filter(Boolean).length} words</span>
         </div>
       </div>
       ${ex.tags}
@@ -2589,4 +2574,483 @@ let _drcForceEditor = false;
     if (_drIsPhone() && !templateContent && !_drcForceEditor) return openDiaryChat(dateStr);
     return classic(dateStr, templateContent);
   };
+})();
+
+/* ═══ RICH EDITOR ═══════════════════════════════════════════════════════════
+   One editor for journal entries and templates:
+   • Toolbar — heading, bold / italic / underline / strike, text colour and
+     highlight palette, bullets, numbers, checklist, quote, clear formatting.
+   • Bubble — select any text and a small formatter floats next to it.
+   Entries with formatting are stored as cleaned HTML (allow-listed tags and
+   colour styles only). Entries without formatting stay plain text, so old
+   data and the chat flow are unchanged. Old markdown entries/templates
+   (###, -, 1., **bold**) open as real headings and lists. */
+
+const DRX_TEXT = [
+  { c: '#E5484D', n: 'Red' },
+  { c: '#F76B15', n: 'Orange' },
+  { c: '#CA8A04', n: 'Gold' },
+  { c: '#16A34A', n: 'Green' },
+  { c: '#3B82F6', n: 'Blue' },
+  { c: '#8B5CF6', n: 'Purple' },
+  { c: '#DB2777', n: 'Pink' },
+  { c: '#8A8F98', n: 'Gray' },
+];
+const DRX_HILITE = [
+  { c: 'rgba(250, 204, 21, 0.4)', n: 'Yellow' },
+  { c: 'rgba(34, 197, 94, 0.28)', n: 'Green' },
+  { c: 'rgba(59, 130, 246, 0.26)', n: 'Blue' },
+  { c: 'rgba(236, 72, 153, 0.26)', n: 'Pink' },
+  { c: 'rgba(249, 115, 22, 0.3)', n: 'Orange' },
+];
+const DRX_SENTINEL = '#010203';            // used to strip a colour back to default
+const DRX_SENTINEL_RGB = 'rgb(1, 2, 3)';
+
+/* ── Sanitiser ── */
+const DRX_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'SPAN', 'MARK', 'H2', 'H3', 'H4', 'P', 'DIV', 'BR', 'UL', 'OL', 'LI', 'BLOCKQUOTE']);
+const DRX_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'SVG', 'MATH', 'TEMPLATE', 'NOSCRIPT', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'IMG', 'VIDEO', 'AUDIO', 'CANVAS', 'FORM', 'HEAD', 'TITLE']);
+const DRX_COLOR = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*[\d.]+\s*)?\)|[a-z]{3,20})$/i;
+
+function drSanitize(html) {
+  const doc = new DOMParser().parseFromString('<body>' + String(html || '') + '</body>', 'text/html');
+  const clean = (parent) => {
+    [...parent.childNodes].forEach(n => {
+      if (n.nodeType === 3) return;
+      if (n.nodeType !== 1) { n.remove(); return; }
+      const tag = n.tagName.toUpperCase();
+      if (DRX_DROP.has(tag)) { n.remove(); return; }
+      clean(n);
+      if (tag === 'FONT') {
+        const s = doc.createElement('span');
+        const col = (n.getAttribute('color') || '').trim();
+        if (DRX_COLOR.test(col)) s.style.color = col;
+        while (n.firstChild) s.appendChild(n.firstChild);
+        n.replaceWith(s);
+        if (!s.getAttribute('style')) s.replaceWith(...s.childNodes);
+        return;
+      }
+      if (!DRX_TAGS.has(tag)) { n.replaceWith(...n.childNodes); return; }
+      const st = n.style;
+      const color = (st.color || '').trim();
+      const bg = (st.backgroundColor || '').trim();
+      const fw = (st.fontWeight || '').trim();
+      const fs = (st.fontStyle || '').trim();
+      const td = ((st.textDecorationLine || st.textDecoration || '') + '').trim();
+      const isCheck = tag === 'UL' && n.classList.contains('dr-check');
+      const checked = tag === 'LI' && n.hasAttribute('data-checked');
+      [...n.attributes].forEach(a => n.removeAttribute(a.name));
+      if (color && DRX_COLOR.test(color) && color !== DRX_SENTINEL_RGB) n.style.color = color;
+      if (bg && DRX_COLOR.test(bg) && bg !== DRX_SENTINEL_RGB && !/^rgba\([^)]*,\s*0\s*\)$/.test(bg)) n.style.backgroundColor = bg;
+      if (tag === 'SPAN') {
+        if (fw === 'bold' || +fw >= 600) n.style.fontWeight = '700';
+        if (fs === 'italic') n.style.fontStyle = 'italic';
+        if (/underline|line-through/.test(td)) n.style.textDecorationLine = td.match(/underline|line-through/g).join(' ');
+        if (!n.getAttribute('style')) { n.replaceWith(...n.childNodes); return; }
+      }
+      if (isCheck) n.className = 'dr-check';
+      if (checked) n.setAttribute('data-checked', '1');
+    });
+  };
+  clean(doc.body);
+  return doc.body.innerHTML;
+}
+
+function drIsHTML(s) {
+  return /<(b|strong|i|em|u|s|strike|del|span|mark|font|h[1-6]|p|div|br|ul|ol|li|blockquote)(\s[^>]*)?\/?>/i.test(String(s || ''));
+}
+
+/* Plain text / light markdown → editor HTML */
+function drMdToHTML(md) {
+  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = t => esc(t)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/__(.+?)__/g, '<b>$1</b>')
+    .replace(/(^|[^*\w])\*(?!\s)([^*]+?)\*(?!\w)/g, '$1<i>$2</i>')
+    .replace(/~~(.+?)~~/g, '<s>$1</s>');
+  const lines = String(md || '').replace(/\r\n?/g, '\n').split('\n');
+  let out = '', list = null;
+  const close = () => { if (list) { out += `</${list}>`; list = null; } };
+  const open = (t) => { if (list !== t) { close(); out += `<${t}>`; list = t; } };
+  lines.forEach(line => {
+    let m;
+    if ((m = /^\s{0,3}(#{1,6})\s+(.*)$/.exec(line))) { close(); const h = m[1].length <= 2 ? 'h2' : 'h3'; out += `<${h}>${inline(m[2]) || '<br>'}</${h}>`; return; }
+    if ((m = /^\s*[-*+•](?:\s+(.*))?$/.exec(line))) { open('ul'); out += `<li>${inline(m[1] || '') || '<br>'}</li>`; return; }
+    if ((m = /^\s*\d+[.)](?:\s+(.*))?$/.exec(line))) { open('ol'); out += `<li>${inline(m[1] || '') || '<br>'}</li>`; return; }
+    if ((m = /^\s*>\s?(.*)$/.exec(line))) { close(); out += `<blockquote>${inline(m[1]) || '<br>'}</blockquote>`; return; }
+    close();
+    out += `<div>${inline(line) || '<br>'}</div>`;
+  });
+  close();
+  return out;
+}
+
+/* Stored content → HTML for the editor */
+function drToEditorHTML(content) {
+  const s = String(content || '');
+  if (!s.trim()) return '';
+  return drIsHTML(s) ? drSanitize(s) : drMdToHTML(s);
+}
+
+/* Editor → value to store. Plain text when nothing is formatted. */
+function drRichValue(el) {
+  if (!el) return '';
+  const html = drSanitize(el.innerHTML).trim();
+  const probe = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
+  const formatted = probe.querySelector('b,strong,i,em,u,s,strike,del,span,mark,h2,h3,h4,ul,ol,li,blockquote');
+  if (!formatted) return String(el.innerText || el.textContent || '').replace(/ /g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  return html;
+}
+window.drSanitize = drSanitize;
+window.drToEditorHTML = drToEditorHTML;
+window.drRichValue = drRichValue;
+
+/* ── Toolbar markup ── */
+function drToolbarHTML(opts = {}) {
+  const b = (cmd, inner, title) => `<button type="button" class="dr-toolbar-btn drx-btn" data-cmd="${cmd}" title="${title}" aria-label="${title}">${inner}</button>`;
+  const ic = n => `<i data-lucide="${n}" style="width:16px;height:16px"></i>`;
+  const sw = (kind, c, n) => `<button type="button" class="drx-sw ${kind === 'hilite' ? 'is-hl' : ''}" data-cmd="${kind}" data-val="${c}" title="${n}" aria-label="${n}" style="${kind === 'hilite' ? `background:${c}` : `--c:${c}`}">${kind === 'hilite' ? 'A' : ''}</button>`;
+  return `
+    <div class="dr-zone-toolbar drx-toolbar" role="toolbar" aria-label="Formatting">
+      ${b('h3', ic('heading'), 'Heading')}
+      ${b('bold', '<b>B</b>', 'Bold')}
+      ${b('italic', '<i style="font-family:Georgia,serif">I</i>', 'Italic')}
+      ${b('underline', '<u>U</u>', 'Underline')}
+      ${b('strikeThrough', '<s>S</s>', 'Strikethrough')}
+      <span class="drx-sep"></span>
+      <button type="button" class="dr-toolbar-btn drx-btn drx-color-btn" data-cmd="palette" title="Text colour and highlight" aria-label="Text colour and highlight">
+        <span class="drx-a">A</span><span class="drx-bar"></span>
+      </button>
+      <span class="drx-sep"></span>
+      ${b('insertUnorderedList', ic('list'), 'Bullet list')}
+      ${b('insertOrderedList', ic('list-ordered'), 'Numbered list')}
+      ${b('check', ic('list-checks'), 'Checklist')}
+      ${b('quote', ic('quote'), 'Quote')}
+      ${b('clear', ic('remove-formatting'), 'Clear formatting')}
+      ${opts.dateStr ? `
+      <button type="button" class="dr-toolbar-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${opts.dateStr}')" title="Auto-Summarize Day">✨ Summary</button>
+      <button type="button" class="dr-toolbar-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Speak to Write" style="margin-left:4px">${ic('mic')}</button>` : ''}
+    </div>
+    <div class="drx-palette" hidden>
+      <div class="drx-pal-row"><span class="drx-pal-lbl">Text</span>
+        <button type="button" class="drx-sw is-none" data-cmd="color" data-val="" title="Default colour" aria-label="Default colour">A</button>
+        ${DRX_TEXT.map(x => sw('color', x.c, x.n)).join('')}
+      </div>
+      <div class="drx-pal-row"><span class="drx-pal-lbl">Highlight</span>
+        <button type="button" class="drx-sw is-none" data-cmd="hilite" data-val="" title="No highlight" aria-label="No highlight">⌀</button>
+        ${DRX_HILITE.map(x => sw('hilite', x.c, x.n)).join('')}
+      </div>
+    </div>`;
+}
+window.drToolbarHTML = drToolbarHTML;
+
+/* ── Commands ── */
+let _drxEditor = null;      // editor the bubble/toolbar acts on
+let _drxRange = null;       // last selection inside an editor
+
+function _drxEditorFor(el) {
+  const zone = el && el.closest && el.closest('.dr-write-zone');
+  return (zone && zone.querySelector('.drx-editor')) || _drxEditor;
+}
+function _drxSelInside(ed) {
+  const sel = window.getSelection();
+  return sel && sel.rangeCount && ed && ed.contains(sel.getRangeAt(0).commonAncestorContainer);
+}
+function _drxEnsureSel(ed) {
+  if (!ed) return false;
+  if (_drxSelInside(ed)) { if (document.activeElement !== ed) { const r = window.getSelection().getRangeAt(0).cloneRange(); ed.focus({ preventScroll: true }); const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r); } return true; }
+  ed.focus({ preventScroll: true });
+  const sel = window.getSelection();
+  if (_drxRange && ed.contains(_drxRange.commonAncestorContainer)) { sel.removeAllRanges(); sel.addRange(_drxRange); return true; }
+  const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
+  sel.removeAllRanges(); sel.addRange(r);
+  return true;
+}
+function _drxBlock(ed, tag) {
+  const sel = window.getSelection();
+  let n = sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+  while (n && n !== ed) { if (n.nodeType === 1 && n.tagName === tag) return n; n = n.parentNode; }
+  return null;
+}
+function _drxStripSentinel(ed, prop) {
+  ed.querySelectorAll('[style]').forEach(el => {
+    if ((el.style[prop] || '').replace(/\s/g, '') === DRX_SENTINEL_RGB.replace(/\s/g, '') || (el.style[prop] || '').toLowerCase() === DRX_SENTINEL) {
+      el.style[prop] = '';
+      if (!el.getAttribute('style')) el.removeAttribute('style');
+      if (el.tagName === 'SPAN' && !el.attributes.length) el.replaceWith(...el.childNodes);
+    }
+  });
+  ed.querySelectorAll('font[color]').forEach(f => { if (f.getAttribute('color').toLowerCase() === DRX_SENTINEL) f.replaceWith(...f.childNodes); });
+}
+
+/* Chrome moves the caret to the line start when a block command (list,
+   heading, quote) re-wraps a line — remember it as text offsets and put it back. */
+function _drxSaveCaret(ed) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !ed.contains(sel.getRangeAt(0).commonAncestorContainer)) return null;
+  const r = sel.getRangeAt(0), pre = document.createRange();
+  pre.selectNodeContents(ed); pre.setEnd(r.startContainer, r.startOffset);
+  const start = pre.toString().length;
+  return { start, end: start + r.toString().length };
+}
+function _drxRestoreCaret(ed, pos) {
+  if (!pos) return;
+  const walker = document.createTreeWalker(ed, NodeFilter.SHOW_TEXT);
+  let n, seen = 0, sN = null, sO = 0, eN = null, eO = 0, last = null;
+  while ((n = walker.nextNode())) {
+    const len = n.textContent.length;
+    if (!sN && pos.start <= seen + len) { sN = n; sO = pos.start - seen; }
+    if (!eN && pos.end <= seen + len) { eN = n; eO = pos.end - seen; break; }
+    seen += len; last = n;
+  }
+  if (!sN) { if (!last) return; sN = last; sO = last.textContent.length; }
+  if (!eN) { eN = sN; eO = sO; }
+  const r = document.createRange();
+  try { r.setStart(sN, sO); r.setEnd(eN, eO); } catch (e) { return; }
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+}
+
+function drxRun(cmd, val, srcEl) {
+  const ed = _drxEditorFor(srcEl);
+  if (!ed) return;
+  if (cmd === 'palette') {
+    const pal = ed.closest('.dr-write-zone')?.querySelector('.drx-palette');
+    if (pal) pal.hidden = !pal.hidden;
+    srcEl.classList.toggle('on', pal && !pal.hidden);
+    return;
+  }
+  _drxEnsureSel(ed);
+  try { document.execCommand('styleWithCSS', false, true); document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) { }
+  const blockCmd = ['h3', 'quote', 'check', 'insertUnorderedList', 'insertOrderedList'].includes(cmd);
+  const caret = blockCmd ? _drxSaveCaret(ed) : null;
+  switch (cmd) {
+    case 'h3': {
+      if (_drxBlock(ed, 'LI')) document.execCommand(_drxBlock(ed, 'OL') ? 'insertOrderedList' : 'insertUnorderedList');
+      const cur = String(document.queryCommandValue('formatBlock') || '').toLowerCase();
+      document.execCommand('formatBlock', false, cur === 'h3' || cur === 'h2' ? '<div>' : '<h3>');
+      break;
+    }
+    case 'quote': {
+      const inQ = _drxBlock(ed, 'BLOCKQUOTE');
+      if (!inQ && _drxBlock(ed, 'LI')) document.execCommand(_drxBlock(ed, 'OL') ? 'insertOrderedList' : 'insertUnorderedList');
+      document.execCommand('formatBlock', false, inQ ? '<div>' : '<blockquote>');
+      break;
+    }
+    case 'check': {
+      const ul = _drxBlock(ed, 'UL');
+      if (ul && ul.classList.contains('dr-check')) { document.execCommand('insertUnorderedList'); break; }
+      if (ul) { ul.classList.add('dr-check'); break; }
+      if (_drxBlock(ed, 'OL')) document.execCommand('insertOrderedList');
+      document.execCommand('insertUnorderedList');
+      const nu = _drxBlock(ed, 'UL'); if (nu) nu.classList.add('dr-check');
+      break;
+    }
+    case 'color':
+      document.execCommand('foreColor', false, val || DRX_SENTINEL);
+      if (!val) _drxStripSentinel(ed, 'color');
+      _drxSetBar(ed, val);
+      break;
+    case 'hilite':
+      if (!document.execCommand('hiliteColor', false, val || DRX_SENTINEL)) document.execCommand('backColor', false, val || DRX_SENTINEL);
+      if (!val) _drxStripSentinel(ed, 'backgroundColor');
+      break;
+    case 'clear':
+      document.execCommand('removeFormat');
+      document.execCommand('unlink');
+      break;
+    default:
+      document.execCommand(cmd, false, null);
+  }
+  if (caret) _drxRestoreCaret(ed, caret);
+  if (cmd === 'color' || cmd === 'hilite') {
+    const pal = ed.closest('.dr-write-zone')?.querySelector('.drx-palette');
+    if (pal && _drIsPhone()) { pal.hidden = true; ed.closest('.dr-write-zone').querySelector('.drx-color-btn')?.classList.remove('on'); }
+  }
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+  _drxSyncState();
+}
+window.drxRun = drxRun;
+
+function _drxSetBar(ed, c) {
+  const bar = ed.closest('.dr-write-zone')?.querySelector('.drx-bar');
+  if (bar) bar.style.background = c || 'currentColor';
+}
+
+function _drxSyncState() {
+  const ed = _drxEditor;
+  if (!ed || !_drxSelInside(ed)) return;
+  const zone = ed.closest('.dr-write-zone');
+  const q = c => { try { return document.queryCommandState(c); } catch (e) { return false; } };
+  const fb = String((() => { try { return document.queryCommandValue('formatBlock'); } catch (e) { return ''; } })() || '').toLowerCase();
+  const inCheck = !!(_drxBlock(ed, 'UL') && _drxBlock(ed, 'UL').classList.contains('dr-check'));
+  const state = {
+    bold: q('bold'), italic: q('italic'), underline: q('underline'), strikeThrough: q('strikeThrough'),
+    insertUnorderedList: q('insertUnorderedList') && !inCheck, insertOrderedList: q('insertOrderedList'),
+    check: inCheck, h3: fb === 'h3' || fb === 'h2', quote: !!_drxBlock(ed, 'BLOCKQUOTE'),
+  };
+  [zone, _drxBubbleEl].forEach(root => {
+    if (!root) return;
+    root.querySelectorAll('.drx-btn[data-cmd]').forEach(b => { if (b.dataset.cmd in state) b.classList.toggle('on', !!state[b.dataset.cmd]); });
+  });
+}
+
+/* ── Floating bubble ── */
+let _drxBubbleEl = null;
+function _drxBubble() {
+  if (_drxBubbleEl) return _drxBubbleEl;
+  const el = document.createElement('div');
+  el.className = 'drx-bubble';
+  el.setAttribute('role', 'toolbar');
+  el.setAttribute('aria-label', 'Format selection');
+  el.hidden = true;
+  const sw = (kind, c, n) => `<button type="button" class="drx-sw sm ${kind === 'hilite' ? 'is-hl' : ''}" data-cmd="${kind}" data-val="${c}" title="${n}" aria-label="${n}" style="${kind === 'hilite' ? `background:${c}` : `--c:${c}`}">${kind === 'hilite' ? 'A' : ''}</button>`;
+  el.innerHTML = `
+    <button type="button" class="drx-btn" data-cmd="bold" aria-label="Bold"><b>B</b></button>
+    <button type="button" class="drx-btn" data-cmd="italic" aria-label="Italic"><i style="font-family:Georgia,serif">I</i></button>
+    <button type="button" class="drx-btn" data-cmd="underline" aria-label="Underline"><u>U</u></button>
+    <button type="button" class="drx-btn" data-cmd="strikeThrough" aria-label="Strikethrough"><s>S</s></button>
+    <span class="drx-sep"></span>
+    ${DRX_TEXT.slice(0, 5).map(x => sw('color', x.c, x.n)).join('')}
+    <span class="drx-sep"></span>
+    ${DRX_HILITE.slice(0, 3).map(x => sw('hilite', x.c, x.n + ' highlight')).join('')}
+    <span class="drx-sep"></span>
+    <button type="button" class="drx-btn" data-cmd="clear" aria-label="Clear formatting">✕</button>`;
+  document.body.appendChild(el);
+  _drxBubbleEl = el;
+  return el;
+}
+function _drxHideBubble() { if (_drxBubbleEl) _drxBubbleEl.hidden = true; }
+function _drxPlaceBubble() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) return _drxHideBubble();
+  const range = sel.getRangeAt(0);
+  const ed = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer.closest('.drx-editor') : range.commonAncestorContainer.parentElement?.closest('.drx-editor');
+  if (!ed || !sel.toString().trim()) return _drxHideBubble();
+  _drxEditor = ed;
+  const rect = range.getBoundingClientRect();
+  if (!rect || (!rect.width && !rect.height)) return _drxHideBubble();
+  const b = _drxBubble();
+  b.hidden = false;
+  const bw = b.offsetWidth, bh = b.offsetHeight, vw = window.innerWidth, vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+  const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  // On touch the OS copy/paste menu sits above the selection, so go below it.
+  let top = touch ? rect.bottom + 12 : rect.top - bh - 10;
+  if (top < 8) top = rect.bottom + 12;
+  if (top + bh > vh - 8) top = Math.max(8, rect.top - bh - 10);
+  let left = rect.left + rect.width / 2 - bw / 2;
+  left = Math.max(8, Math.min(left, vw - bw - 8));
+  b.style.top = Math.round(top) + 'px';
+  b.style.left = Math.round(left) + 'px';
+  _drxSyncState();
+}
+
+/* ── Global wiring (once) ── */
+(function () {
+  if (window._drxWired) return;
+  window._drxWired = true;
+  let raf = 0;
+  const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(_drxPlaceBubble); };
+
+  // Keep focus + selection in the editor when a tool is pressed.
+  const keep = e => { if (e.target.closest && e.target.closest('.drx-btn, .drx-sw, .drx-bubble')) e.preventDefault(); };
+  document.addEventListener('mousedown', keep, true);
+  document.addEventListener('pointerdown', keep, true);
+
+  document.addEventListener('click', e => {
+    const btn = e.target.closest && e.target.closest('.drx-btn, .drx-sw');
+    if (btn && btn.dataset.cmd) {
+      e.preventDefault();
+      drxRun(btn.dataset.cmd, btn.dataset.val || '', btn);
+      if (btn.closest('.drx-bubble')) schedule();
+      return;
+    }
+    // Checklist: tap the box to tick it.
+    const li = e.target.closest && e.target.closest('.drx-editor ul.dr-check > li');
+    if (li && e.clientX - li.getBoundingClientRect().left < 30) {
+      e.preventDefault();
+      if (li.hasAttribute('data-checked')) li.removeAttribute('data-checked'); else li.setAttribute('data-checked', '1');
+      li.closest('.drx-editor').dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
+  document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount) {
+      const r = sel.getRangeAt(0);
+      const host = r.commonAncestorContainer.nodeType === 1 ? r.commonAncestorContainer : r.commonAncestorContainer.parentElement;
+      const ed = host && host.closest && host.closest('.drx-editor');
+      if (ed) { _drxEditor = ed; _drxRange = r.cloneRange(); }
+    }
+    schedule();
+  });
+
+  // A new checklist item shouldn't inherit the tick from the one above.
+  document.addEventListener('input', e => {
+    if (!e.target.classList || !e.target.classList.contains('drx-editor')) return;
+    if (e.inputType === 'insertParagraph') {
+      const li = _drxBlock(e.target, 'LI');
+      if (li && li.hasAttribute('data-checked') && !li.textContent.trim()) li.removeAttribute('data-checked');
+    }
+  });
+
+  // Keyboard shortcuts for underline / strike (bold & italic are native).
+  document.addEventListener('keydown', e => {
+    if (!e.target.classList || !e.target.classList.contains('drx-editor')) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.shiftKey && (e.key === 'x' || e.key === 'X')) { e.preventDefault(); drxRun('strikeThrough', '', e.target); }
+    if (mod && e.altKey && (e.key === 'h' || e.key === 'H' || e.code === 'KeyH')) { e.preventDefault(); drxRun('h3', '', e.target); }
+    if (e.key === 'Escape') _drxHideBubble();
+  });
+
+  window.addEventListener('scroll', schedule, true);
+  window.addEventListener('resize', schedule);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', schedule);
+  document.addEventListener('focusout', () => setTimeout(() => { if (!document.activeElement || !document.activeElement.classList || !document.activeElement.classList.contains('drx-editor')) _drxHideBubble(); }, 120));
+
+  const st = document.createElement('style');
+  st.id = 'drxStyles';
+  st.textContent = `
+.drx-toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.drx-toolbar::-webkit-scrollbar { display: none; }
+.drx-toolbar > * { flex-shrink: 0; }
+.drx-toolbar .dr-toolbar-ai { margin-left: auto; }
+.drx-sep { width: 1px; height: 20px; background: var(--border-color); margin: 0 4px; flex: none; display: inline-block; }
+.dr-toolbar-btn.drx-btn.on { background: rgba(79,70,229,.1); color: var(--primary); }
+.drx-color-btn { position: relative; flex-direction: column; gap: 1px; }
+.drx-color-btn .drx-a { font-size: 14px; font-weight: 800; line-height: 1; }
+.drx-color-btn .drx-bar { width: 16px; height: 3px; border-radius: 2px; background: currentColor; }
+.drx-palette { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border-color); background: var(--surface-1); flex-shrink: 0; }
+.drx-palette[hidden] { display: none; }
+.drx-pal-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.drx-pal-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); width: 64px; flex: none; }
+.drx-sw { width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--border-color); background: var(--c, transparent); cursor: pointer; padding: 0; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: var(--text-1); -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: transform .12s; }
+.drx-sw:not(.is-hl):not(.is-none) { border-color: transparent; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.drx-sw.is-hl { border-radius: 7px; border-color: transparent; }
+.drx-sw.is-none { background: var(--surface-2); color: var(--text-2); }
+.drx-sw:active { transform: scale(.88); }
+@media (pointer: coarse) { .drx-palette .drx-sw { width: 32px; height: 32px; } }
+.drx-bubble { position: fixed; z-index: 100000; display: flex; align-items: center; gap: 3px; padding: 5px 6px; border-radius: 12px; background: var(--surface-1); border: 1px solid var(--border-color);
+  box-shadow: 0 8px 24px rgba(0,0,0,.14), 0 2px 6px rgba(0,0,0,.08); max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; animation: drxPop .12s ease-out; }
+.drx-bubble[hidden] { display: none; }
+.drx-bubble::-webkit-scrollbar { display: none; }
+@keyframes drxPop { from { opacity: 0; transform: translateY(4px) scale(.97); } to { opacity: 1; transform: none; } }
+.drx-bubble .drx-btn { width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent; color: var(--text-1); font-size: 14px; cursor: pointer; flex: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.drx-bubble .drx-btn.on { background: rgba(79,70,229,.1); color: var(--primary); }
+.drx-bubble .drx-btn:active { background: var(--surface-2); }
+.drx-bubble .drx-sw.sm { width: 22px; height: 22px; font-size: 11px; }
+.drx-bubble .drx-sep { height: 18px; margin: 0 2px; }
+.drx-editor h2 { font-size: 1.3em; font-weight: 800; line-height: 1.3; margin: .55em 0 .2em; letter-spacing: -.3px; }
+.drx-editor h3 { font-size: 1.12em; font-weight: 750; line-height: 1.35; margin: .55em 0 .15em; letter-spacing: -.2px; }
+.drx-editor h2:first-child, .drx-editor h3:first-child { margin-top: 0; }
+.drx-editor ul, .drx-editor ol { padding-left: 1.4em; margin: .25em 0; }
+.drx-editor blockquote { margin: .4em 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--primary); color: var(--text-2); font-style: italic; }
+.drx-editor ul.dr-check { list-style: none; padding-left: 2px; }
+.drx-editor ul.dr-check > li { position: relative; padding-left: 28px; }
+.drx-editor ul.dr-check > li::before { content: ''; position: absolute; left: 0; top: .32em; width: 17px; height: 17px; box-sizing: border-box; border: 1.8px solid var(--text-3); border-radius: 5px; cursor: pointer; }
+.drx-editor ul.dr-check > li[data-checked]::before { content: '✓'; background: var(--primary); border-color: var(--primary); color: #fff; font-size: 12px; font-weight: 800; line-height: 14px; text-align: center; }
+.drx-editor ul.dr-check > li[data-checked] { color: var(--text-3); text-decoration: line-through; }
+.drx-tpl-zone { margin: 4px 0 0; min-height: 260px; }
+.drx-tpl-zone .drx-editor { min-height: 200px; border: none; border-radius: 0; }
+`;
+  document.head.appendChild(st);
 })();
