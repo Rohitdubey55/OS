@@ -112,10 +112,8 @@ function renderDiary() {
   const today = new Date();
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
-  const thisWeekEntries = entries.filter(e => {
-    const entryDate = new Date(e.date);
-    return entryDate >= startOfWeek;
-  });
+  const _wkStart = diaryLocalDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay()));
+  const thisWeekEntries = entries.filter(e => String(e.date || '').slice(0, 10) >= _wkStart);
   const weekDaysWritten = new Set(thisWeekEntries.map(e => e.date)).size;
 
   // Get mood insights
@@ -455,6 +453,116 @@ function renderDiary() {
   .dr-pro .dr-body-split { display:block; }
   .dr-pro .dr-rail { display:none; }
 }
+
+/* ═══ DIARY POLISH 2026-10 — summary, tabs, tags & templates ═══ */
+.dr-pro .drh { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(300px,1fr); gap:12px; margin:2px 20px 14px; flex-shrink:0; }
+.drh-stats, .drh-week { background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; box-shadow:var(--shadow-card, 0 1px 3px rgba(0,0,0,.04)); }
+.drh-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); }
+.drh-stat { display:flex; gap:12px; align-items:flex-start; padding:16px; min-width:0; }
+.drh-stat + .drh-stat { border-left:1px solid var(--border-color); }
+.drh-txt { min-width:0; }
+.drh-ic { width:34px; height:34px; border-radius:10px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--ic); background:color-mix(in srgb, var(--ic) 13%, transparent); }
+.drh-ic svg { width:17px; height:17px; }
+.drh-n { font-size:24px; font-weight:750; color:var(--text-1); letter-spacing:-.6px; line-height:1.05; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.drh-n small { font-size:12px; font-weight:600; color:var(--text-3); margin-left:3px; letter-spacing:0; }
+.drh-l { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); margin-top:5px; }
+.drh-sub { font-size:12px; color:var(--text-3); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drh-sub.ok { color:#059669; font-weight:600; }
+.drh-week { padding:14px 16px; display:flex; flex-direction:column; gap:10px; justify-content:center; }
+.drh-week-top { display:flex; justify-content:space-between; align-items:baseline; }
+.drh-week-top .drh-l { margin:0; }
+.drh-week-count { font-size:12px; color:var(--text-3); }
+.drh-week-count b { font-size:15px; color:var(--text-1); font-weight:750; }
+.drh-days { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.drh-day { display:flex; flex-direction:column; align-items:center; gap:5px; background:none; border:none; padding:2px 0; cursor:pointer; font:inherit; }
+.drh-day:disabled { cursor:default; }
+.drh-dow { font-size:10px; font-weight:700; color:var(--text-3); }
+.drh-dot { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:650; color:var(--text-2); background:var(--surface-2); border:1.5px solid transparent; transition:transform .15s, box-shadow .15s; font-variant-numeric:tabular-nums; }
+.drh-day:not(:disabled):hover .drh-dot { transform:translateY(-1px); box-shadow:var(--shadow-md, 0 4px 12px rgba(0,0,0,.08)); }
+.drh-day.has .drh-dot { background:var(--m); color:#fff; }
+.drh-day.today .drh-dot { border-color:var(--primary); color:var(--primary); font-weight:800; }
+.drh-day.today .drh-dow { color:var(--primary); }
+.drh-day.today.has .drh-dot { color:#fff; border-color:transparent; box-shadow:0 0 0 2px var(--surface-1), 0 0 0 4px var(--m); }
+.drh-day.future .drh-dot { opacity:.45; }
+.drh-bar { height:4px; border-radius:99px; background:var(--surface-2); overflow:hidden; }
+.drh-bar i { display:block; height:100%; border-radius:inherit; background:var(--primary); transition:width .5s cubic-bezier(.4,0,.2,1); }
+@media (max-width:1240px) { .dr-pro .drh { grid-template-columns:1fr; } }
+@media (max-width:900px) {
+  .drh-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .drh-stat:nth-child(3) { border-left:none; }
+  .drh-stat:nth-child(n+3) { border-top:1px solid var(--border-color); }
+}
+
+.drt-row { display:flex; align-items:center; gap:10px 12px; margin:0 20px 12px; flex-shrink:0; flex-wrap:wrap; }
+.drt-seg { display:inline-flex; gap:2px; padding:3px; background:var(--surface-2); border:1px solid var(--border-color); border-radius:11px; max-width:100%; overflow-x:auto; scrollbar-width:none; }
+.drt-seg::-webkit-scrollbar { display:none; }
+.drt-tab { display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border:none; background:transparent; border-radius:8px; font-size:13px; font-weight:600; color:var(--text-2); cursor:pointer; white-space:nowrap; transition:background .15s, color .15s, box-shadow .15s; }
+.drt-tab svg { width:14px; height:14px; }
+.drt-tab:hover { color:var(--text-1); }
+.drt-tab.active { background:var(--surface-1); color:var(--text-1); box-shadow:0 1px 2px rgba(0,0,0,.06), 0 0 0 1px var(--border-color); }
+.drt-tab.active svg { color:var(--primary); }
+.drt-tools { margin-left:auto; display:flex; gap:8px; align-items:center; }
+.drt-search { display:flex; align-items:center; gap:7px; height:36px; padding:0 10px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:10px; width:240px; cursor:text; transition:border-color .15s, box-shadow .15s; }
+.drt-search:focus-within { border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent); }
+.drt-search input { flex:1; min-width:0; height:auto !important; min-height:0 !important; margin:0 !important; padding:0 !important; border:none !important; outline:none; background:transparent !important; box-shadow:none !important; border-radius:0 !important; font-size:13px !important; color:var(--text-1); }
+.drt-search input::placeholder { color:var(--text-3); }
+.drt-search svg { width:14px; height:14px; color:var(--text-3); flex:none; }
+.drt-clear { border:none; background:none; color:var(--text-3); cursor:pointer; font-size:17px; line-height:1; padding:0 2px; }
+.drt-clear:hover { color:var(--text-1); }
+.drt-select { height:36px !important; min-height:0 !important; width:auto !important; margin:0 !important; padding:0 30px 0 11px !important; border:1px solid var(--border-color) !important; border-radius:10px !important; box-shadow:none !important; background:var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center !important; font-size:13px !important; font-weight:600; color:var(--text-2); -webkit-appearance:none; appearance:none; cursor:pointer; outline:none; }
+.drt-select:focus { border-color:var(--primary); }
+.drt-filter { display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 8px 0 11px; border-radius:99px; border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); background:color-mix(in srgb, var(--primary) 9%, transparent); color:var(--primary); font-size:12.5px; font-weight:700; cursor:pointer; }
+.drt-filter span { font-size:15px; line-height:1; opacity:.7; }
+@media (max-width:900px) { .drt-tools { margin-left:0; width:100%; } .drt-search { flex:1; width:auto; } }
+
+.drtg { padding:6px 20px 28px; display:flex; flex-direction:column; gap:28px; }
+.drtg-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+.drtg-head h3 { margin:0; font-size:15px; font-weight:750; color:var(--text-1); letter-spacing:-.2px; display:flex; align-items:center; gap:7px; }
+.drtg-head h3 span { font-size:11px; font-weight:700; color:var(--text-3); background:var(--surface-2); border-radius:99px; padding:2px 8px; letter-spacing:0; }
+.drtg-head p { margin:3px 0 0; font-size:12.5px; color:var(--text-3); }
+.drtg-actions { display:flex; gap:6px; }
+.drtg-btn { display:inline-flex; align-items:center; gap:5px; height:32px; padding:0 12px; border-radius:9px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); font-size:12.5px; font-weight:650; cursor:pointer; white-space:nowrap; transition:border-color .15s, color .15s, filter .15s; }
+.drtg-btn svg { width:14px; height:14px; }
+.drtg-btn:hover { border-color:var(--text-3); color:var(--text-1); }
+.drtg-btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+.drtg-btn.primary:hover { filter:brightness(.95); color:#fff; }
+.drtg-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.drtg-chip { display:inline-flex; align-items:center; gap:7px; height:34px; padding:0 7px 0 12px; border-radius:99px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-1); font-size:13px; font-weight:600; cursor:pointer; transition:border-color .15s, background .15s, transform .15s; }
+.drtg-chip:hover { border-color:var(--c); background:color-mix(in srgb, var(--c) 7%, var(--surface-1)); }
+.drtg-chip:active { transform:scale(.96); }
+.drtg-dot { width:8px; height:8px; border-radius:50%; background:var(--c); flex:none; }
+.drtg-n { min-width:22px; height:22px; padding:0 6px; border-radius:99px; background:var(--surface-2); color:var(--text-3); font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+.drtg-empty { font-size:13px; color:var(--text-3); padding:14px 16px; border:1px dashed var(--border-color); border-radius:12px; }
+
+.drtp-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px; }
+.drtp-card { position:relative; display:flex; flex-direction:column; text-align:left; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; padding:15px 16px 12px; cursor:pointer; box-shadow:var(--shadow-card, 0 1px 3px rgba(0,0,0,.04)); transition:transform .16s, box-shadow .16s, border-color .16s; overflow:hidden; font:inherit; color:inherit; min-height:200px; -webkit-tap-highlight-color:transparent; }
+.drtp-card::before { content:''; position:absolute; inset:0 0 auto 0; height:3px; background:var(--c); }
+.drtp-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-md, 0 8px 20px rgba(0,0,0,.08)); border-color:color-mix(in srgb, var(--c) 35%, var(--border-color)); }
+.drtp-card:focus-visible { outline:2px solid var(--c); outline-offset:2px; }
+.drtp-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; min-height:28px; }
+.drtp-cat { display:inline-flex; align-items:center; gap:5px; padding:3px 9px 3px 7px; border-radius:99px; font-size:11px; font-weight:700; text-transform:capitalize; color:var(--c); background:color-mix(in srgb, var(--c) 11%, transparent); }
+.drtp-cat svg { width:12px; height:12px; }
+.drtp-acts { display:flex; gap:2px; opacity:0; transition:opacity .15s; }
+.drtp-card:hover .drtp-acts, .drtp-card:focus-within .drtp-acts { opacity:1; }
+@media (hover:none) { .drtp-acts { opacity:1; } }
+.drtp-act { width:28px; height:28px; border-radius:8px; border:none; background:transparent; color:var(--text-3); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.drtp-act svg { width:14px; height:14px; }
+.drtp-act:hover { background:var(--surface-2); color:var(--text-1); }
+.drtp-act.del:hover { background:rgba(220,38,38,.08); color:#DC2626; }
+.drtp-title { font-size:15px; font-weight:700; color:var(--text-1); letter-spacing:-.2px; margin-bottom:9px; }
+.drtp-outline { list-style:none; margin:0 0 12px; padding:0; display:flex; flex-direction:column; gap:6px; flex:1; }
+.drtp-outline li { position:relative; padding-left:14px; font-size:12.5px; color:var(--text-2); line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.drtp-outline li::before { content:''; position:absolute; left:2px; top:.48em; width:5px; height:5px; border-radius:2px; background:color-mix(in srgb, var(--c) 60%, transparent); }
+.drtp-outline li.more { color:var(--text-3); font-size:12px; padding-left:0; }
+.drtp-outline li.more::before { display:none; }
+.drtp-use { display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid var(--border-color); font-size:12.5px; font-weight:700; color:var(--c); }
+.drtp-use svg { width:15px; height:15px; transition:transform .15s; }
+.drtp-card:hover .drtp-use svg { transform:translateX(3px); }
+.drtp-new { align-items:center; justify-content:center; gap:8px; border:1.5px dashed var(--border-color); background:transparent; box-shadow:none; color:var(--text-3); font-size:13px; font-weight:650; }
+.drtp-new::before { display:none; }
+.drtp-new svg { width:22px; height:22px; }
+.drtp-new:hover { color:var(--primary); border-color:var(--primary); background:color-mix(in srgb, var(--primary) 4%, transparent); box-shadow:none; }
+@media (max-width:480px) { .drtg { padding:4px 16px 24px; } .drtp-grid { grid-template-columns:1fr; } .drtp-card { min-height:0; } .drtp-new { min-height:64px; } }
 </style>`;
 
   if (_drIsPhone()) {
@@ -470,53 +578,29 @@ function renderDiary() {
       <!-- Header action ("New Entry") lives in the app header bar (#pageActions),
            inline with the "Diary" page title — see main.js view-switch logic. -->
 
-      <!-- Stats Strip -->
-      <div class="dr-stats-strip">
-        <div class="dr-stat-item">
-          <span class="dr-stat-n">${streak}</span>
-          <span class="dr-stat-l">Streak</span>
-        </div>
-        <div class="dr-stat-div"></div>
-        <div class="dr-stat-item">
-          <span class="dr-stat-n">${avgMood !== '-' ? avgMood : '—'}</span>
-          <span class="dr-stat-l">Avg Mood</span>
-        </div>
-        <div class="dr-stat-div"></div>
-        <div class="dr-stat-item">
-          <span class="dr-stat-n">${totalEntries}</span>
-          <span class="dr-stat-l">Entries</span>
-        </div>
-        <div class="dr-stat-div"></div>
-        <div class="dr-stat-item">
-          <span class="dr-stat-n">${achievements.length}</span>
-          <span class="dr-stat-l">Badges</span>
-        </div>
-      </div>
+      ${renderDiaryHero(entries, streak)}
 
-      <!-- Overview Row: This Week -->
-      <div class="dr-overview-row">
-        <div class="dr-overview-card" style="flex:1">
-          <div class="dr-card-label">
-            <i data-lucide="calendar-days" style="width:11px;height:11px"></i>
-            This Week
-          </div>
-          <div class="dr-week-dots">
-            ${getWeekDots(entries)}
-          </div>
-          <div class="dr-week-progress">
-            <div class="dr-week-progress-fill" style="width:${(weekDaysWritten / 7) * 100}%"></div>
-          </div>
-          <div class="dr-week-stat">${weekDaysWritten}/7 days written</div>
+      <!-- Nav: segmented tabs + list tools -->
+      <div class="drt-row">
+        <div class="drt-seg" role="tablist">
+          ${[['list', 'list', 'Entries'], ['calendar', 'calendar', 'Month'], ['yearly', 'grid-3x3', 'Year'], ['insights', 'bar-chart-3', 'Stats'], ['tags', 'tags', 'Tags & Templates']].map(([v, ic, label]) => `
+          <button class="drt-tab ${currentDiaryView === v ? 'active' : ''}" role="tab" aria-selected="${currentDiaryView === v}" onclick="switchDiaryView('${v}')"><i data-lucide="${ic}"></i>${label}</button>`).join('')}
         </div>
-      </div>
-
-      <!-- Nav Tabs -->
-      <div class="dr-tabs">
-        <button class="dr-tab ${currentDiaryView === 'list' ? 'active' : ''}" onclick="switchDiaryView('list')">List</button>
-        <button class="dr-tab ${currentDiaryView === 'calendar' ? 'active' : ''}" onclick="switchDiaryView('calendar')">Month</button>
-        <button class="dr-tab ${currentDiaryView === 'yearly' ? 'active' : ''}" onclick="switchDiaryView('yearly')">Year</button>
-        <button class="dr-tab ${currentDiaryView === 'insights' ? 'active' : ''}" onclick="switchDiaryView('insights')">Stats</button>
-        <button class="dr-tab ${currentDiaryView === 'tags' ? 'active' : ''}" onclick="switchDiaryView('tags')">Tags</button>
+        ${currentDiaryView === 'list' ? `
+        <div class="drt-tools">
+          ${currentTagFilter ? `<button class="drt-filter" onclick="drClearTagFilter()" title="Clear tag filter">#${_drpEsc(currentTagFilter)}<span aria-hidden="true">×</span></button>` : ''}
+          <label class="drt-search">
+            <i data-lucide="search"></i>
+            <input type="text" id="drSearchInput" placeholder="Search entries" value="${_drpEsc(currentSearchQuery)}" oninput="handleDiarySearch(this.value)">
+            ${currentSearchQuery ? `<button class="drt-clear" onclick="handleDiarySearch('')" title="Clear search">×</button>` : ''}
+          </label>
+          <select class="drt-select" onchange="handleDateFilter(this.value)" aria-label="Date range">
+            <option value="all" ${currentDateFilter === 'all' ? 'selected' : ''}>All time</option>
+            <option value="week" ${currentDateFilter === 'week' ? 'selected' : ''}>This week</option>
+            <option value="month" ${currentDateFilter === 'month' ? 'selected' : ''}>This month</option>
+            <option value="last7" ${currentDateFilter === 'last7' ? 'selected' : ''}>Last 7 days</option>
+          </select>
+        </div>` : ''}
       </div>
 
       <!-- Scrollable Body -->
@@ -528,21 +612,6 @@ function renderDiary() {
         ${currentDiaryView === 'tags' ? renderTagsView() : ''}
       </div>
 
-      <!-- Search & Filter Bar -->
-      <div class="dr-search-bar">
-        <div class="dr-search-wrap">
-          <i data-lucide="search" style="width:14px;height:14px;color:var(--text-3);flex-shrink:0"></i>
-          <input type="text" class="dr-search-input" placeholder="Search entries..."
-                 value="${currentSearchQuery}" oninput="handleDiarySearch(this.value)">
-          ${currentSearchQuery ? `<button class="dr-search-clear" onclick="handleDiarySearch('')">×</button>` : ''}
-        </div>
-        <select class="dr-filter-select" onchange="handleDateFilter(this.value)">
-          <option value="all" ${currentDateFilter === 'all' ? 'selected' : ''}>All Time</option>
-          <option value="week" ${currentDateFilter === 'week' ? 'selected' : ''}>This Week</option>
-          <option value="month" ${currentDateFilter === 'month' ? 'selected' : ''}>Month</option>
-          <option value="last7" ${currentDateFilter === 'last7' ? 'selected' : ''}>Last 7d</option>
-        </select>
-      </div>
 
     </div>
   `;
@@ -562,6 +631,70 @@ function diaryLocalDate(d) {
   const day = String(dt.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+
+function _drMoodColor(m) { return m >= 8 ? '#10B981' : m >= 6 ? '#84CC16' : m >= 4 ? '#F59E0B' : m >= 2 ? '#F97316' : '#EF4444'; }
+
+/* Desktop summary: four stat tiles + this week's days (coloured by mood). */
+function renderDiaryHero(entries, streak) {
+  const all = entries || [];
+  const now = new Date();
+  const todayStr = diaryLocalDate(now);
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+  const byDate = {};
+  all.forEach(e => { const d = String(e.date || '').slice(0, 10); if (d) (byDate[d] = byDate[d] || []).push(e); });
+  const days = [];
+  for (let i = 0; i < 7; i++) days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+  const written = days.filter(d => byDate[diaryLocalDate(d)]).length;
+  const thisMonth = all.filter(e => String(e.date || '').startsWith(todayStr.slice(0, 7))).length;
+  const words = all.reduce((s, e) => s + _drStripMd(e.content).split(/\s+/).filter(Boolean).length, 0);
+  const cutoff = diaryLocalDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29));
+  const recentMoods = all.filter(e => String(e.date || '').slice(0, 10) >= cutoff).map(_drMood).filter(v => v != null);
+  const moods = recentMoods.length ? recentMoods : all.map(_drMood).filter(v => v != null);
+  const avg = moods.length ? moods.reduce((a, b) => a + b, 0) / moods.length : null;
+  const doneToday = !!byDate[todayStr];
+  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const tile = (ic, color, n, unit, label, sub, ok) => `
+      <div class="drh-stat">
+        <div class="drh-ic" style="--ic:${color}"><i data-lucide="${ic}"></i></div>
+        <div class="drh-txt">
+          <div class="drh-n">${n}${unit ? `<small>${unit}</small>` : ''}</div>
+          <div class="drh-l">${label}</div>
+          <div class="drh-sub ${ok ? 'ok' : ''}">${sub}</div>
+        </div>
+      </div>`;
+  return `
+  <div class="drh">
+    <div class="drh-stats">
+      ${tile('flame', '#F97316', streak, streak === 1 ? 'day' : 'days', 'Streak', doneToday ? 'Today is written' : (streak ? 'Write today to keep it' : 'Write today to start one'), doneToday)}
+      ${tile('smile', avg != null ? _drMoodColor(avg) : '#94A3B8', avg != null ? avg.toFixed(1) : '—', avg != null ? '/10' : '', 'Avg mood', recentMoods.length ? 'Last 30 days' : (moods.length ? 'All time' : 'No moods yet'))}
+      ${tile('book-open', '#6366F1', all.length, '', 'Entries', `${thisMonth} this month`)}
+      ${tile('pen-line', '#0EA5E9', words >= 10000 ? (words / 1000).toFixed(1) + 'k' : words.toLocaleString(), '', 'Words', all.length ? `≈ ${Math.round(words / all.length)} per entry` : 'Start writing')}
+    </div>
+    <div class="drh-week">
+      <div class="drh-week-top">
+        <span class="drh-l">This week</span>
+        <span class="drh-week-count"><b>${written}</b>/7 days</span>
+      </div>
+      <div class="drh-days">
+        ${days.map((d, i) => {
+          const ds = diaryLocalDate(d);
+          const es = byDate[ds];
+          const m = es ? _drMood(es[0]) : null;
+          const future = ds > todayStr;
+          const click = es ? `openEditDiary('${es[0].id}')` : `openDiaryModal('${ds}')`;
+          const tip = `${dow[i]} ${d.getDate()}${es ? (m != null ? ` · mood ${m}/10` : ' · written') : (future ? '' : ' · tap to write')}`;
+          return `<button class="drh-day ${es ? 'has' : ''} ${ds === todayStr ? 'today' : ''} ${future ? 'future' : ''}" ${future ? 'disabled' : `onclick="${click}"`} title="${tip}">
+            <span class="drh-dow">${dow[i].charAt(0)}</span>
+            <span class="drh-dot" ${es ? `style="--m:${m != null ? _drMoodColor(m) : 'var(--primary)'}"` : ''}>${d.getDate()}</span>
+          </button>`;
+        }).join('')}
+      </div>
+      <div class="drh-bar"><i style="width:${(written / 7) * 100}%"></i></div>
+    </div>
+  </div>`;
+}
+
+window.drClearTagFilter = function () { currentTagFilter = ''; renderDiary(); };
 
 // Generate week dots (new dr- classes)
 function getWeekDots(entries) {
@@ -1165,8 +1298,13 @@ function filterEntries(entries) {
 }
 
 window.handleDiarySearch = function (query) {
+  const hadFocus = document.activeElement && document.activeElement.id === 'drSearchInput';
   currentSearchQuery = query;
   renderDiary();
+  if (hadFocus) {
+    const inp = document.getElementById('drSearchInput');
+    if (inp) { inp.focus(); const n = inp.value.length; try { inp.setSelectionRange(n, n); } catch (e) { } }
+  }
 };
 
 window.handleDateFilter = function (filter) {
@@ -1246,46 +1384,40 @@ function renderTagsView() {
 
   const colors = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
+  const nT = (state.data.diary_templates || []).length;
   return `
-    <div class="dr-tags">
-      <div class="dr-section-header" style="padding:4px 0 14px;">
-        <span class="dr-section-title">Your Tags</span>
-        <button style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:10px;border:1.5px solid var(--border-color);background:var(--surface-2);color:var(--text-2);cursor:pointer;" onclick="openTagModal()">+ New Tag</button>
-      </div>
-
-      <div class="dr-tags-grid">
-        ${allTags.length === 0 ? `
-          <div class="dr-empty" style="padding:30px 0;">
-            <div class="dr-empty-icon">🏷️</div>
-            <div class="dr-empty-title" style="font-size:14px;">No tags yet</div>
-            <div class="dr-empty-sub" style="font-size:12px;">Tags will appear when you add them to entries.</div>
+    <div class="drtg">
+      <section>
+        <div class="drtg-head">
+          <div>
+            <h3>Tags<span>${allTags.length}</span></h3>
+            <p>Click a tag to see the entries that use it.</p>
           </div>
-        ` : allTags.map((tag, idx) => {
-    const count = tagCounts[tag] || 0;
-    const color = colors[idx % colors.length];
-    return `
-            <div class="dr-tag-chip" style="background:${color}14;color:${color};border-color:${color}30;" onclick="filterByTag('${tag}')">
-              #${tag}
-              <span class="dr-tag-count">${count}</span>
-            </div>
-          `;
-  }).join('')}
-      </div>
-
-      <!-- Templates Section -->
-      <div class="dr-section-sep">
-        Templates
-      </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <span style="font-size:12px;color:var(--text-3);font-weight:500;">${(state.data.diary_templates || []).length} templates</span>
-        <div style="display:flex;gap:6px;">
-          ${(state.data.diary_templates || []).length === 0 ? `
-            <button style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:10px;border:1.5px solid var(--border-color);background:var(--surface-2);color:var(--text-2);cursor:pointer;" onclick="seedDefaultTemplates()">Seed Defaults</button>
-          ` : ''}
-          <button style="font-size:11px;font-weight:700;padding:5px 11px;border-radius:10px;border:none;background:var(--primary);color:#fff;cursor:pointer;" onclick="openTemplateModal()">+ New Template</button>
+          <div class="drtg-actions">
+            <button class="drtg-btn" onclick="openTagModal()"><i data-lucide="plus"></i>New tag</button>
+          </div>
         </div>
-      </div>
-      ${renderTemplatesList()}
+        ${allTags.length === 0
+          ? `<div class="drtg-empty">No tags yet — add #tags while writing and they'll show up here.</div>`
+          : `<div class="drtg-chips">${allTags.map((tag, idx) => `
+            <button class="drtg-chip" style="--c:${colors[idx % colors.length]}" onclick="filterByTag('${String(tag).replace(/'/g, "\\'")}')">
+              <span class="drtg-dot"></span>#${_drpEsc(tag)}<span class="drtg-n">${tagCounts[tag] || 0}</span>
+            </button>`).join('')}</div>`}
+      </section>
+
+      <section>
+        <div class="drtg-head">
+          <div>
+            <h3>Templates<span>${nT}</span></h3>
+            <p>Start an entry from a ready-made outline.</p>
+          </div>
+          <div class="drtg-actions">
+            ${nT === 0 ? `<button class="drtg-btn btn-seed" onclick="seedDefaultTemplates()"><i data-lucide="sparkles"></i>Add starter set</button>` : ''}
+            <button class="drtg-btn primary" onclick="openTemplateModal()"><i data-lucide="plus"></i>New template</button>
+          </div>
+        </div>
+        ${renderTemplatesList()}
+      </section>
     </div>
   `;
 }
@@ -1316,24 +1448,58 @@ window.seedDefaultTemplates = async function () {
   }
 };
 
+const DR_TPL_CATS = {
+  reflection: ['#6366F1', 'lightbulb'], gratitude: ['#F59E0B', 'heart'], goals: ['#10B981', 'target'],
+  morning: ['#F97316', 'sunrise'], evening: ['#8B5CF6', 'moon'], work: ['#0EA5E9', 'briefcase'],
+  health: ['#EF4444', 'activity'], planning: ['#14B8A6', 'list-checks'], general: ['#64748B', 'file-text'],
+};
+function _drTplCat(c) { return DR_TPL_CATS[String(c || 'general').toLowerCase()] || DR_TPL_CATS.general; }
+
+/* The outline a template gives you: its headings, else its first lines. */
+function _drTplOutline(content) {
+  const s = String(content || '');
+  if (!s.trim()) return [];
+  if (drIsHTML(s)) {
+    const b = new DOMParser().parseFromString('<body>' + drSanitize(s) + '</body>', 'text/html').body;
+    let out = [...b.querySelectorAll('h2,h3,h4')].map(h => h.textContent.trim()).filter(Boolean);
+    if (!out.length) out = [...b.children].map(c => c.textContent.trim()).filter(Boolean);
+    return out;
+  }
+  const lines = s.split(/\r?\n/);
+  let out = lines.filter(l => /^\s*#{1,6}\s+\S/.test(l)).map(l => l.replace(/^\s*#{1,6}\s+/, ''));
+  if (!out.length) out = lines.map(l => l.replace(/^\s*([-*+•>]|\d+[.)])\s*/, ''));
+  return out.map(l => l.replace(/\*\*|__|~~/g, '').trim()).filter(Boolean);
+}
+
 function renderTemplatesList() {
   const templates = state.data.diary_templates || [];
-  if (!templates.length) return '<p style="font-size:13px;color:var(--text-3);margin:0;">No templates yet</p>';
-
+  const newCard = `<button class="drtp-card drtp-new" onclick="openTemplateModal()"><i data-lucide="plus"></i><span>New template</span></button>`;
+  if (!templates.length) return `<div class="drtp-grid">${newCard}</div>`;
   return `
-    <div class="dr-templates-grid">
-      ${templates.map(t => `
-        <div class="dr-template-card">
-          <div class="dr-template-cat">${t.category || 'general'}</div>
-          <div class="dr-template-title">${_drpEsc(t.title)}</div>
-          <div class="dr-template-preview">${_drpEsc(_drStripMd(t.content).substring(0, 90))}…</div>
-          <div class="dr-template-actions">
-            <button class="dr-template-btn primary" onclick="useTemplate(${t.id})">Use</button>
-            <button class="dr-template-btn" onclick="editTemplate(${t.id})">Edit</button>
-            <button class="dr-template-btn danger" onclick="deleteTemplate(${t.id})">Delete</button>
+    <div class="drtp-grid">
+      ${templates.map(t => {
+        const [color, icon] = _drTplCat(t.category);
+        const outline = _drTplOutline(t.content);
+        const shown = outline.slice(0, 4);
+        return `
+        <div class="drtp-card" style="--c:${color}" role="button" tabindex="0" title="Use this template"
+             onclick="useTemplate(${t.id})" onkeydown="if(event.key==='Enter'){useTemplate(${t.id})}">
+          <div class="drtp-top">
+            <span class="drtp-cat"><i data-lucide="${icon}"></i>${_drpEsc(t.category || 'general')}</span>
+            <div class="drtp-acts">
+              <button class="drtp-act" title="Edit template" onclick="event.stopPropagation(); editTemplate(${t.id})"><i data-lucide="pencil"></i></button>
+              <button class="drtp-act del" title="Delete template" onclick="event.stopPropagation(); deleteTemplate(${t.id})"><i data-lucide="trash-2"></i></button>
+            </div>
           </div>
-        </div>
-      `).join('')}
+          <div class="drtp-title">${_drpEsc(t.title || 'Untitled')}</div>
+          <ul class="drtp-outline">
+            ${shown.length ? shown.map(x => `<li>${_drpEsc(x)}</li>`).join('') : '<li class="more">Empty template</li>'}
+            ${outline.length > shown.length ? `<li class="more">+${outline.length - shown.length} more</li>` : ''}
+          </ul>
+          <div class="drtp-use">Use template<i data-lucide="arrow-right"></i></div>
+        </div>`;
+      }).join('')}
+      ${newCard}
     </div>
   `;
 }
