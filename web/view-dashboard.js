@@ -655,7 +655,7 @@ const WIDGET_RENDERERS = {
         if (entries.length === 0) return _listShell(c, 0, _emptyState('No diary entries yet.'));
         const moodEmoji = { happy: '😄', good: '🙂', neutral: '😐', sad: '😞', angry: '😠', anxious: '😟' };
         const rows = entries.map(e => {
-            const preview = (e.content || '').replace(/<[^>]+>/g, '').slice(0, 60);
+            const preview = (e.content || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/^\s*#{1,6}\s+/gm, '').replace(/\s+/g, ' ').trim().slice(0, 60);
             return `
                 <button class="lw-row" onclick="event.stopPropagation();(typeof openEditDiary === 'function' ? openEditDiary('${e.id}') : routeTo('diary'))">
                     <span class="lw-row__emoji">${moodEmoji[e.mood] || (_dashMoodNum(e) != null ? _dashMoodEmoji(_dashMoodNum(e)) : '✨')}</span>
