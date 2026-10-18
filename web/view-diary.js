@@ -3110,18 +3110,18 @@ function drxRun(cmd, val, srcEl) {
   }
   _drxEnsureSel(ed);
   try { document.execCommand('styleWithCSS', false, true); document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) { }
-  const blockCmd = ['h2', 'h3', 'p', 'quote', 'check', 'insertUnorderedList', 'insertOrderedList'].includes(cmd);
+  const blockCmd = ['h2', 'h3', 'p', 'quote'].includes(cmd);
   const caret = blockCmd ? _drxSaveCaret(ed) : null;
   switch (cmd) {
     case 'h2':
     case 'h3': {
-      if (_drxBlock(ed, 'LI')) document.execCommand(_drxBlock(ed, 'OL') ? 'insertOrderedList' : 'insertUnorderedList');
+      if (_drxBlock(ed, 'LI')) _drxSetList(ed, null);
       const cur = String(document.queryCommandValue('formatBlock') || '').toLowerCase();
       document.execCommand('formatBlock', false, cur === cmd ? '<div>' : `<${cmd}>`);
       break;
     }
     case 'p': {
-      if (_drxBlock(ed, 'LI')) document.execCommand(_drxBlock(ed, 'OL') ? 'insertOrderedList' : 'insertUnorderedList');
+      if (_drxBlock(ed, 'LI')) _drxSetList(ed, null);
       document.execCommand('formatBlock', false, '<div>');
       break;
     }
@@ -3130,41 +3130,13 @@ function drxRun(cmd, val, srcEl) {
       break;
     case 'quote': {
       const inQ = _drxBlock(ed, 'BLOCKQUOTE');
-      if (!inQ && _drxBlock(ed, 'LI')) document.execCommand(_drxBlock(ed, 'OL') ? 'insertOrderedList' : 'insertUnorderedList');
+      if (!inQ && _drxBlock(ed, 'LI')) _drxSetList(ed, null);
       document.execCommand('formatBlock', false, inQ ? '<div>' : '<blockquote>');
       break;
     }
-    /* Lists: switching between bullet, numbered and checklist converts the
-       list in place instead of removing it (the old toggle dropped the list
-       when you went checklist → bullet). */
-    case 'check': {
-      const ul = _drxBlock(ed, 'UL');
-      if (ul && ul.classList.contains('dr-check')) { document.execCommand('insertUnorderedList'); break; }   // checklist → plain text
-      if (ul) { ul.classList.add('dr-check'); break; }                                                       // bullets → checklist
-      if (_drxBlock(ed, 'OL')) document.execCommand('insertUnorderedList');                                   // numbered → bullets
-      else document.execCommand('insertUnorderedList');                                                       // text → bullets
-      const nu = _drxBlock(ed, 'UL'); if (nu) nu.classList.add('dr-check');
-      break;
-    }
-    case 'insertUnorderedList': {
-      const ul = _drxBlock(ed, 'UL');
-      if (ul && ul.classList.contains('dr-check')) {                                                          // checklist → bullets
-        ul.classList.remove('dr-check');
-        if (!ul.className) ul.removeAttribute('class');
-        ul.querySelectorAll(':scope > li[data-checked]').forEach(li => li.removeAttribute('data-checked'));
-        break;
-      }
-      document.execCommand('insertUnorderedList');
-      break;
-    }
-    case 'insertOrderedList': {
-      const ul = _drxBlock(ed, 'UL');
-      if (ul && ul.classList.contains('dr-check')) ul.querySelectorAll(':scope > li[data-checked]').forEach(li => li.removeAttribute('data-checked'));
-      document.execCommand('insertOrderedList');
-      const ol = _drxBlock(ed, 'OL');
-      if (ol) { ol.classList.remove('dr-check'); if (!ol.className) ol.removeAttribute('class'); }
-      break;
-    }
+    case 'check': _drxSetList(ed, 'check'); break;
+    case 'insertUnorderedList': _drxSetList(ed, 'ul'); break;
+    case 'insertOrderedList': _drxSetList(ed, 'ol'); break;
     case 'color':
       document.execCommand('foreColor', false, val || DRX_SENTINEL);
       if (!val) _drxStripSentinel(ed, 'color');
@@ -3392,6 +3364,92 @@ function _drxCaretIn(blk) {
   if (n.firstChild && n.firstChild.nodeType === 3) r.setStart(n.firstChild, 0); else r.setStart(n, 0);
   r.collapse(true);
   const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+/* ── Lists: bullet / numbered / checklist work on the line(s) you're on ──
+   The browser's own list command acts on the whole list and glues a new list
+   onto the one above it, which is why ticking a checklist turned the bullets
+   above into checkboxes. This converts only the selected lines: it splits the
+   list around them, and joins lists only when they are the same kind. */
+function _drxListType(list) { return list.tagName === 'OL' ? 'ol' : (list.classList.contains('dr-check') ? 'check' : 'ul'); }
+function _drxNewList(type) { const l = document.createElement(type === 'ol' ? 'ol' : 'ul'); if (type === 'check') l.className = 'dr-check'; return l; }
+function _drxIsList(n) { return n && n.nodeType === 1 && (n.tagName === 'UL' || n.tagName === 'OL'); }
+function _drxLineOf(ed, node) {
+  let b = node && (node.nodeType === 1 ? node : node.parentElement);
+  while (b && b !== ed && !/^(DIV|P|H[1-6]|BLOCKQUOTE|LI)$/.test(b.tagName)) b = b.parentElement;
+  if (b && b !== ed && b.tagName === 'DIV' && b.querySelector(':scope > ul, :scope > ol')) return null; // wrapper around a list
+  return b && b !== ed ? b : null;
+}
+/* The lines a selection covers: LIs of one list, or ordinary lines that share a parent. */
+function _drxSelLines(ed) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return null;
+  const r = sel.getRangeAt(0);
+  if (!ed.contains(r.commonAncestorContainer)) return null;
+  let a = _drxLineOf(ed, r.startContainer), b = _drxLineOf(ed, r.endContainer);
+  if (!a) { // text typed straight into the editor
+    const top = r.startContainer.nodeType === 3 && r.startContainer.parentNode === ed ? r.startContainer : null;
+    a = top ? _drxWrapTop(ed, top) : null;
+    if (!a) { const d = document.createElement('div'); d.innerHTML = '<br>'; ed.appendChild(d); a = d; }
+    b = a;
+  }
+  if (!b || b.parentNode !== a.parentNode || (a.tagName === 'LI') !== (b.tagName === 'LI')) b = a;
+  const out = [];
+  for (let n = a; n; n = n.nextSibling) { if (n.nodeType === 1) out.push(n); if (n === b) break; }
+  return out.length ? out : [a];
+}
+function _drxMergeAround(list) {
+  const t = _drxListType(list);
+  const prev = list.previousElementSibling, next = list.nextElementSibling;
+  if (_drxIsList(next) && _drxListType(next) === t) { while (next.firstChild) list.appendChild(next.firstChild); next.remove(); }
+  if (_drxIsList(prev) && _drxListType(prev) === t) { while (list.firstChild) prev.appendChild(list.firstChild); list.remove(); return prev; }
+  return list;
+}
+function _drxSetList(ed, type) {
+  const sel = window.getSelection();
+  const r = sel.rangeCount ? sel.getRangeAt(0) : null;
+  const mark = r ? { sc: r.startContainer, so: r.startOffset, ec: r.endContainer, eo: r.endOffset } : null;
+  const lines = _drxSelLines(ed);
+  if (!lines) return;
+  const swap = new Map();                 // old line element → new one (for the caret)
+  const fill = el => { if (!el.firstChild) el.appendChild(document.createElement('br')); return el; };
+  const move = (from, to) => { while (from.firstChild) to.appendChild(from.firstChild); swap.set(from, to); return fill(to); };
+
+  if (lines[0].tagName === 'LI') {
+    const list = lines[0].parentNode;
+    const cur = _drxListType(list);
+    // the items after the selection keep the old list type
+    const rest = [];
+    for (let n = lines[lines.length - 1].nextSibling; n; n = n.nextSibling) rest.push(n);
+    let anchor = list;
+    if (type == null || type === cur) {
+      // toggle off → plain lines
+      lines.forEach(li => { const d = move(li, document.createElement('div')); anchor.after(d); anchor = d; li.remove(); });
+    } else {
+      const nl = _drxNewList(type);
+      lines.forEach(li => { if (type !== 'check') li.removeAttribute('data-checked'); nl.appendChild(li); });
+      anchor.after(nl); anchor = nl;
+    }
+    if (rest.length) { const tail = list.cloneNode(false); rest.forEach(n => tail.appendChild(n)); anchor.after(tail); }
+    if (!list.querySelector('li')) list.remove();
+    const made = anchor.tagName === 'UL' || anchor.tagName === 'OL' ? anchor : null;
+    if (made) _drxMergeAround(made);
+  } else {
+    if (type == null) return;
+    const nl = _drxNewList(type);
+    lines[0].before(nl);
+    lines.forEach(bl => { const li = move(bl, document.createElement('li')); nl.appendChild(li); bl.remove(); });
+    _drxMergeAround(nl);
+  }
+  // caret back where it was
+  if (mark) {
+    const fix = (c, o) => { const m = swap.get(c); return m ? [m, Math.min(o, m.childNodes.length)] : [c, o]; };
+    try {
+      const [sc, so] = fix(mark.sc, mark.so), [ec, eo] = fix(mark.ec, mark.eo);
+      const nr = document.createRange(); nr.setStart(sc, so); nr.setEnd(ec, eo);
+      sel.removeAllRanges(); sel.addRange(nr);
+    } catch (e) { }
+  }
 }
 
 /* ── Dividers ── */
