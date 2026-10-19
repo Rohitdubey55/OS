@@ -140,7 +140,7 @@ function renderFinance() {
 window.finOpenImport = function () {
   if (window.fimpOpen) return window.fimpOpen();
   const s = document.createElement('script');
-  s.src = 'finance-import.js?v=20261019a';
+  s.src = 'finance-import.js?v=20261019b';
   s.onload = () => window.fimpOpen && window.fimpOpen();
   s.onerror = () => showToast('Could not load the statement importer');
   document.head.appendChild(s);
