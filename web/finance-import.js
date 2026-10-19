@@ -32,7 +32,12 @@
     '664826332277': { cat: 'Fun', scope: 'weekly' },
     '665397418704': { cat: 'GST', scope: 'monthly', note: 'GST charges' },
     '665165520370': { skip: 'Refunded' },
-    '961689241123': { cat: 'Rent', scope: 'monthly', note: 'Rent' },
+    '961689241123': { skip: 'Already in app — Rent' },
+    '231016720768': { skip: 'Already in app — Train ticket up and down' },
+    '232128867823': { skip: 'Already in app — Train ticket up and down' },
+    '627523015849': { skip: 'Already in app — Kaleji roll' },
+    '104046600899': { skip: 'Already in app — Electricity' },
+    '665174903264': { skip: 'Already in app — Gaon (logged 19 Oct)' },
     '613388651806': { skip: 'Moved to own Kotak account' }
   };
   /* Standing payee rules (lower-case cleaned payee name). */
