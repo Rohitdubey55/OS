@@ -477,12 +477,12 @@ function renderDiary() {
 .drh-day { display:flex; flex-direction:column; align-items:center; gap:5px; background:none; border:none; padding:2px 0; cursor:pointer; font:inherit; }
 .drh-day:disabled { cursor:default; }
 .drh-dow { font-size:10px; font-weight:700; color:var(--text-3); }
-.drh-dot { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:650; color:var(--text-2); background:var(--surface-2); border:1.5px solid transparent; transition:transform .15s, box-shadow .15s; font-variant-numeric:tabular-nums; }
+.drh-dot { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:650; color:var(--text-2); background:var(--surface-2); border:1.5px solid transparent; transition:transform .15s, box-shadow .15s; font-variant-numeric:tabular-nums; }
 .drh-day:not(:disabled):hover .drh-dot { transform:translateY(-1px); box-shadow:var(--shadow-md, 0 4px 12px rgba(0,0,0,.08)); }
-.drh-day.has .drh-dot { background:var(--m); color:#fff; }
+.drh-day.has .drh-dot { font-size:19px; color:var(--text-1); background:color-mix(in srgb, var(--m) 16%, var(--surface-1)); border-color:color-mix(in srgb, var(--m) 45%, transparent); }
 .drh-day.today .drh-dot { border-color:var(--primary); color:var(--primary); font-weight:800; }
 .drh-day.today .drh-dow { color:var(--primary); }
-.drh-day.today.has .drh-dot { color:#fff; border-color:transparent; box-shadow:0 0 0 2px var(--surface-1), 0 0 0 4px var(--m); }
+.drh-day.today.has .drh-dot { border:2px solid var(--primary); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
 .drh-day.future .drh-dot { opacity:.45; }
 .drh-bar { height:4px; border-radius:99px; background:var(--surface-2); overflow:hidden; }
 .drh-bar i { display:block; height:100%; border-radius:inherit; background:var(--primary); transition:width .5s cubic-bezier(.4,0,.2,1); }
@@ -680,12 +680,13 @@ function renderDiaryHero(entries, streak) {
           const ds = diaryLocalDate(d);
           const es = byDate[ds];
           const m = es ? _drMood(es[0]) : null;
+          const face = m != null ? _drwFace(m) : null;
           const future = ds > todayStr;
           const click = es ? `openEditDiary('${es[0].id}')` : `openDiaryModal('${ds}')`;
           const tip = `${dow[i]} ${d.getDate()}${es ? (m != null ? ` · mood ${m}/10` : ' · written') : (future ? '' : ' · tap to write')}`;
           return `<button class="drh-day ${es ? 'has' : ''} ${ds === todayStr ? 'today' : ''} ${future ? 'future' : ''}" ${future ? 'disabled' : `onclick="${click}"`} title="${tip}">
             <span class="drh-dow">${dow[i].charAt(0)}</span>
-            <span class="drh-dot" ${es ? `style="--m:${m != null ? _drMoodColor(m) : 'var(--primary)'}"` : ''}>${d.getDate()}</span>
+            <span class="drh-dot" ${es ? `style="--m:${face ? face.c : 'var(--primary)'}"` : ''}>${es ? (face ? face.e : '•') : d.getDate()}</span>
           </button>`;
         }).join('')}
       </div>
@@ -1784,7 +1785,7 @@ function _drwMetaHTML() {
   <section class="drw-sec">
     <div class="drw-h">Writing</div>
     <div class="drw-stat"><b id="diaryWordCount">0 words</b><span id="drwRead">1 min read</span></div>
-    <p class="drw-hint">Type <kbd>/</kbd> for blocks, <kbd>#</kbd> for a heading, <kbd>-</kbd> for a list, <kbd>---</kbd> for a divider. <kbd>⌘</kbd><kbd>↵</kbd> saves.</p>
+    <p class="drw-hint">Type <kbd>/</kbd> for blocks, <kbd>#</kbd> for a heading, <kbd>-</kbd> for a list, <kbd>---</kbd> for a divider, <kbd>-&gt;</kbd> for →. <kbd>⌘</kbd><kbd>↵</kbd> saves.</p>
   </section>`;
 }
 
@@ -3563,6 +3564,15 @@ function _drxSlashPick(i) {
     if (!sel.rangeCount) return;
     const r = sel.getRangeAt(0), node = r.startContainer, off = r.startOffset;
     if (node.nodeType !== 3) return;
+    // Typed arrows: -> → , <- ← , <-> ↔ , => ⇒
+    const ARROWS = { '->': '→', '<-': '←', '=>': '⇒', '←>': '↔' };
+    const pair = node.textContent.slice(Math.max(0, off - 2), off);
+    if (ARROWS[pair]) {
+      const r2 = document.createRange(); r2.setStart(node, off - 2); r2.setEnd(node, off);
+      sel.removeAllRanges(); sel.addRange(r2);
+      document.execCommand('insertText', false, ARROWS[pair]);
+      return;
+    }
     if (e.data === '/') {
       const prev = node.textContent.charAt(off - 2);
       if (off === 1 || /[\s ]/.test(prev)) { _drxSlash = { ed, node, offset: off - 1, idx: 0 }; _drxSlashRender(); }
