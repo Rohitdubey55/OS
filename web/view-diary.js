@@ -477,9 +477,9 @@ function renderDiary() {
 .drh-day { display:flex; flex-direction:column; align-items:center; gap:5px; background:none; border:none; padding:2px 0; cursor:pointer; font:inherit; }
 .drh-day:disabled { cursor:default; }
 .drh-dow { font-size:10px; font-weight:700; color:var(--text-3); }
-.drh-dot { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:650; color:var(--text-2); background:var(--surface-2); border:1.5px solid transparent; transition:transform .15s, box-shadow .15s; font-variant-numeric:tabular-nums; }
+.drh-dot { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-weight:650; color:var(--text-2); background:var(--surface-2); border:1.5px solid transparent; transition:transform .15s, box-shadow .15s; font-variant-numeric:tabular-nums; }
 .drh-day:not(:disabled):hover .drh-dot { transform:translateY(-1px); box-shadow:var(--shadow-md, 0 4px 12px rgba(0,0,0,.08)); }
-.drh-day.has .drh-dot { font-size:19px; color:var(--text-1); background:color-mix(in srgb, var(--m) 16%, var(--surface-1)); border-color:color-mix(in srgb, var(--m) 45%, transparent); }
+.drh-day.has .drh-dot { font-size:27px; line-height:1; color:var(--text-1); background:color-mix(in srgb, var(--m) 24%, var(--surface-1)); border:2px solid color-mix(in srgb, var(--m) 70%, transparent); }
 .drh-day.today .drh-dot { border-color:var(--primary); color:var(--primary); font-weight:800; }
 .drh-day.today .drh-dow { color:var(--primary); }
 .drh-day.today.has .drh-dot { border:2px solid var(--primary); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
