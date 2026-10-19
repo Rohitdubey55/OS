@@ -494,7 +494,7 @@ const VIEW_MAP = {
     vision:        { src: 'view-vision.js?v=20261003d', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260930a', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
-    gym:           { src: 'view-gym.js?v=20260915c', render: 'renderGym' },
+    gym:           { src: 'view-gym.js?v=20261019a', render: 'renderGym' },
     notes:         { src: 'view-notes.js',         render: 'renderNotes' },
     chimes:        { src: 'view-chimes.js',        render: 'renderChimesView' },
     lifeCalendar:  { src: 'view-life-calendar.js', render: 'renderLifeCalendar' },
