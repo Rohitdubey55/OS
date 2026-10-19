@@ -124,12 +124,16 @@
     const pick = (re, not) => h.findIndex(c => re.test(c) && !(not && not.test(c)));
     return {
       date: pick(/^(tran(saction)?|txn|value)? ?date$|^date$/),
-      desc: pick(/particular|narration|description|remarks|details/),
+      desc: pick(/particular|narration|description|remarks|details|payee|merchant|^name$/),
       dr: pick(/^dr$|debit|withdraw/),
       cr: pick(/^cr$|credit|deposit/),
       amt: pick(/^amount|amount \(inr\)/),
       type: pick(/^(dr\/cr|cr\/dr|type)$/),
-      ref: pick(/ref|chq|cheque/, /particular/)
+      ref: pick(/ref|chq|cheque/, /particular/),
+      cat: pick(/^category$/),
+      scope: pick(/^scope$|^budget$/),
+      count: pick(/^count$|^include$/),
+      note: pick(/^note$/)
     };
   }
 
@@ -152,14 +156,19 @@
   }
 
   function parseSheet(XLSX, wb) {
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const grid = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
-    let hi = -1, cols = null;
-    for (let i = 0; i < Math.min(grid.length, 60); i++) {
-      const c = findColumns(grid[i]);
-      if (c.date >= 0 && c.desc >= 0 && (c.dr >= 0 || c.amt >= 0)) { hi = i; cols = c; break; }
+    let grid = null, hi = -1, cols = null;
+    const seen = [];
+    for (const name of wb.SheetNames) {              // any sheet, not just the first
+      const g = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' });
+      for (let i = 0; i < Math.min(g.length, 80); i++) {
+        const c = findColumns(g[i]);
+        if (c.date >= 0 && c.desc >= 0 && (c.dr >= 0 || c.amt >= 0)) { grid = g; hi = i; cols = c; break; }
+      }
+      if (grid) break;
+      const firstRow = g.find(r => r.filter(x => String(x).trim()).length >= 3);
+      if (firstRow) seen.push(firstRow.filter(x => String(x).trim()).slice(0, 6).join(', '));
     }
-    if (hi < 0) throw new Error("Couldn't find the transactions table (needs Date, Particulars/Narration and Debit columns).");
+    if (!grid) throw new Error("Couldn't find the transactions table — it needs a Date column, a Particulars / Narration / Payee column and a Debit (or Amount) column." + (seen.length ? ' Found: ' + seen[0] : ''));
     let period = '';
     for (let i = 0; i < hi; i++) { const t = grid[i].join(' '); const m = /from\s*:?\s*([\d\-\/]+)\s*to\s*:?\s*([\d\-\/]+)/i.exec(t); if (m) period = m[1] + ' – ' + m[2]; }
     const out = [];
@@ -175,7 +184,20 @@
       }
       if (!dr && !cr) continue;
       const { label, ref, name } = splitPayee(raw);
-      out.push({ i: out.length, date: d, raw, label, probe: name || raw, ref: ref || (cols.ref >= 0 ? String(r[cols.ref] || '').trim() : ''), dr, cr });
+      const row = { i: out.length, date: d, raw, label, probe: name || raw, ref: ref || (cols.ref >= 0 ? String(r[cols.ref] || '').trim() : ''), dr, cr };
+      // A sheet that already says what each row is (e.g. the cleaned sheet): honour it.
+      if (cols.cat >= 0 || cols.count >= 0) {
+        const cnt = cols.count >= 0 ? String(r[cols.count]).trim().toLowerCase() : '';
+        const note = cols.note >= 0 ? String(r[cols.note] || '').trim() : '';
+        row.preset = {
+          skip: /^(no|n|false|0)$/.test(cnt) ? (note || 'Marked as not counted') : '',
+          cat: cols.cat >= 0 ? String(r[cols.cat] || '').trim() : '',
+          scope: cols.scope >= 0 && /week/i.test(String(r[cols.scope])) ? 'weekly' : 'monthly',
+          note: /^(already|car —|lent|refund)|confirm|probably/i.test(note) ? '' : note
+        };
+        row.label = raw;
+      }
+      out.push(row);
     }
     return { rows: out, period };
   }
@@ -235,7 +257,8 @@
       if (r.cr) { r.skip = r.pair ? 'Refund' : 'Money in — not an expense'; r.src = 'credit'; return; }
       if (r.pair) { r.skip = 'Refunded later'; r.src = 'auto'; return; }
       const apply = (d, src) => { if (d.skip) r.skip = d.skip; if (d.cat) r.cat = matchCat(d.cat, cats); if (d.scope) r.scope = d.scope; if (d.note) r.note = d.note; r.src = src; };
-      if (REF_DECISIONS[r.ref]) apply(REF_DECISIONS[r.ref], 'you');
+      if (r.preset) apply(r.preset, 'you');
+      else if (REF_DECISIONS[r.ref]) apply(REF_DECISIONS[r.ref], 'you');
       else if (rules[r.key]) apply(rules[r.key], 'rule');
       else {
         const nv = NEVER.find(([re]) => re.test(r.raw));
@@ -468,7 +491,7 @@
         const payload = {
           type: 'expense', amount: Math.round(r.amount * 100) / 100, date: iso(r.date),
           category: r.cat || 'Uncategorized', budget_scope: r.scope === 'weekly' ? 'weekly' : 'monthly',
-          description: r.note && r.note !== r.label ? `${r.label} — ${r.note}` : r.label
+          description: r.note && r.note !== r.label && r.note !== r.cat ? `${r.label} — ${r.note}` : r.label
         };
         try {
           const res = await apiCall('create', 'expenses', payload);
