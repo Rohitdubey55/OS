@@ -20,6 +20,10 @@ const FINANCE_REFINE_CSS = `<style>
 .fin-pro .fin-range { background:var(--surface-2); border:1px solid var(--border-color); border-radius:9px; padding:3px; display:inline-flex; gap:2px; }
 .fin-pro .fin-range .range-btn { border:none; background:transparent; padding:6px 14px; border-radius:7px; font-size:12.5px; font-weight:550; color:var(--text-3); cursor:pointer; }
 .fin-pro .fin-range .range-btn.active { background:var(--surface-1); color:var(--text-1); box-shadow:var(--shadow-xs); }
+.fin-toprow { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px; margin-bottom:18px; }
+.fin-import-btn { justify-self:end; display:inline-flex; align-items:center; gap:7px; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); font:inherit; font-size:12.5px; font-weight:600; padding:7px 12px; border-radius:9px; cursor:pointer; box-shadow:var(--shadow-xs); }
+.fin-import-btn:hover { color:var(--text-1); border-color:var(--border-strong); }
+@media (max-width:640px){ .fin-toprow { grid-template-columns:1fr auto; } .fin-toprow > span { display:none; } .fin-import-btn span { display:none; } .fin-import-btn { padding:7px 9px; } }
 .fin-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
 .fin-kpi { background:var(--surface-1); border:1px solid var(--border-color); border-radius:13px; box-shadow:var(--shadow-card); padding:14px 16px; }
 .fin-kpi .k-l { font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); font-weight:600; }
@@ -131,6 +135,16 @@ function renderFinance() {
 
   renderFinanceContent();
 }
+
+// Bank-statement importer lives in its own file, loaded the first time it's opened.
+window.finOpenImport = function () {
+  if (window.fimpOpen) return window.fimpOpen();
+  const s = document.createElement('script');
+  s.src = 'finance-import.js?v=20261019a';
+  s.onload = () => window.fimpOpen && window.fimpOpen();
+  s.onerror = () => showToast('Could not load the statement importer');
+  document.head.appendChild(s);
+};
 
 function switchFinTab(tab) {
   finState = tab;
@@ -778,12 +792,14 @@ function renderFinExpenses(container) {
 
   // Render
   container.innerHTML = `
-    <div style="display:flex; justify-content:center; margin-bottom:18px;">
+    <div class="fin-toprow">
+      <span></span>
       <div class="fin-range">
         <button class="range-btn ${finRange === 'week' ? 'active' : ''}" onclick="switchFinRange('week')">Weekly</button>
         <button class="range-btn ${finRange === 'month' ? 'active' : ''}" onclick="switchFinRange('month')">Monthly</button>
         <button class="range-btn ${finRange === 'year' ? 'active' : ''}" onclick="switchFinRange('year')">Yearly</button>
       </div>
+      <button class="fin-import-btn" onclick="finOpenImport()" title="Import a bank statement (.xls / .xlsx / .csv)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import statement</span></button>
     </div>
     ${_finPeriodNavHTML(now)}
 
