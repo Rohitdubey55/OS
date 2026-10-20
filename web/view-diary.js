@@ -1705,7 +1705,7 @@ function _drwMount(html, { focusEnd = true, onInput } = {}) {
     else if (e.key === 'Escape' && !_drxSlash) { e.preventDefault(); drwCancel(); }
   });
   sync();
-  if (root.querySelector('#drwPlan') && window.drwPlanRender) { _dp.editId = null; _dp.adding = false; drwPlanRender(); }
+  if (root.querySelector('#drwPlan') && window.drwPlanRender) { _dp.editId = null; _dp.adding = false; _dp.addingTask = false; drwPlanRender(); }
   if (focusEnd && !_drIsPhone()) {
     ed.focus({ preventScroll: true });
     const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
@@ -1842,7 +1842,7 @@ function _dpEvents(ds) {
 
 function _drwPlanHTML() {
   return `<section class="drw-sec drw-plan" id="drwPlan">
-    <div class="drw-plan-head"><div class="drw-h">Day plan</div><span class="drw-plan-count" data-dp="count"></span></div>
+    <div class="drw-plan-head"><div class="drw-h">My day</div><span class="drw-plan-count" data-dp="count"></span></div>
     <div class="drw-plan-host"></div>
   </section>`;
 }
@@ -1910,21 +1910,22 @@ window.drwPlanRender = function () {
   const hosts = document.querySelectorAll('#universalModal .drw-plan-host');
   if (!hosts.length) return;
   const ds = _dpDate();
-  const list = _dpEvents(ds);
-  const done = list.filter(x => _dpIsDone(x.e)).length;
-  document.querySelectorAll('#universalModal [data-dp="count"]').forEach(el => { el.textContent = list.length ? `${done} / ${list.length} done` : ''; });
-  const html = _dpListHTML(ds);
+  const c = _dpCounts(ds);
+  const all = c.plan[1] + c.habits[1] + c.tasks[1], done = c.plan[0] + c.habits[0] + c.tasks[0];
+  document.querySelectorAll('#universalModal [data-dp="count"]').forEach(el => { el.textContent = all ? `${done} of ${all} done` : ''; });
+  const body = _dp.tab === 'habits' ? _dhListHTML(ds) : _dp.tab === 'tasks' ? _dtListHTML(ds) : _dpListHTML(ds);
+  const html = _dpTabsHTML(c) + body;
   hosts.forEach(h => {
     h.innerHTML = html;
     h.querySelectorAll('.dp-form input').forEach(inp => inp.addEventListener('keydown', ev => {
       ev.stopPropagation();
-      if (ev.key === 'Enter') { ev.preventDefault(); drwPlanSave(inp); }
+      if (ev.key === 'Enter') { ev.preventDefault(); if (inp.closest('.dp-form').dataset.kind === 'task') drwTaskSave(inp); else drwPlanSave(inp); }
       else if (ev.key === 'Escape') { ev.preventDefault(); drwPlanCancel(); }
     }));
   });
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   const f = document.querySelector('#universalModal .drw-plan-sheet.open .dp-in-title') || (!_drIsPhone() && document.querySelector('#drwPlan .dp-in-title'));
-  if (f && (_dp.adding || _dp.editId)) f.focus();
+  if (f && (_dp.adding || _dp.editId || _dp.addingTask)) f.focus();
 };
 
 async function _dpRefresh() {
@@ -1954,7 +1955,7 @@ window.drwPlanToggle = async function (id) {
 
 window.drwPlanEdit = function (id) { _dp.adding = false; _dp.editId = id; drwPlanRender(); };
 window.drwPlanAdd = function () { _dp.editId = null; _dp.adding = true; drwPlanRender(); };
-window.drwPlanCancel = function () { _dp.editId = null; _dp.adding = false; drwPlanRender(); };
+window.drwPlanCancel = function () { _dp.editId = null; _dp.adding = false; _dp.addingTask = false; drwPlanRender(); };
 
 window.drwPlanSave = async function (el) {
   const form = el.closest('.dp-form');
@@ -2012,20 +2013,29 @@ window.drwPlanDelete = async function (id) {
 // Drop the plan into the entry as a checklist, at the cursor or at the end.
 window.drwPlanInsert = function () {
   const ed = document.getElementById('mDiaryText');
-  const list = _dpEvents(_dpDate());
-  if (!ed || !list.length) return;
-  const items = list.map(x => {
-    const t = `${_dpFmt(x.s.time)}${x.en.time ? ' – ' + _dpFmt(x.en.time) : ''} → ${_drpEsc(x.e.title || 'Untitled')}`;
-    return `<li${_dpIsDone(x.e) ? ' data-checked="1"' : ''}>${t}</li>`;
-  }).join('');
-  const html = `<ul class="dr-check">${items}</ul><p><br></p>`;
+  const ds = _dpDate();
+  let items = '', what = 'Plan';
+  if (_dp.tab === 'habits') {
+    what = 'Habits';
+    items = _dhItems(ds).map(x => `<li${x.done ? ' data-checked="1"' : ''}>${_drpEsc(x.h.habit_name || 'Habit')}</li>`).join('');
+  } else if (_dp.tab === 'tasks') {
+    what = 'Tasks';
+    items = _dtItems(ds).map(x => `<li${x.done ? ' data-checked="1"' : ''}>${_drpEsc(x.t.title || 'Task')}</li>`).join('');
+  } else {
+    items = _dpEvents(ds).map(x => {
+      const t = `${_dpFmt(x.s.time)}${x.en.time ? ' – ' + _dpFmt(x.en.time) : ''} → ${_drpEsc(x.e.title || 'Untitled')}`;
+      return `<li${_dpIsDone(x.e) ? ' data-checked="1"' : ''}>${t}</li>`;
+    }).join('');
+  }
+  if (!ed || !items) return;
+  const html = `<p><b>${what}</b></p><ul class="dr-check">${items}</ul><p><br></p>`;
   const sel = window.getSelection();
   const inEd = sel && sel.rangeCount && ed.contains(sel.getRangeAt(0).commonAncestorContainer);
   if (inEd) { ed.focus(); document.execCommand('insertHTML', false, html); }
   else { ed.insertAdjacentHTML('beforeend', html); }
   ed.dispatchEvent(new Event('input', { bubbles: true }));
   drwPlanCloseSheet();
-  showToast('Plan added to your entry');
+  showToast(`${what} added to your entry`);
 };
 
 window.drwPlanOpenPlanner = function () {
@@ -2040,7 +2050,7 @@ window.drwPlanOpenPlanner = function () {
 
 // Toolbar button: rail section on desktop, bottom sheet on a phone.
 window.drwPlanOpen = function () {
-  _dp.editId = null; _dp.adding = false;
+  _dp.editId = null; _dp.adding = false; _dp.addingTask = false;
   if (_drIsPhone()) {
     const root = document.querySelector('#universalModal .drw');
     if (!root) return;
@@ -2049,9 +2059,9 @@ window.drwPlanOpen = function () {
       sh = document.createElement('div');
       sh.className = 'drw-plan-sheet';
       sh.innerHTML = `<div class="drw-plan-scrim" onclick="drwPlanCloseSheet()"></div>
-        <div class="drw-plan-panel" role="dialog" aria-label="Day plan">
+        <div class="drw-plan-panel" role="dialog" aria-label="My day">
           <div class="drw-plan-grab"></div>
-          <div class="drw-plan-head"><div class="drw-h">Day plan</div><span class="drw-plan-count" data-dp="count"></span>
+          <div class="drw-plan-head"><div class="drw-h">My day</div><span class="drw-plan-count" data-dp="count"></span>
             <button type="button" class="drw-plan-x" onclick="drwPlanCloseSheet()" aria-label="Close"><i data-lucide="x"></i></button></div>
           <div class="drw-plan-host"></div>
         </div>`;
@@ -2073,6 +2083,225 @@ window.drwPlanCloseSheet = function () {
   sh.classList.remove('open');
   _dp.editId = null; _dp.adding = false;
   setTimeout(() => { if (!sh.classList.contains('open')) sh.remove(); drwPlanRender(); }, 220);
+};
+
+/* ═══ MY DAY: habits + tasks tabs (beside the Plan tab) ═════════════════════
+   Habits: the ones scheduled on the entry's date (same rule as Habits /
+   Planner), ticked via habit_logs. Tasks: due that date — recurring ones by
+   their rule — plus, on today's entry, anything overdue. One-off tasks tick
+   status; recurring ones tick that date in completed_dates, like Tasks does. */
+_dp.tab = (() => { try { return localStorage.getItem('drwMyDayTab') || 'plan'; } catch (e) { return 'plan'; } })();
+_dp.addingTask = false;
+
+function _dpDateObj(ds) { const [y, m, d] = String(ds).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); }
+function _dpShift(ds, n) { const d = _dpDateObj(ds); d.setDate(d.getDate() + n); return diaryLocalDate(d); }
+
+/* habits */
+function _dhTime(h) {
+  const rt = String(h.reminder_time || '');
+  if (!rt) return '';
+  if (rt.startsWith('1899-12-30T')) return rt.slice(11, 16);
+  if (/^\d{1,2}:\d{2}/.test(rt)) return rt.padStart(5, '0').slice(0, 5);
+  if (rt.includes('T')) { const d = new Date(rt); if (!isNaN(d)) return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+  return '';
+}
+function _dhOn(h, ds) { return typeof window.habitScheduledOn === 'function' ? window.habitScheduledOn(h, _dpDateObj(ds)) : true; }
+function _dhLog(h, ds) { return (state.data.habit_logs || []).find(l => String(l.habit_id) === String(h.id) && String(l.date || '').startsWith(ds)); }
+function _dhStreak(h, ds) {
+  let n = 0, d = _dhLog(h, ds) ? ds : _dpShift(ds, -1);
+  for (let i = 0; i < 400; i++, d = _dpShift(d, -1)) {
+    if (!_dhOn(h, d)) continue;
+    if (_dhLog(h, d)) n++; else break;
+  }
+  return n;
+}
+function _dhItems(ds) {
+  return (state.data.habits || []).filter(h => _dhOn(h, ds))
+    .map(h => ({ h, t: _dhTime(h), done: !!_dhLog(h, ds) }))
+    .sort((a, b) => (a.t || '99:99').localeCompare(b.t || '99:99') || String(a.h.habit_name || '').localeCompare(String(b.h.habit_name || '')));
+}
+function _dhListHTML(ds) {
+  const list = _dhItems(ds);
+  const rows = list.map(x => {
+    const id = _drpEsc(String(x.h.id));
+    const st = _dhStreak(x.h, ds);
+    const meta = [x.t ? _dpFmt(x.t) : '', st > 1 ? `${st}-day streak` : (st === 1 ? '1 day' : '')].filter(Boolean).join(' · ');
+    return `<div class="dp-row${x.done ? ' done' : ''}">
+      <button type="button" class="dp-box dp-round" onclick="drwHabitToggle('${id}')" aria-label="${x.done ? 'Mark not done' : 'Mark done'}" aria-pressed="${x.done}">${x.done ? '<i data-lucide="check"></i>' : ''}</button>
+      <div class="dp-txt dp-static">
+        <span class="dp-title">${_drpEsc(x.h.habit_name || 'Habit')}</span>
+        ${meta ? `<span class="dp-meta">${meta}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  return `${_dpBar(list.filter(x => x.done).length, list.length)}
+    <div class="dp-list">${rows || '<p class="dp-empty">No habits scheduled for this day.</p>'}</div>
+    <div class="dp-foot">
+      ${list.length ? `<button type="button" class="dp-link" onclick="drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
+      <button type="button" class="dp-link" onclick="drwMyDayGo('habits')"><i data-lucide="repeat"></i>Open habits</button>
+    </div>`;
+}
+window.drwHabitToggle = async function (habitId) {
+  const ds = _dpDate();
+  if (!Array.isArray(state.data.habit_logs)) state.data.habit_logs = [];
+  const log = _dhLog({ id: habitId }, ds);
+  try {
+    if (log) {
+      state.data.habit_logs = state.data.habit_logs.filter(l => l !== log);
+      drwPlanRender();
+      if (log.id && !String(log.id).startsWith('temp-')) await apiCall('delete', 'habit_logs', {}, log.id);
+    } else {
+      const temp = { id: 'temp-' + Date.now(), habit_id: habitId, date: ds, status: 'completed' };
+      state.data.habit_logs.push(temp);
+      drwPlanRender();
+      const res = await apiCall('create', 'habit_logs', { habit_id: habitId, date: ds, status: 'completed', pomodoro_completed: 0 });
+      const nid = res && ((res.data && res.data.id) || res.id);
+      if (nid) temp.id = String(nid);
+    }
+  } catch (e) { showToast('Couldn’t update the habit'); }
+  try { if (typeof refreshData === 'function') await refreshData('habit_logs'); } catch (e) { }
+  drwPlanRender();
+};
+
+/* tasks */
+function _dtRecurring(t) { return t.recurrence && t.recurrence !== 'none'; }
+function _dtDates(t) {
+  const v = t.completed_dates;
+  if (!v) return [];
+  if (Array.isArray(v)) return v.map(String);
+  const s = String(v).trim();
+  if (s.startsWith('[')) { try { return JSON.parse(s).map(String); } catch (e) { } }
+  return s.split(',').map(x => x.trim()).filter(Boolean);
+}
+function _dtDue(t) { return String(t.due_date || '').slice(0, 10); }
+function _dtOn(t, ds) {
+  if (!_dtRecurring(t)) return _dtDue(t) === ds;
+  if (t.recurrence_end && String(t.recurrence_end).slice(0, 10) < ds) return false;
+  if (_dtDue(t) && _dtDue(t) > ds) return false;
+  const d = _dpDateObj(ds);
+  if (t.recurrence === 'daily') return true;
+  if (t.recurrence === 'weekly') {
+    if (!t.recurrence_days) return true;
+    const wd = d.getDay();
+    const name = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][wd === 0 ? 6 : wd - 1];
+    return String(t.recurrence_days).split(',').map(s => s.trim().slice(0, 3).toLowerCase()).includes(name.toLowerCase());
+  }
+  if (t.recurrence === 'monthly') return _dtDue(t) ? _dpDateObj(_dtDue(t)).getDate() === d.getDate() : true;
+  return true;
+}
+function _dtDone(t, ds) { return _dtRecurring(t) ? _dtDates(t).includes(ds) : t.status === 'completed'; }
+function _dtItems(ds) {
+  const today = diaryLocalDate();
+  const pr = { P1: 1, P2: 2, P3: 3 };
+  return (state.data.tasks || []).map(t => {
+    const on = _dtOn(t, ds);
+    const overdue = !on && ds === today && !_dtRecurring(t) && _dtDue(t) && _dtDue(t) < today && t.status !== 'completed';
+    return (on || overdue) ? { t, overdue, done: _dtDone(t, ds), time: String(t.due_time || '').slice(0, 5) } : null;
+  }).filter(Boolean).sort((a, b) =>
+    (a.done - b.done) || (b.overdue - a.overdue) || ((pr[a.t.priority] || 2) - (pr[b.t.priority] || 2)) || (a.time || '99:99').localeCompare(b.time || '99:99'));
+}
+function _dtListHTML(ds) {
+  const list = _dtItems(ds);
+  const plabel = { P1: 'High', P3: 'Low' };
+  const rows = list.map(x => {
+    const id = _drpEsc(String(x.t.id));
+    const due = x.overdue ? `Overdue · ${_dpDateObj(_dtDue(x.t)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : (x.time ? _dpFmt(x.time) : '');
+    const meta = [due, _dtRecurring(x.t) ? 'Repeats' : '', plabel[x.t.priority] || ''].filter(Boolean).join(' · ');
+    return `<div class="dp-row${x.done ? ' done' : ''}">
+      <button type="button" class="dp-box" onclick="drwTaskToggle('${id}')" aria-label="${x.done ? 'Mark not done' : 'Mark done'}" aria-pressed="${x.done}">${x.done ? '<i data-lucide="check"></i>' : ''}</button>
+      <div class="dp-txt dp-static">
+        <span class="dp-title">${_drpEsc(x.t.title || 'Task')}</span>
+        ${meta ? `<span class="dp-meta${x.overdue ? ' late' : ''}${x.t.priority === 'P1' && !x.overdue ? ' hi' : ''}">${meta}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  const add = _dp.addingTask
+    ? `<div class="dp-form" data-kind="task">
+        <input class="dp-in-title" type="text" placeholder="What needs doing?" autocomplete="off">
+        <div class="dp-form-times"><input class="dp-in-start" type="time" aria-label="Due time (optional)"><span>optional time</span></div>
+        <div class="dp-form-acts"><span style="flex:1"></span>
+          <button type="button" class="dp-cancel" onclick="drwPlanCancel()">Cancel</button>
+          <button type="button" class="dp-ok" onclick="drwTaskSave(this)">Add</button></div>
+      </div>`
+    : `<button type="button" class="dp-add" onclick="drwTaskAdd()"><i data-lucide="plus"></i>Add task for this day</button>`;
+  return `${_dpBar(list.filter(x => x.done).length, list.length)}
+    <div class="dp-list">${rows || (_dp.addingTask ? '' : '<p class="dp-empty">Nothing due this day.</p>')}</div>
+    ${add}
+    <div class="dp-foot">
+      ${list.length ? `<button type="button" class="dp-link" onclick="drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
+      <button type="button" class="dp-link" onclick="drwMyDayGo('tasks')"><i data-lucide="list-checks"></i>Open tasks</button>
+    </div>`;
+}
+window.drwTaskToggle = async function (id) {
+  const t = (state.data.tasks || []).find(x => String(x.id) === String(id));
+  if (!t) return;
+  const ds = _dpDate();
+  const before = { status: t.status, completed_at: t.completed_at, completed_dates: t.completed_dates };
+  let payload;
+  if (_dtRecurring(t)) {
+    let dates = _dtDates(t);
+    dates = dates.includes(ds) ? dates.filter(d => d !== ds) : dates.concat(ds);
+    t.completed_dates = dates.join(',');
+    payload = { completed_dates: t.completed_dates };
+  } else {
+    t.status = t.status === 'completed' ? 'pending' : 'completed';
+    t.completed_at = t.status === 'completed' ? new Date().toISOString() : null;
+    payload = { status: t.status, completed_at: t.completed_at };
+  }
+  drwPlanRender();
+  try {
+    const res = await apiCall('update', 'tasks', payload, id);
+    if (res && res.success === false) throw new Error(res.message);
+  } catch (e) { Object.assign(t, before); drwPlanRender(); showToast('Couldn’t update the task'); }
+};
+window.drwTaskAdd = function () { _dp.addingTask = true; drwPlanRender(); };
+window.drwTaskSave = async function (el) {
+  const form = el.closest('.dp-form');
+  const inp = form && form.querySelector('.dp-in-title');
+  const title = inp ? inp.value.trim() : '';
+  if (!title) { if (inp) { inp.classList.add('drw-err'); inp.focus(); setTimeout(() => inp.classList.remove('drw-err'), 1600); } return; }
+  const time = form.querySelector('.dp-in-start')?.value || '';
+  const ds = _dpDate();
+  const payload = { title, description: '', category: 'General', tags: '', subtasks: '[]', priority: 'P2', due_date: ds, due_time: time, duration: 30, recurrence: 'none', recurrence_days: '', recurrence_end: '', status: 'pending', created_at: new Date().toISOString() };
+  const temp = { id: 'temp-' + Date.now(), ...payload };
+  state.data.tasks = state.data.tasks || [];
+  state.data.tasks.push(temp);
+  _dp.addingTask = false;
+  drwPlanRender();
+  try {
+    const res = await apiCall('create', 'tasks', payload);
+    if (!res || res.success === false) throw new Error(res && res.message);
+    const nid = (res.data && res.data.id) || res.id;
+    if (nid) temp.id = String(nid);
+  } catch (e) { state.data.tasks = state.data.tasks.filter(x => x !== temp); showToast('Couldn’t add the task'); }
+  try { if (typeof refreshData === 'function') await refreshData('tasks'); } catch (e) { }
+  drwPlanRender();
+};
+
+/* shared bits */
+function _dpBar(done, n) { return n ? `<div class="dp-bar"><i style="width:${Math.round(done / n * 100)}%"></i></div>` : ''; }
+function _dpCounts(ds) {
+  const p = _dpEvents(ds), h = _dhItems(ds), t = _dtItems(ds);
+  return {
+    plan: [p.filter(x => _dpIsDone(x.e)).length, p.length],
+    habits: [h.filter(x => x.done).length, h.length],
+    tasks: [t.filter(x => x.done).length, t.length]
+  };
+}
+function _dpTabsHTML(c) {
+  const tab = (k, l) => `<button type="button" class="dp-tab${_dp.tab === k ? ' on' : ''}" onclick="drwMyDayTab('${k}')" aria-pressed="${_dp.tab === k}">${l}${c[k][1] ? `<em>${c[k][0]}/${c[k][1]}</em>` : ''}</button>`;
+  return `<div class="dp-tabs" role="group" aria-label="My day">${tab('plan', 'Plan')}${tab('habits', 'Habits')}${tab('tasks', 'Tasks')}</div>`;
+}
+window.drwMyDayTab = function (k) {
+  _dp.tab = k; _dp.editId = null; _dp.adding = false; _dp.addingTask = false;
+  try { localStorage.setItem('drwMyDayTab', k); } catch (e) { }
+  drwPlanRender();
+};
+window.drwMyDayGo = function (view) {
+  const root = document.querySelector('#universalModal .drw');
+  if (root && root.dataset.dirty && !confirm('Leave this entry? Unsaved writing will be lost.')) return;
+  _drwModal().classList.add('hidden');
+  if (typeof routeTo === 'function') routeTo(view);
 };
 
 // Modal functions
@@ -3282,7 +3511,7 @@ function drToolbarHTML(opts = {}) {
       <span class="drx-sep"></span>
       <div class="drx-grp">
         <button type="button" class="dr-toolbar-btn drx-btn drx-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${opts.dateStr}')" title="Summarise my day (tasks, habits, spend)">${ic('sparkles')}<span>Summary</span></button>
-        ${opts.planner ? `<button type="button" class="dr-toolbar-btn drx-btn drx-plan-btn" onmousedown="event.preventDefault();" onclick="drwPlanOpen()" title="Day plan from your Planner">${ic('calendar-clock')}<span>Planner</span></button>` : ''}
+        ${opts.planner ? `<button type="button" class="dr-toolbar-btn drx-btn drx-plan-btn" onmousedown="event.preventDefault();" onclick="drwPlanOpen()" title="My day: plan, habits and tasks">${ic('calendar-check')}<span>My day</span></button>` : ''}
         <button type="button" class="dr-toolbar-btn drx-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Dictate" aria-label="Dictate">${ic('mic')}</button>
       </div>` : ''}
     </div>
@@ -4034,7 +4263,18 @@ const DRW_CSS = `
 .drx-slash-it em { display:block; font-style:normal; font-size:11.5px; color:var(--text-3); }
 .drx-editor hr { border:none; height:0; border-top:1.5px solid var(--border-color); margin:1.3em 0; }
 
-/* day plan (rail section + phone sheet) */
+/* my day (rail section + phone sheet) */
+.dp-tabs { display:flex; gap:2px; padding:3px; margin:0 0 2px; border-radius:10px; background:var(--surface-2); }
+.dp-tab { flex:1; display:flex; align-items:center; justify-content:center; gap:4px; height:30px; padding:0 4px; border:none; border-radius:8px; background:transparent; color:var(--text-2); font-size:12.5px; font-weight:650; cursor:pointer; font-family:inherit; white-space:nowrap; }
+.dp-tab em { font-style:normal; font-size:10.5px; font-weight:700; color:var(--text-3); font-variant-numeric:tabular-nums; }
+.dp-tab.on { background:var(--surface-1); color:var(--text-1); box-shadow:0 1px 3px rgba(15,23,42,.1); }
+.dp-box.dp-round { border-radius:50%; }
+.dp-static { cursor:default; }
+.dp-meta { font-size:11.5px; font-weight:600; color:var(--text-3); }
+.dp-meta.late { color:#DC2626; }
+.dp-meta.hi { color:#D97706; }
+.drw-plan-panel .dp-tab { height:36px; font-size:14px; }
+.drw-plan-panel .dp-meta { font-size:12.5px; }
 .drw-plan { border:1px solid var(--border-color); border-radius:14px; background:var(--surface-1); padding:14px 12px 12px; gap:8px; transition:box-shadow .3s, border-color .3s; }
 .drw-plan.flash { animation:dpFlash 1.2s ease-out; }
 @keyframes dpFlash { 0%,40% { border-color:var(--primary); box-shadow:0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent); } 100% { box-shadow:none; } }
