@@ -96,6 +96,7 @@ function renderDiaryRail(entries) {
 }
 
 function renderDiary() {
+  if (window.drwAutoPlan) setTimeout(() => window.drwAutoPlan(), 0);
   const entries = state.data.diary || [];
 
   let filteredEntries = filterEntries(entries);
@@ -1493,6 +1494,7 @@ function renderTemplatesList() {
             </div>
           </div>
           <div class="drtp-title">${_drpEsc(t.title || 'Untitled')}</div>
+          ${_tplPlan(t).length || _tplIsDefault(t) ? `<div class="drtp-plan">${_tplPlan(t).length ? `<span><i data-lucide="calendar-clock"></i>${_tplPlan(t).length} plan blocks</span>` : ''}${_tplIsDefault(t) ? '<span class="def">Default</span>' : ''}</div>` : ''}
           <ul class="drtp-outline">
             ${shown.length ? shown.map(x => `<li>${_drpEsc(x)}</li>`).join('') : '<li class="more">Empty template</li>'}
             ${outline.length > shown.length ? `<li class="more">+${outline.length - shown.length} more</li>` : ''}
@@ -1509,7 +1511,9 @@ function _drTplById(id) { return (state.data.diary_templates || []).find(x => St
 
 window.useTemplate = function (id) {
   const t = _drTplById(id);
-  if (t) openDiaryModal(null, drToEditorHTML(t.content));
+  if (!t) return;
+  openDiaryModal(null, drToEditorHTML(t.content));
+  if (_tplPlan(t).length) drwApplyTemplatePlan(t.id, diaryLocalDate());
 };
 
 window.editTemplate = function (id) {
@@ -1554,6 +1558,7 @@ window.openTemplateModal = function (template = null) {
           return `<button type="button" class="drw-cat ${c === cat ? 'on' : ''}" style="--c:${col}" data-cat="${_drpEsc(c)}" onclick="drwPickCat(this)"><i data-lucide="${ic}"></i>${_drpEsc(c)}</button>`;
         }).join('')}</div>
       </section>
+      ${_tplEdSectionHTML(template)}
       <section class="drw-sec">
         <div class="drw-h">Outline</div>
         <ol class="drw-outline" id="drwOutline"></ol>
@@ -1587,7 +1592,10 @@ window.saveTemplate = async function (existingId) {
   const contentEl = document.getElementById('mTemplateContent');
   const content = (contentEl && (contentEl.innerText || '').trim()) ? drRichValue(contentEl) : '';
   if (!title) return _drwFlag('mTemplateTitle', 'Give the template a name');
-  if (!content) return _drwFlag('mTemplateContent', 'Add some content first');
+  const blocks = _tplEd.blocks.filter(b => String(b.title || '').trim() && /^\d{2}:\d{2}$/.test(b.start || '')).map(b => ({ start: b.start, end: b.end || '', title: String(b.title).trim() }));
+  if (!content && !blocks.length) return _drwFlag('mTemplateContent', 'Add some content or a day plan first');
+  const plan_json = JSON.stringify(blocks);
+  const is_default = !!_tplEd.isDefault;
 
   const editing = existingId != null && existingId !== 'null';
   const btn = document.querySelector('#universalModal .drw-save');
@@ -1595,9 +1603,15 @@ window.saveTemplate = async function (existingId) {
   try {
     if (editing) {
       const t = _drTplById(existingId);
-      await apiCall('update', 'diary_templates', { title, category, content }, t ? t.id : existingId);
+      await apiCall('update', 'diary_templates', { title, category, content, plan_json, is_default }, t ? t.id : existingId);
     } else {
-      await apiCall('create', 'diary_templates', { title, category, content, is_default: false, sort_order: 1 });
+      const res = await apiCall('create', 'diary_templates', { title, category, content, plan_json, is_default, sort_order: 1 });
+      existingId = res && ((res.data && res.data.id) || res.id);
+    }
+    if (is_default) {
+      for (const o of (state.data.diary_templates || [])) {
+        if (String(o.id) !== String(existingId) && _tplIsDefault(o)) await apiCall('update', 'diary_templates', { is_default: false }, o.id);
+      }
     }
     _drwModal().classList.add('hidden');
     if (typeof showToast === 'function') showToast(editing ? 'Template saved' : 'Template created');
@@ -1705,7 +1719,8 @@ function _drwMount(html, { focusEnd = true, onInput } = {}) {
     else if (e.key === 'Escape' && !_drxSlash) { e.preventDefault(); drwCancel(); }
   });
   sync();
-  if (root.querySelector('#drwPlan') && window.drwPlanRender) { _dp.editId = null; _dp.adding = false; _dp.addingTask = false; drwPlanRender(); }
+  if (root.querySelector('#drwPlan') && window.drwPlanRender) { _dp.editId = null; _dp.adding = false; _dp.addingTask = false; _dp.tplMode = null; drwPlanRender(); if (_dpDate() === diaryLocalDate() && window.drwAutoPlan) drwAutoPlan(); }
+  if (root.querySelector('#drwTplPlan') && window.tplPlanRender) tplPlanRender();
   if (focusEnd && !_drIsPhone()) {
     ed.focus({ preventScroll: true });
     const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
@@ -1867,10 +1882,29 @@ function _dpFormHTML(x, isNew) {
 
 function _dpListHTML(ds) {
   const list = _dpEvents(ds);
+  const habits = _dhItems(ds);
   const today = diaryLocalDate();
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const rows = list.map(x => {
+  // One timeline: planner blocks and timed habits, by start time. Untimed habits go under "Anytime".
+  const line = list.map(x => ({ k: 'e', t: x.s.time || '', x }))
+    .concat(habits.filter(h => h.t).map(h => ({ k: 'h', t: h.t, x: h })))
+    .sort((a, b) => (a.t || '99:99').localeCompare(b.t || '99:99') || (a.k === 'e' ? -1 : 1));
+  const habitRow = h => {
+    const id = _drpEsc(String(h.h.id));
+    const st = _dhStreak(h.h, ds);
+    const meta = [h.t ? _dpFmt(h.t) : '', st > 1 ? `${st}-day streak` : (st === 1 ? '1 day' : '')].filter(Boolean).join(' · ');
+    return `<div class="dp-row is-habit${h.done ? ' done' : ''}">
+      <button type="button" class="dp-box dp-round" onclick="drwHabitToggle('${id}')" aria-label="${h.done ? 'Mark not done' : 'Mark done'}" aria-pressed="${h.done}">${h.done ? '<i data-lucide="check"></i>' : ''}</button>
+      <div class="dp-txt dp-static">
+        ${meta ? `<span class="dp-time">${meta}</span>` : ''}
+        <span class="dp-title"><span>${_drpEsc(h.h.habit_name || 'Habit')}</span><span class="dp-tag">habit</span></span>
+      </div>
+    </div>`;
+  };
+  const rows = line.map(it => {
+    if (it.k === 'h') return habitRow(it.x);
+    const x = it.x;
     const id = _drpEsc(String(x.e.id));
     if (!_dp.adding && String(_dp.editId) === String(x.e.id)) return _dpFormHTML(x, false);
     const done = _dpIsDone(x.e);
@@ -1885,6 +1919,7 @@ function _dpListHTML(ds) {
       </button>
     </div>`;
   }).join('');
+  const anytime = habits.filter(h => !h.t);
   let addRow;
   if (_dp.adding) {
     const last = list[list.length - 1];
@@ -1894,32 +1929,207 @@ function _dpListHTML(ds) {
   } else {
     addRow = `<button type="button" class="dp-add" onclick="drwPlanAdd()"><i data-lucide="plus"></i>Add block</button>`;
   }
-  const empty = !list.length && !_dp.adding ? `<p class="dp-empty">No blocks planned for this day yet.</p>` : '';
-  const done = list.filter(x => _dpIsDone(x.e)).length;
-  return `${list.length ? `<div class="dp-bar"><i style="width:${Math.round(done / list.length * 100)}%"></i></div>` : ''}
-    <div class="dp-list">${empty}${rows}</div>
+  const n = list.length + habits.length;
+  const empty = !n && !_dp.adding ? `<p class="dp-empty">Nothing planned for this day yet.</p>` : '';
+  const done = list.filter(x => _dpIsDone(x.e)).length + habits.filter(h => h.done).length;
+  return `${_dpBar(done, n)}
+    <div class="dp-list">${empty}${rows}${anytime.length ? `<div class="dp-sub">Anytime</div>${anytime.map(habitRow).join('')}` : ''}</div>
     ${addRow}
+    ${_dpTplHTML(ds)}
     <div class="dp-foot">
-      ${list.length ? `<button type="button" class="dp-link" onclick="drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
+      ${n ? `<button type="button" class="dp-link" onclick="drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
       <button type="button" class="dp-link" onclick="drwPlanOpenPlanner()"><i data-lucide="calendar-days"></i>Open planner</button>
     </div>
-    <p class="dp-sync"><i data-lucide="refresh-cw"></i>Synced with your Planner</p>`;
+    <p class="dp-sync"><i data-lucide="refresh-cw"></i>Synced with your Planner and Habits</p>`;
 }
+
+/* ── Templates that carry a day plan ──
+   diary_templates.plan_json holds [{start, end, title}]. Applying a template
+   adds its blocks to the Planner for a date, skipping any already there
+   (same start time and title). The default template fills today's plan the
+   first time the journal is opened that day. */
+function _tplPlan(t) {
+  if (!t || !t.plan_json) return [];
+  let a = t.plan_json;
+  if (typeof a === 'string') { try { a = JSON.parse(a); } catch (e) { return []; } }
+  return Array.isArray(a) ? a.filter(b => b && b.title && /^\d{2}:\d{2}$/.test(b.start || '')).map(b => ({ start: b.start, end: /^\d{2}:\d{2}$/.test(b.end || '') ? b.end : '', title: String(b.title) })) : [];
+}
+function _tplIsDefault(t) { return !!t && (t.is_default === true || t.is_default === 'true' || t.is_default === 1); }
+function _dpEndFor(start) { const m = Math.min(1439, _dpMin(start) + 60); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
+
+// Adds the blocks that aren't on that date yet. Returns how many were added.
+async function _dpApplyPlan(blocks, ds) {
+  if (!blocks.length || !Array.isArray(state.data.planner)) return 0;
+  const key = (time, title) => `${time}|${String(title).trim().toLowerCase()}`;
+  const have = new Set(_dpEvents(ds).map(x => key(x.s.time, x.e.title || '')));
+  let added = 0;
+  for (const b of blocks) {
+    if (have.has(key(b.start, b.title))) continue;
+    have.add(key(b.start, b.title));
+    const end = b.end && _dpMin(b.end) > _dpMin(b.start) ? b.end : _dpEndFor(b.start);
+    const payload = { title: b.title, start_datetime: `${ds}T${b.start}:00`, end_datetime: `${ds}T${end}:00`, category: 'Other', color: '' };
+    const temp = { id: 'temp-' + Date.now() + '-' + added, done: false, ...payload };
+    state.data.planner.push(temp);
+    added++;
+    try {
+      const res = await apiCall('create', 'planner_events', payload);
+      if (!res || res.success === false) throw new Error(res && res.message);
+      const nid = (res.data && res.data.id) || res.id;
+      if (nid) temp.id = String(nid);
+    } catch (e) { state.data.planner = state.data.planner.filter(x => x !== temp); added--; }
+  }
+  drwPlanRender();
+  if (added) { try { if (typeof refreshData === 'function') await refreshData('planner_events'); } catch (e) { } drwPlanRender(); }
+  return added;
+}
+window.drwApplyTemplatePlan = async function (id, ds) {
+  const t = _drTplById(id);
+  const blocks = _tplPlan(t);
+  if (!blocks.length) return 0;
+  const n = await _dpApplyPlan(blocks, ds || _dpDate());
+  showToast(n ? `${n} plan block${n > 1 ? 's' : ''} added from “${t.title || 'template'}”` : 'Plan already in place');
+  return n;
+};
+
+// Default template → today's plan, once per day (per device).
+window.drwAutoPlan = async function () {
+  const ds = diaryLocalDate();
+  const flag = 'drwAutoPlan:' + ds;
+  try { if (localStorage.getItem(flag)) return; } catch (e) { }
+  if (!Array.isArray(state.data.planner) || !Array.isArray(state.data.diary_templates)) return;
+  const t = state.data.diary_templates.find(x => _tplIsDefault(x) && _tplPlan(x).length);
+  if (!t) return;
+  try { localStorage.setItem(flag, '1'); } catch (e) { }
+  const n = await _dpApplyPlan(_tplPlan(t), ds);
+  if (n) showToast(`Today’s plan added from “${t.title || 'template'}”`);
+};
+
+// Save / apply controls under the Plan tab.
+function _dpTplHTML(ds) {
+  const ts = state.data.diary_templates || [];
+  const opts = (withNew) => ts.map(t => `<option value="${_drpEsc(String(t.id))}">${_drpEsc(t.title || 'Untitled')}${_tplPlan(t).length ? ` (${_tplPlan(t).length} blocks)` : ''}${_tplIsDefault(t) ? ' · default' : ''}</option>`).join('') + (withNew ? '<option value="__new">+ New template…</option>' : '');
+  if (_dp.tplMode === 'save') {
+    return `<div class="dp-form dp-tplform" data-kind="tpl">
+      <div class="dp-tpl-h">Save this day’s blocks to a template</div>
+      <select class="dp-in-tpl" onchange="this.closest('.dp-form').querySelector('.dp-in-newtpl').hidden = this.value !== '__new'">${opts(true)}</select>
+      <input class="dp-in-newtpl dp-in-title" type="text" placeholder="Template name" ${ts.length ? 'hidden' : ''}>
+      <label class="dp-check"><input type="checkbox" class="dp-in-default"> Use as default (fills each day automatically)</label>
+      <div class="dp-form-acts"><span style="flex:1"></span>
+        <button type="button" class="dp-cancel" onclick="drwTplMode(null)">Cancel</button>
+        <button type="button" class="dp-ok" onclick="drwSavePlanToTemplate(this)">Save</button></div>
+    </div>`;
+  }
+  if (_dp.tplMode === 'apply') {
+    const withPlan = ts.filter(t => _tplPlan(t).length);
+    return `<div class="dp-form dp-tplform" data-kind="tpl">
+      <div class="dp-tpl-h">Add a template’s blocks to this day</div>
+      ${withPlan.length ? `<select class="dp-in-tpl">${withPlan.map(t => `<option value="${_drpEsc(String(t.id))}">${_drpEsc(t.title || 'Untitled')} (${_tplPlan(t).length} blocks)</option>`).join('')}</select>
+      <p class="dp-tpl-note">Blocks already on this day are skipped.</p>` : `<p class="dp-tpl-note">No template has a day plan yet. Use “Save as template” first.</p>`}
+      <div class="dp-form-acts"><span style="flex:1"></span>
+        <button type="button" class="dp-cancel" onclick="drwTplMode(null)">Cancel</button>
+        ${withPlan.length ? `<button type="button" class="dp-ok" onclick="drwApplyFromPanel(this)">Add blocks</button>` : ''}</div>
+    </div>`;
+  }
+  return `<div class="dp-foot">
+      <button type="button" class="dp-link" onclick="drwTplMode('save')"><i data-lucide="save"></i>Save as template</button>
+      <button type="button" class="dp-link" onclick="drwTplMode('apply')"><i data-lucide="layout-template"></i>Apply template</button>
+    </div>`;
+}
+window.drwTplMode = function (m) { _dp.tplMode = m; _dp.editId = null; _dp.adding = false; drwPlanRender(); };
+window.drwApplyFromPanel = async function (btn) {
+  const id = btn.closest('.dp-form').querySelector('.dp-in-tpl')?.value;
+  _dp.tplMode = null;
+  if (id) await drwApplyTemplatePlan(id, _dpDate()); else drwPlanRender();
+};
+window.drwSavePlanToTemplate = async function (btn) {
+  const form = btn.closest('.dp-form');
+  const sel = form.querySelector('.dp-in-tpl');
+  const id = sel ? sel.value : '__new';
+  const makeDefault = form.querySelector('.dp-in-default').checked;
+  const blocks = _dpEvents(_dpDate()).map(x => ({ start: x.s.time, end: x.en.time, title: x.e.title || '' })).filter(b => b.start && b.title);
+  if (!blocks.length) { showToast('Add some blocks to this day first'); return; }
+  const plan_json = JSON.stringify(blocks);
+  const ts = state.data.diary_templates || (state.data.diary_templates = []);
+  let tid = id, name;
+  try {
+    if (id === '__new' || !id) {
+      const inp = form.querySelector('.dp-in-newtpl');
+      name = (inp.value || '').trim();
+      if (!name) { inp.hidden = false; inp.classList.add('drw-err'); inp.focus(); setTimeout(() => inp.classList.remove('drw-err'), 1600); return; }
+      const res = await apiCall('create', 'diary_templates', { title: name, category: 'routine', content: '', plan_json, is_default: makeDefault, sort_order: 1 });
+      if (!res || res.success === false) throw new Error(res && res.message);
+      tid = String((res.data && res.data.id) || res.id || '');
+      if (res.data && !('plan_json' in res.data)) throw new Error('migration');
+    } else {
+      const t = _drTplById(id); name = t ? t.title : '';
+      const res = await apiCall('update', 'diary_templates', { plan_json, ...(makeDefault ? { is_default: true } : {}) }, id);
+      if (res && res.success === false) throw new Error(res.message);
+      if (res && (res.skipped || (res.data && !('plan_json' in res.data)))) throw new Error('migration');
+    }
+    if (makeDefault) {
+      for (const t of ts) if (String(t.id) !== String(tid) && _tplIsDefault(t)) { t.is_default = false; await apiCall('update', 'diary_templates', { is_default: false }, t.id); }
+    }
+    _dp.tplMode = null;
+    showToast(`Plan saved to “${name || 'template'}”${makeDefault ? ' · default' : ''}`);
+    try { if (typeof refreshData === 'function') await refreshData('diary_templates'); } catch (e) { }
+    drwPlanRender();
+  } catch (e) {
+    showToast(String(e && e.message) === 'migration' ? 'Run the template plan migration in Supabase first' : 'Couldn’t save the plan');
+  }
+};
+
+/* Day plan section inside the template editor (kept in _tplEd until Save). */
+const _tplEd = { blocks: [], isDefault: false };
+function _tplEdSectionHTML(t) {
+  _tplEd.blocks = _tplPlan(t).map(b => ({ ...b }));
+  _tplEd.isDefault = _tplIsDefault(t);
+  return `<section class="drw-sec drw-plan" id="drwTplPlan">
+    <div class="drw-plan-head"><div class="drw-h">Day plan</div><span class="drw-plan-count" id="tplPlanCount"></span></div>
+    <p class="drw-hint">Blocks added to your Planner when you use this template.</p>
+    <div id="tplPlanRows"></div>
+    <button type="button" class="dp-add" onclick="tplPlanAdd()"><i data-lucide="plus"></i>Add block</button>
+    <label class="dp-check"><input type="checkbox" id="tplPlanDefault" ${_tplEd.isDefault ? 'checked' : ''} onchange="tplPlanDefault(this.checked)"> Use as default — fills each day’s plan automatically</label>
+  </section>`;
+}
+window.tplPlanRender = function () {
+  const host = document.getElementById('tplPlanRows');
+  if (!host) return;
+  _tplEd.blocks.sort((a, b) => (a.start || '99:99').localeCompare(b.start || '99:99'));
+  host.innerHTML = _tplEd.blocks.map((b, i) => `<div class="tpl-row">
+      <div class="tpl-row-t"><input type="time" value="${b.start || ''}" onchange="tplPlanSet(${i},'start',this.value)" aria-label="Start"><span>–</span><input type="time" value="${b.end || ''}" onchange="tplPlanSet(${i},'end',this.value)" aria-label="End">
+        <button type="button" class="dp-del" onclick="tplPlanDel(${i})" aria-label="Remove block"><i data-lucide="x"></i></button></div>
+      <input type="text" value="${_drpEsc(b.title || '')}" placeholder="What’s the block?" oninput="tplPlanSet(${i},'title',this.value, true)">
+    </div>`).join('') || '<p class="dp-empty">No blocks yet.</p>';
+  const c = document.getElementById('tplPlanCount'); if (c) c.textContent = _tplEd.blocks.length ? `${_tplEd.blocks.length} block${_tplEd.blocks.length > 1 ? 's' : ''}` : '';
+  host.querySelectorAll('input').forEach(inp => inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); ev.stopPropagation(); } }));
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+};
+window.tplPlanSet = function (i, k, v, quiet) { if (_tplEd.blocks[i]) _tplEd.blocks[i][k] = v; _drwDirty(); if (!quiet) tplPlanRender(); };
+window.tplPlanDel = function (i) { _tplEd.blocks.splice(i, 1); _drwDirty(); tplPlanRender(); };
+window.tplPlanAdd = function () {
+  const last = _tplEd.blocks[_tplEd.blocks.length - 1];
+  const s = last ? (last.end || _dpEndFor(last.start)) : '09:00';
+  _tplEd.blocks.push({ start: s, end: _dpEndFor(s), title: '' });
+  _drwDirty(); tplPlanRender();
+  const ins = document.querySelectorAll('#tplPlanRows input[type=text]'); ins[ins.length - 1]?.focus();
+};
+window.tplPlanDefault = function (v) { _tplEd.isDefault = !!v; _drwDirty(); };
 
 window.drwPlanRender = function () {
   const hosts = document.querySelectorAll('#universalModal .drw-plan-host');
   if (!hosts.length) return;
   const ds = _dpDate();
   const c = _dpCounts(ds);
-  const all = c.plan[1] + c.habits[1] + c.tasks[1], done = c.plan[0] + c.habits[0] + c.tasks[0];
+  const all = c.plan[1] + c.tasks[1], done = c.plan[0] + c.tasks[0];
   document.querySelectorAll('#universalModal [data-dp="count"]').forEach(el => { el.textContent = all ? `${done} of ${all} done` : ''; });
-  const body = _dp.tab === 'habits' ? _dhListHTML(ds) : _dp.tab === 'tasks' ? _dtListHTML(ds) : _dpListHTML(ds);
+  if (_dp.tab !== 'tasks') _dp.tab = 'plan';
+  const body = _dp.tab === 'tasks' ? _dtListHTML(ds) : _dpListHTML(ds);
   const html = _dpTabsHTML(c) + body;
   hosts.forEach(h => {
     h.innerHTML = html;
-    h.querySelectorAll('.dp-form input').forEach(inp => inp.addEventListener('keydown', ev => {
+    h.querySelectorAll('.dp-form input, .dp-form select').forEach(inp => inp.addEventListener('keydown', ev => {
       ev.stopPropagation();
-      if (ev.key === 'Enter') { ev.preventDefault(); if (inp.closest('.dp-form').dataset.kind === 'task') drwTaskSave(inp); else drwPlanSave(inp); }
+      if (ev.key === 'Enter') { ev.preventDefault(); const k = inp.closest('.dp-form').dataset.kind; if (k === 'task') drwTaskSave(inp); else if (k === 'tpl') inp.closest('.dp-form').querySelector('.dp-ok')?.click(); else drwPlanSave(inp); }
       else if (ev.key === 'Escape') { ev.preventDefault(); drwPlanCancel(); }
     }));
   });
@@ -1955,7 +2165,7 @@ window.drwPlanToggle = async function (id) {
 
 window.drwPlanEdit = function (id) { _dp.adding = false; _dp.editId = id; drwPlanRender(); };
 window.drwPlanAdd = function () { _dp.editId = null; _dp.adding = true; drwPlanRender(); };
-window.drwPlanCancel = function () { _dp.editId = null; _dp.adding = false; _dp.addingTask = false; drwPlanRender(); };
+window.drwPlanCancel = function () { _dp.editId = null; _dp.adding = false; _dp.addingTask = false; _dp.tplMode = null; drwPlanRender(); };
 
 window.drwPlanSave = async function (el) {
   const form = el.closest('.dp-form');
@@ -1965,7 +2175,7 @@ window.drwPlanSave = async function (el) {
   let end = form.querySelector('.dp-in-end').value;
   if (!title) { form.querySelector('.dp-in-title').classList.add('drw-err'); form.querySelector('.dp-in-title').focus(); setTimeout(() => form.querySelector('.dp-in-title')?.classList.remove('drw-err'), 1600); return; }
   if (!start) { form.querySelector('.dp-in-start').focus(); return; }
-  if (!end || _dpMin(end) <= _dpMin(start)) end = `${String(Math.min(23, Math.floor(_dpMin(start) / 60) + 1)).padStart(2, '0')}:${start.slice(3, 5)}`;
+  if (!end || _dpMin(end) <= _dpMin(start)) end = _dpEndFor(start);
   const ds = _dpDate();
   const payload = { title, start_datetime: `${ds}T${start}:00`, end_datetime: `${ds}T${end}:00` };
   const id = form.dataset.id;
@@ -2015,17 +2225,13 @@ window.drwPlanInsert = function () {
   const ed = document.getElementById('mDiaryText');
   const ds = _dpDate();
   let items = '', what = 'Plan';
-  if (_dp.tab === 'habits') {
-    what = 'Habits';
-    items = _dhItems(ds).map(x => `<li${x.done ? ' data-checked="1"' : ''}>${_drpEsc(x.h.habit_name || 'Habit')}</li>`).join('');
-  } else if (_dp.tab === 'tasks') {
+  if (_dp.tab === 'tasks') {
     what = 'Tasks';
     items = _dtItems(ds).map(x => `<li${x.done ? ' data-checked="1"' : ''}>${_drpEsc(x.t.title || 'Task')}</li>`).join('');
   } else {
-    items = _dpEvents(ds).map(x => {
-      const t = `${_dpFmt(x.s.time)}${x.en.time ? ' – ' + _dpFmt(x.en.time) : ''} → ${_drpEsc(x.e.title || 'Untitled')}`;
-      return `<li${_dpIsDone(x.e) ? ' data-checked="1"' : ''}>${t}</li>`;
-    }).join('');
+    const ev = _dpEvents(ds).map(x => ({ t: x.s.time || '', html: `<li${_dpIsDone(x.e) ? ' data-checked="1"' : ''}>${_dpFmt(x.s.time)}${x.en.time ? ' – ' + _dpFmt(x.en.time) : ''} → ${_drpEsc(x.e.title || 'Untitled')}</li>` }));
+    const hb = _dhItems(ds).map(x => ({ t: x.t || '99:99', html: `<li${x.done ? ' data-checked="1"' : ''}>${x.t ? _dpFmt(x.t) + ' → ' : ''}${_drpEsc(x.h.habit_name || 'Habit')} (habit)</li>` }));
+    items = ev.concat(hb).sort((a, b) => a.t.localeCompare(b.t)).map(x => x.html).join('');
   }
   if (!ed || !items) return;
   const html = `<p><b>${what}</b></p><ul class="dr-check">${items}</ul><p><br></p>`;
@@ -2090,7 +2296,8 @@ window.drwPlanCloseSheet = function () {
    Planner), ticked via habit_logs. Tasks: due that date — recurring ones by
    their rule — plus, on today's entry, anything overdue. One-off tasks tick
    status; recurring ones tick that date in completed_dates, like Tasks does. */
-_dp.tab = (() => { try { return localStorage.getItem('drwMyDayTab') || 'plan'; } catch (e) { return 'plan'; } })();
+_dp.tab = (() => { try { return localStorage.getItem('drwMyDayTab') === 'tasks' ? 'tasks' : 'plan'; } catch (e) { return 'plan'; } })();
+_dp.tplMode = null;
 _dp.addingTask = false;
 
 function _dpDateObj(ds) { const [y, m, d] = String(ds).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); }
@@ -2119,27 +2326,6 @@ function _dhItems(ds) {
   return (state.data.habits || []).filter(h => _dhOn(h, ds))
     .map(h => ({ h, t: _dhTime(h), done: !!_dhLog(h, ds) }))
     .sort((a, b) => (a.t || '99:99').localeCompare(b.t || '99:99') || String(a.h.habit_name || '').localeCompare(String(b.h.habit_name || '')));
-}
-function _dhListHTML(ds) {
-  const list = _dhItems(ds);
-  const rows = list.map(x => {
-    const id = _drpEsc(String(x.h.id));
-    const st = _dhStreak(x.h, ds);
-    const meta = [x.t ? _dpFmt(x.t) : '', st > 1 ? `${st}-day streak` : (st === 1 ? '1 day' : '')].filter(Boolean).join(' · ');
-    return `<div class="dp-row${x.done ? ' done' : ''}">
-      <button type="button" class="dp-box dp-round" onclick="drwHabitToggle('${id}')" aria-label="${x.done ? 'Mark not done' : 'Mark done'}" aria-pressed="${x.done}">${x.done ? '<i data-lucide="check"></i>' : ''}</button>
-      <div class="dp-txt dp-static">
-        <span class="dp-title">${_drpEsc(x.h.habit_name || 'Habit')}</span>
-        ${meta ? `<span class="dp-meta">${meta}</span>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-  return `${_dpBar(list.filter(x => x.done).length, list.length)}
-    <div class="dp-list">${rows || '<p class="dp-empty">No habits scheduled for this day.</p>'}</div>
-    <div class="dp-foot">
-      ${list.length ? `<button type="button" class="dp-link" onclick="drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
-      <button type="button" class="dp-link" onclick="drwMyDayGo('habits')"><i data-lucide="repeat"></i>Open habits</button>
-    </div>`;
 }
 window.drwHabitToggle = async function (habitId) {
   const ds = _dpDate();
@@ -2283,17 +2469,16 @@ function _dpBar(done, n) { return n ? `<div class="dp-bar"><i style="width:${Mat
 function _dpCounts(ds) {
   const p = _dpEvents(ds), h = _dhItems(ds), t = _dtItems(ds);
   return {
-    plan: [p.filter(x => _dpIsDone(x.e)).length, p.length],
-    habits: [h.filter(x => x.done).length, h.length],
+    plan: [p.filter(x => _dpIsDone(x.e)).length + h.filter(x => x.done).length, p.length + h.length],
     tasks: [t.filter(x => x.done).length, t.length]
   };
 }
 function _dpTabsHTML(c) {
   const tab = (k, l) => `<button type="button" class="dp-tab${_dp.tab === k ? ' on' : ''}" onclick="drwMyDayTab('${k}')" aria-pressed="${_dp.tab === k}">${l}${c[k][1] ? `<em>${c[k][0]}/${c[k][1]}</em>` : ''}</button>`;
-  return `<div class="dp-tabs" role="group" aria-label="My day">${tab('plan', 'Plan')}${tab('habits', 'Habits')}${tab('tasks', 'Tasks')}</div>`;
+  return `<div class="dp-tabs" role="group" aria-label="My day">${tab('plan', 'Plan')}${tab('tasks', 'Tasks')}</div>`;
 }
 window.drwMyDayTab = function (k) {
-  _dp.tab = k; _dp.editId = null; _dp.adding = false; _dp.addingTask = false;
+  _dp.tab = k; _dp.editId = null; _dp.adding = false; _dp.addingTask = false; _dp.tplMode = null;
   try { localStorage.setItem('drwMyDayTab', k); } catch (e) { }
   drwPlanRender();
 };
@@ -2324,10 +2509,13 @@ window.loadTemplateInModal = function (templateId) {
   const t = _drTplById(templateId);
   const editor = document.getElementById('mDiaryText');
   if (!t || !editor) return;
-  if ((editor.innerText || '').trim() && !confirm('Replace what you have written with this template?')) return;
-  editor.innerHTML = drToEditorHTML(t.content);
-  editor.dispatchEvent(new Event('input', { bubbles: true }));
-  editor.focus();
+  if (String(t.content || '').trim()) {
+    if ((editor.innerText || '').trim() && !confirm('Replace what you have written with this template?')) return;
+    editor.innerHTML = drToEditorHTML(t.content);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    editor.focus();
+  }
+  if (_tplPlan(t).length) drwApplyTemplatePlan(t.id, _dpDate());
 };
 
 window.updateMoodDisplay = function (value) {
@@ -4264,6 +4452,27 @@ const DRW_CSS = `
 .drx-editor hr { border:none; height:0; border-top:1.5px solid var(--border-color); margin:1.3em 0; }
 
 /* my day (rail section + phone sheet) */
+.dp-tag { display:inline-block; margin-left:6px; padding:0 6px; border-radius:99px; font-size:10px; font-weight:750; letter-spacing:.02em; vertical-align:1px; color:#7C3AED; background:rgba(124,58,237,.1); }
+.dp-row.is-habit.done .dp-title { text-decoration:none; color:var(--text-3); }
+.dp-row.is-habit.done .dp-title > :not(.dp-tag) { text-decoration:line-through; }
+.dp-sub { font-size:10.5px; font-weight:750; letter-spacing:.07em; text-transform:uppercase; color:var(--text-3); margin:8px 6px 2px; }
+.dp-check { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:600; color:var(--text-2); cursor:pointer; margin:2px 2px 0; }
+.dp-check input { width:15px; height:15px; margin:0; accent-color:var(--primary); }
+.dp-tplform select { width:100%; height:34px; padding:0 8px; border:1px solid var(--border-color); border-radius:8px; background:var(--surface-2); color:var(--text-1); font-size:13px; font-family:inherit; }
+.dp-tpl-h { font-size:12.5px; font-weight:700; color:var(--text-1); }
+.dp-tpl-note { margin:0; font-size:11.5px; color:var(--text-3); }
+.tpl-row { display:flex; flex-direction:column; gap:5px; padding:8px; border:1px solid var(--border-color); border-radius:10px; background:var(--surface-1); margin-bottom:6px; }
+.tpl-row-t { display:flex; align-items:center; gap:5px; }
+.tpl-row-t span { color:var(--text-3); font-size:12px; }
+.tpl-row input { min-width:0; box-sizing:border-box; height:32px !important; padding:0 8px !important; margin:0 !important; border:1px solid var(--border-color) !important; border-radius:7px !important; background:var(--surface-2) !important; font-size:13px !important; color:var(--text-1); font-family:inherit; }
+.tpl-row-t input { flex:1; }
+.tpl-row > input { width:100%; }
+.tpl-row input:focus { outline:none; border-color:var(--primary) !important; }
+.tpl-row .dp-del { height:30px; border-radius:7px; }
+.drtp-plan { display:flex; flex-wrap:wrap; gap:6px; margin:-2px 0 6px; }
+.drtp-plan span { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; background:color-mix(in srgb, var(--primary) 10%, transparent); color:var(--primary); }
+.drtp-plan span.def { background:rgba(16,185,129,.12); color:#059669; }
+.drtp-plan svg { width:12px; height:12px; }
 .dp-tabs { display:flex; gap:2px; padding:3px; margin:0 0 2px; border-radius:10px; background:var(--surface-2); }
 .dp-tab { flex:1; display:flex; align-items:center; justify-content:center; gap:4px; height:30px; padding:0 4px; border:none; border-radius:8px; background:transparent; color:var(--text-2); font-size:12.5px; font-weight:650; cursor:pointer; font-family:inherit; white-space:nowrap; }
 .dp-tab em { font-style:normal; font-size:10.5px; font-weight:700; color:var(--text-3); font-variant-numeric:tabular-nums; }
@@ -4314,8 +4523,8 @@ const DRW_CSS = `
 .dp-del { width:30px; padding:0 !important; display:flex; align-items:center; justify-content:center; border:1px solid transparent; background:transparent; color:#DC2626; }
 .dp-del:hover { background:rgba(220,38,38,.07); }
 .dp-del svg { width:15px; height:15px; }
-.dp-foot { display:flex; gap:6px; margin-top:2px; }
-.dp-link { flex:1; display:flex; align-items:center; justify-content:center; gap:5px; height:30px; padding:0 8px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-2); font-size:11.5px; font-weight:650; cursor:pointer; white-space:nowrap; font-family:inherit; }
+.dp-foot { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
+.dp-link { flex:1 1 auto; min-width:0; display:flex; align-items:center; justify-content:center; gap:5px; height:30px; padding:0 8px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-2); font-size:11.5px; font-weight:650; cursor:pointer; white-space:nowrap; font-family:inherit; }
 .dp-link:hover { border-color:var(--primary); color:var(--primary); }
 .dp-link svg { width:13px; height:13px; }
 .dp-sync { margin:2px 4px 0; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-3); }

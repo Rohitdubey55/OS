@@ -341,7 +341,7 @@
         gym_sessions: new Set(['id','user_id','date','plan_id','plan_name','workout_json','completed']),
         pomodoro_sessions: new Set(['id','user_id','date','type','duration','habit_id','task_id','completed']),
         pomodoro_badges: new Set(['id','user_id','badge_type','unlocked_at','total_sessions']),
-        diary_templates: new Set(['id','user_id','title','content','category','is_default','sort_order']),
+        diary_templates: new Set(['id','user_id','title','content','category','is_default','sort_order','plan_json']),
         diary_tags: new Set(['id','user_id','name','color','usage_count']),
         diary_achievements: new Set(['id','user_id','type','name','description','target_value','unlocked_at']),
         vision_images: new Set(['id','user_id','vision_id','file_id','url','name','uploaded_at']),

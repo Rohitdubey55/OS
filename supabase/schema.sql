@@ -254,6 +254,7 @@ CREATE TABLE IF NOT EXISTS public.diary_templates (
     category TEXT,
     is_default BOOLEAN DEFAULT false,
     sort_order INT,
+    plan_json TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
