@@ -486,11 +486,11 @@ window.appStrayCategories = function appStrayCategories() {
 
 const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js?v=20261006a', render: 'renderDashboard' },
-    calendar:      { src: 'view-calendar.js?v=20260929a', render: 'renderCalendar' },
+    calendar:      { src: 'view-calendar.js?v=20261020a', render: 'renderCalendar' },
     tasks:         { src: 'view-tasks.js?v=20260930a', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20261019b', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
-    diary:         { src: 'view-diary.js?v=20261019b', render: 'renderDiary' },
+    diary:         { src: 'view-diary.js?v=20261020a', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20261003d', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260930a', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },

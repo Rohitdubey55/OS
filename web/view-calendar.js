@@ -22,6 +22,11 @@ const CAL_REFINE_CSS = `<style>
 </style>`;
 
 function renderCalendar() {
+  if (window._plannerJumpTo) {
+    const [y, m, d] = String(window._plannerJumpTo).split('-').map(Number);
+    if (y && m && d) { calState.cursor = new Date(y, m - 1, d); calState.view = 'day'; }
+    window._plannerJumpTo = null;
+  }
   const main = document.getElementById('main');
   const monthName = calState.cursor.toLocaleString('default', { month: 'long', year: 'numeric' });
 
@@ -72,6 +77,27 @@ function renderCalendar() {
   if (typeof renderAllIcons === 'function') renderAllIcons();
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
+
+/* --- DONE STATE (shared with the journal's Day plan) --- */
+function _plannerIsDone(e) { return !!e && (e.done === true || e.done === 'true' || e.done === 1 || e.done === '1'); }
+
+window.plannerToggleEventDone = async function (id) {
+  const e = (state.data.planner || []).find(x => String(x.id) === String(id));
+  if (!e) return;
+  const prev = e.done;
+  const next = !_plannerIsDone(e);
+  e.done = next;
+  if (state.view === 'calendar') renderCalendar();
+  try {
+    const res = await apiCall('update', 'planner_events', { done: next }, id);
+    if (res && res.success === false) throw new Error(res.message || 'failed');
+    if (res && (res.skipped || (res.data && !('done' in res.data)))) showToast('Ticks won’t save until the planner “done” migration is run in Supabase');
+  } catch (err) {
+    e.done = prev;
+    if (state.view === 'calendar') renderCalendar();
+    showToast('Couldn’t update the event');
+  }
+};
 
 /* --- LOGIC --- */
 function switchCalView(v) { calState.view = v; renderCalendar(); }
@@ -337,7 +363,7 @@ function renderMonthGrid() {
             <div class="date-num">${curr.getDate()}</div>
             ${dayEvents.slice(0, 4).map(e => `
               <div class="month-event-chip" onclick="event.stopPropagation(); openEditEvent('${e.id}')"
-                   style="background:${eventColor(e)}; color:white; font-size:10px; font-weight:600; padding:2px 4px; border-radius:4px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                   style="background:${eventColor(e)}; color:white; font-size:10px; font-weight:600; padding:2px 4px; border-radius:4px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; ${_plannerIsDone(e) ? 'opacity:.55; text-decoration:line-through;' : ''}">
                 ${e.title}
               </div>
             `).join('')}
@@ -548,10 +574,14 @@ function renderTimeGrid() {
           </div>`;
       } else {
         const bgColor = eventColor(e);
-        return `<div class="event-block" data-id="${e.id}"
-                     style="${inlineStyle} background:${bgColor}; color:white; font-weight:600; border-radius:4px;"
+        const evDone = _plannerIsDone(e);
+        return `<div class="event-block ${evDone ? 'evt-done' : ''}" data-id="${e.id}"
+                     style="${inlineStyle} background:${bgColor}; color:white; font-weight:600; border-radius:4px; padding-right:24px; ${evDone ? 'opacity:.55;' : ''}"
                      onclick="event.stopPropagation(); openEditEvent('${e.id}')">
-            <span class="event-time" style="color:white; opacity:0.9;">${e.startT}</span> ${e.title}
+            <span class="evt-check" role="button" aria-label="${evDone ? 'Mark not done' : 'Mark done'}" title="${evDone ? 'Mark not done' : 'Mark done'}"
+                  onclick="event.stopPropagation(); plannerToggleEventDone('${e.id}')"
+                  style="position:absolute; top:4px; right:4px; width:15px; height:15px; border-radius:4px; border:1.6px solid rgba(255,255,255,.9); background:${evDone ? 'rgba(255,255,255,.95)' : 'transparent'}; color:${bgColor}; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; line-height:1; cursor:pointer;">${evDone ? '✓' : ''}</span>
+            <span class="event-time" style="color:white; opacity:0.9;">${e.startT}</span> <span style="text-decoration:${evDone ? 'line-through' : 'none'}">${e.title}</span>
           </div>`;
       }
     }).join('');
@@ -868,6 +898,7 @@ async function _endDrag() {
 
 // Mouse Events
 document.addEventListener('mousedown', (e) => {
+  if (e.target.closest('.evt-check')) return;
   const el = e.target.closest('.event-block');
   if (el) _startDrag(el, e.clientY);
 });
@@ -876,6 +907,7 @@ document.addEventListener('mouseup', () => _endDrag());
 
 // Touch Events (mobile)
 document.addEventListener('touchstart', (e) => {
+  if (e.target.closest('.evt-check')) return;
   const el = e.target.closest('.event-block');
   if (el) _startDrag(el, e.touches[0].clientY);
 }, { passive: true });

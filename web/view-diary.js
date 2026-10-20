@@ -1705,6 +1705,7 @@ function _drwMount(html, { focusEnd = true, onInput } = {}) {
     else if (e.key === 'Escape' && !_drxSlash) { e.preventDefault(); drwCancel(); }
   });
   sync();
+  if (root.querySelector('#drwPlan') && window.drwPlanRender) { _dp.editId = null; _dp.adding = false; drwPlanRender(); }
   if (focusEnd && !_drIsPhone()) {
     ed.focus({ preventScroll: true });
     const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false);
@@ -1794,13 +1795,285 @@ function _drwEntryDoc(ds, content, placeholder) {
     <div class="drw-eyebrow"><i data-lucide="book-open"></i>Journal</div>
     <label class="drw-date" title="Change date">
       <span id="drwDateLbl">${_drwFmtDate(ds)}</span><i data-lucide="chevron-down"></i>
-      <input type="date" id="mDiaryDate" value="${ds}" onchange="document.getElementById('drwDateLbl').textContent = _drwFmtDate(this.value)" onclick="try { this.showPicker(); } catch (e) { }">
+      <input type="date" id="mDiaryDate" value="${ds}" onchange="document.getElementById('drwDateLbl').textContent = _drwFmtDate(this.value); if (window.drwPlanRender) drwPlanRender()" onclick="try { this.showPicker(); } catch (e) { }">
     </label>
     <div class="dr-write-zone drw-zone">
-      ${drToolbarHTML({ dateStr: ds })}
+      ${drToolbarHTML({ dateStr: ds, planner: true })}
       <div class="rich-editor drx-editor drw-editor" id="mDiaryText" contenteditable="true" placeholder="${placeholder}">${content}</div>
     </div>`;
 }
+
+/* ═══ DAY PLAN ══════════════════════════════════════════════════════════════
+   The Planner's blocks for the entry's date, inside the writer. Same rows as
+   the Planner page (planner_events), so a block added, edited or ticked here
+   shows up there and the other way round. Desktop: a section in the right
+   rail. Phone: the toolbar's Planner button opens it as a bottom sheet.
+   Edits save straight to the Planner — they never mark the entry unsaved. */
+const _dp = { editId: null, adding: false, warned: false };
+
+function _dpParts(v) {
+  if (v == null || v === '') return { date: '', time: '' };
+  if (typeof v === 'number' || /^\d+$/.test(String(v).trim())) {
+    const d = new Date(Number(v));
+    if (isNaN(d)) return { date: '', time: '' };
+    const p = n => String(n).padStart(2, '0');
+    return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` };
+  }
+  const s = String(v).trim();
+  const i = s.indexOf('T') !== -1 ? s.indexOf('T') : s.indexOf(' ');
+  return i === -1 ? { date: s.slice(0, 10), time: '' } : { date: s.slice(0, i), time: s.slice(i + 1, i + 6) };
+}
+function _dpMin(t) { const [h, m] = String(t || '0:0').split(':').map(Number); return (h || 0) * 60 + (m || 0); }
+function _dpFmt(t) {
+  if (!t) return '';
+  let [h, m] = t.split(':').map(Number);
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2, '0')}${ap}`;
+}
+function _dpIsDone(e) { return e && (e.done === true || e.done === 'true' || e.done === 1 || e.done === '1'); }
+function _dpDate() { return document.getElementById('mDiaryDate')?.value || diaryLocalDate(); }
+function _dpEvents(ds) {
+  return (state.data.planner || [])
+    .map(e => ({ e, s: _dpParts(e.start_datetime), en: _dpParts(e.end_datetime) }))
+    .filter(x => x.s.date === ds)
+    .sort((a, b) => (a.s.time || '').localeCompare(b.s.time || ''));
+}
+
+function _drwPlanHTML() {
+  return `<section class="drw-sec drw-plan" id="drwPlan">
+    <div class="drw-plan-head"><div class="drw-h">Day plan</div><span class="drw-plan-count" data-dp="count"></span></div>
+    <div class="drw-plan-host"></div>
+  </section>`;
+}
+
+function _dpFormHTML(x, isNew) {
+  const id = isNew ? '' : _drpEsc(String(x.e.id));
+  return `<div class="dp-form" data-id="${id}">
+    <input class="dp-in-title" type="text" placeholder="What's the block?" value="${isNew ? '' : _drpEsc(x.e.title || '')}" autocomplete="off">
+    <div class="dp-form-times">
+      <input class="dp-in-start" type="time" value="${x.s.time || '09:00'}" aria-label="Start time">
+      <span>to</span>
+      <input class="dp-in-end" type="time" value="${x.en.time || '10:00'}" aria-label="End time">
+    </div>
+    <div class="dp-form-acts">
+      ${isNew ? '' : `<button type="button" class="dp-del" onclick="drwPlanDelete('${id}')" title="Delete block" aria-label="Delete block"><i data-lucide="trash-2"></i></button>`}
+      <span style="flex:1"></span>
+      <button type="button" class="dp-cancel" onclick="drwPlanCancel()">Cancel</button>
+      <button type="button" class="dp-ok" onclick="drwPlanSave(this)">${isNew ? 'Add' : 'Save'}</button>
+    </div>
+  </div>`;
+}
+
+function _dpListHTML(ds) {
+  const list = _dpEvents(ds);
+  const today = diaryLocalDate();
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const rows = list.map(x => {
+    const id = _drpEsc(String(x.e.id));
+    if (!_dp.adding && String(_dp.editId) === String(x.e.id)) return _dpFormHTML(x, false);
+    const done = _dpIsDone(x.e);
+    const sMin = _dpMin(x.s.time), eMin = x.en.time ? _dpMin(x.en.time) : sMin + 60;
+    const past = ds < today || (ds === today && eMin <= nowMin);
+    const cur = ds === today && sMin <= nowMin && nowMin < eMin;
+    return `<div class="dp-row${done ? ' done' : ''}${past ? ' past' : ''}${cur ? ' now' : ''}">
+      <button type="button" class="dp-box" onclick="drwPlanToggle('${id}')" aria-label="${done ? 'Mark not done' : 'Mark done'}" aria-pressed="${done}">${done ? '<i data-lucide="check"></i>' : ''}</button>
+      <button type="button" class="dp-txt" onclick="drwPlanEdit('${id}')" title="Edit block">
+        <span class="dp-time">${_dpFmt(x.s.time)}${x.en.time ? ' – ' + _dpFmt(x.en.time) : ''}${cur ? '<em>now</em>' : ''}</span>
+        <span class="dp-title">${_drpEsc(x.e.title || 'Untitled')}</span>
+      </button>
+    </div>`;
+  }).join('');
+  let addRow;
+  if (_dp.adding) {
+    const last = list[list.length - 1];
+    const startMin = last ? (last.en.time ? _dpMin(last.en.time) : _dpMin(last.s.time) + 60) : Math.min(23 * 60, (ds === today ? now.getHours() + 1 : 9) * 60);
+    const t = m => `${String(Math.floor(Math.min(m, 1439) / 60)).padStart(2, '0')}:${String(Math.min(m, 1439) % 60).padStart(2, '0')}`;
+    addRow = _dpFormHTML({ e: {}, s: { time: t(startMin) }, en: { time: t(startMin + 60) } }, true);
+  } else {
+    addRow = `<button type="button" class="dp-add" onclick="drwPlanAdd()"><i data-lucide="plus"></i>Add block</button>`;
+  }
+  const empty = !list.length && !_dp.adding ? `<p class="dp-empty">No blocks planned for this day yet.</p>` : '';
+  const done = list.filter(x => _dpIsDone(x.e)).length;
+  return `${list.length ? `<div class="dp-bar"><i style="width:${Math.round(done / list.length * 100)}%"></i></div>` : ''}
+    <div class="dp-list">${empty}${rows}</div>
+    ${addRow}
+    <div class="dp-foot">
+      ${list.length ? `<button type="button" class="dp-link" onclick="drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
+      <button type="button" class="dp-link" onclick="drwPlanOpenPlanner()"><i data-lucide="calendar-days"></i>Open planner</button>
+    </div>
+    <p class="dp-sync"><i data-lucide="refresh-cw"></i>Synced with your Planner</p>`;
+}
+
+window.drwPlanRender = function () {
+  const hosts = document.querySelectorAll('#universalModal .drw-plan-host');
+  if (!hosts.length) return;
+  const ds = _dpDate();
+  const list = _dpEvents(ds);
+  const done = list.filter(x => _dpIsDone(x.e)).length;
+  document.querySelectorAll('#universalModal [data-dp="count"]').forEach(el => { el.textContent = list.length ? `${done} / ${list.length} done` : ''; });
+  const html = _dpListHTML(ds);
+  hosts.forEach(h => {
+    h.innerHTML = html;
+    h.querySelectorAll('.dp-form input').forEach(inp => inp.addEventListener('keydown', ev => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); drwPlanSave(inp); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); drwPlanCancel(); }
+    }));
+  });
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+  const f = document.querySelector('#universalModal .drw-plan-sheet.open .dp-in-title') || (!_drIsPhone() && document.querySelector('#drwPlan .dp-in-title'));
+  if (f && (_dp.adding || _dp.editId)) f.focus();
+};
+
+async function _dpRefresh() {
+  try { if (typeof refreshData === 'function') await refreshData('planner_events'); } catch (e) { }
+  drwPlanRender();
+}
+
+window.drwPlanToggle = async function (id) {
+  const e = (state.data.planner || []).find(x => String(x.id) === String(id));
+  if (!e) return;
+  const prev = e.done;
+  const next = !_dpIsDone(e);
+  e.done = next;
+  drwPlanRender();
+  try {
+    const res = await apiCall('update', 'planner_events', { done: next }, id);
+    if (res && res.success === false) throw new Error(res.message || 'failed');
+    if (res && (res.skipped || (res.data && !('done' in res.data)))) {
+      if (!_dp.warned) { _dp.warned = true; showToast('Ticks won’t save until the planner “done” migration is run in Supabase'); }
+    }
+  } catch (err) {
+    e.done = prev;
+    drwPlanRender();
+    showToast('Couldn’t update the planner');
+  }
+};
+
+window.drwPlanEdit = function (id) { _dp.adding = false; _dp.editId = id; drwPlanRender(); };
+window.drwPlanAdd = function () { _dp.editId = null; _dp.adding = true; drwPlanRender(); };
+window.drwPlanCancel = function () { _dp.editId = null; _dp.adding = false; drwPlanRender(); };
+
+window.drwPlanSave = async function (el) {
+  const form = el.closest('.dp-form');
+  if (!form) return;
+  const title = form.querySelector('.dp-in-title').value.trim();
+  const start = form.querySelector('.dp-in-start').value;
+  let end = form.querySelector('.dp-in-end').value;
+  if (!title) { form.querySelector('.dp-in-title').classList.add('drw-err'); form.querySelector('.dp-in-title').focus(); setTimeout(() => form.querySelector('.dp-in-title')?.classList.remove('drw-err'), 1600); return; }
+  if (!start) { form.querySelector('.dp-in-start').focus(); return; }
+  if (!end || _dpMin(end) <= _dpMin(start)) end = `${String(Math.min(23, Math.floor(_dpMin(start) / 60) + 1)).padStart(2, '0')}:${start.slice(3, 5)}`;
+  const ds = _dpDate();
+  const payload = { title, start_datetime: `${ds}T${start}:00`, end_datetime: `${ds}T${end}:00` };
+  const id = form.dataset.id;
+  state.data.planner = state.data.planner || [];
+  _dp.editId = null; _dp.adding = false;
+  if (id) {
+    const e = state.data.planner.find(x => String(x.id) === String(id));
+    const before = e ? { ...e } : null;
+    if (e) Object.assign(e, payload);
+    drwPlanRender();
+    try {
+      const res = await apiCall('update', 'planner_events', payload, id);
+      if (res && res.success === false) throw new Error(res.message);
+    } catch (err) { if (e && before) Object.assign(e, before); showToast('Couldn’t save the block'); }
+  } else {
+    const temp = { id: 'temp-' + Date.now(), category: 'Other', color: '', done: false, ...payload };
+    state.data.planner.push(temp);
+    drwPlanRender();
+    try {
+      const res = await apiCall('create', 'planner_events', { ...payload, category: 'Other', color: '' });
+      if (!res || res.success === false) throw new Error(res && res.message);
+      const nid = (res.data && res.data.id) || res.id;
+      if (nid) temp.id = String(nid);
+    } catch (err) {
+      state.data.planner = state.data.planner.filter(x => x.id !== temp.id);
+      showToast('Couldn’t add the block');
+    }
+  }
+  _dpRefresh();
+};
+
+window.drwPlanDelete = async function (id) {
+  if (!confirm('Delete this block from your planner?')) return;
+  const before = state.data.planner || [];
+  state.data.planner = before.filter(x => String(x.id) !== String(id));
+  _dp.editId = null;
+  drwPlanRender();
+  try {
+    const res = await apiCall('delete', 'planner_events', null, id);
+    if (res && res.success === false) throw new Error(res.message);
+  } catch (err) { state.data.planner = before; showToast('Couldn’t delete the block'); }
+  _dpRefresh();
+};
+
+// Drop the plan into the entry as a checklist, at the cursor or at the end.
+window.drwPlanInsert = function () {
+  const ed = document.getElementById('mDiaryText');
+  const list = _dpEvents(_dpDate());
+  if (!ed || !list.length) return;
+  const items = list.map(x => {
+    const t = `${_dpFmt(x.s.time)}${x.en.time ? ' – ' + _dpFmt(x.en.time) : ''} → ${_drpEsc(x.e.title || 'Untitled')}`;
+    return `<li${_dpIsDone(x.e) ? ' data-checked="1"' : ''}>${t}</li>`;
+  }).join('');
+  const html = `<ul class="dr-check">${items}</ul><p><br></p>`;
+  const sel = window.getSelection();
+  const inEd = sel && sel.rangeCount && ed.contains(sel.getRangeAt(0).commonAncestorContainer);
+  if (inEd) { ed.focus(); document.execCommand('insertHTML', false, html); }
+  else { ed.insertAdjacentHTML('beforeend', html); }
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+  drwPlanCloseSheet();
+  showToast('Plan added to your entry');
+};
+
+window.drwPlanOpenPlanner = function () {
+  const root = document.querySelector('#universalModal .drw');
+  if (root && root.dataset.dirty && !confirm('Leave this entry? Unsaved writing will be lost.')) return;
+  const ds = _dpDate();
+  _drwModal().classList.add('hidden');
+  try { if (typeof calState !== 'undefined') { calState.cursor = _drpParse(ds); calState.view = 'day'; } } catch (e) { }
+  window._plannerJumpTo = ds;
+  if (typeof routeTo === 'function') routeTo('calendar');
+};
+
+// Toolbar button: rail section on desktop, bottom sheet on a phone.
+window.drwPlanOpen = function () {
+  _dp.editId = null; _dp.adding = false;
+  if (_drIsPhone()) {
+    const root = document.querySelector('#universalModal .drw');
+    if (!root) return;
+    let sh = root.querySelector('.drw-plan-sheet');
+    if (!sh) {
+      sh = document.createElement('div');
+      sh.className = 'drw-plan-sheet';
+      sh.innerHTML = `<div class="drw-plan-scrim" onclick="drwPlanCloseSheet()"></div>
+        <div class="drw-plan-panel" role="dialog" aria-label="Day plan">
+          <div class="drw-plan-grab"></div>
+          <div class="drw-plan-head"><div class="drw-h">Day plan</div><span class="drw-plan-count" data-dp="count"></span>
+            <button type="button" class="drw-plan-x" onclick="drwPlanCloseSheet()" aria-label="Close"><i data-lucide="x"></i></button></div>
+          <div class="drw-plan-host"></div>
+        </div>`;
+      root.appendChild(sh);
+    }
+    drwPlanRender();
+    requestAnimationFrame(() => sh.classList.add('open'));
+    return;
+  }
+  const sec = document.getElementById('drwPlan');
+  if (!sec) return;
+  drwPlanRender();
+  sec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  sec.classList.remove('flash'); void sec.offsetWidth; sec.classList.add('flash');
+};
+window.drwPlanCloseSheet = function () {
+  const sh = document.querySelector('#universalModal .drw-plan-sheet');
+  if (!sh) return;
+  sh.classList.remove('open');
+  _dp.editId = null; _dp.adding = false;
+  setTimeout(() => { if (!sh.classList.contains('open')) sh.remove(); drwPlanRender(); }, 220);
+};
 
 // Modal functions
 window.openDiaryModal = function (dateStr, templateContent = '') {
@@ -1812,7 +2085,7 @@ window.openDiaryModal = function (dateStr, templateContent = '') {
     crumb: `<span>Journal</span><i data-lucide="chevron-right"></i><b>New entry</b>`,
     save: `<button type="button" class="drw-save" data-action="save-diary-modal">Save entry</button>`,
     doc: _drwEntryDoc(ds, templateContent, _drpEsc(_drpPrompt()) + ' Type / for blocks.'),
-    side: _drwMoodHTML(dm != null && dm !== '' ? dm : null) + _drwTagsHTML('') + _drwTplPickHTML() + _drwContextHTML(ds) + _drwMetaHTML()
+    side: _drwMoodHTML(dm != null && dm !== '' ? dm : null) + _drwTagsHTML('') + _drwPlanHTML() + _drwTplPickHTML() + _drwContextHTML(ds) + _drwMetaHTML()
   });
   _drwMount(html);
 };
@@ -1854,7 +2127,7 @@ window.openEditDiary = function (id) {
     crumb: `<span>Journal</span><i data-lucide="chevron-right"></i><b>Edit entry</b>`,
     save: `<button type="button" class="drw-save" data-action="update-diary-modal" data-edit-id="${eid}">Save changes</button>`,
     doc: _drwEntryDoc(ds, drToEditorHTML(e.content), 'Write something… Type / for blocks.'),
-    side: _drwMoodHTML(_drMood(e)) + _drwTagsHTML(e.tags) + _drwContextHTML(ds) + _drwMetaHTML()
+    side: _drwMoodHTML(_drMood(e)) + _drwTagsHTML(e.tags) + _drwPlanHTML() + _drwContextHTML(ds) + _drwMetaHTML()
       + `<section class="drw-sec drw-danger"><button type="button" class="drw-del" onclick="drwDeleteEntry('${eid}')"><i data-lucide="trash-2"></i>Delete entry</button></section>`
   });
   _drwMount(html);
@@ -3009,6 +3282,7 @@ function drToolbarHTML(opts = {}) {
       <span class="drx-sep"></span>
       <div class="drx-grp">
         <button type="button" class="dr-toolbar-btn drx-btn drx-ai" onmousedown="event.preventDefault();" onclick="insertDiarySummary('${opts.dateStr}')" title="Summarise my day (tasks, habits, spend)">${ic('sparkles')}<span>Summary</span></button>
+        ${opts.planner ? `<button type="button" class="dr-toolbar-btn drx-btn drx-plan-btn" onmousedown="event.preventDefault();" onclick="drwPlanOpen()" title="Day plan from your Planner">${ic('calendar-clock')}<span>Planner</span></button>` : ''}
         <button type="button" class="dr-toolbar-btn drx-btn" id="speechBtn" onmousedown="event.preventDefault();" onclick="toggleSpeechToText()" title="Dictate" aria-label="Dictate">${ic('mic')}</button>
       </div>` : ''}
     </div>
@@ -3759,6 +4033,69 @@ const DRW_CSS = `
 .drx-slash-it b { display:block; font-size:13px; font-weight:650; color:var(--text-1); }
 .drx-slash-it em { display:block; font-style:normal; font-size:11.5px; color:var(--text-3); }
 .drx-editor hr { border:none; height:0; border-top:1.5px solid var(--border-color); margin:1.3em 0; }
+
+/* day plan (rail section + phone sheet) */
+.drw-plan { border:1px solid var(--border-color); border-radius:14px; background:var(--surface-1); padding:14px 12px 12px; gap:8px; transition:box-shadow .3s, border-color .3s; }
+.drw-plan.flash { animation:dpFlash 1.2s ease-out; }
+@keyframes dpFlash { 0%,40% { border-color:var(--primary); box-shadow:0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent); } 100% { box-shadow:none; } }
+.drw-plan-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 4px; }
+.drw-plan-count { font-size:11.5px; font-weight:650; color:var(--text-3); font-variant-numeric:tabular-nums; }
+.dp-bar { height:4px; border-radius:99px; background:var(--surface-2); margin:0 4px 2px; overflow:hidden; }
+.dp-bar i { display:block; height:100%; border-radius:99px; background:var(--success, #10B981); transition:width .25s; }
+.dp-list { display:flex; flex-direction:column; gap:2px; }
+.dp-empty { margin:4px; font-size:12.5px; color:var(--text-3); }
+.dp-row { display:flex; align-items:flex-start; gap:8px; padding:6px 6px; border-radius:9px; transition:background .15s; }
+.dp-row:hover { background:var(--surface-2); }
+.dp-row.past .dp-txt { color:var(--text-3); }
+.dp-row.now { background:var(--success-soft, rgba(16,185,129,.1)); }
+.dp-row.now .dp-time { color:var(--success, #059669); }
+.dp-row.done .dp-title { text-decoration:line-through; color:var(--text-3); }
+.dp-box { width:18px; height:18px; flex:none; margin-top:2px; padding:0; border-radius:5px; border:1.8px solid var(--text-3); background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer; color:#fff; transition:background .15s, border-color .15s, transform .1s; }
+.dp-box:active { transform:scale(.88); }
+.dp-box svg { width:12px; height:12px; stroke-width:3.4; }
+.dp-row.done .dp-box { background:var(--success, #10B981); border-color:var(--success, #10B981); }
+.dp-txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; padding:0; border:none; background:transparent; text-align:left; cursor:pointer; color:var(--text-1); font-family:inherit; }
+.dp-time { font-size:11.5px; font-weight:700; color:var(--text-2); font-variant-numeric:tabular-nums; display:flex; align-items:center; gap:6px; }
+.dp-time em { font-style:normal; font-size:10px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; padding:1px 6px; border-radius:99px; background:var(--success, #10B981); color:#fff; }
+.dp-title { font-size:13px; font-weight:600; line-height:1.35; word-break:break-word; }
+.dp-add { display:flex; align-items:center; gap:7px; width:100%; height:34px; padding:0 8px; border:1px dashed var(--border-color); border-radius:9px; background:transparent; color:var(--text-2); font-size:12.5px; font-weight:650; cursor:pointer; font-family:inherit; }
+.dp-add:hover { border-color:var(--primary); color:var(--primary); }
+.dp-add svg { width:14px; height:14px; }
+.dp-form { display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid var(--primary); border-radius:11px; background:var(--surface-1); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent); }
+.dp-form input { width:100%; box-sizing:border-box; height:34px !important; padding:0 10px !important; margin:0 !important; border:1px solid var(--border-color) !important; border-radius:8px !important; background:var(--surface-2) !important; font-size:13px !important; color:var(--text-1); font-family:inherit; }
+.dp-form input:focus { outline:none; border-color:var(--primary) !important; }
+.dp-form-times { display:flex; align-items:center; gap:6px; }
+.dp-form-times input { flex:1; min-width:0; }
+.dp-form-times span { font-size:12px; color:var(--text-3); }
+.dp-form-acts { display:flex; align-items:center; gap:6px; }
+.dp-form-acts button { height:30px; padding:0 12px; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; }
+.dp-cancel { border:1px solid var(--border-color); background:transparent; color:var(--text-2); }
+.dp-ok { border:none; background:var(--primary); color:#fff; }
+.dp-del { width:30px; padding:0 !important; display:flex; align-items:center; justify-content:center; border:1px solid transparent; background:transparent; color:#DC2626; }
+.dp-del:hover { background:rgba(220,38,38,.07); }
+.dp-del svg { width:15px; height:15px; }
+.dp-foot { display:flex; gap:6px; margin-top:2px; }
+.dp-link { flex:1; display:flex; align-items:center; justify-content:center; gap:5px; height:30px; padding:0 8px; border-radius:8px; border:1px solid var(--border-color); background:transparent; color:var(--text-2); font-size:11.5px; font-weight:650; cursor:pointer; white-space:nowrap; font-family:inherit; }
+.dp-link:hover { border-color:var(--primary); color:var(--primary); }
+.dp-link svg { width:13px; height:13px; }
+.dp-sync { margin:2px 4px 0; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text-3); }
+.dp-sync svg { width:11px; height:11px; }
+.drw .drx-btn.drx-plan-btn { width:auto !important; padding:0 10px !important; gap:5px; font-size:12.5px !important; font-weight:650; color:var(--primary) !important; }
+.drw .drx-btn.drx-plan-btn svg { width:15px; height:15px; }
+.drw-plan-sheet { position:fixed; inset:0; z-index:100002; display:flex; flex-direction:column; justify-content:flex-end; }
+.drw-plan-scrim { position:absolute; inset:0; background:rgba(15,23,42,.38); opacity:0; transition:opacity .2s; }
+.drw-plan-panel { position:relative; max-height:82vh; overflow-y:auto; -webkit-overflow-scrolling:touch; background:var(--surface-1); border-radius:20px 20px 0 0; padding:8px 14px calc(env(safe-area-inset-bottom,0px) + 18px); display:flex; flex-direction:column; gap:10px; transform:translateY(100%); transition:transform .22s ease-out; }
+.drw-plan-sheet.open .drw-plan-scrim { opacity:1; }
+.drw-plan-sheet.open .drw-plan-panel { transform:none; }
+.drw-plan-grab { width:38px; height:4px; border-radius:99px; background:var(--border-color); margin:2px auto 4px; }
+.drw-plan-x { margin-left:auto; width:32px; height:32px; border-radius:50%; border:none; background:var(--surface-2); color:var(--text-2); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.drw-plan-x svg { width:16px; height:16px; }
+.drw-plan-panel .drw-plan-head .drw-plan-count { margin-left:4px; }
+.drw-plan-panel .dp-title { font-size:15px; }
+.drw-plan-panel .dp-time { font-size:12.5px; }
+.drw-plan-panel .dp-box { width:22px; height:22px; }
+.drw-plan-panel .dp-row { padding:9px 6px; }
+.drw-plan-panel .dp-form input { height:40px !important; font-size:15px !important; }
 
 @media (max-width:1000px) and (min-width:769px) {
   .drw-body { grid-template-columns:minmax(0,1fr) 280px; }
