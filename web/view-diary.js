@@ -4591,13 +4591,15 @@ const DB_K = {
   task: { l: 'Tasks', c: '#059669' },
   habit: { l: 'Habits', c: '#7C3AED' },
   food: { l: 'Food', c: '#EA580C' },
-  gym: { l: 'Gym', c: '#0D9488' }
+  gym: { l: 'Gym', c: '#DB2777' }
 };
 const DB_SLOTS = [['breakfast', 'Breakfast', '08:30'], ['lunch', 'Lunch', '13:30'], ['snacks', 'Snacks', '17:00'], ['dinner', 'Dinner', '20:00']];
 const DB_H = 46;   // px per hour on the timeline
 const _db = {
   hide: (() => { try { return JSON.parse(localStorage.getItem('dbHide') || '{}') || {}; } catch (e) { return {}; } })(),
-  scrolled: false
+  scrolled: false,
+  edit: null,       // 'kind:id' of the row being renamed
+  editVal: null
 };
 
 function _dbWide() { try { return !_drIsPhone() && window.innerWidth >= 1100; } catch (e) { return false; } }
@@ -4615,17 +4617,16 @@ function _dbMeals(ds) {
     const planned = (row && row.planned && String(row.planned).trim()) || (tpl && tpl.planned ? String(tpl.planned).trim() : '');
     const status = row ? row.status : null;
     const eaten = row && row.eaten ? String(row.eaten).trim() : '';
+    const skipped = status === 'skipped';
     const done = status === 'as_planned' || status === 'different';
-    const name = status === 'different' && eaten ? eaten : planned;
-    return { key, label, time, row, planned, name, status, done };
+    const name = skipped ? '' : (status === 'different' && eaten ? eaten : planned);
+    return { key, label, time, row, planned, name, status, done, skipped };
   });
 }
-window.dbMealToggle = async function (key) {
+async function _dbMealSave(key, fields) {
   const ds = _dpDate();
   const m = _dbMeals(ds).find(x => x.key === key);
   if (!m) return;
-  if (!m.planned && !m.done) { dbGo('meals'); return; }
-  const fields = m.done ? { status: null, eaten: '' } : { status: 'as_planned', planned: m.planned, eaten: m.planned };
   if (!Array.isArray(state.data.meal_plan)) state.data.meal_plan = [];
   let row = m.row;
   const before = row ? { ...row } : null;
@@ -4640,6 +4641,13 @@ window.dbMealToggle = async function (key) {
     dbRender();
     showToast('Couldn’t update the meal');
   }
+}
+window.dbMealToggle = function (key) {
+  const m = _dbMeals(_dpDate()).find(x => x.key === key);
+  if (!m) return;
+  if (m.skipped) return _dbMealSave(key, { status: null, eaten: '' });
+  if (!m.planned && !m.done) { dbGo('meals'); return; }
+  return _dbMealSave(key, m.done ? { status: null, eaten: '' } : { status: 'as_planned', planned: m.planned, eaten: m.planned });
 };
 
 /* ── gym: that day's session, else (today or later) the plan that's up next ── */
@@ -4670,7 +4678,7 @@ function _dbGym(ds) {
       const b = w.completed_at ? new Date(w.completed_at) : null;
       if (b && !isNaN(b)) { const m = Math.round((b - a) / 60000); if (m > 0 && m < 600) mins = m; }
     }
-    return { kind: 'session', name: s.plan_name || 'Workout', done: isDone(s), exs, time, mins };
+    return { kind: 'session', row: s, name: s.plan_name || 'Workout', done: isDone(s), exs, time, mins };
   }
   if (ds < diaryLocalDate()) return null;
   const plans = state.data.gym_plans || [];
@@ -4679,7 +4687,7 @@ function _dbGym(ds) {
   const last = p => doneAll.filter(x => String(x.plan_id) === String(p.id) || (x.plan_name && x.plan_name === p.name)).map(x => String(x.date || '')).sort().pop() || '0000';
   const p = [...plans].sort((a, b) => last(a).localeCompare(last(b)))[0];
   const exs = (_dbJSON(p.exercises_json, []) || []).map(e => ({ name: e.name || 'Exercise', done: 0, total: Array.isArray(e.sets) ? e.sets.length : (Number(e.sets) || 0), spec: _dbSetSpec(e) }));
-  return { kind: 'plan', name: p.name || 'Workout', done: false, exs, time: '', mins: null };
+  return { kind: 'plan', plan: p, name: p.name || 'Workout', done: false, exs, time: '', mins: null };
 }
 
 /* ── one timeline for everything with a time; the rest goes to "All day" ── */
@@ -4740,15 +4748,117 @@ function _dbBox(k, title, count, actions, body, foot) {
   </section>`;
 }
 function _dbIcon(onclick, icon, label) { return `<button type="button" class="dbd-ib" onclick="${onclick}" title="${label}" aria-label="${label}"><i data-lucide="${icon}"></i></button>`; }
+// One row: tick box (toggles), name (click to rename), meta, delete (on hover).
 function _dbRow(k, id, title, meta, done, opts = {}) {
-  const tag = opts.static ? 'div' : 'button';
-  const click = opts.static ? '' : ` type="button" onclick="${opts.onclick || `dbToggle('${k}','${_dbq(id)}')`}" aria-pressed="${!!done}"`;
-  return `<${tag} class="dbd-row${done ? ' done' : ''}${opts.muted ? ' muted' : ''}"${click}>
-    ${opts.noCheck ? '' : `<span class="dbd-ck${opts.round ? ' round' : ''}">${done ? '<i data-lucide="check"></i>' : ''}</span>`}
-    <span class="dbd-row-t">${_drpEsc(title)}</span>
-    ${meta ? `<span class="dbd-row-m${opts.late ? ' late' : ''}">${meta}</span>` : ''}
-  </${tag}>`;
+  const editing = _db.edit === `${k}:${id}`;
+  const tick = done ? '<i data-lucide="check"></i>' : '';
+  const ck = opts.staticCheck
+    ? `<span class="dbd-ck${opts.round ? ' round' : ''}" aria-hidden="true">${tick}</span>`
+    : `<button type="button" class="dbd-ck${opts.round ? ' round' : ''}" onclick="${opts.onclick || `dbToggle('${k}','${_dbq(id)}')`}" aria-pressed="${!!done}" aria-label="${done ? 'Mark not done' : 'Mark done'}: ${_drpEsc(title)}">${tick}</button>`;
+  let name;
+  if (editing) {
+    const v = _db.editVal != null ? _db.editVal : (opts.editValue != null ? opts.editValue : title);
+    name = `<input class="dbd-name-in" type="text" data-k="${k}" data-id="${_drpEsc(String(id))}" value="${_drpEsc(v)}" aria-label="Rename" autocomplete="off">`;
+  } else if (opts.editable === false) {
+    name = `<span class="dbd-row-t">${_drpEsc(title)}</span>`;
+  } else {
+    name = `<button type="button" class="dbd-row-t dbd-name" onclick="dbEdit('${k}','${_dbq(id)}')" title="Click to rename">${_drpEsc(title)}</button>`;
+  }
+  const del = editing || opts.deletable === false ? ''
+    : `<button type="button" class="dbd-x" onclick="dbDelete('${k}','${_dbq(id)}')" title="${opts.delLabel || 'Delete'}" aria-label="${opts.delLabel || 'Delete'}: ${_drpEsc(title)}"><i data-lucide="trash-2"></i></button>`;
+  return `<div class="dbd-row${done ? ' done' : ''}${opts.muted ? ' muted' : ''}${editing ? ' editing' : ''}">
+    ${ck}${name}
+    ${meta && !editing ? `<span class="dbd-row-m${opts.late ? ' late' : ''}">${meta}</span>` : ''}
+    ${del}
+  </div>`;
 }
+
+/* ── rename + delete ── */
+window.dbEdit = function (k, id) {
+  _db.edit = `${k}:${id}`; _db.editVal = null;
+  dbRender();
+  const inp = document.querySelector('#dbSide .dbd-name-in');
+  if (inp) { inp.focus(); inp.select(); }
+};
+function _dbEditDone() { _db.edit = null; _db.editVal = null; dbRender(); }
+async function _dbUpdate(table, list, id, fields, failMsg) {
+  const row = (state.data[list] || []).find(x => String(x.id) === String(id));
+  if (!row) return;
+  const before = {}; Object.keys(fields).forEach(f => { before[f] = row[f]; });
+  Object.assign(row, fields);
+  dbRender();
+  try {
+    const res = await apiCall('update', table, fields, id);
+    if (res && res.success === false) throw new Error(res.message);
+  } catch (e) { Object.assign(row, before); dbRender(); showToast(failMsg); }
+}
+async function _dbGymEdit(mutate) {
+  const g = _dbGym(_dpDate());
+  if (!g) return;
+  const isS = g.kind === 'session';
+  const row = isS ? g.row : g.plan, col = isS ? 'workout_json' : 'exercises_json';
+  const prev = row[col];
+  const obj = isS ? (_dbJSON(prev, { exercises: [] }) || { exercises: [] }) : (_dbJSON(prev, []) || []);
+  const list = isS ? (obj.exercises || (obj.exercises = [])) : obj;
+  if (mutate(list) === false) return;
+  row[col] = JSON.stringify(obj);
+  dbRender();
+  try {
+    const res = await apiCall('update', isS ? 'gym_sessions' : 'gym_plans', { [col]: row[col] }, row.id);
+    if (res && res.success === false) throw new Error(res.message);
+  } catch (e) { row[col] = prev; dbRender(); showToast('Couldn’t update the workout'); }
+}
+window.dbSaveName = async function (inp) {
+  if (!inp || inp.dataset.saving) return;
+  inp.dataset.saving = '1';
+  const k = inp.dataset.k, id = inp.dataset.id, v = inp.value.trim();
+  _db.edit = null; _db.editVal = null;
+  if (!v) { dbRender(); return; }
+  if (k === 'task') return _dbUpdate('tasks', 'tasks', id, { title: v }, 'Couldn’t rename the task');
+  if (k === 'habit') return _dbUpdate('habits', 'habits', id, { habit_name: v }, 'Couldn’t rename the habit');
+  if (k === 'food') {
+    const m = _dbMeals(_dpDate()).find(x => x.key === id);
+    if (!m || v === m.name) { dbRender(); return; }
+    return _dbMealSave(id, m.status === 'different' ? { eaten: v } : { planned: v, ...(m.done ? { eaten: v } : {}) });
+  }
+  if (k === 'gym') return _dbGymEdit(list => { const e = list[+id]; if (!e || e.name === v) return false; e.name = v; });
+  dbRender();
+};
+// Same undo pattern as the Tasks and Habits pages: gone at once, deleted for real after 5s unless undone.
+function _dbSoftDelete(list, table, id, label) {
+  const arr = state.data[list] || [];
+  const i = arr.findIndex(x => String(x.id) === String(id));
+  if (i === -1) return;
+  const item = arr[i];
+  arr.splice(i, 1);
+  dbRender();
+  showToast(`${label} deleted`, 'default', () => {
+    if (!arr.find(x => String(x.id) === String(id))) arr.splice(Math.min(i, arr.length), 0, item);
+    dbRender();
+    showToast(`${label} restored`);
+  });
+  setTimeout(async () => {
+    if (arr.find(x => String(x.id) === String(id))) return;
+    try { await apiCall('delete', table, {}, id); } catch (e) { console.error('delete ' + table, e); }
+  }, 5000);
+}
+window.dbDelete = function (k, id) {
+  if (k === 'task') return _dbSoftDelete('tasks', 'tasks', id, 'Task');
+  if (k === 'habit') {
+    const h = (state.data.habits || []).find(x => String(x.id) === String(id));
+    if (h && !confirm(`Delete the habit “${h.habit_name || 'Habit'}”? It’s removed from every day, not just this one.`)) return;
+    return _dbSoftDelete('habits', 'habits', id, 'Habit');
+  }
+  if (k === 'food') return _dbMealSave(id, { status: 'skipped', eaten: '' });
+  if (k === 'gym') {
+    const g = _dbGym(_dpDate());
+    const e = g && g.exs[+id];
+    if (!e) return;
+    const where = g.kind === 'plan' ? `the “${g.name}” plan (all future workouts)` : 'this workout';
+    if (!confirm(`Remove “${e.name}” from ${where}?`)) return;
+    return _dbGymEdit(list => { if (!list[+id]) return false; list.splice(+id, 1); });
+  }
+};
 
 function _dbPlannerHTML(ds) {
   const { items, allDay } = _dbTimeline(ds);
@@ -4809,7 +4919,7 @@ function _dbTasksHTML(ds) {
   const list = _dtItems(ds);
   const rows = list.map(x => {
     const meta = x.overdue ? `Overdue · ${_dpDateObj(_dtDue(x.t)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : (x.time ? _dpFmt(x.time) : (_dtRecurring(x.t) ? 'Repeats' : ''));
-    return _dbRow('task', x.t.id, x.t.title || 'Task', meta, x.done, { late: x.overdue });
+    return _dbRow('task', x.t.id, x.t.title || 'Task', meta, x.done, { late: x.overdue, delLabel: 'Delete task' });
   }).join('');
   const form = _dp.addingTask ? `<div class="dp-form" data-kind="task">
       <input class="dp-in-title" type="text" placeholder="What needs doing?" autocomplete="off">
@@ -4828,7 +4938,7 @@ function _dbHabitsHTML(ds) {
   const rows = list.map(x => {
     const st = _dhStreak(x.h, ds);
     const meta = [x.t ? _dpFmt(x.t) : '', st > 1 ? `${st}d streak` : ''].filter(Boolean).join(' · ');
-    return _dbRow('habit', x.h.id, x.h.habit_name || 'Habit', meta, x.done, { round: true });
+    return _dbRow('habit', x.h.id, x.h.habit_name || 'Habit', meta, x.done, { round: true, delLabel: 'Delete habit' });
   }).join('');
   return _dbBox('habit', 'Habits', list.length ? `${list.filter(x => x.done).length}/${list.length}` : '',
     _dbIcon("dbGo('habits')", 'arrow-up-right', 'Open Habits'),
@@ -4838,10 +4948,12 @@ function _dbHabitsHTML(ds) {
 function _dbFoodHTML(ds) {
   const meals = _dbMeals(ds);
   const planned = meals.filter(m => m.name);
-  const rows = meals.map(m => m.name
-    ? _dbRow('food', m.key, m.name, `${m.label} · ${_dpFmt(m.time)}${m.status === 'different' ? ' · ate other' : ''}`, m.done)
-    : _dbRow('food', m.key, `${m.label}: not planned`, _dpFmt(m.time), false, { muted: true, onclick: "dbGo('meals')" })
-  ).join('');
+  void planned;
+  const rows = meals.map(m => {
+    if (m.skipped) return _dbRow('food', m.key, `${m.label}: skipped`, _dpFmt(m.time), false, { muted: true, editable: false, deletable: false, onclick: `dbMealToggle('${m.key}')` });
+    if (m.name) return _dbRow('food', m.key, m.name, `${m.label} · ${_dpFmt(m.time)}${m.status === 'different' ? ' · ate other' : ''}`, m.done, { delLabel: 'Remove from this day' });
+    return _dbRow('food', m.key, `${m.label}: not planned`, _dpFmt(m.time), false, { muted: true, editable: false, deletable: false, onclick: "dbGo('meals')" });
+  }).join('');
   return _dbBox('food', 'Food', planned.length ? `${meals.filter(m => m.done).length}/${planned.length}` : '',
     _dbIcon("dbGo('meals')", 'arrow-up-right', 'Open Food Planner'), rows);
 }
@@ -4851,7 +4963,7 @@ function _dbGymHTML(ds) {
   if (!g) return _dbBox('gym', 'Gym', '', _dbIcon("dbGo('gym')", 'arrow-up-right', 'Open Gym'), '<p class="dbd-empty">No workout on this day.</p>');
   const sets = g.exs.reduce((n, e) => n + e.done, 0), total = g.exs.reduce((n, e) => n + e.total, 0);
   const sub = g.kind === 'plan' ? 'Up next' : (g.done ? `Done${g.mins ? ` · ${g.mins} min` : ''}` : `In progress · ${sets}/${total} sets`);
-  const rows = g.exs.map(e => _dbRow('gym', '', e.name, g.kind === 'session' && e.total ? `${e.done}/${e.total} sets` : e.spec, g.kind === 'session' && e.total > 0 && e.done >= e.total, { static: true })).join('');
+  const rows = g.exs.map((e, i) => _dbRow('gym', i, e.name, g.kind === 'session' && e.total ? `${e.done}/${e.total} sets` : e.spec, g.kind === 'session' && e.total > 0 && e.done >= e.total, { staticCheck: true, delLabel: 'Remove exercise' })).join('');
   return _dbBox('gym', `Gym · ${_drpEsc(g.name)}`, sub,
     _dbIcon("dbGo('gym')", 'arrow-up-right', 'Open Gym'),
     rows || '<p class="dbd-empty">No exercises in this workout.</p>',
@@ -4862,10 +4974,24 @@ window.dbRender = function () {
   const side = document.getElementById('dbSide');
   if (!side) return;
   const ds = _dpDate();
-  const keep = {};
+  const keep = {}, sideTop = side.scrollTop;
   side.querySelectorAll('[data-scroll]').forEach(el => { keep[el.dataset.scroll] = el.scrollTop; });
-  side.innerHTML = _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>`;
+  const live = side.querySelector('.dbd-name-in');
+  if (live && _db.edit) _db.editVal = live.value;
+  const nav = `<nav class="dbd-nav" aria-label="Jump to">${[['plan', 'Planner', 'event'], ['task', 'Tasks', 'task'], ['habit', 'Habits', 'habit'], ['food', 'Food', 'food'], ['gym', 'Gym', 'gym']]
+    .map(([b, l, k]) => `<button type="button" class="dbd-jump k-${k}" onclick="dbJump('${b}')"><span class="dbd-dot"></span>${l}</button>`).join('')}</nav>`;
+  side.innerHTML = nav + _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>`;
+  side.scrollTop = sideTop;
   side.querySelectorAll('[data-scroll]').forEach(el => { if (keep[el.dataset.scroll] != null) el.scrollTop = keep[el.dataset.scroll]; });
+  side.querySelectorAll('.dbd-name-in').forEach(inp => {
+    inp.addEventListener('keydown', ev => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); dbSaveName(inp); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); inp.dataset.saving = '1'; _dbEditDone(); }
+    });
+    inp.addEventListener('blur', () => { if (document.contains(inp)) dbSaveName(inp); });
+    inp.addEventListener('input', () => { _db.editVal = inp.value; });
+  });
   if (!_db.scrolled) {
     const sc = side.querySelector('[data-scroll="plan"]');
     const tgt = side.querySelector('.dbd-nowl') || side.querySelector('.dbd-blk');
@@ -4879,6 +5005,14 @@ window.dbRender = function () {
   }));
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
   if (_dp.adding || _dp.editId || _dp.addingTask) side.querySelector('.dp-form .dp-in-title')?.focus();
+  else if (_db.edit) { const inp = side.querySelector('.dbd-name-in'); if (inp && document.activeElement !== inp) { inp.focus(); const n = inp.value.length; inp.setSelectionRange(n, n); } }
+};
+window.dbJump = function (b) {
+  const side = document.getElementById('dbSide');
+  const box = side && side.querySelector(`[data-scroll="${b}"]`)?.closest('.dbd-box');
+  if (!box) return;
+  const nav = side.querySelector('.dbd-nav');
+  side.scrollTo({ top: Math.max(0, box.offsetTop - (nav ? nav.offsetHeight + 8 : 0)), behavior: 'smooth' });
 };
 
 // Everything that re-renders the My day rail also re-renders the board.
@@ -5021,7 +5155,10 @@ function _dbOpen(o) {
 .dbd-del svg { width:14px; height:14px; }
 .dbd-del:hover { color:#DC2626; border-color:rgba(220,38,38,.35); background:rgba(220,38,38,.05); }
 
-.dbd-side { min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:12px; padding-right:2px; }
+.dbd-side { position:relative; min-width:0; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; display:flex; flex-direction:column; gap:12px; padding:0 2px 14px 0; scroll-padding-top:52px; }
+.dbd-nav { position:sticky; top:0; z-index:5; flex:none; display:flex; gap:6px; flex-wrap:wrap; padding:0 0 8px; background:var(--surface-2); }
+.dbd-jump { height:30px; padding:0 11px; border-radius:99px; border:1px solid color-mix(in srgb, var(--c) 35%, var(--border-color)); background:var(--surface-1); color:var(--text-1); font-size:12.5px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-family:inherit; }
+.dbd-jump:hover { background:color-mix(in srgb, var(--c) 10%, var(--surface-1)); }
 .dbd-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
 .k-event { --c:${DB_K.event.c}; } .k-task { --c:${DB_K.task.c}; } .k-habit { --c:${DB_K.habit.c}; } .k-food { --c:${DB_K.food.c}; } .k-gym { --c:${DB_K.gym.c}; }
 .dbd-box { --t:color-mix(in srgb, var(--c) 10%, var(--surface-1)); --b:color-mix(in srgb, var(--c) 38%, var(--border-color)); flex:none; height:320px; display:flex; flex-direction:column; background:var(--surface-1); border:1.5px solid var(--b); border-radius:14px; overflow:hidden; }
@@ -5032,13 +5169,24 @@ function _dbOpen(o) {
 .dbd-ib { width:28px; height:28px; flex:none; border-radius:8px; border:1px solid var(--b); background:var(--surface-1); color:var(--text-1); display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
 .dbd-ib svg { width:15px; height:15px; }
 .dbd-ib:hover { background:var(--t); }
-.dbd-box-b { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:6px; }
+.dbd-box-b { flex:1; min-height:0; overflow-y:auto; padding:6px; }
 .dbd-box-f { flex:none; display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:6px 8px; border-top:1px solid var(--border-color); }
 .dbd-box-f .dp-link { margin:0; }
-.dbd-row { display:flex; align-items:center; gap:10px; width:100%; box-sizing:border-box; padding:7px 8px; border:none; border-radius:9px; background:transparent; text-align:left; cursor:pointer; color:var(--text-1); font-size:13.5px; font-weight:600; font-family:inherit; }
-div.dbd-row { cursor:default; }
-button.dbd-row:hover { background:var(--t); }
-.dbd-ck { width:18px; height:18px; flex:none; box-sizing:border-box; border-radius:5px; border:2px solid var(--c); display:flex; align-items:center; justify-content:center; color:#fff; }
+.dbd-row { display:flex; align-items:center; gap:10px; width:100%; box-sizing:border-box; min-height:36px; padding:4px 6px 4px 8px; border-radius:9px; color:var(--text-1); font-size:13.5px; font-weight:600; }
+.dbd-row:hover, .dbd-row.editing { background:var(--t); }
+.dbd-ck { width:18px; height:18px; flex:none; box-sizing:border-box; padding:0; margin:0; border-radius:5px; border:2px solid var(--c); background:transparent; display:flex; align-items:center; justify-content:center; color:#fff; }
+button.dbd-ck { cursor:pointer; }
+button.dbd-ck:focus-visible, .dbd-name:focus-visible, .dbd-x:focus-visible { outline:2px solid var(--c); outline-offset:2px; }
+.dbd-name { padding:3px 4px; margin:0 -4px; border:none; border-radius:6px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:text; }
+.dbd-name:hover { background:color-mix(in srgb, var(--c) 10%, var(--surface-1)); }
+.drw .dbd-name-in { flex:1; min-width:0; height:30px !important; min-height:0 !important; margin:0 !important; padding:0 8px !important; border:1.5px solid var(--c) !important; border-radius:7px !important; background:var(--surface-1) !important; color:var(--text-1) !important; font-size:13.5px !important; font-weight:600; box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 15%, transparent) !important; outline:none; }
+.dbd-row { position:relative; }
+.dbd-x { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:28px; height:28px; padding:0; border:none; border-radius:7px; background:var(--surface-1); box-shadow:-10px 0 10px var(--t); color:var(--text-3); display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0; pointer-events:none; transition:opacity .12s; }
+.dbd-row:hover .dbd-x, .dbd-x:focus-visible { pointer-events:auto; }
+.dbd-x svg { width:14px; height:14px; }
+.dbd-row:hover .dbd-x, .dbd-x:focus-visible { opacity:1; }
+.dbd-x:hover { color:#DC2626; background:rgba(220,38,38,.08); }
+@media (hover:none) { .dbd-x { position:static; transform:none; box-shadow:none; background:transparent; opacity:.7; pointer-events:auto; } }
 .dbd-ck.round { border-radius:50%; }
 .dbd-row.done .dbd-ck { background:var(--c); }
 .dbd-ck svg { width:12px; height:12px; stroke-width:3.5; }
