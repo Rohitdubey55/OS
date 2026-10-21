@@ -4574,3 +4574,514 @@ const DRW_CSS = `
   st.textContent = DRW_CSS;
   document.head.appendChild(st);
 })();
+
+/* ═══ DAY BOARD — desktop writer: editor + planner + colour-coded boxes ════
+   On wide screens (1100px+) the journal writer becomes: the editor on the
+   left (date, mood, template picker in its header; tags and word count in
+   its footer; formatting, summary and dictation in the toolbar) and, on the
+   right, a Planner box — an hour-by-hour timeline of planner blocks, timed
+   tasks, timed habits, meals and the workout — over four boxes: Tasks,
+   Habits, Food and Gym. Each kind has one colour, used by its box and by its
+   blocks on the timeline. Every box has a fixed height and scrolls.
+   Ticks write to the same rows as the Planner, Tasks, Habits and Food pages
+   (planner_events.done, tasks, habit_logs, meal_plan), through the same
+   functions the My day rail uses. Phones and narrow windows keep the rail. */
+const DB_K = {
+  event: { l: 'Events', c: '#2563EB' },
+  task: { l: 'Tasks', c: '#059669' },
+  habit: { l: 'Habits', c: '#7C3AED' },
+  food: { l: 'Food', c: '#EA580C' },
+  gym: { l: 'Gym', c: '#0D9488' }
+};
+const DB_SLOTS = [['breakfast', 'Breakfast', '08:30'], ['lunch', 'Lunch', '13:30'], ['snacks', 'Snacks', '17:00'], ['dinner', 'Dinner', '20:00']];
+const DB_H = 46;   // px per hour on the timeline
+const _db = {
+  hide: (() => { try { return JSON.parse(localStorage.getItem('dbHide') || '{}') || {}; } catch (e) { return {}; } })(),
+  scrolled: false
+};
+
+function _dbWide() { try { return !_drIsPhone() && window.innerWidth >= 1100; } catch (e) { return false; } }
+function _dbq(s) { return _drpEsc(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")); }
+function _dbPad(n) { return String(n).padStart(2, '0'); }
+function _dbJSON(j, fb) { try { const v = typeof j === 'string' ? JSON.parse(j || '') : j; return v == null ? fb : v; } catch (e) { return fb; } }
+
+/* ── food (meal_plan + weekly meal_template, same rules as the Food Planner) ── */
+function _dbMeals(ds) {
+  const mp = state.data.meal_plan || [], mt = state.data.meal_template || [];
+  const dow = _dpDateObj(ds).getDay(), wd = dow === 0 ? 6 : dow - 1;
+  return DB_SLOTS.map(([key, label, time]) => {
+    const row = mp.find(r => String(r.date || '').slice(0, 10) === ds && r.slot === key);
+    const tpl = mt.find(r => +r.weekday === wd && r.slot === key);
+    const planned = (row && row.planned && String(row.planned).trim()) || (tpl && tpl.planned ? String(tpl.planned).trim() : '');
+    const status = row ? row.status : null;
+    const eaten = row && row.eaten ? String(row.eaten).trim() : '';
+    const done = status === 'as_planned' || status === 'different';
+    const name = status === 'different' && eaten ? eaten : planned;
+    return { key, label, time, row, planned, name, status, done };
+  });
+}
+window.dbMealToggle = async function (key) {
+  const ds = _dpDate();
+  const m = _dbMeals(ds).find(x => x.key === key);
+  if (!m) return;
+  if (!m.planned && !m.done) { dbGo('meals'); return; }
+  const fields = m.done ? { status: null, eaten: '' } : { status: 'as_planned', planned: m.planned, eaten: m.planned };
+  if (!Array.isArray(state.data.meal_plan)) state.data.meal_plan = [];
+  let row = m.row;
+  const before = row ? { ...row } : null;
+  if (row) Object.assign(row, fields);
+  else { row = { id: 'mp_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), date: ds, slot: key, ...fields }; state.data.meal_plan.push(row); }
+  dbRender();
+  try {
+    const res = before ? await apiCall('update', 'meal_plan', fields, row.id) : await apiCall('create', 'meal_plan', { id: row.id, date: ds, slot: key, ...fields });
+    if (res && res.success === false) throw new Error(res.message);
+  } catch (e) {
+    if (before) Object.assign(row, before); else state.data.meal_plan = state.data.meal_plan.filter(r => r !== row);
+    dbRender();
+    showToast('Couldn’t update the meal');
+  }
+};
+
+/* ── gym: that day's session, else (today or later) the plan that's up next ── */
+function _dbSetSpec(e) {
+  const sets = Array.isArray(e.sets) ? e.sets : [];
+  const n = sets.length || Number(e.sets) || 0;
+  if (!n) return '';
+  const s = sets[0] || e;
+  if (s.secs) return `${n} × ${s.secs}s`;
+  const base = s.reps ? `${n} × ${s.reps}` : `${n} sets`;
+  return s.weight ? `${base} · ${s.weight} kg` : base;
+}
+function _dbGym(ds) {
+  const isDone = r => r && (r.completed === true || r.completed === 'true' || r.completed == 1);
+  const all = state.data.gym_sessions || [];
+  const day = all.filter(s => String(s.date || '').slice(0, 10) === ds);
+  const s = day.find(isDone) || day[0];
+  if (s) {
+    const w = _dbJSON(s.workout_json, { exercises: [] }) || { exercises: [] };
+    const exs = (w.exercises || []).map(e => {
+      const sets = Array.isArray(e.sets) ? e.sets : [];
+      return { name: e.name || 'Exercise', done: sets.filter(x => x.done).length, total: sets.length, spec: _dbSetSpec(e) };
+    });
+    let time = '', mins = null;
+    const a = w.started_at ? new Date(w.started_at) : null;
+    if (a && !isNaN(a)) {
+      time = `${_dbPad(a.getHours())}:${_dbPad(a.getMinutes())}`;
+      const b = w.completed_at ? new Date(w.completed_at) : null;
+      if (b && !isNaN(b)) { const m = Math.round((b - a) / 60000); if (m > 0 && m < 600) mins = m; }
+    }
+    return { kind: 'session', name: s.plan_name || 'Workout', done: isDone(s), exs, time, mins };
+  }
+  if (ds < diaryLocalDate()) return null;
+  const plans = state.data.gym_plans || [];
+  if (!plans.length) return null;
+  const doneAll = all.filter(isDone);
+  const last = p => doneAll.filter(x => String(x.plan_id) === String(p.id) || (x.plan_name && x.plan_name === p.name)).map(x => String(x.date || '')).sort().pop() || '0000';
+  const p = [...plans].sort((a, b) => last(a).localeCompare(last(b)))[0];
+  const exs = (_dbJSON(p.exercises_json, []) || []).map(e => ({ name: e.name || 'Exercise', done: 0, total: Array.isArray(e.sets) ? e.sets.length : (Number(e.sets) || 0), spec: _dbSetSpec(e) }));
+  return { kind: 'plan', name: p.name || 'Workout', done: false, exs, time: '', mins: null };
+}
+
+/* ── one timeline for everything with a time; the rest goes to "All day" ── */
+function _dbTimeline(ds) {
+  const items = [], allDay = [];
+  const add = (it, t, mins) => {
+    if (!t) { allDay.push(it); return; }
+    const s = _dpMin(t), e = s + Math.max(15, mins);
+    items.push({ ...it, s, e, label: _dpFmt(t) });
+  };
+  _dpEvents(ds).forEach(x => {
+    const s = x.s.time ? _dpMin(x.s.time) : 0;
+    const e = x.en.time ? _dpMin(x.en.time) : s + 60;
+    add({ k: 'event', id: x.e.id, title: x.e.title || 'Untitled', done: _dpIsDone(x.e) }, x.s.time, e > s ? e - s : 60);
+  });
+  _dtItems(ds).forEach(x => add({ k: 'task', id: x.t.id, title: x.t.title || 'Task', done: x.done }, x.time, Math.min(240, Number(x.t.duration) || 30)));
+  _dhItems(ds).forEach(x => add({ k: 'habit', id: x.h.id, title: x.h.habit_name || 'Habit', done: x.done }, x.t, Math.min(180, Number(x.h.duration) || 20)));
+  _dbMeals(ds).filter(m => m.name).forEach(m => add({ k: 'food', id: m.key, title: `${m.label} · ${m.name}`, done: m.done }, m.time, 30));
+  const g = _dbGym(ds);
+  if (g) add({ k: 'gym', id: 'gym', title: g.name + (g.kind === 'plan' ? ' (planned)' : ''), done: g.done }, g.time, g.mins || 60);
+
+  // side-by-side lanes where blocks overlap (using their drawn height)
+  const minMins = Math.ceil(22 / DB_H * 60);
+  items.forEach(it => { it.ev = Math.max(it.e, it.s + minMins); });
+  items.sort((a, b) => a.s - b.s || b.ev - a.ev);
+  let cluster = [], end = -1;
+  const flush = () => {
+    const lanes = [];
+    cluster.forEach(it => { let l = lanes.findIndex(x => x <= it.s); if (l === -1) { l = lanes.length; lanes.push(it.ev); } else lanes[l] = it.ev; it.lane = l; });
+    cluster.forEach(it => { it.lanes = lanes.length; });
+    cluster = [];
+  };
+  items.forEach(it => { if (cluster.length && it.s >= end) { flush(); end = -1; } cluster.push(it); end = Math.max(end, it.ev); });
+  if (cluster.length) flush();
+  return { items, allDay, gym: g };
+}
+
+window.dbToggle = function (k, id) {
+  if (k === 'event') return drwPlanToggle(id);
+  if (k === 'task') return drwTaskToggle(id);
+  if (k === 'habit') return drwHabitToggle(id);
+  if (k === 'food') return dbMealToggle(id);
+  if (k === 'gym') return dbGo('gym');
+};
+window.dbGo = function (view) { drwMyDayGo(view); };
+window.dbHide = function (k) {
+  _db.hide[k] = !_db.hide[k];
+  try { localStorage.setItem('dbHide', JSON.stringify(_db.hide)); } catch (e) { }
+  dbRender();
+};
+
+/* ── markup ── */
+function _dbBox(k, title, count, actions, body, foot) {
+  return `<section class="dbd-box k-${k}">
+    <header class="dbd-box-h"><span class="dbd-box-t">${title}</span><span class="dbd-box-n">${count}</span>${actions}</header>
+    <div class="dbd-box-b" data-scroll="${k}">${body}</div>
+    ${foot ? `<footer class="dbd-box-f">${foot}</footer>` : ''}
+  </section>`;
+}
+function _dbIcon(onclick, icon, label) { return `<button type="button" class="dbd-ib" onclick="${onclick}" title="${label}" aria-label="${label}"><i data-lucide="${icon}"></i></button>`; }
+function _dbRow(k, id, title, meta, done, opts = {}) {
+  const tag = opts.static ? 'div' : 'button';
+  const click = opts.static ? '' : ` type="button" onclick="${opts.onclick || `dbToggle('${k}','${_dbq(id)}')`}" aria-pressed="${!!done}"`;
+  return `<${tag} class="dbd-row${done ? ' done' : ''}${opts.muted ? ' muted' : ''}"${click}>
+    ${opts.noCheck ? '' : `<span class="dbd-ck${opts.round ? ' round' : ''}">${done ? '<i data-lucide="check"></i>' : ''}</span>`}
+    <span class="dbd-row-t">${_drpEsc(title)}</span>
+    ${meta ? `<span class="dbd-row-m${opts.late ? ' late' : ''}">${meta}</span>` : ''}
+  </${tag}>`;
+}
+
+function _dbPlannerHTML(ds) {
+  const { items, allDay } = _dbTimeline(ds);
+  const vis = items.filter(i => !_db.hide[i.k]);
+  const visAll = allDay.filter(i => !_db.hide[i.k]);
+  const total = items.length + allDay.length;
+  const done = items.concat(allDay).filter(i => i.done).length;
+  const today = diaryLocalDate();
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  let h0 = 6, h1 = 22;
+  vis.forEach(i => { h0 = Math.min(h0, Math.floor(i.s / 60)); h1 = Math.max(h1, Math.ceil(i.ev / 60)); });
+  h0 = Math.max(0, h0); h1 = Math.min(24, h1);
+  const y = m => Math.round((m - h0 * 60) / 60 * DB_H);
+  let hours = '';
+  for (let h = h0; h <= h1; h++) hours += `<div class="dbd-hr" style="top:${(h - h0) * DB_H}px"><span>${_dbPad(h % 24)}:00</span><b></b></div>`;
+  const blocks = vis.map(i => {
+    const top = y(i.s) + 1, hgt = Math.max(22, y(i.e) - y(i.s)) - 2;
+    const w = `(100% - 54px) / ${i.lanes}`;
+    const tip = `${i.label} · ${i.title}`;
+    return `<div class="dbd-blk k-${i.k}${i.done ? ' done' : ''}${hgt < 36 ? ' short' : ''}" style="top:${top}px;height:${hgt}px;left:calc(54px + ${w} * ${i.lane});width:calc(${w} - 3px)">
+      <button type="button" class="dbd-blk-main" onclick="dbToggle('${i.k}','${_dbq(i.id)}')" title="${_drpEsc(tip)} — ${i.k === 'gym' ? 'open Gym' : (i.done ? 'mark not done' : 'mark done')}">
+        <span class="dbd-blk-t">${i.done ? '✓ ' : ''}${_drpEsc(i.title)}</span><span class="dbd-blk-time">${i.label}</span>
+      </button>
+      ${i.k === 'event' ? `<button type="button" class="dbd-blk-ed" onclick="drwPlanEdit('${_dbq(i.id)}')" title="Edit block" aria-label="Edit block"><i data-lucide="pencil"></i></button>` : ''}
+    </div>`;
+  }).join('');
+  const nowLine = ds === today && nowMin >= h0 * 60 && nowMin <= h1 * 60 ? `<div class="dbd-nowl" style="top:${y(nowMin)}px"></div>` : '';
+  const legend = Object.keys(DB_K).map(k => `<button type="button" class="dbd-chip k-${k}${_db.hide[k] ? ' off' : ''}" onclick="dbHide('${k}')" aria-pressed="${!_db.hide[k]}" title="${_db.hide[k] ? 'Show' : 'Hide'} ${DB_K[k].l.toLowerCase()}"><span class="dbd-dot"></span>${DB_K[k].l}</button>`).join('');
+  const ad = visAll.map(i => `<button type="button" class="dbd-ad k-${i.k}${i.done ? ' done' : ''}" onclick="dbToggle('${i.k}','${_dbq(i.id)}')" title="${_drpEsc(i.title)}">${i.done ? '✓ ' : ''}${_drpEsc(i.title)}</button>`).join('');
+  let form = '';
+  if (_dp.adding) {
+    const startMin = Math.min(23 * 60, (ds === today ? now.getHours() + 1 : 9) * 60);
+    const t = m => `${_dbPad(Math.floor(m / 60))}:${_dbPad(m % 60)}`;
+    form = _dpFormHTML({ e: {}, s: { time: t(startMin) }, en: { time: t(Math.min(1439, startMin + 60)) } }, true);
+  } else if (_dp.editId) {
+    const x = _dpEvents(ds).find(x => String(x.e.id) === String(_dp.editId));
+    if (x) form = _dpFormHTML(x, false);
+  } else if (_dp.tplMode) {
+    form = _dpTplHTML(ds);
+  }
+  const empty = !vis.length && !visAll.length && !form ? `<p class="dbd-empty dbd-plan-empty">Nothing planned for this day yet. Use + to add a block.</p>` : '';
+  return `<section class="dbd-box dbd-plan k-event">
+    <header class="dbd-box-h"><span class="dbd-box-t">Planner</span><span class="dbd-box-n">${total ? `${done}/${total} done` : ''}</span>
+      ${_dbIcon('drwPlanAdd()', 'plus', 'Add a block')}${_dbIcon('drwPlanOpenPlanner()', 'calendar-days', 'Open planner')}</header>
+    <div class="dbd-legend">${legend}</div>
+    ${form ? `<div class="dbd-form">${form}</div>` : ''}
+    ${ad ? `<div class="dbd-allday"><span>All day</span>${ad}</div>` : ''}
+    <div class="dbd-box-b" data-scroll="plan">${empty}<div class="dbd-tl" style="height:${(h1 - h0) * DB_H}px">${hours}${blocks}${nowLine}</div></div>
+    <footer class="dbd-box-f dbd-plan-f">
+      ${total ? `<button type="button" class="dp-link" onclick="_dp.tab='plan'; drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
+      <button type="button" class="dp-link" onclick="drwTplMode('save')"><i data-lucide="save"></i>Save as template</button>
+      <button type="button" class="dp-link" onclick="drwTplMode('apply')"><i data-lucide="layout-template"></i>Apply template</button>
+    </footer>
+  </section>`;
+}
+
+function _dbTasksHTML(ds) {
+  const list = _dtItems(ds);
+  const rows = list.map(x => {
+    const meta = x.overdue ? `Overdue · ${_dpDateObj(_dtDue(x.t)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : (x.time ? _dpFmt(x.time) : (_dtRecurring(x.t) ? 'Repeats' : ''));
+    return _dbRow('task', x.t.id, x.t.title || 'Task', meta, x.done, { late: x.overdue });
+  }).join('');
+  const form = _dp.addingTask ? `<div class="dp-form" data-kind="task">
+      <input class="dp-in-title" type="text" placeholder="What needs doing?" autocomplete="off">
+      <div class="dp-form-times"><input class="dp-in-start" type="time" aria-label="Due time (optional)"><span>optional time</span></div>
+      <div class="dp-form-acts"><span style="flex:1"></span>
+        <button type="button" class="dp-cancel" onclick="drwPlanCancel()">Cancel</button>
+        <button type="button" class="dp-ok" onclick="drwTaskSave(this)">Add</button></div>
+    </div>` : '';
+  return _dbBox('task', 'Tasks', list.length ? `${list.filter(x => x.done).length}/${list.length}` : '',
+    _dbIcon('drwTaskAdd()', 'plus', 'Add a task for this day') + _dbIcon("dbGo('tasks')", 'arrow-up-right', 'Open Tasks'),
+    form + (rows || (form ? '' : '<p class="dbd-empty">Nothing due this day.</p>')));
+}
+
+function _dbHabitsHTML(ds) {
+  const list = _dhItems(ds);
+  const rows = list.map(x => {
+    const st = _dhStreak(x.h, ds);
+    const meta = [x.t ? _dpFmt(x.t) : '', st > 1 ? `${st}d streak` : ''].filter(Boolean).join(' · ');
+    return _dbRow('habit', x.h.id, x.h.habit_name || 'Habit', meta, x.done, { round: true });
+  }).join('');
+  return _dbBox('habit', 'Habits', list.length ? `${list.filter(x => x.done).length}/${list.length}` : '',
+    _dbIcon("dbGo('habits')", 'arrow-up-right', 'Open Habits'),
+    rows || '<p class="dbd-empty">No habits scheduled this day.</p>');
+}
+
+function _dbFoodHTML(ds) {
+  const meals = _dbMeals(ds);
+  const planned = meals.filter(m => m.name);
+  const rows = meals.map(m => m.name
+    ? _dbRow('food', m.key, m.name, `${m.label} · ${_dpFmt(m.time)}${m.status === 'different' ? ' · ate other' : ''}`, m.done)
+    : _dbRow('food', m.key, `${m.label}: not planned`, _dpFmt(m.time), false, { muted: true, onclick: "dbGo('meals')" })
+  ).join('');
+  return _dbBox('food', 'Food', planned.length ? `${meals.filter(m => m.done).length}/${planned.length}` : '',
+    _dbIcon("dbGo('meals')", 'arrow-up-right', 'Open Food Planner'), rows);
+}
+
+function _dbGymHTML(ds) {
+  const g = _dbGym(ds);
+  if (!g) return _dbBox('gym', 'Gym', '', _dbIcon("dbGo('gym')", 'arrow-up-right', 'Open Gym'), '<p class="dbd-empty">No workout on this day.</p>');
+  const sets = g.exs.reduce((n, e) => n + e.done, 0), total = g.exs.reduce((n, e) => n + e.total, 0);
+  const sub = g.kind === 'plan' ? 'Up next' : (g.done ? `Done${g.mins ? ` · ${g.mins} min` : ''}` : `In progress · ${sets}/${total} sets`);
+  const rows = g.exs.map(e => _dbRow('gym', '', e.name, g.kind === 'session' && e.total ? `${e.done}/${e.total} sets` : e.spec, g.kind === 'session' && e.total > 0 && e.done >= e.total, { static: true })).join('');
+  return _dbBox('gym', `Gym · ${_drpEsc(g.name)}`, sub,
+    _dbIcon("dbGo('gym')", 'arrow-up-right', 'Open Gym'),
+    rows || '<p class="dbd-empty">No exercises in this workout.</p>',
+    `<button type="button" class="dbd-gym-go" onclick="dbGo('gym')">${g.kind === 'plan' ? 'Start workout' : 'Open in Gym'}</button>`);
+}
+
+window.dbRender = function () {
+  const side = document.getElementById('dbSide');
+  if (!side) return;
+  const ds = _dpDate();
+  const keep = {};
+  side.querySelectorAll('[data-scroll]').forEach(el => { keep[el.dataset.scroll] = el.scrollTop; });
+  side.innerHTML = _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>`;
+  side.querySelectorAll('[data-scroll]').forEach(el => { if (keep[el.dataset.scroll] != null) el.scrollTop = keep[el.dataset.scroll]; });
+  if (!_db.scrolled) {
+    const sc = side.querySelector('[data-scroll="plan"]');
+    const tgt = side.querySelector('.dbd-nowl') || side.querySelector('.dbd-blk');
+    if (sc && tgt) sc.scrollTop = Math.max(0, tgt.offsetTop - 90);
+    _db.scrolled = true;
+  }
+  side.querySelectorAll('.dp-form input, .dp-form select').forEach(inp => inp.addEventListener('keydown', ev => {
+    ev.stopPropagation();
+    if (ev.key === 'Enter') { ev.preventDefault(); const k = inp.closest('.dp-form').dataset.kind; if (k === 'task') drwTaskSave(inp); else if (k === 'tpl') inp.closest('.dp-form').querySelector('.dp-ok')?.click(); else drwPlanSave(inp); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); drwPlanCancel(); }
+  }));
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+  if (_dp.adding || _dp.editId || _dp.addingTask) side.querySelector('.dp-form .dp-in-title')?.focus();
+};
+
+// Everything that re-renders the My day rail also re-renders the board.
+(function () {
+  const prev = window.drwPlanRender;
+  window.drwPlanRender = function () {
+    if (prev) prev.apply(this, arguments);
+    if (document.getElementById('dbSide')) dbRender();
+  };
+})();
+
+async function _dbEnsureData() {
+  const need = ['meal_plan', 'meal_template', 'gym_sessions', 'gym_plans'].filter(t => !Array.isArray(state.data[t]));
+  if (!need.length || typeof apiGet !== 'function') return;
+  try {
+    const got = await Promise.all(need.map(t => apiGet(t).catch(() => null)));
+    need.forEach((t, i) => { if (!Array.isArray(state.data[t])) state.data[t] = Array.isArray(got[i]) ? got[i] : []; });
+    dbRender();
+  } catch (e) { }
+}
+
+function _dbShell(o) {
+  const ts = state.data.diary_templates || [];
+  const has = o.mood != null && o.mood !== '' && !isNaN(Number(o.mood));
+  const cur = has ? Number(o.mood) : 5;
+  return `
+  <div class="drw drw--entry drw--day">
+    <header class="drw-bar">
+      <button type="button" class="drw-x" onclick="drwCancel()" title="Close" aria-label="Close"><i data-lucide="x"></i></button>
+      <div class="drw-crumb">${o.crumb}</div>
+      <div class="drw-bar-r">
+        <span class="drw-status" id="drwStatus"></span>
+        <span class="drw-kbd" title="Save with Cmd/Ctrl + Enter">⌘ ↵</span>
+        ${o.save}
+      </div>
+    </header>
+    <div class="dbd-body">
+      <main class="dbd-ed">
+        <div class="dbd-ed-head">
+          <label class="drw-date dbd-date" title="Change date">
+            <span id="drwDateLbl">${_drwFmtDate(o.ds)}</span><i data-lucide="chevron-down"></i>
+            <input type="date" id="mDiaryDate" value="${o.ds}" onchange="document.getElementById('drwDateLbl').textContent = _drwFmtDate(this.value); _db.scrolled = false; drwPlanRender()" onclick="try { this.showPicker(); } catch (e) { }">
+          </label>
+          <div class="dbd-head-r">
+            <div class="dbd-mood">
+              <span class="dbd-lbl">Mood</span>
+              <span id="moodEmoji" class="dbd-mood-emoji">${getMoodEmoji(cur)}</span>
+              <input type="range" min="1" max="10" step="1" value="${cur}" class="drw-range dbd-range" id="mMoodScore" aria-label="Mood from 1 to 10" oninput="drwMoodSlide(this.value)">
+              <b id="moodVal">${cur}</b>
+            </div>
+            ${ts.length ? `<label class="dbd-tpl"><span class="dbd-lbl">Template</span>
+              <select aria-label="Use a template" onchange="if (this.value) { loadTemplateInModal(this.value); this.value = ''; }">
+                <option value="">Use a template…</option>
+                ${ts.map(t => `<option value="${_drpEsc(String(t.id))}">${_drpEsc(t.title || 'Untitled')}</option>`).join('')}
+              </select></label>` : ''}
+          </div>
+        </div>
+        <div class="dbd-scroll">
+          <div class="dr-write-zone drw-zone">
+            ${drToolbarHTML({ dateStr: o.ds })}
+            <div class="rich-editor drx-editor drw-editor" id="mDiaryText" contenteditable="true" placeholder="${o.placeholder}">${o.content}</div>
+          </div>
+        </div>
+        <footer class="dbd-foot">
+          <label class="drw-field dbd-tags"><i data-lucide="hash"></i><input id="mDiaryTags" value="${_drpEsc(o.tags || '')}" placeholder="Tags: work, health, family" autocomplete="off"></label>
+          <span class="dbd-wc"><b id="diaryWordCount">0 words</b> · <span id="drwRead">1 min read</span></span>
+          ${o.del || ''}
+        </footer>
+      </main>
+      <aside class="dbd-side" id="dbSide" aria-label="Your day"></aside>
+    </div>
+  </div>`;
+}
+
+function _dbOpen(o) {
+  _dp.editId = null; _dp.adding = false; _dp.addingTask = false; _dp.tplMode = null; _dp.tab = 'plan';
+  _db.scrolled = false;
+  const { root } = _drwMount(_dbShell(o));
+  root.querySelectorAll('.dbd-foot input, .dbd-ed-head input').forEach(el => el.addEventListener('input', _drwDirty));
+  dbRender();
+  if (o.ds === diaryLocalDate() && window.drwAutoPlan) drwAutoPlan();
+  _dbEnsureData();
+}
+
+(function () {
+  const prevNew = window.openDiaryModal, prevEdit = window.openEditDiary;
+  window.openDiaryModal = function (dateStr, templateContent = '') {
+    if (!_dbWide()) return prevNew.apply(this, arguments);
+    const ds = dateStr || diaryLocalDate();
+    const dm = (state.data.settings?.[0] || {}).diary_default_mood;
+    _dbOpen({
+      ds, content: templateContent || '', tags: '',
+      mood: dm != null && dm !== '' ? dm : null,
+      crumb: `<span>Journal</span><i data-lucide="chevron-right"></i><b>New entry</b>`,
+      save: `<button type="button" class="drw-save" data-action="save-diary-modal">Save entry</button>`,
+      placeholder: _drpEsc(_drpPrompt()) + ' Type / for blocks.'
+    });
+  };
+  window.openEditDiary = function (id) {
+    if (!_dbWide()) return prevEdit.apply(this, arguments);
+    const e = (state.data.diary || []).find(x => String(x.id) === String(id));
+    if (!e) return;
+    const eid = _drpEsc(String(e.id));
+    _dbOpen({
+      ds: (e.date || '').slice(0, 10), content: drToEditorHTML(e.content), tags: e.tags, mood: _drMood(e),
+      crumb: `<span>Journal</span><i data-lucide="chevron-right"></i><b>Edit entry</b>`,
+      save: `<button type="button" class="drw-save" data-action="update-diary-modal" data-edit-id="${eid}">Save changes</button>`,
+      placeholder: 'Write something… Type / for blocks.',
+      del: `<button type="button" class="dbd-del" onclick="drwDeleteEntry('${eid}')"><i data-lucide="trash-2"></i>Delete</button>`
+    });
+  };
+})();
+
+(function () {
+  if (document.getElementById('dbdStyles')) return;
+  const st = document.createElement('style');
+  st.id = 'dbdStyles';
+  st.textContent = `
+.modal-overlay:has(.drw--day) { padding:16px !important; }
+.modal-box:has(.drw--day) { width:min(1600px, 100%) !important; height:calc(100vh - 32px) !important; }
+.dbd-body { flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(460px, 42%); gap:14px; padding:14px; background:var(--surface-2); }
+.dbd-ed { min-width:0; min-height:0; display:flex; flex-direction:column; background:var(--surface-1); border:1px solid var(--border-color); border-radius:16px; overflow:hidden; }
+.dbd-ed-head { flex:none; display:flex; align-items:center; gap:12px 18px; flex-wrap:wrap; padding:12px 18px; border-bottom:1px solid var(--border-color); }
+.drw .dbd-date { font-size:21px; letter-spacing:-.5px; margin:0 -8px; }
+.dbd-head-r { margin-left:auto; display:flex; align-items:center; gap:12px 18px; flex-wrap:wrap; }
+.dbd-lbl { font-size:11px; font-weight:750; letter-spacing:.06em; text-transform:uppercase; color:var(--text-3); }
+.dbd-mood { display:flex; align-items:center; gap:8px; }
+.dbd-mood-emoji { font-size:22px; line-height:1; }
+.drw .dbd-range { width:130px !important; margin:0 !important; }
+.dbd-mood b { font-size:16px; font-weight:800; min-width:18px; color:var(--text-1); font-variant-numeric:tabular-nums; }
+.dbd-tpl { display:flex; align-items:center; gap:8px; }
+.dbd-tpl select { height:36px !important; min-height:0 !important; width:auto !important; max-width:230px; margin:0 !important; padding:0 28px 0 10px !important; border:1px solid var(--border-color) !important; border-radius:10px !important; background-color:var(--surface-1) !important; color:var(--text-1) !important; font-size:13px !important; font-weight:600; cursor:pointer; box-shadow:none !important; }
+.dbd-scroll { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:0 30px 40px; }
+.drw .dbd-scroll .drw-editor { min-height:58vh; font-size:17px !important; line-height:1.8 !important; }
+.dbd-foot { flex:none; display:flex; align-items:center; gap:12px; padding:10px 14px; border-top:1px solid var(--border-color); background:var(--surface-1); }
+.drw .dbd-tags { flex:1; max-width:460px; height:36px; }
+.dbd-wc { margin-left:auto; font-size:12.5px; color:var(--text-3); white-space:nowrap; }
+.dbd-wc b { font-weight:650; color:var(--text-2); }
+.dbd-del { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border-radius:9px; border:1px solid var(--border-color); background:transparent; color:var(--text-3); font-size:12.5px; font-weight:650; cursor:pointer; }
+.dbd-del svg { width:14px; height:14px; }
+.dbd-del:hover { color:#DC2626; border-color:rgba(220,38,38,.35); background:rgba(220,38,38,.05); }
+
+.dbd-side { min-width:0; min-height:0; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; gap:12px; padding-right:2px; }
+.dbd-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
+.k-event { --c:${DB_K.event.c}; } .k-task { --c:${DB_K.task.c}; } .k-habit { --c:${DB_K.habit.c}; } .k-food { --c:${DB_K.food.c}; } .k-gym { --c:${DB_K.gym.c}; }
+.dbd-box { --t:color-mix(in srgb, var(--c) 10%, var(--surface-1)); --b:color-mix(in srgb, var(--c) 38%, var(--border-color)); flex:none; height:320px; display:flex; flex-direction:column; background:var(--surface-1); border:1.5px solid var(--b); border-radius:14px; overflow:hidden; }
+.dbd-plan { height:640px; }
+.dbd-box-h { flex:none; display:flex; align-items:center; gap:6px; padding:7px 8px 7px 14px; background:var(--t); border-bottom:1px solid var(--b); min-height:42px; box-sizing:border-box; }
+.dbd-box-t { min-width:0; font-size:12px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:color-mix(in srgb, var(--c) 78%, var(--text-1)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dbd-box-n { margin-left:auto; font-size:12px; font-weight:750; color:var(--text-2); white-space:nowrap; padding-right:2px; }
+.dbd-ib { width:28px; height:28px; flex:none; border-radius:8px; border:1px solid var(--b); background:var(--surface-1); color:var(--text-1); display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; }
+.dbd-ib svg { width:15px; height:15px; }
+.dbd-ib:hover { background:var(--t); }
+.dbd-box-b { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:6px; }
+.dbd-box-f { flex:none; display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:6px 8px; border-top:1px solid var(--border-color); }
+.dbd-box-f .dp-link { margin:0; }
+.dbd-row { display:flex; align-items:center; gap:10px; width:100%; box-sizing:border-box; padding:7px 8px; border:none; border-radius:9px; background:transparent; text-align:left; cursor:pointer; color:var(--text-1); font-size:13.5px; font-weight:600; font-family:inherit; }
+div.dbd-row { cursor:default; }
+button.dbd-row:hover { background:var(--t); }
+.dbd-ck { width:18px; height:18px; flex:none; box-sizing:border-box; border-radius:5px; border:2px solid var(--c); display:flex; align-items:center; justify-content:center; color:#fff; }
+.dbd-ck.round { border-radius:50%; }
+.dbd-row.done .dbd-ck { background:var(--c); }
+.dbd-ck svg { width:12px; height:12px; stroke-width:3.5; }
+.dbd-row-t { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.dbd-row.done .dbd-row-t { color:var(--text-3); text-decoration:line-through; }
+.dbd-row.muted .dbd-row-t { color:var(--text-3); font-weight:500; }
+.dbd-row.muted .dbd-ck { border-style:dashed; border-color:var(--border-color); }
+.dbd-row-m { flex:none; font-size:11.5px; font-weight:600; color:var(--text-3); font-variant-numeric:tabular-nums; }
+.dbd-row-m.late { color:#DC2626; }
+.dbd-empty { margin:0; font-size:13px; color:var(--text-3); padding:10px 8px; }
+.dbd-gym-go { flex:1; height:34px; border-radius:9px; border:none; background:var(--c); color:#fff; font-size:13px; font-weight:700; cursor:pointer; }
+.dbd-gym-go:hover { filter:brightness(.94); }
+
+.dbd-legend { flex:none; display:flex; gap:6px; flex-wrap:wrap; padding:8px 10px 6px; }
+.dbd-chip { height:26px; padding:0 10px; border-radius:99px; border:1px solid color-mix(in srgb, var(--c) 38%, var(--border-color)); background:color-mix(in srgb, var(--c) 11%, var(--surface-1)); color:var(--text-1); font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-family:inherit; }
+.dbd-dot { width:9px; height:9px; border-radius:3px; background:var(--c); flex:none; }
+.dbd-chip.off { background:transparent; color:var(--text-3); border-color:var(--border-color); }
+.dbd-chip.off .dbd-dot { background:var(--border-color); }
+.dbd-allday { flex:none; display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding:2px 10px 8px; border-bottom:1px solid var(--border-color); }
+.dbd-allday > span { font-size:11px; font-weight:750; letter-spacing:.05em; text-transform:uppercase; color:var(--text-3); margin-right:2px; }
+.dbd-ad { height:26px; max-width:100%; padding:0 9px 0 11px; border-radius:7px; border:none; background:color-mix(in srgb, var(--c) 13%, var(--surface-1)); box-shadow:inset 3px 0 0 var(--c); color:var(--text-1); font-size:12px; font-weight:650; cursor:pointer; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-family:inherit; }
+.dbd-ad.done { text-decoration:line-through; color:var(--text-3); }
+.dbd-form { flex:none; padding:4px 10px 8px; border-bottom:1px solid var(--border-color); }
+.dbd-plan .dbd-box-b { padding:12px 8px 12px 0; }
+.dbd-tl { position:relative; }
+.dbd-hr { position:absolute; left:0; right:0; display:flex; align-items:flex-start; pointer-events:none; }
+.dbd-hr span { width:50px; flex:none; text-align:right; padding-right:8px; box-sizing:border-box; font-size:11px; font-weight:600; color:var(--text-3); transform:translateY(-7px); font-variant-numeric:tabular-nums; }
+.dbd-hr b { flex:1; border-top:1px solid var(--border-color); opacity:.7; }
+.dbd-blk { position:absolute; box-sizing:border-box; display:flex; border-radius:8px; overflow:hidden; background:color-mix(in srgb, var(--c) 14%, var(--surface-1)); box-shadow:inset 3px 0 0 var(--c); z-index:1; }
+.dbd-blk:hover { z-index:2; box-shadow:inset 3px 0 0 var(--c), 0 2px 8px rgba(15,23,42,.12); }
+.dbd-blk-main { flex:1; min-width:0; display:flex; align-items:flex-start; gap:6px; padding:5px 8px 0 11px; border:none; background:transparent; text-align:left; cursor:pointer; color:var(--text-1); font-family:inherit; }
+.dbd-blk.short .dbd-blk-main { align-items:center; padding-top:0; }
+.dbd-blk-t { flex:1; min-width:0; font-size:12.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dbd-blk-time { flex:none; font-size:11px; font-weight:650; color:var(--text-2); font-variant-numeric:tabular-nums; }
+.dbd-blk.done .dbd-blk-t { text-decoration:line-through; color:var(--text-2); }
+.dbd-blk.done { background:color-mix(in srgb, var(--c) 7%, var(--surface-1)); }
+.dbd-blk-ed { opacity:0; width:24px; flex:none; border:none; background:transparent; color:var(--text-2); cursor:pointer; display:flex; align-items:flex-start; justify-content:center; padding:5px 0 0; }
+.dbd-blk.short .dbd-blk-ed { align-items:center; padding:0; }
+.dbd-blk-ed svg { width:13px; height:13px; }
+.dbd-blk:hover .dbd-blk-ed, .dbd-blk-ed:focus-visible { opacity:1; }
+.dbd-nowl { position:absolute; left:50px; right:0; height:2px; background:#E5484D; z-index:3; pointer-events:none; }
+.dbd-nowl::before { content:''; position:absolute; left:-4px; top:-3.5px; width:9px; height:9px; border-radius:50%; background:#E5484D; }
+@media (max-width:1380px) { .dbd-body { grid-template-columns:minmax(0,1fr) 440px; } .dbd-grid { grid-template-columns:1fr; } }
+`;
+  document.head.appendChild(st);
+})();
