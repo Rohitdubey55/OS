@@ -654,6 +654,7 @@ function renderTabTogglesOrdered(layoutStr, fallbackHiddenStr) {
     { id: 'pomodoro', label: 'Pomodoro' },
     { id: 'chimes', label: 'Chimes' },
     { id: 'wishlist', label: 'Wishlist' },
+    { id: 'wardrobe', label: 'Wardrobe' },
     { id: 'tdp', label: '10 Days Plan' }
   ];
 

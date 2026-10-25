@@ -4985,9 +4985,9 @@ window.dbRender = function () {
   side.querySelectorAll('[data-scroll]').forEach(el => { keep[el.dataset.scroll] = el.scrollTop; });
   const live = side.querySelector('.dbd-name-in');
   if (live && _db.edit) _db.editVal = live.value;
-  const nav = `<nav class="dbd-nav" aria-label="Jump to">${[['plan', 'Planner', 'event'], ['task', 'Tasks', 'task'], ['habit', 'Habits', 'habit'], ['food', 'Food', 'food'], ['gym', 'Gym', 'gym'], ['vision', 'Vision', 'vision']]
+  const nav = `<nav class="dbd-nav" aria-label="Jump to">${[['plan', 'Planner', 'event'], ['task', 'Tasks', 'task'], ['habit', 'Habits', 'habit'], ['food', 'Food', 'food'], ['gym', 'Gym', 'gym'], ['outfit', 'Outfits', 'outfit'], ['vision', 'Vision', 'vision']]
     .map(([b, l, k]) => `<button type="button" class="dbd-jump k-${k}" onclick="dbJump('${b}')"><span class="dbd-dot"></span>${l}</button>`).join('')}</nav>`;
-  side.innerHTML = nav + _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>` + _dbVisionHTML();
+  side.innerHTML = nav + _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>` + _dbOutfitHTML(ds) + _dbVisionHTML();
   side.scrollTop = sideTop;
   side.querySelectorAll('[data-scroll]').forEach(el => { if (keep[el.dataset.scroll] != null) el.scrollTop = keep[el.dataset.scroll]; });
   side.querySelectorAll('.dbd-name-in').forEach(inp => {
@@ -5167,7 +5167,7 @@ function _dbOpen(o) {
 .dbd-jump { height:30px; padding:0 11px; border-radius:99px; border:1px solid color-mix(in srgb, var(--c) 35%, var(--border-color)); background:var(--surface-1); color:var(--text-1); font-size:12.5px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-family:inherit; }
 .dbd-jump:hover { background:color-mix(in srgb, var(--c) 10%, var(--surface-1)); }
 .dbd-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
-.k-vision { --c:#0EA5E9; } .k-event { --c:${DB_K.event.c}; } .k-task { --c:${DB_K.task.c}; } .k-habit { --c:${DB_K.habit.c}; } .k-food { --c:${DB_K.food.c}; } .k-gym { --c:${DB_K.gym.c}; }
+.k-vision { --c:#0EA5E9; } .k-outfit { --c:#0D9488; } .k-event { --c:${DB_K.event.c}; } .k-task { --c:${DB_K.task.c}; } .k-habit { --c:${DB_K.habit.c}; } .k-food { --c:${DB_K.food.c}; } .k-gym { --c:${DB_K.gym.c}; }
 .dbd-box { --t:color-mix(in srgb, var(--c) 10%, var(--surface-1)); --b:color-mix(in srgb, var(--c) 38%, var(--border-color)); flex:none; height:320px; display:flex; flex-direction:column; background:var(--surface-1); border:1.5px solid var(--b); border-radius:14px; overflow:hidden; }
 .dbd-plan { height:640px; }
 .dbd-box-h { flex:none; display:flex; align-items:center; gap:6px; padding:7px 8px 7px 14px; background:var(--t); border-bottom:1px solid var(--b); min-height:42px; box-sizing:border-box; }
@@ -5434,14 +5434,32 @@ function _dbVisionHTML() {
     _db.visLoading = true;
     window.ensureViewLoaded('vision').then(() => { if (document.getElementById('dbSide')) dbRender(); }).catch(() => { });
   }
-  const cover = g => { try { return loaded ? (v2CoverSync(g) || '') : ''; } catch (e) { return ''; } };
+  // Covers: first photo of the vision (else its first video). Photos stored on
+  // the device or in the cloud resolve asynchronously, so fetch them once and
+  // re-render when they arrive.
+  _db.visCov = _db.visCov || {};
+  const cover = g => {
+    if (!loaded) return null;
+    const key = String(g.id), hit = _db.visCov[key];
+    if (hit && hit.url != null) return hit;
+    try { const u = v2CoverSync(g); if (u) return (_db.visCov[key] = { url: u, kind: 'image' }); } catch (e) { }
+    if (!hit && typeof v2MediaOf === 'function' && typeof v2Resolve === 'function') {
+      const media = v2MediaOf(g);
+      const m = media.find(x => x.kind === 'image') || media.find(x => x.kind === 'video');
+      if (!m) { _db.visCov[key] = { url: '', kind: '' }; return null; }
+      _db.visCov[key] = { pending: true };
+      v2Resolve(m.ref).then(u => { _db.visCov[key] = { url: u || '', kind: m.kind }; _dbVisRerender(); }).catch(() => { _db.visCov[key] = { url: '', kind: '' }; });
+    }
+    return null;
+  };
   const media = g => { try { return loaded && typeof v2StoryMediaOf === 'function' ? v2StoryMediaOf(g).length : 0; } catch (e) { return 0; } };
   const seenAll = g => { try { return loaded && typeof v2StorySeenAll === 'function' ? v2StorySeenAll(g) : false; } catch (e) { return false; } };
   const items = goals.map(g => {
-    const c = cover(g), n = media(g), st = n ? (seenAll(g) ? 'seen' : 'new') : 'none';
+    const cv = cover(g), n = media(g), st = n ? (seenAll(g) ? 'seen' : 'new') : 'none';
     const ini = String(g.title || '?').trim().charAt(0).toUpperCase();
+    const img = cv && cv.url && cv.kind === 'image' ? cv.url : '', vid = cv && cv.url && cv.kind === 'video' ? cv.url : '';
     return `<button type="button" class="dbv-it ${st}" onclick="dbVisionOpen('${_dbq(g.id)}')" title="${_drpEsc(g.title || 'Vision')}${n ? ' — play story' : ''}">
-      <span class="dbv-ring"><span class="dbv-av"${c ? ` style="background-image:url('${_drpEsc(c)}')"` : ''}>${c ? '' : _drpEsc(ini)}</span></span>
+      <span class="dbv-ring"><span class="dbv-av"${img ? ` style="background-image:url('${_drpEsc(img)}')"` : ''}>${img ? '' : (vid ? `<video src="${_drpEsc(vid)}#t=0.5" muted playsinline preload="metadata"></video>` : _drpEsc(ini))}</span></span>
       <span class="dbv-t">${_drpEsc(g.title || 'Vision')}</span></button>`;
   }).join('');
   const body = goals.length
@@ -5453,6 +5471,19 @@ function _dbVisionHTML() {
     <header class="dbd-box-h"><span class="dbd-box-t">Vision</span><span class="dbd-box-n">${goals.length || ''}</span>${_dbIcon("dbGo('vision')", 'arrow-up-right', 'Open Vision')}</header>
     ${body}
   </section>`;
+}
+let _dbVisT = null;
+function _dbVisRerender() {
+  clearTimeout(_dbVisT);
+  _dbVisT = setTimeout(() => {
+    const box = document.querySelector('#dbSide .dbd-vision');
+    if (!box) return;
+    const strip = box.querySelector('.dbv-strip'), sl = strip ? strip.scrollLeft : 0;
+    const tmp = document.createElement('div'); tmp.innerHTML = _dbVisionHTML();
+    box.replaceWith(tmp.firstElementChild);
+    const ns = document.querySelector('#dbSide .dbv-strip'); if (ns) ns.scrollLeft = sl;
+    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+  }, 120);
 }
 window.dbVisionScroll = function (dir) {
   const s = document.querySelector('#dbSide .dbv-strip'); if (!s) return;
@@ -5504,7 +5535,8 @@ body.dbd-dragging, body.dbd-dragging * { cursor:grabbing !important; -webkit-use
 .dbv-ring { width:68px; height:68px; border-radius:50%; padding:3px; box-sizing:border-box; background:var(--border-color); display:flex; }
 .dbv-it.new .dbv-ring { background:conic-gradient(from 210deg, #f59e0b, #ef4444, #d946ef, #6366f1, #0ea5e9, #f59e0b); }
 .dbv-it.seen .dbv-ring { background:color-mix(in srgb, var(--text-3) 45%, transparent); }
-.dbv-av { flex:1; border-radius:50%; border:2.5px solid var(--surface-1); background:color-mix(in srgb, var(--c) 18%, var(--surface-2)) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; color:color-mix(in srgb, var(--c) 75%, var(--text-1)); }
+.dbv-av video { width:100%; height:100%; object-fit:cover; border-radius:50%; pointer-events:none; }
+.dbv-av { overflow:hidden; flex:1; border-radius:50%; border:2.5px solid var(--surface-1); background:color-mix(in srgb, var(--c) 18%, var(--surface-2)) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; color:color-mix(in srgb, var(--c) 75%, var(--text-1)); }
 .dbv-it:hover .dbv-av { filter:brightness(1.05); }
 .dbv-t { width:100%; font-size:11.5px; font-weight:650; color:var(--text-1); line-height:1.25; text-align:center; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
 .dbv-nav { position:absolute; top:34px; transform:translateY(-50%); z-index:2; width:28px; height:28px; border-radius:50%; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); box-shadow:0 2px 8px rgba(15,23,42,.12); display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; opacity:0; transition:opacity .15s; }
@@ -5512,6 +5544,68 @@ body.dbd-dragging, body.dbd-dragging * { cursor:grabbing !important; -webkit-use
 .dbv-nav.l { left:4px; } .dbv-nav.r { right:4px; }
 .dbd-vision:hover .dbv-nav { opacity:1; }
 @media (hover:none) { .dbv-nav { display:none; } }
+`;
+  document.head.appendChild(st);
+})();
+
+
+/* ── Outfits: pick clothes from the Wardrobe for each event of the day ── */
+function _dbOutfitHTML(ds) {
+  const ready = typeof window.wdPickOutfit === 'function' && Array.isArray(state.data.wardrobe_log);
+  if (!ready && !_db.wdLoading && typeof window.ensureViewLoaded === 'function') {
+    _db.wdLoading = true;
+    window.ensureViewLoaded('wardrobe').then(ok => ok && window._wdLoad ? window._wdLoad() : null).then(() => { if (document.getElementById('dbSide')) dbRender(); }).catch(() => { });
+  }
+  const { items, allDay } = _dbTimeline(ds);
+  const evs = [{ id: '', title: 'The day', label: 'Everyday look' }]
+    .concat(items.concat(allDay).filter(i => i.k === 'event' || i.k === 'gym').map(i => ({ id: i.k === 'gym' ? 'gym' : String(i.id), title: i.title, label: i.label || 'All day' })));
+  const logs = (state.data.wardrobe_log || []).filter(l => String(l.date || '').slice(0, 10) === ds);
+  const item = id => (state.data.wardrobe_items || []).find(x => String(x.id) === String(id));
+  const rows = evs.map(e => {
+    const log = logs.find(l => String(l.event_id || '') === e.id);
+    let ids = []; try { ids = log ? (typeof log.item_ids === 'string' ? JSON.parse(log.item_ids || '[]') : (log.item_ids || [])) : []; } catch (er) { }
+    const its = ids.map(item).filter(Boolean);
+    const worn = log && (log.worn === true || log.worn === 'true');
+    const thumbs = its.length ? `<span class="dbo-th">${its.slice(0, 5).map(i => i.image ? `<img src="${i.image}" alt="" title="${_drpEsc(i.name || '')}">` : `<i style="background:${_drpEsc(i.color || '#94a3b8')}" title="${_drpEsc(i.name || '')}"></i>`).join('')}</span>` : '';
+    return `<div class="dbo-row${worn ? ' worn' : ''}">
+      <div class="dbo-ev"><b>${_drpEsc(e.title)}</b><span>${_drpEsc(e.label)}</span></div>
+      ${thumbs || '<span class="dbo-none">No outfit yet</span>'}
+      <div class="dbo-a">
+        ${log && its.length ? `<button type="button" class="dbo-w${worn ? ' on' : ''}" onclick="wdMarkWorn('${_dbq(log.id)}')" title="${worn ? 'Worn — clothes are in the laundry' : 'Mark as worn (moves clothes to the laundry)'}">${worn ? '✓ Worn' : 'Wore it'}</button>` : ''}
+        <button type="button" class="dbo-p" onclick="dbOutfitPick('${_dbq(e.id)}','${_dbq(e.title)}')" ${ready ? '' : 'disabled'}>${its.length ? 'Change' : 'Pick'}</button>
+      </div>
+    </div>`;
+  }).join('');
+  const n = logs.filter(l => { try { return JSON.parse(l.item_ids || '[]').length; } catch (er) { return 0; } }).length;
+  return `<section class="dbd-box dbd-outfit k-outfit">
+    <header class="dbd-box-h"><span class="dbd-box-t">Outfits</span><span class="dbd-box-n">${n ? `${n} planned` : ''}</span>${_dbIcon("dbGo('wardrobe')", 'arrow-up-right', 'Open Wardrobe')}</header>
+    <div class="dbd-box-b" data-scroll="outfit">${ready ? rows : '<p class="dbd-empty">Loading your wardrobe…</p>'}</div>
+  </section>`;
+}
+window.dbOutfitPick = function (eventId, title) {
+  if (typeof window.wdPickOutfit !== 'function') return;
+  window.wdPickOutfit({ date: _dpDate(), eventId, eventTitle: title });
+};
+(function () {
+  if (document.getElementById('dbOutfitStyles')) return;
+  const st = document.createElement('style'); st.id = 'dbOutfitStyles';
+  st.textContent = `
+.dbd-outfit { height:auto !important; margin-top:12px; }
+.dbd-outfit .dbd-box-b { max-height:260px; }
+.dbo-row { display:flex; align-items:center; gap:10px; padding:8px 8px; border-radius:10px; }
+.dbo-row + .dbo-row { border-top:1px solid var(--border-color); border-radius:0; }
+.dbo-ev { min-width:0; flex:0 1 38%; display:flex; flex-direction:column; }
+.dbo-ev b { font-size:13px; font-weight:700; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dbo-ev span { font-size:11px; color:var(--text-3); font-weight:600; }
+.dbo-th { flex:1; min-width:0; display:flex; gap:4px; overflow:hidden; }
+.dbo-th img, .dbo-th i { width:34px; height:34px; flex:none; object-fit:contain; border-radius:8px; background:var(--surface-2); display:block; }
+.dbo-none { flex:1; font-size:12px; color:var(--text-3); }
+.dbo-a { display:flex; gap:6px; flex:none; }
+.dbo-p, .dbo-w { border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-1); font:inherit; font-size:12px; font-weight:700; padding:5px 10px; border-radius:8px; cursor:pointer; }
+.dbo-p { color:var(--c); border-color:color-mix(in srgb, var(--c) 40%, var(--border-color)); }
+.dbo-p:disabled { opacity:.5; cursor:default; }
+.dbo-w.on { background:color-mix(in srgb, var(--c) 14%, var(--surface-1)); color:color-mix(in srgb, var(--c) 80%, var(--text-1)); }
+.dbo-row.worn .dbo-th { opacity:.7; }
 `;
   document.head.appendChild(st);
 })();

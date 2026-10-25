@@ -360,6 +360,11 @@
         // Repeatable weekly template — one row per (weekday 0=Mon..6=Sun, slot).
         meal_template: new Set(['id','user_id','weekday','slot','planned','created_at','updated_at']),
         // Per-day time/duration for a habit, repeating task, meal or workout (diary planner drag & drop).
+        // Wardrobe: clothes, saved outfits, what you planned/wore, your face & body.
+        wardrobe_items: new Set(['id','user_id','name','type','category','status','image','color','purchase_date','price','brand','size','notes','favorite','wear_count','last_worn','created_at','updated_at']),
+        wardrobe_outfits: new Set(['id','user_id','name','item_ids','created_at','updated_at']),
+        wardrobe_log: new Set(['id','user_id','date','event_id','event_title','item_ids','worn','created_at','updated_at']),
+        wardrobe_profile: new Set(['id','user_id','data','created_at','updated_at']),
         day_overrides: new Set(['id','user_id','date','kind','ref_id','time','duration','created_at','updated_at']),
         // Time Tracker — 6-slot stopwatch grid linked from the Pomodoro page.
         time_categories: new Set(['id','user_id','slot_index','name','goal_minutes','elapsed_seconds','running','running_since','day','todos_json','task_category','habit_routine','active_task_id','active_habit_id','active_tdp_item_id','timer_target_seconds']),

@@ -518,9 +518,9 @@ const VIEW_MAP = {
     tasks:         { src: 'view-tasks.js?v=20261025a', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20261019b', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
-    diary:         { src: 'view-diary.js?v=20261025c', render: 'renderDiary' },
+    diary:         { src: 'view-diary.js?v=20261026a', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20261003d', render: 'renderVision' },
-    settings:      { src: 'view-settings.js?v=20260930a', render: 'renderSettings' },
+    settings:      { src: 'view-settings.js?v=20261026a', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
     gym:           { src: 'view-gym.js?v=20261019a', render: 'renderGym' },
     notes:         { src: 'view-notes.js',         render: 'renderNotes' },
@@ -534,6 +534,7 @@ const VIEW_MAP = {
     meditation:    { src: 'view-meditation.js',    render: 'renderMeditation' },
     dailyTools:    { src: 'view-daily-tools.js?v=20260924a', render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
+    wardrobe:      { src: 'view-wardrobe.js?v=20261026a', render: 'renderWardrobe' },
     tdp:           { src: 'view-tdp.js?v=20260930a',  render: 'renderTDP' },
     meals:         { src: 'view-meals.js?v=20261025b', render: 'renderMeals' },
     timeTracker:   { src: 'view-time-tracker.js?v=20260930a', render: 'renderTimeTracker' },
@@ -629,7 +630,7 @@ async function routeTo(viewName) {
         mural: 'Mural', settings: 'Settings', pomodoro: 'Pomodoro',
         notes: 'Notes', gym: 'Gym', chimes: 'Chimes', tutor: 'Tutor',
         meditation: 'Meditate', reader: 'Reader', lifeCalendar: 'Life',
-        dailyTools: 'Daily Life Tools', wishlist: 'Wishlist', meals: 'Food Planner',
+        dailyTools: 'Daily Life Tools', wishlist: 'Wishlist', meals: 'Food Planner', wardrobe: 'Wardrobe',
         timeTracker: 'Time Spent On', timeAnalysis: 'Time Analysis', tdp: '10 Days Plan'
     };
     const headerBar = document.querySelector('.main-header-bar');
