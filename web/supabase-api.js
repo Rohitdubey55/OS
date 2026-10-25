@@ -312,7 +312,7 @@
     // not in this list is silently dropped — prevents "schema doesn't have column X"
     // errors from view code that sends legacy fields like habit_summary_time.
     const ALLOWED_COLUMNS = {
-        settings: new Set(['id','user_id','name','dob','morning_message','afternoon_message','evening_message','weekly_budget','monthly_budget','category_budgets','theme_color','theme_mode','orientation_lock','ai_api_key','ai_model','nav_layout','dashboard_config','kpi_config','bento_config','dashboard_tiles','mobile_dashboard_tiles','notification_enabled','notification_sound','notification_method','quiet_hours_start','quiet_hours_end','diary_default_mood','diary_show_tasks','diary_show_habits','diary_show_expenses','task_default_view','task_categories','habit_routines','elevenlabs_api_key','elevenlabs_voice_id','tts_provider','tts_voice_id','networth_milestone','assumed_monthly_expense','story_photo_seconds']),
+        settings: new Set(['id','user_id','name','dob','morning_message','afternoon_message','evening_message','weekly_budget','monthly_budget','category_budgets','theme_color','theme_mode','orientation_lock','ai_api_key','ai_model','nav_layout','dashboard_config','kpi_config','bento_config','dashboard_tiles','mobile_dashboard_tiles','notification_enabled','notification_sound','notification_method','quiet_hours_start','quiet_hours_end','diary_default_mood','diary_show_tasks','diary_show_habits','diary_show_expenses','task_default_view','task_categories','habit_routines','elevenlabs_api_key','elevenlabs_voice_id','tts_provider','tts_voice_id','networth_milestone','assumed_monthly_expense','story_photo_seconds','nutrition_goals']),
         reader_settings: new Set(['id','user_id','background_color','font_color','font_family','font_size','line_spacing','fullscreen_mode','page_animation','auto_save_position']),
         pomodoro_settings: new Set(['id','user_id','work_duration','short_break','long_break','long_break_interval','sound_work','sound_break','auto_start_break','background_mode']),
         tasks: new Set(['id','user_id','title','due_date','due_time','priority','status','notes','description','category','tags','vision_id','recurrence','recurrence_days','recurrence_end','completed_dates','completed_at','duration','subtasks','pomodoro_estimate','pomodoro_length','tdp_plan_id','tdp_carried_from','comments_json']),
@@ -352,13 +352,15 @@
         english_sessions: new Set(['id','user_id','date','duration_seconds','topic','level','score','weak_areas','strong_areas','summary','message_count']),
         english_messages: new Set(['id','user_id','session_id','role','content','correction','feedback','timestamp']),
         // Weekly food planner — one row per (date, slot); planned vs what was eaten.
-        meal_plan: new Set(['id','user_id','date','slot','planned','eaten','status','created_at','updated_at']),
+        meal_plan: new Set(['id','user_id','date','slot','planned','eaten','status','kcal','protein','created_at','updated_at']),
         // Daily check-in — mood/energy (1-5) + "ate healthy?" for food↔energy analysis.
-        meal_day: new Set(['id','user_id','date','mood','energy','ate_healthy','note','created_at','updated_at']),
+        meal_day: new Set(['id','user_id','date','mood','energy','ate_healthy','note','extra_kcal','extra_protein','created_at','updated_at']),
         // "Things I can eat" library — reusable foods you pick from when planning meals.
-        meal_items: new Set(['id','user_id','name','slots','healthy','favorite','use_count','notes','sort_order','created_at','updated_at']),
+        meal_items: new Set(['id','user_id','name','slots','healthy','favorite','use_count','notes','sort_order','kcal','protein','created_at','updated_at']),
         // Repeatable weekly template — one row per (weekday 0=Mon..6=Sun, slot).
         meal_template: new Set(['id','user_id','weekday','slot','planned','created_at','updated_at']),
+        // Per-day time/duration for a habit, repeating task, meal or workout (diary planner drag & drop).
+        day_overrides: new Set(['id','user_id','date','kind','ref_id','time','duration','created_at','updated_at']),
         // Time Tracker — 6-slot stopwatch grid linked from the Pomodoro page.
         time_categories: new Set(['id','user_id','slot_index','name','goal_minutes','elapsed_seconds','running','running_since','day','todos_json','task_category','habit_routine','active_task_id','active_habit_id','active_tdp_item_id','timer_target_seconds']),
         time_logs: new Set(['id','user_id','category_id','category_name','date','duration_seconds','started_at','ended_at','task_id','task_title','habit_id','tdp_item_id'])

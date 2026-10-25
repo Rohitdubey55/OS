@@ -2324,7 +2324,7 @@ function _dhStreak(h, ds) {
 }
 function _dhItems(ds) {
   return (state.data.habits || []).filter(h => _dhOn(h, ds))
-    .map(h => ({ h, t: _dhTime(h), done: !!_dhLog(h, ds) }))
+    .map(h => { const o = _dov(ds, 'habit', h.id); return { h, t: (o && o.time) || _dhTime(h), dur: o ? Number(o.duration) || null : null, moved: !!o, done: !!_dhLog(h, ds) }; })
     .sort((a, b) => (a.t || '99:99').localeCompare(b.t || '99:99') || String(a.h.habit_name || '').localeCompare(String(b.h.habit_name || '')));
 }
 window.drwHabitToggle = async function (habitId) {
@@ -2382,7 +2382,8 @@ function _dtItems(ds) {
   return (state.data.tasks || []).map(t => {
     const on = _dtOn(t, ds);
     const overdue = !on && ds === today && !_dtRecurring(t) && _dtDue(t) && _dtDue(t) < today && t.status !== 'completed';
-    return (on || overdue) ? { t, overdue, done: _dtDone(t, ds), time: String(t.due_time || '').slice(0, 5) } : null;
+    const o = (on || overdue) ? _dov(ds, 'task', t.id) : null;
+    return (on || overdue) ? { t, overdue, done: _dtDone(t, ds), time: (o && o.time) || String(t.due_time || '').slice(0, 5), dur: o ? Number(o.duration) || null : null, moved: !!o } : null;
   }).filter(Boolean).sort((a, b) =>
     (a.done - b.done) || (b.overdue - a.overdue) || ((pr[a.t.priority] || 2) - (pr[b.t.priority] || 2)) || (a.time || '99:99').localeCompare(b.time || '99:99'));
 }
@@ -4611,7 +4612,9 @@ function _dbJSON(j, fb) { try { const v = typeof j === 'string' ? JSON.parse(j |
 function _dbMeals(ds) {
   const mp = state.data.meal_plan || [], mt = state.data.meal_template || [];
   const dow = _dpDateObj(ds).getDay(), wd = dow === 0 ? 6 : dow - 1;
-  return DB_SLOTS.map(([key, label, time]) => {
+  return DB_SLOTS.map(([key, label, time0]) => {
+    const ov = _dov(ds, 'food', key);
+    const time = (ov && ov.time) || time0, dur = (ov && Number(ov.duration)) || 30;
     const row = mp.find(r => String(r.date || '').slice(0, 10) === ds && r.slot === key);
     const tpl = mt.find(r => +r.weekday === wd && r.slot === key);
     const planned = (row && row.planned && String(row.planned).trim()) || (tpl && tpl.planned ? String(tpl.planned).trim() : '');
@@ -4620,7 +4623,7 @@ function _dbMeals(ds) {
     const skipped = status === 'skipped';
     const done = status === 'as_planned' || status === 'different';
     const name = skipped ? '' : (status === 'different' && eaten ? eaten : planned);
-    return { key, label, time, row, planned, name, status, done, skipped };
+    return { key, label, time, dur, moved: !!ov, row, planned, name, status, done, skipped };
   });
 }
 async function _dbMealSave(key, fields) {
@@ -4694,8 +4697,9 @@ function _dbGym(ds) {
 function _dbTimeline(ds) {
   const items = [], allDay = [];
   const add = (it, t, mins) => {
+    it.dur = Math.max(15, mins || 30);
     if (!t) { allDay.push(it); return; }
-    const s = _dpMin(t), e = s + Math.max(15, mins);
+    const s = _dpMin(t), e = Math.min(1440, s + it.dur);
     items.push({ ...it, s, e, label: _dpFmt(t) });
   };
   _dpEvents(ds).forEach(x => {
@@ -4703,11 +4707,11 @@ function _dbTimeline(ds) {
     const e = x.en.time ? _dpMin(x.en.time) : s + 60;
     add({ k: 'event', id: x.e.id, title: x.e.title || 'Untitled', done: _dpIsDone(x.e) }, x.s.time, e > s ? e - s : 60);
   });
-  _dtItems(ds).forEach(x => add({ k: 'task', id: x.t.id, title: x.t.title || 'Task', done: x.done }, x.time, Math.min(240, Number(x.t.duration) || 30)));
-  _dhItems(ds).forEach(x => add({ k: 'habit', id: x.h.id, title: x.h.habit_name || 'Habit', done: x.done }, x.t, Math.min(180, Number(x.h.duration) || 20)));
-  _dbMeals(ds).filter(m => m.name).forEach(m => add({ k: 'food', id: m.key, title: `${m.label} · ${m.name}`, done: m.done }, m.time, 30));
+  _dtItems(ds).forEach(x => add({ k: 'task', id: x.t.id, title: x.t.title || 'Task', done: x.done, moved: x.moved }, x.time, Math.min(720, x.dur || Number(x.t.duration) || 30)));
+  _dhItems(ds).forEach(x => add({ k: 'habit', id: x.h.id, title: x.h.habit_name || 'Habit', done: x.done, moved: x.moved }, x.t, Math.min(720, x.dur || Number(x.h.duration) || 20)));
+  _dbMeals(ds).filter(m => m.name).forEach(m => add({ k: 'food', id: m.key, title: `${m.label} · ${m.name}`, done: m.done, moved: m.moved }, m.time, m.dur));
   const g = _dbGym(ds);
-  if (g) add({ k: 'gym', id: 'gym', title: g.name + (g.kind === 'plan' ? ' (planned)' : ''), done: g.done }, g.time, g.mins || 60);
+  if (g) { const go = _dov(ds, 'gym', 'gym'); add({ k: 'gym', id: 'gym', title: g.name + (g.kind === 'plan' ? ' (planned)' : ''), done: g.done, moved: !!go }, (go && go.time) || g.time, (go && Number(go.duration)) || g.mins || 60); }
 
   // side-by-side lanes where blocks overlap (using their drawn height)
   const minMins = Math.ceil(22 / DB_H * 60);
@@ -4766,8 +4770,9 @@ function _dbRow(k, id, title, meta, done, opts = {}) {
   }
   const del = editing || opts.deletable === false ? ''
     : `<button type="button" class="dbd-x" onclick="dbDelete('${k}','${_dbq(id)}')" title="${opts.delLabel || 'Delete'}" aria-label="${opts.delLabel || 'Delete'}: ${_drpEsc(title)}"><i data-lucide="trash-2"></i></button>`;
-  return `<div class="dbd-row${done ? ' done' : ''}${opts.muted ? ' muted' : ''}${editing ? ' editing' : ''}">
-    ${ck}${name}
+  const grip = opts.drag && !editing ? `<span class="dbd-grip" data-k="${k}" data-id="${_drpEsc(String(id))}" data-dur="${opts.drag}" data-title="${_drpEsc(title)}" title="Drag onto the planner to set a time for this day" aria-hidden="true"><i data-lucide="grip-vertical"></i></span>` : '';
+  return `<div class="dbd-row${done ? ' done' : ''}${opts.muted ? ' muted' : ''}${editing ? ' editing' : ''}${grip ? ' has-grip' : ''}">
+    ${grip}${ck}${name}
     ${meta && !editing ? `<span class="dbd-row-m${opts.late ? ' late' : ''}">${meta}</span>` : ''}
     ${del}
   </div>`;
@@ -4878,16 +4883,18 @@ function _dbPlannerHTML(ds) {
     const top = y(i.s) + 1, hgt = Math.max(22, y(i.e) - y(i.s)) - 2;
     const w = `(100% - 54px) / ${i.lanes}`;
     const tip = `${i.label} · ${i.title}`;
-    return `<div class="dbd-blk k-${i.k}${i.done ? ' done' : ''}${hgt < 36 ? ' short' : ''}" style="top:${top}px;height:${hgt}px;left:calc(54px + ${w} * ${i.lane});width:calc(${w} - 3px)">
+    return `<div class="dbd-blk k-${i.k}${i.done ? ' done' : ''}${hgt < 36 ? ' short' : ''}${i.moved ? ' moved' : ''}" data-k="${i.k}" data-id="${_drpEsc(String(i.id))}" data-s="${i.s}" data-dur="${i.e - i.s}" data-title="${_drpEsc(i.title)}" style="top:${top}px;height:${hgt}px;left:calc(54px + ${w} * ${i.lane});width:calc(${w} - 3px)">
       <button type="button" class="dbd-blk-main" onclick="dbToggle('${i.k}','${_dbq(i.id)}')" title="${_drpEsc(tip)} — ${i.k === 'gym' ? 'open Gym' : (i.done ? 'mark not done' : 'mark done')}">
         <span class="dbd-blk-t">${i.done ? '✓ ' : ''}${_drpEsc(i.title)}</span><span class="dbd-blk-time">${i.label}</span>
       </button>
       ${i.k === 'event' ? `<button type="button" class="dbd-blk-ed" onclick="drwPlanEdit('${_dbq(i.id)}')" title="Edit block" aria-label="Edit block"><i data-lucide="pencil"></i></button>` : ''}
+      ${i.moved ? `<button type="button" class="dbd-blk-ed" onclick="dbResetTime('${i.k}','${_dbq(i.id)}')" title="Moved for this day only — back to the usual time" aria-label="Back to the usual time"><i data-lucide="rotate-ccw"></i></button>` : ''}
+      <span class="dbd-blk-rs" title="Drag to change how long it takes" aria-hidden="true"></span>
     </div>`;
   }).join('');
   const nowLine = ds === today && nowMin >= h0 * 60 && nowMin <= h1 * 60 ? `<div class="dbd-nowl" style="top:${y(nowMin)}px"></div>` : '';
   const legend = Object.keys(DB_K).map(k => `<button type="button" class="dbd-chip k-${k}${_db.hide[k] ? ' off' : ''}" onclick="dbHide('${k}')" aria-pressed="${!_db.hide[k]}" title="${_db.hide[k] ? 'Show' : 'Hide'} ${DB_K[k].l.toLowerCase()}"><span class="dbd-dot"></span>${DB_K[k].l}</button>`).join('');
-  const ad = visAll.map(i => `<button type="button" class="dbd-ad k-${i.k}${i.done ? ' done' : ''}" onclick="dbToggle('${i.k}','${_dbq(i.id)}')" title="${_drpEsc(i.title)}">${i.done ? '✓ ' : ''}${_drpEsc(i.title)}</button>`).join('');
+  const ad = visAll.map(i => `<button type="button" class="dbd-ad k-${i.k}${i.done ? ' done' : ''}" data-k="${i.k}" data-id="${_drpEsc(String(i.id))}" data-dur="${i.dur || 30}" data-title="${_drpEsc(i.title)}" onclick="dbToggle('${i.k}','${_dbq(i.id)}')" title="${_drpEsc(i.title)} — drag onto the timeline to give it a time">${i.done ? '✓ ' : ''}${_drpEsc(i.title)}</button>`).join('');
   let form = '';
   if (_dp.adding) {
     const startMin = Math.min(23 * 60, (ds === today ? now.getHours() + 1 : 9) * 60);
@@ -4906,7 +4913,7 @@ function _dbPlannerHTML(ds) {
     <div class="dbd-legend">${legend}</div>
     ${form ? `<div class="dbd-form">${form}</div>` : ''}
     ${ad ? `<div class="dbd-allday"><span>All day</span>${ad}</div>` : ''}
-    <div class="dbd-box-b" data-scroll="plan">${empty}<div class="dbd-tl" style="height:${(h1 - h0) * DB_H}px">${hours}${blocks}${nowLine}</div></div>
+    <div class="dbd-box-b" data-scroll="plan">${empty}<div class="dbd-tl" data-h0="${h0}" style="height:${(h1 - h0) * DB_H}px">${hours}${blocks}${nowLine}</div></div>
     <footer class="dbd-box-f dbd-plan-f">
       ${total ? `<button type="button" class="dp-link" onclick="_dp.tab='plan'; drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
       <button type="button" class="dp-link" onclick="drwTplMode('save')"><i data-lucide="save"></i>Save as template</button>
@@ -4919,7 +4926,7 @@ function _dbTasksHTML(ds) {
   const list = _dtItems(ds);
   const rows = list.map(x => {
     const meta = x.overdue ? `Overdue · ${_dpDateObj(_dtDue(x.t)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : (x.time ? _dpFmt(x.time) : (_dtRecurring(x.t) ? 'Repeats' : ''));
-    return _dbRow('task', x.t.id, x.t.title || 'Task', meta, x.done, { late: x.overdue, delLabel: 'Delete task' });
+    return _dbRow('task', x.t.id, x.t.title || 'Task', meta, x.done, { late: x.overdue, delLabel: 'Delete task', drag: x.dur || Number(x.t.duration) || 30 });
   }).join('');
   const form = _dp.addingTask ? `<div class="dp-form" data-kind="task">
       <input class="dp-in-title" type="text" placeholder="What needs doing?" autocomplete="off">
@@ -4938,7 +4945,7 @@ function _dbHabitsHTML(ds) {
   const rows = list.map(x => {
     const st = _dhStreak(x.h, ds);
     const meta = [x.t ? _dpFmt(x.t) : '', st > 1 ? `${st}d streak` : ''].filter(Boolean).join(' · ');
-    return _dbRow('habit', x.h.id, x.h.habit_name || 'Habit', meta, x.done, { round: true, delLabel: 'Delete habit' });
+    return _dbRow('habit', x.h.id, x.h.habit_name || 'Habit', [meta, x.moved ? 'moved this day' : ''].filter(Boolean).join(' · '), x.done, { round: true, delLabel: 'Delete habit', drag: x.dur || Number(x.h.duration) || 20 });
   }).join('');
   return _dbBox('habit', 'Habits', list.length ? `${list.filter(x => x.done).length}/${list.length}` : '',
     _dbIcon("dbGo('habits')", 'arrow-up-right', 'Open Habits'),
@@ -4978,9 +4985,9 @@ window.dbRender = function () {
   side.querySelectorAll('[data-scroll]').forEach(el => { keep[el.dataset.scroll] = el.scrollTop; });
   const live = side.querySelector('.dbd-name-in');
   if (live && _db.edit) _db.editVal = live.value;
-  const nav = `<nav class="dbd-nav" aria-label="Jump to">${[['plan', 'Planner', 'event'], ['task', 'Tasks', 'task'], ['habit', 'Habits', 'habit'], ['food', 'Food', 'food'], ['gym', 'Gym', 'gym']]
+  const nav = `<nav class="dbd-nav" aria-label="Jump to">${[['plan', 'Planner', 'event'], ['task', 'Tasks', 'task'], ['habit', 'Habits', 'habit'], ['food', 'Food', 'food'], ['gym', 'Gym', 'gym'], ['vision', 'Vision', 'vision']]
     .map(([b, l, k]) => `<button type="button" class="dbd-jump k-${k}" onclick="dbJump('${b}')"><span class="dbd-dot"></span>${l}</button>`).join('')}</nav>`;
-  side.innerHTML = nav + _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>`;
+  side.innerHTML = nav + _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>` + _dbVisionHTML();
   side.scrollTop = sideTop;
   side.querySelectorAll('[data-scroll]').forEach(el => { if (keep[el.dataset.scroll] != null) el.scrollTop = keep[el.dataset.scroll]; });
   side.querySelectorAll('.dbd-name-in').forEach(inp => {
@@ -5025,7 +5032,7 @@ window.dbJump = function (b) {
 })();
 
 async function _dbEnsureData() {
-  const need = ['meal_plan', 'meal_template', 'gym_sessions', 'gym_plans'].filter(t => !Array.isArray(state.data[t]));
+  const need = ['meal_plan', 'meal_template', 'gym_sessions', 'gym_plans', 'day_overrides', 'vision', 'vision_images'].filter(t => !Array.isArray(state.data[t]));
   if (!need.length || typeof apiGet !== 'function') return;
   try {
     const got = await Promise.all(need.map(t => apiGet(t).catch(() => null)));
@@ -5160,7 +5167,7 @@ function _dbOpen(o) {
 .dbd-jump { height:30px; padding:0 11px; border-radius:99px; border:1px solid color-mix(in srgb, var(--c) 35%, var(--border-color)); background:var(--surface-1); color:var(--text-1); font-size:12.5px; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-family:inherit; }
 .dbd-jump:hover { background:color-mix(in srgb, var(--c) 10%, var(--surface-1)); }
 .dbd-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px; }
-.k-event { --c:${DB_K.event.c}; } .k-task { --c:${DB_K.task.c}; } .k-habit { --c:${DB_K.habit.c}; } .k-food { --c:${DB_K.food.c}; } .k-gym { --c:${DB_K.gym.c}; }
+.k-vision { --c:#0EA5E9; } .k-event { --c:${DB_K.event.c}; } .k-task { --c:${DB_K.task.c}; } .k-habit { --c:${DB_K.habit.c}; } .k-food { --c:${DB_K.food.c}; } .k-gym { --c:${DB_K.gym.c}; }
 .dbd-box { --t:color-mix(in srgb, var(--c) 10%, var(--surface-1)); --b:color-mix(in srgb, var(--c) 38%, var(--border-color)); flex:none; height:320px; display:flex; flex-direction:column; background:var(--surface-1); border:1.5px solid var(--b); border-radius:14px; overflow:hidden; }
 .dbd-plan { height:640px; }
 .dbd-box-h { flex:none; display:flex; align-items:center; gap:6px; padding:7px 8px 7px 14px; background:var(--t); border-bottom:1px solid var(--b); min-height:42px; box-sizing:border-box; }
@@ -5230,6 +5237,281 @@ button.dbd-ck:focus-visible, .dbd-name:focus-visible, .dbd-x:focus-visible { out
 .dbd-nowl { position:absolute; left:50px; right:0; height:2px; background:#E5484D; z-index:3; pointer-events:none; }
 .dbd-nowl::before { content:''; position:absolute; left:-4px; top:-3.5px; width:9px; height:9px; border-radius:50%; background:#E5484D; }
 @media (max-width:1380px) { .dbd-body { grid-template-columns:minmax(0,1fr) 440px; } .dbd-grid { grid-template-columns:1fr; } }
+`;
+  document.head.appendChild(st);
+})();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PLANNER DRAG & DROP — move a block to a new time, drag its bottom edge to
+   change how long it takes, or drag a task / habit (grip on its row, or the
+   chip in "All day") onto the timeline to give it a time.
+   • Events and one-off tasks are changed directly (they belong to that day).
+   • Habits, repeating tasks, meals and the workout get a per-day override in
+     day_overrides, so only THAT day moves; ↺ on the block puts it back.
+   Mouse: just drag. Touch: press and hold a block, or use the grip handle.
+   ══════════════════════════════════════════════════════════════════════════ */
+function _dovAll() { if (!Array.isArray(state.data.day_overrides)) state.data.day_overrides = []; return state.data.day_overrides; }
+function _dov(ds, kind, ref) {
+  const all = state.data && state.data.day_overrides;
+  if (!Array.isArray(all) || !all.length) return null;
+  return all.find(o => String(o.date || '').slice(0, 10) === ds && o.kind === kind && String(o.ref_id) === String(ref)) || null;
+}
+function _dovFail(e) {
+  console.error('day_overrides', e);
+  if (!_db.dovWarned) { _db.dovWarned = true; showToast('Moved, but it won’t be saved until the day-overrides migration is run in Supabase'); }
+}
+async function _dovSave(ds, kind, ref, fields) {
+  const all = _dovAll();
+  const o = _dov(ds, kind, ref);
+  if (!fields) {
+    if (!o) return;
+    state.data.day_overrides = all.filter(x => x !== o);
+    dbRender();
+    try { await apiCall('delete', 'day_overrides', {}, o.id); } catch (e) { console.error(e); }
+    return;
+  }
+  if (o) {
+    Object.assign(o, fields); dbRender();
+    try { const r = await apiCall('update', 'day_overrides', fields, o.id); if (r && r.success === false) throw new Error(r.message); } catch (e) { _dovFail(e); }
+  } else {
+    const row = { id: 'dov_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), date: ds, kind, ref_id: String(ref), ...fields };
+    all.push(row); dbRender();
+    try { const r = await apiCall('create', 'day_overrides', { ...row }); if (!r || r.success === false) throw new Error(r && r.message); } catch (e) { _dovFail(e); }
+  }
+}
+const _dbHM = m => `${_dbPad(Math.floor(m / 60))}:${_dbPad(m % 60)}`;
+const _dbSnap = m => Math.round(m / 15) * 15;
+
+// Save a new start (+ duration) for one item on the day being viewed.
+async function _dbSetTime(k, id, s, dur, title) {
+  const ds = _dpDate();
+  s = Math.max(0, Math.min(1425, s)); dur = Math.max(15, Math.min(1440 - s, dur || 30));
+  const t = _dbHM(s), endT = _dbHM(Math.min(1439, s + dur));
+  const dayLbl = _dpDateObj(ds).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  let undo = null, perDay = false;
+  if (k === 'event') {
+    const e = (state.data.planner || []).find(x => String(x.id) === String(id)); if (!e) return;
+    const before = { start_datetime: e.start_datetime, end_datetime: e.end_datetime };
+    const payload = { start_datetime: `${ds}T${t}:00`, end_datetime: `${ds}T${endT}:00` };
+    Object.assign(e, payload); dbRender();
+    try { const r = await apiCall('update', 'planner_events', payload, id); if (r && r.success === false) throw new Error(r.message); }
+    catch (err) { Object.assign(e, before); dbRender(); showToast('Couldn’t move the block'); return; }
+    undo = async () => { Object.assign(e, before); dbRender(); try { await apiCall('update', 'planner_events', before, id); } catch (er) { } };
+  } else if (k === 'task' && !_dtRecurring((state.data.tasks || []).find(x => String(x.id) === String(id)) || {})) {
+    const task = (state.data.tasks || []).find(x => String(x.id) === String(id)); if (!task) return;
+    const before = { due_time: task.due_time || '', duration: task.duration || null, due_date: task.due_date || null };
+    const payload = { due_time: t, duration: dur };
+    if (_dtDue(task) !== ds) payload.due_date = ds;
+    Object.assign(task, payload); dbRender();
+    try { const r = await apiCall('update', 'tasks', payload, id); if (r && r.success === false) throw new Error(r.message); }
+    catch (err) { Object.assign(task, before); dbRender(); showToast('Couldn’t move the task'); return; }
+    undo = async () => { Object.assign(task, before); dbRender(); try { await apiCall('update', 'tasks', before, id); } catch (er) { } };
+  } else {
+    perDay = true;
+    const prev = _dov(ds, k, id); const prevCopy = prev ? { time: prev.time, duration: prev.duration } : null;
+    await _dovSave(ds, k, id, { time: t, duration: dur });
+    undo = () => _dovSave(ds, k, id, prevCopy);
+  }
+  showToast(`${title ? title + ' → ' : ''}${_dpFmt(t)}–${_dpFmt(endT)}${perDay ? ` · ${dayLbl} only` : ''}`, 'default', undo);
+}
+window.dbResetTime = function (k, id) { _dovSave(_dpDate(), k, id, null); showToast('Back to its usual time'); };
+
+const _dbDrag = { d: null, justDragged: 0 };
+function _dbTlEl() { return document.querySelector('#dbSide .dbd-tl'); }
+function _dbMinAt(y) { const tl = _dbTlEl(); if (!tl) return 0; const r = tl.getBoundingClientRect(); return (+tl.dataset.h0 || 0) * 60 + (y - r.top) / DB_H * 60; }
+function _dbTopFor(m) { const tl = _dbTlEl(); return Math.round((m - (+tl.dataset.h0 || 0) * 60) / 60 * DB_H); }
+function _dbOverTl(x, y) { const tl = _dbTlEl(); if (!tl) return false; const b = tl.closest('[data-scroll="plan"]') || tl; const r = b.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; }
+
+function _dbDragStart(d) {
+  d.started = true;
+  if (d.timer) { clearTimeout(d.timer); d.timer = null; }
+  try { navigator.vibrate && navigator.vibrate(12); } catch (e) { }
+  document.body.classList.add('dbd-dragging');
+  if (d.mode === 'move' || d.mode === 'resize') {
+    d.el.classList.add('dragging');
+    d.grab = _dbMinAt(d.y0) - d.s0;
+    d.s = d.s0; d.dur = d.dur0;
+  } else {
+    const g = document.createElement('div');
+    g.className = `dbd-ghost k-${d.k}`; g.textContent = d.title;
+    document.body.appendChild(g); d.ghost = g;
+    const tl = _dbTlEl();
+    if (tl) { const ln = document.createElement('div'); ln.className = `dbd-drop k-${d.k}`; ln.style.display = 'none'; tl.appendChild(ln); d.line = ln; }
+    d.s = null; d.dur = d.dur0;
+  }
+}
+function _dbDragMove(d, x, y) {
+  const tl = _dbTlEl(); if (!tl) return;
+  const box = tl.closest('[data-scroll="plan"]');
+  if (box) { const r = box.getBoundingClientRect(); if (y < r.top + 26) box.scrollTop -= 9; else if (y > r.bottom - 26) box.scrollTop += 9; }
+  if (d.mode === 'move') {
+    d.s = Math.max(0, Math.min(1440 - d.dur, _dbSnap(_dbMinAt(y) - d.grab)));
+    d.el.style.top = (_dbTopFor(d.s) + 1) + 'px';
+  } else if (d.mode === 'resize') {
+    d.dur = Math.max(15, Math.min(1440 - d.s0, _dbSnap(_dbMinAt(y)) - d.s0));
+    d.el.style.height = Math.max(20, Math.round(d.dur / 60 * DB_H) - 2) + 'px';
+  } else {
+    d.ghost.style.transform = `translate(${x + 12}px, ${y - 14}px)`;
+    if (_dbOverTl(x, y)) {
+      d.s = Math.max(0, Math.min(1440 - d.dur, _dbSnap(_dbMinAt(y) - 7)));
+      d.line.style.display = 'block'; d.line.style.top = _dbTopFor(d.s) + 'px';
+      d.line.style.height = Math.max(18, Math.round(d.dur / 60 * DB_H)) + 'px';
+      d.line.dataset.t = `${_dpFmt(_dbHM(d.s))}–${_dpFmt(_dbHM(Math.min(1439, d.s + d.dur)))}`;
+      d.ghost.classList.add('ok');
+    } else { d.s = null; if (d.line) d.line.style.display = 'none'; d.ghost.classList.remove('ok'); }
+    return;
+  }
+  const lbl = d.el.querySelector('.dbd-blk-time');
+  if (lbl) lbl.textContent = `${_dpFmt(_dbHM(d.s))}–${_dpFmt(_dbHM(Math.min(1439, d.s + d.dur)))}`;
+}
+function _dbDragCleanup(d) {
+  document.body.classList.remove('dbd-dragging');
+  if (d.ghost) d.ghost.remove();
+  if (d.line) d.line.remove();
+  if (d.el) d.el.classList.remove('dragging');
+}
+function _dbDragEnd(d) {
+  _dbDragCleanup(d);
+  _dbDrag.justDragged = Date.now();
+  if (d.s == null || (d.mode === 'move' && d.s === d.s0) || (d.mode === 'resize' && d.dur === d.dur0)) { dbRender(); return; }
+  _dbSetTime(d.k, d.id, d.mode === 'resize' ? d.s0 : d.s, d.dur, d.title);
+}
+
+if (!window._dbDragWired) {
+  window._dbDragWired = true;
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const t = e.target;
+    if (!t.closest || !t.closest('#dbSide')) return;
+    if (t.closest('.dbd-blk-ed, input, select, textarea')) return;
+    const rs = t.closest('.dbd-blk-rs');
+    const blk = t.closest('.dbd-blk[data-k]');
+    const src = t.closest('.dbd-ad[data-k], .dbd-grip[data-k]');
+    const el = blk || src;
+    if (!el || (el.dataset.k === 'gym' && !blk && !src)) return;
+    const touch = e.pointerType !== 'mouse';
+    const handle = !!rs || (src && src.classList.contains('dbd-grip'));
+    const d = { mode: rs ? 'resize' : (blk ? 'move' : 'place'), k: el.dataset.k, id: el.dataset.id, el, x0: e.clientX, y0: e.clientY,
+      touch, handle, started: false, s0: +el.dataset.s || 0, dur0: +el.dataset.dur || 30, title: el.dataset.title || '' };
+    if (touch && !handle) d.timer = setTimeout(() => { if (_dbDrag.d === d) _dbDragStart(d); }, 330);
+    _dbDrag.d = d;
+  }, true);
+  document.addEventListener('pointermove', e => {
+    const d = _dbDrag.d; if (!d) return;
+    const dist = Math.hypot(e.clientX - d.x0, e.clientY - d.y0);
+    if (!d.started) {
+      if (d.touch && !d.handle) { if (dist > 8) { clearTimeout(d.timer); _dbDrag.d = null; } return; }
+      if (dist < 4) return;
+      _dbDragStart(d);
+    }
+    e.preventDefault();
+    _dbDragMove(d, e.clientX, e.clientY);
+  }, { passive: false });
+  const up = e => {
+    const d = _dbDrag.d; if (!d) return;
+    _dbDrag.d = null;
+    if (d.timer) clearTimeout(d.timer);
+    if (!d.started) return;
+    if (e.type === 'pointercancel') { _dbDragCleanup(d); dbRender(); return; }
+    _dbDragEnd(d);
+  };
+  document.addEventListener('pointerup', up, true);
+  document.addEventListener('pointercancel', up, true);
+  // While dragging on a phone, stop the page from scrolling under the finger.
+  document.addEventListener('touchmove', e => { if (_dbDrag.d && (_dbDrag.d.started || _dbDrag.d.handle)) e.preventDefault(); }, { passive: false });
+  // A drag ends with a click on the block — swallow it so it doesn't tick the item.
+  document.addEventListener('click', e => {
+    if (Date.now() - _dbDrag.justDragged < 450 && e.target.closest && e.target.closest('#dbSide')) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+  document.addEventListener('contextmenu', e => { if (_dbDrag.d && e.target.closest && e.target.closest('#dbSide')) e.preventDefault(); }, true);
+}
+
+/* ── Vision: story-style strip at the bottom of the right side ── */
+function _dbVisionHTML() {
+  const goals = (state.data.vision || []).filter(g => g.status !== 'achieved');
+  const loaded = typeof window.v2CoverSync === 'function' || typeof v2CoverSync === 'function';
+  if (!loaded && goals.length && !_db.visLoading && typeof window.ensureViewLoaded === 'function') {
+    _db.visLoading = true;
+    window.ensureViewLoaded('vision').then(() => { if (document.getElementById('dbSide')) dbRender(); }).catch(() => { });
+  }
+  const cover = g => { try { return loaded ? (v2CoverSync(g) || '') : ''; } catch (e) { return ''; } };
+  const media = g => { try { return loaded && typeof v2StoryMediaOf === 'function' ? v2StoryMediaOf(g).length : 0; } catch (e) { return 0; } };
+  const seenAll = g => { try { return loaded && typeof v2StorySeenAll === 'function' ? v2StorySeenAll(g) : false; } catch (e) { return false; } };
+  const items = goals.map(g => {
+    const c = cover(g), n = media(g), st = n ? (seenAll(g) ? 'seen' : 'new') : 'none';
+    const ini = String(g.title || '?').trim().charAt(0).toUpperCase();
+    return `<button type="button" class="dbv-it ${st}" onclick="dbVisionOpen('${_dbq(g.id)}')" title="${_drpEsc(g.title || 'Vision')}${n ? ' — play story' : ''}">
+      <span class="dbv-ring"><span class="dbv-av"${c ? ` style="background-image:url('${_drpEsc(c)}')"` : ''}>${c ? '' : _drpEsc(ini)}</span></span>
+      <span class="dbv-t">${_drpEsc(g.title || 'Vision')}</span></button>`;
+  }).join('');
+  const body = goals.length
+    ? `<div class="dbv-wrap"><button type="button" class="dbv-nav l" onclick="dbVisionScroll(-1)" aria-label="Scroll left"><i data-lucide="chevron-left"></i></button>
+        <div class="dbv-strip" data-scroll="vision">${items}</div>
+        <button type="button" class="dbv-nav r" onclick="dbVisionScroll(1)" aria-label="Scroll right"><i data-lucide="chevron-right"></i></button></div>`
+    : '<p class="dbd-empty">No visions yet — add one in Vision.</p>';
+  return `<section class="dbd-box dbd-vision k-vision">
+    <header class="dbd-box-h"><span class="dbd-box-t">Vision</span><span class="dbd-box-n">${goals.length || ''}</span>${_dbIcon("dbGo('vision')", 'arrow-up-right', 'Open Vision')}</header>
+    ${body}
+  </section>`;
+}
+window.dbVisionScroll = function (dir) {
+  const s = document.querySelector('#dbSide .dbv-strip'); if (!s) return;
+  s.scrollBy({ left: dir * Math.max(160, s.clientWidth * 0.8), behavior: 'smooth' });
+};
+window.dbVisionOpen = async function (id) {
+  try {
+    if (typeof window.v2StoryOpen !== 'function' && typeof window.ensureViewLoaded === 'function') await window.ensureViewLoaded('vision');
+    const g = (state.data.vision || []).find(v => String(v.id) === String(id));
+    const hasMedia = typeof v2StoryMediaOf === 'function' && g ? v2StoryMediaOf(g).length > 0 : false;
+    if (typeof window.v2StoryOpen !== 'function' || !hasMedia) { dbGo('vision'); return; }
+    if (typeof v2InjectCSS === 'function') v2InjectCSS();
+    await window.v2StoryOpen(id);
+    const el = document.getElementById('v2Story'); if (el) el.style.zIndex = '100005';
+    // When the story closes, refresh the rings (seen / unseen).
+    const watch = setInterval(() => { const st = document.getElementById('v2Story'); if (!st || getComputedStyle(st).display === 'none') { clearInterval(watch); if (document.getElementById('dbSide')) dbRender(); } }, 700);
+  } catch (e) { console.error(e); dbGo('vision'); }
+};
+
+(function () {
+  if (document.getElementById('dbDragStyles')) return;
+  const st = document.createElement('style'); st.id = 'dbDragStyles';
+  st.textContent = `
+#dbSide .dbd-blk { cursor:grab; touch-action:pan-y; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+#dbSide .dbd-blk-main { cursor:inherit; }
+#dbSide .dbd-blk.dragging { z-index:20; opacity:.92; cursor:grabbing; box-shadow:inset 3px 0 0 var(--c), 0 10px 24px rgba(15,23,42,.22); transition:none; }
+#dbSide .dbd-blk.dragging .dbd-blk-time { color:var(--text-1); font-weight:800; }
+#dbSide .dbd-blk.moved { box-shadow:inset 3px 0 0 var(--c), inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); }
+.dbd-blk-rs { position:absolute; left:0; right:0; bottom:0; height:7px; cursor:ns-resize; touch-action:none; }
+.dbd-blk-rs::after { content:''; position:absolute; left:50%; bottom:2px; width:22px; height:3px; margin-left:-11px; border-radius:3px; background:color-mix(in srgb, var(--c) 55%, transparent); opacity:0; transition:opacity .12s; }
+.dbd-blk:hover .dbd-blk-rs::after, .dbd-blk.dragging .dbd-blk-rs::after { opacity:1; }
+@media (hover:none) { .dbd-blk-rs { height:12px; } .dbd-blk-rs::after { opacity:.8; } }
+#dbSide .dbd-ad[data-k] { cursor:grab; touch-action:pan-y; -webkit-user-select:none; user-select:none; }
+.dbd-row.has-grip { position:relative; }
+.dbd-grip { flex:none; width:16px; margin:0 -2px 0 -4px; display:flex; align-items:center; justify-content:center; color:var(--text-3); cursor:grab; touch-action:none; opacity:.35; transition:opacity .12s; }
+.dbd-grip svg { width:14px; height:14px; }
+.dbd-row:hover .dbd-grip { opacity:1; }
+@media (hover:none) { .dbd-grip { opacity:.7; } }
+body.dbd-dragging, body.dbd-dragging * { cursor:grabbing !important; -webkit-user-select:none !important; user-select:none !important; }
+.dbd-ghost { position:fixed; left:0; top:0; z-index:100010; pointer-events:none; max-width:240px; padding:6px 11px; border-radius:9px; font-size:12.5px; font-weight:700; color:var(--text-1); background:color-mix(in srgb, var(--c) 16%, var(--surface-1)); box-shadow:inset 3px 0 0 var(--c), 0 10px 26px rgba(15,23,42,.25); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.75; }
+.dbd-ghost.ok { opacity:1; }
+.dbd-drop { position:absolute; left:54px; right:4px; border-radius:8px; background:color-mix(in srgb, var(--c) 18%, transparent); border:1.5px dashed var(--c); z-index:15; pointer-events:none; box-sizing:border-box; }
+.dbd-drop::after { content:attr(data-t); position:absolute; left:8px; top:3px; font-size:11px; font-weight:800; color:color-mix(in srgb, var(--c) 80%, var(--text-1)); }
+.dbd-vision { height:auto !important; margin-top:12px; }
+.dbv-wrap { position:relative; }
+.dbv-strip { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x proximity; padding:12px 14px 10px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+.dbv-strip::-webkit-scrollbar { display:none; }
+.dbv-it { flex:none; width:76px; display:flex; flex-direction:column; align-items:center; gap:6px; border:none; background:none; padding:0; cursor:pointer; scroll-snap-align:start; font-family:inherit; }
+.dbv-ring { width:68px; height:68px; border-radius:50%; padding:3px; box-sizing:border-box; background:var(--border-color); display:flex; }
+.dbv-it.new .dbv-ring { background:conic-gradient(from 210deg, #f59e0b, #ef4444, #d946ef, #6366f1, #0ea5e9, #f59e0b); }
+.dbv-it.seen .dbv-ring { background:color-mix(in srgb, var(--text-3) 45%, transparent); }
+.dbv-av { flex:1; border-radius:50%; border:2.5px solid var(--surface-1); background:color-mix(in srgb, var(--c) 18%, var(--surface-2)) center/cover no-repeat; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; color:color-mix(in srgb, var(--c) 75%, var(--text-1)); }
+.dbv-it:hover .dbv-av { filter:brightness(1.05); }
+.dbv-t { width:100%; font-size:11.5px; font-weight:650; color:var(--text-1); line-height:1.25; text-align:center; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.dbv-nav { position:absolute; top:34px; transform:translateY(-50%); z-index:2; width:28px; height:28px; border-radius:50%; border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-2); box-shadow:0 2px 8px rgba(15,23,42,.12); display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0; opacity:0; transition:opacity .15s; }
+.dbv-nav svg { width:16px; height:16px; }
+.dbv-nav.l { left:4px; } .dbv-nav.r { right:4px; }
+.dbd-vision:hover .dbv-nav { opacity:1; }
+@media (hover:none) { .dbv-nav { display:none; } }
 `;
   document.head.appendChild(st);
 })();

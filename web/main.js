@@ -518,7 +518,7 @@ const VIEW_MAP = {
     tasks:         { src: 'view-tasks.js?v=20261025a', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20261019b', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
-    diary:         { src: 'view-diary.js?v=20261021b', render: 'renderDiary' },
+    diary:         { src: 'view-diary.js?v=20261025c', render: 'renderDiary' },
     vision:        { src: 'view-vision.js?v=20261003d', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20260930a', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
@@ -535,7 +535,7 @@ const VIEW_MAP = {
     dailyTools:    { src: 'view-daily-tools.js?v=20260924a', render: 'renderDailyTools' },
     wishlist:      { src: 'view-wishlist.js',      render: 'renderWishlist' },
     tdp:           { src: 'view-tdp.js?v=20260930a',  render: 'renderTDP' },
-    meals:         { src: 'view-meals.js?v=20260622e', render: 'renderMeals' },
+    meals:         { src: 'view-meals.js?v=20261025b', render: 'renderMeals' },
     timeTracker:   { src: 'view-time-tracker.js?v=20260930a', render: 'renderTimeTracker' },
     timeAnalysis:  { src: 'view-time-tracker.js?v=20260930a', render: 'renderTimeAnalysis' }
 };

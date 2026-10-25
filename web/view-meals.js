@@ -204,6 +204,93 @@ window.toggleMealItemFav = async function (id) {
   renderMeals();
 };
 
+
+/* ── Nutrition: calories + protein ───────────────────────────────────────────
+   Numbers come from three places, most specific first:
+     1. a number typed on that meal (meal_plan.kcal / .protein)
+     2. the food in "My foods" (meal_items.kcal / .protein) — so a meal you plan
+        or mark from your foods counts automatically
+     3. nothing (shown as "add calories")
+   A meal marked Ate it / Ate other counts as EATEN; one not yet marked counts
+   as PLANNED; skipped counts as zero. Extras (snacks, drinks, anything not in
+   a slot) live on the day row (meal_day.extra_kcal / .extra_protein).
+   ────────────────────────────────────────────────────────────────────────── */
+const _mNum = v => (v === null || v === undefined || v === '' || isNaN(+v)) ? null : +v;
+const _mFmtK = v => v == null ? '—' : Math.round(v).toLocaleString('en-IN');
+const _mFmtP = v => v == null ? '—' : (Math.round(v * 10) / 10).toLocaleString('en-IN');
+function _miNums(name) {
+  const it = _miByName(name);
+  return it ? { kcal: _mNum(it.kcal), protein: _mNum(it.protein), item: it } : { kcal: null, protein: null, item: null };
+}
+function _mealNums(date, slot) {
+  const eff = _mealEffective(date, slot), mp = eff.mp, st = mp && mp.status;
+  if (st === 'skipped') return { kcal: 0, protein: 0, state: 'skipped', src: '', food: eff.text };
+  const food = st === 'different' ? ((mp.eaten || '').trim()) : eff.text;
+  let kcal = mp ? _mNum(mp.kcal) : null, protein = mp ? _mNum(mp.protein) : null, src = (kcal != null || protein != null) ? 'meal' : '';
+  if (kcal == null && protein == null && food) {
+    const n = _miNums(food); kcal = n.kcal; protein = n.protein;
+    if (kcal != null || protein != null) src = 'food';
+  }
+  const state = (st === 'as_planned' || st === 'different') ? 'eaten' : (food ? 'planned' : 'none');
+  return { kcal, protein, state, src, food };
+}
+function _mealDayNut(date) {
+  const r = { eatK: 0, eatP: 0, planK: 0, planP: 0, extraK: 0, extraP: 0, missing: 0, eatenN: 0, plannedN: 0, hasAny: false };
+  MEAL_SLOTS.forEach(s => {
+    const n = _mealNums(date, s.key);
+    if (n.state === 'eaten') { r.eatK += n.kcal || 0; r.eatP += n.protein || 0; r.eatenN++; }
+    else if (n.state === 'planned') { r.planK += n.kcal || 0; r.planP += n.protein || 0; r.plannedN++; }
+    if ((n.state === 'eaten' || n.state === 'planned') && n.kcal == null && n.protein == null) r.missing++;
+    if (n.kcal || n.protein) r.hasAny = true;
+  });
+  const md = _mdFor(date);
+  r.extraK = (md && _mNum(md.extra_kcal)) || 0; r.extraP = (md && _mNum(md.extra_protein)) || 0;
+  if (r.extraK || r.extraP) r.hasAny = true;
+  r.eatK += r.extraK; r.eatP += r.extraP;
+  r.totK = r.eatK + r.planK; r.totP = r.eatP + r.planP;
+  r.logged = r.eatenN > 0 || r.extraK > 0 || r.extraP > 0;
+  return r;
+}
+const MEAL_GOALS_KEY = 'os.meal.goals';
+function _mealGoals() {
+  let g = null;
+  try { const s = state.data.settings && state.data.settings[0]; if (s && s.nutrition_goals) g = typeof s.nutrition_goals === 'string' ? JSON.parse(s.nutrition_goals) : s.nutrition_goals; } catch (e) { }
+  if (!g) { try { g = JSON.parse(localStorage.getItem(MEAL_GOALS_KEY) || 'null'); } catch (e) { } }
+  return { kcal: _mNum(g && g.kcal), protein: _mNum(g && g.protein) };
+}
+async function _mealSaveGoals(g) {
+  const json = JSON.stringify({ kcal: _mNum(g.kcal), protein: _mNum(g.protein) });
+  try { localStorage.setItem(MEAL_GOALS_KEY, json); } catch (e) { }
+  const s = state.data.settings && state.data.settings[0];
+  if (s) {
+    s.nutrition_goals = json;
+    if (s.id) { try { await apiCall('update', 'settings', { nutrition_goals: json }, s.id); } catch (e) { console.error('goals save', e); } }
+  }
+}
+// A meal's typed numbers are only stored when they differ from the food's own,
+// so fixing a food in My foods updates every meal that uses it.
+function _mealOverride(food, kcal, protein) {
+  const n = _miNums(food);
+  kcal = _mNum(kcal); protein = _mNum(protein);
+  if (n.item && kcal === n.kcal && protein === n.protein) return { kcal: null, protein: null };
+  return { kcal, protein };
+}
+// If the food is in My foods but has no numbers yet, remember these for next time.
+function _mealTeachFood(food, kcal, protein) {
+  const n = _miNums(food);
+  if (!n.item || (n.kcal != null || n.protein != null)) return false;
+  kcal = _mNum(kcal); protein = _mNum(protein);
+  if (kcal == null && protein == null) return false;
+  _miUpdate(n.item.id, { kcal, protein });
+  return true;
+}
+// Small progress meter vs a goal (or a plain number with no goal).
+function _mealMeter(val, goal, unit, cls) {
+  const pct = goal ? Math.max(0, Math.min(100, Math.round(val / goal * 100))) : 0;
+  const over = goal && val > goal * 1.08;
+  return `<div class="ml-meter ${cls} ${over ? 'over' : ''}"><div class="ml-meter-t"><b>${unit === 'g' ? _mFmtP(val) : _mFmtK(val)}</b>${goal ? `<span>/ ${unit === 'g' ? _mFmtP(goal) : _mFmtK(goal)}</span>` : ''}<em>${unit === 'g' ? 'g protein' : 'kcal'}</em></div>${goal ? `<div class="ml-meter-b"><i style="width:${pct}%"></i></div>` : ''}</div>`;
+}
+
 /* ── Weekly stats + lifetime insight ── */
 function _mealWeekStats(dates) {
   const today = _mealToday();
@@ -428,6 +515,58 @@ const MEALS_CSS = `<style>
   .ml-tgrid-row { grid-template-columns:1fr; gap:9px; padding:14px; }
   .ml-tgrid-row .d-wd { margin-bottom:3px; }
 }
+/* ── Calories & protein ── */
+.ml-thead { grid-template-columns:140px repeat(4,minmax(0,1fr)) 168px 132px; }
+.ml-row { grid-template-columns:140px repeat(4,minmax(0,1fr)) 168px 132px; }
+.ml-pill .kc { margin-left:auto; flex:none; font-size:11px; font-weight:800; opacity:.72; font-variant-numeric:tabular-nums; }
+.ml-pill.ok .kc { opacity:.9; }
+.ml-pill .kc::after { content:' kcal'; font-weight:600; font-size:9.5px; }
+.ml-nut { width:100%; min-height:42px; border:1px solid var(--border-color); background:var(--surface-2); border-radius:11px; cursor:pointer; display:flex; flex-direction:column; justify-content:center; gap:4px; padding:6px 10px; box-sizing:border-box; text-align:left; transition:border-color .14s; font:inherit; }
+.ml-nut:hover { border-color:var(--primary); }
+.ml-nut.logged { background:rgba(22,163,74,.07); border-color:rgba(22,163,74,.24); }
+.ml-nut.empty { align-items:center; border-style:dashed; background:transparent; }
+.ml-nut .ci-add { font-size:12px; font-weight:700; color:var(--text-3); }
+.ml-nut-s { font-size:9.5px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.03em; }
+.ml-meter-t { display:flex; align-items:baseline; gap:3px; font-size:11px; color:var(--text-3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.ml-meter-t b { font-size:13px; font-weight:850; color:var(--text-1); }
+.ml-meter-t em { font-style:normal; margin-left:auto; font-size:10px; font-weight:700; }
+.ml-meter-b { height:4px; background:var(--surface-3,#e5e7eb); border-radius:999px; overflow:hidden; margin-top:2px; }
+.ml-meter-b i { display:block; height:100%; border-radius:999px; background:#f59e0b; }
+.ml-meter.p .ml-meter-b i { background:#6366f1; }
+.ml-meter.over .ml-meter-b i { background:#ef4444; }
+.ml-nutbar { margin-top:14px; }
+.ml-nutbar-h { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); }
+.ml-link { border:none; background:none; color:var(--primary); font:inherit; font-size:12px; font-weight:700; text-transform:none; letter-spacing:0; cursor:pointer; padding:0; }
+.ml-nutin { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
+.ml-nutin label > span { display:block; font-size:11px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:.03em; margin-bottom:5px; }
+.ml-unit { position:relative; }
+.ml-unit em { position:absolute; right:12px; top:50%; transform:translateY(-50%); font-style:normal; font-size:12px; font-weight:700; color:var(--text-3); pointer-events:none; }
+.ml-unit .ml-input { padding-right:28px; }
+.ml-nut-hint { font-size:11.5px; color:var(--text-3); margin-top:6px; line-height:1.4; min-height:0; }
+.ml-nut-hint b { color:var(--text-2); }
+.ml-fn { font-size:11px; font-weight:700; color:var(--text-2); background:var(--surface-2); border:1px solid var(--border-color); padding:2px 8px; border-radius:999px; font-variant-numeric:tabular-nums; }
+.ml-fn.add { color:var(--primary); border-style:dashed; background:transparent; cursor:pointer; font:inherit; font-size:11px; font-weight:700; }
+/* day sheet */
+.ml-dn-row { display:grid; grid-template-columns:minmax(0,1fr) 84px 76px; gap:8px; align-items:center; padding:9px 0; border-bottom:1px solid var(--border-color); }
+.ml-dn-row:last-of-type { border-bottom:none; }
+.ml-dn-l { min-width:0; }
+.ml-dn-slot { font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); display:flex; gap:6px; align-items:center; }
+.ml-dn-food { font-size:13.5px; font-weight:650; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ml-dn-food.none { color:var(--text-3); font-weight:500; }
+.ml-dn-st { font-size:9.5px; font-weight:800; padding:1px 6px; border-radius:999px; background:var(--surface-2); color:var(--text-3); text-transform:none; letter-spacing:0; }
+.ml-dn-st.eaten { background:rgba(22,163,74,.12); color:#15803d; }
+.ml-dn-st.skipped { text-decoration:line-through; }
+.ml-dn-row .ml-input { padding:9px 10px; font-size:14px; text-align:right; }
+.ml-dn-row .ml-unit .ml-input { padding-right:24px; }
+.ml-dn-head { display:grid; grid-template-columns:minmax(0,1fr) 84px 76px; gap:8px; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); padding-bottom:4px; }
+.ml-dn-head span:not(:first-child) { text-align:right; padding-right:4px; }
+.ml-dn-tot { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; padding:12px; border-radius:14px; background:var(--surface-2); }
+.ml-dn-tot .ml-meter-t b { font-size:18px; }
+.ml-dn-note { font-size:11.5px; color:var(--text-3); margin-top:8px; line-height:1.4; }
+@media (max-width:920px){
+  .ml-row { grid-template-columns:1fr; }
+  .ml-thead { display:none; }
+}
 </style>`;
 
 /* ── Render ── */
@@ -468,6 +607,16 @@ function renderMeals() {
   const today = _mealToday();
   const st = _mealWeekStats(dates);
   const insight = _mealInsight();
+  const goals = _mealGoals();
+  // Nutrition across the days you logged this week (falls back to the plan).
+  const nutDays = dates.map(dt => ({ dt, n: _mealDayNut(dt) }));
+  const loggedDays = nutDays.filter(x => x.dt <= today && x.n.logged);
+  const avgK = loggedDays.length ? loggedDays.reduce((a, x) => a + x.n.eatK, 0) / loggedDays.length : null;
+  const avgP = loggedDays.length ? loggedDays.reduce((a, x) => a + x.n.eatP, 0) / loggedDays.length : null;
+  const protHit = goals.protein ? loggedDays.filter(x => x.n.eatP >= goals.protein * 0.95).length : null;
+  const planDays = nutDays.filter(x => x.n.totK || x.n.totP);
+  const planAvgK = planDays.length ? planDays.reduce((a, x) => a + x.n.totK, 0) / planDays.length : null;
+  const planAvgP = planDays.length ? planDays.reduce((a, x) => a + x.n.totP, 0) / planDays.length : null;
 
   const startD = _mealParse(dates[0]), endD = _mealParse(dates[6]);
   const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -507,6 +656,8 @@ function renderMeals() {
       else if (planned && eff.fromTemplate) { cls = 'tmpl'; txt = planned; tail = '<span class="tm">USUAL</span>'; }
       else if (planned) { cls = 'planned'; txt = planned; }
       else { cls = 'empty'; txt = '+ Add meal'; lead = ''; }
+      const nn = _mealNums(dt, s.key);
+      if (cls !== 'empty' && cls !== 'skip' && nn.kcal != null) tail = `<span class="kc">${_mFmtK(nn.kcal)}</span>`;
       const act = planned ? `mealCycleStatus('${dt}','${s.key}')` : `openMealEditor('${dt}','${s.key}')`;
       const tip = planned ? `${escapeHtml(txt)} — tap to mark, pencil to edit` : 'Add a meal';
       return `<div class="ml-row-meal">
@@ -527,9 +678,21 @@ function renderMeals() {
       ciInner = '<span class="ci-add">+ Check in</span>';
     }
 
+    const nut = _mealDayNut(dt);
+    const past = dt <= today;
+    const showK = past && nut.logged ? nut.eatK : nut.totK, showP = past && nut.logged ? nut.eatP : nut.totP;
+    const nutLabel = past && nut.logged ? (nut.planK || nut.planP ? `+${_mFmtK(nut.planK)} planned` : 'eaten') : (nut.hasAny ? 'planned' : '');
+    const nutCell = nut.hasAny
+      ? `<button class="ml-nut ${past && nut.logged ? 'logged' : 'plan'}" onclick="openMealDayNutrition('${dt}')" title="Calories & protein for ${dsub}">
+          ${_mealMeter(showK, goals.kcal, 'kcal', 'k')}${_mealMeter(showP, goals.protein, 'g', 'p')}
+          ${nutLabel ? `<span class="ml-nut-s">${nutLabel}${nut.missing ? ` · ${nut.missing} without numbers` : ''}</span>` : ''}
+        </button>`
+      : `<button class="ml-nut empty" onclick="openMealDayNutrition('${dt}')"><span class="ci-add">+ Calories & protein</span></button>`;
+
     return `<div class="ml-row ${isToday ? 'today' : ''}">
         <div class="ml-rd"><div class="d-wd">${wd}${isToday ? '<span class="ml-today-pill">Today</span>' : ''}</div><div class="d-sub">${dsub}</div></div>
         ${mealCells}
+        <div class="ml-row-nut"><span class="ml-mlabel">Calories / protein</span>${nutCell}</div>
         <div class="ml-row-ci"><span class="ml-mlabel">Mood / energy</span><button class="ml-rci ${checked ? 'done' : ''}" onclick="openMealCheckin('${dt}')">${ciInner}</button></div>
       </div>`;
   }).join('');
@@ -553,9 +716,18 @@ function renderMeals() {
           <div class="ml-stat"><div class="ml-stat__v">${st.avgEnergy != null ? st.avgEnergy.toFixed(1) : '—'}<small>${st.avgEnergy != null ? '/5' : ''}</small></div><div class="ml-stat__l">Avg energy</div></div>
           <div class="ml-stat"><div class="ml-stat__v">${st.avgMood != null ? (MEAL_MOODS.find(m => m.v === Math.round(st.avgMood)) || {}).e || st.avgMood.toFixed(1) : '—'}</div><div class="ml-stat__l">Avg mood</div></div>
         </div>
+        <div class="ml-nutbar">
+          <div class="ml-nutbar-h"><span>Calories & protein</span><button class="ml-link" onclick="openMealGoals()">${goals.kcal || goals.protein ? 'Edit daily goals' : 'Set daily goals'}</button></div>
+          <div class="ml-stats">
+            <div class="ml-stat"><div class="ml-stat__v">${avgK != null ? _mFmtK(avgK) : (planAvgK ? _mFmtK(planAvgK) : '—')}${goals.kcal ? `<small>/${_mFmtK(goals.kcal)}</small>` : ''}</div><div class="ml-stat__l">${avgK != null ? 'Avg kcal / day eaten' : 'Avg kcal / day planned'}</div></div>
+            <div class="ml-stat"><div class="ml-stat__v">${avgP != null ? _mFmtP(avgP) : (planAvgP ? _mFmtP(planAvgP) : '—')}<small>${goals.protein ? '/' + _mFmtP(goals.protein) : ''} g</small></div><div class="ml-stat__l">${avgP != null ? 'Avg protein / day eaten' : 'Avg protein / day planned'}</div></div>
+            <div class="ml-stat"><div class="ml-stat__v">${protHit != null ? protHit + `<small>/${loggedDays.length}</small>` : '—'}</div><div class="ml-stat__l">${goals.protein ? 'Days protein goal hit' : 'Set a protein goal'}</div></div>
+            <div class="ml-stat"><div class="ml-stat__v">${loggedDays.length}<small>/${st.elapsed}</small></div><div class="ml-stat__l">Days logged</div></div>
+          </div>
+        </div>
         ${insightHtml}
       </div>
-      <div class="ml-thead"><span>Day</span>${MEAL_SLOTS.map(s => `<span>${s.label}</span>`).join('')}<span>Mood / Energy</span></div>
+      <div class="ml-thead"><span>Day</span>${MEAL_SLOTS.map(s => `<span>${s.label}</span>`).join('')}<span>Calories / Protein</span><span>Mood / Energy</span></div>
       <div class="ml-table">${rowsHtml}</div>
       ${_mtCount() === 0 ? `<div class="ml-hint" style="margin-top:16px">Eat roughly the same things each week? Set them once in <b style="color:var(--primary);cursor:pointer" onclick="mealSetTab('template')">My week</b> and every week fills in automatically.</div>` : ''}
     </div>`;
@@ -676,7 +848,7 @@ function _renderFoodsManager() {
         <button class="ml-food-fav ${_mealFav(it) ? 'on' : ''}" title="Favorite" onclick="toggleMealItemFav('${it.id}')">${_mealFav(it) ? '★' : '☆'}</button>
         <div class="ml-food-main">
           <div class="ml-food-name">${escapeHtml(it.name || '')}</div>
-          <div class="ml-food-meta"><span class="ml-hb" style="color:${hm.color};background:${hm.color}1f">${hm.emo} ${hm.label}</span>${slotTags}${Number(it.use_count) ? `<span class="ml-uc">${it.use_count}× used</span>` : ''}</div>
+          <div class="ml-food-meta"><span class="ml-hb" style="color:${hm.color};background:${hm.color}1f">${hm.emo} ${hm.label}</span>${(_mNum(it.kcal) != null || _mNum(it.protein) != null) ? `<span class="ml-fn">${_mNum(it.kcal) != null ? _mFmtK(_mNum(it.kcal)) + ' kcal' : ''}${_mNum(it.kcal) != null && _mNum(it.protein) != null ? ' · ' : ''}${_mNum(it.protein) != null ? _mFmtP(_mNum(it.protein)) + ' g protein' : ''}</span>` : `<button class="ml-fn add" onclick="openFoodEditor('${it.id}')">+ calories</button>`}${slotTags}${Number(it.use_count) ? `<span class="ml-uc">${it.use_count}× used</span>` : ''}</div>
         </div>
         <button class="ml-food-x" title="Edit" onclick="openFoodEditor('${it.id}')">${renderIcon('edit', null, 'style="width:15px"')}</button>
         <button class="ml-food-x danger" title="Delete" onclick="deleteMealItem('${it.id}')">${renderIcon('trash', null, 'style="width:15px"')}</button>
@@ -692,7 +864,7 @@ window.mealAddStarter = async function (name) { await _miCreate({ name, slots: '
 
 window.openFoodEditor = function (id) {
   const it = id ? _miAll().find(i => String(i.id) === String(id)) : null;
-  window._mealDraft = { _food: true, id: it ? it.id : null, name: it ? (it.name || '') : '', slots: it ? _miSlots(it) : [], healthy: it ? (it.healthy || 'ok') : 'healthy', favorite: it ? _mealFav(it) : false };
+  window._mealDraft = { _food: true, id: it ? it.id : null, name: it ? (it.name || '') : '', slots: it ? _miSlots(it) : [], healthy: it ? (it.healthy || 'ok') : 'healthy', favorite: it ? _mealFav(it) : false, kcal: it ? _mNum(it.kcal) : null, protein: it ? _mNum(it.protein) : null };
   const d = window._mealDraft;
   const slotBtns = MEAL_SLOTS.map(s => `<button class="ml-pickslot ${d.slots.includes(s.key) ? 'on' : ''}" data-s="${s.key}" onclick="foodToggleSlot('${s.key}')">${s.label}</button>`).join('');
   const healthBtns = MEAL_HEALTH.map(h => `<button class="ml-pickhealth ${d.healthy === h.key ? 'on' : ''}" data-h="${h.key}" style="--hc:${h.color}" onclick="foodSetHealth('${h.key}')">${h.emo} ${h.label}</button>`).join('');
@@ -705,6 +877,11 @@ window.openFoodEditor = function (id) {
       <div class="ml-modal-b">
         <div class="ml-field-l">Food name</div>
         <input class="ml-input" id="foodName" placeholder="e.g. Oats with fruit & nuts" value="${escapeHtml(d.name)}" oninput="window._mealDraft.name=this.value">
+        <div class="ml-field-l">Per usual serving <span style="font-weight:500;text-transform:none;color:var(--text-3)">(optional)</span></div>
+        <div class="ml-nutin">
+          <label><span>Calories</span><input class="ml-input" type="number" inputmode="numeric" min="0" step="10" placeholder="kcal" value="${d.kcal ?? ''}" oninput="window._mealDraft.kcal=this.value"></label>
+          <label><span>Protein</span><div class="ml-unit"><input class="ml-input" type="number" inputmode="decimal" min="0" step="1" placeholder="g" value="${d.protein ?? ''}" oninput="window._mealDraft.protein=this.value"><em>g</em></div></label>
+        </div>
         <div class="ml-field-l">Good for <span style="font-weight:500;text-transform:none;color:var(--text-3)">(leave all off = any meal)</span></div>
         <div class="ml-seg" id="foodSlotSeg">${slotBtns}</div>
         <div class="ml-field-l">How healthy is it?</div>
@@ -731,7 +908,7 @@ window.saveFoodItem = async function () {
   const d = window._mealDraft; if (!d) return;
   const name = (d.name || '').trim();
   if (!name) { if (typeof showToast === 'function') showToast('Name the food first', 'error'); return; }
-  const fields = { name, slots: (d.slots || []).join(','), healthy: d.healthy || 'ok', favorite: !!d.favorite };
+  const fields = { name, slots: (d.slots || []).join(','), healthy: d.healthy || 'ok', favorite: !!d.favorite, kcal: _mNum(d.kcal), protein: _mNum(d.protein) };
   _mealCloseModal();
   if (d.id) await _miUpdate(d.id, fields); else await _miCreate(fields);
   renderMeals();
@@ -760,7 +937,8 @@ function _mealMountModal(html) {
 window.openMealEditor = function (date, slot) {
   const slotDef = MEAL_SLOTS.find(s => s.key === slot) || MEAL_SLOTS[0];
   const mp = _mpFor(date, slot) || {};
-  window._mealDraft = { date, slot, planned: mp.planned || '', eaten: mp.eaten || '', status: mp.status || '' };
+  const _n0 = _mealNums(date, slot);
+  window._mealDraft = { date, slot, planned: mp.planned || _mealEffective(date, slot).text || '', eaten: mp.eaten || '', status: mp.status || '', kcal: _n0.kcal, protein: _n0.protein, numsTouched: false };
   const d = _mealParse(date);
   const dateLbl = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   _mealMountModal(`
@@ -773,6 +951,11 @@ window.openMealEditor = function (date, slot) {
         <div class="ml-field-l">What's the plan?</div>
         <input class="ml-input" id="mealPlanned" placeholder="Type, or pick from your foods…" value="${escapeHtml(window._mealDraft.planned)}" oninput="mealOnPlanInput(this.value)" autocomplete="off">
         <div class="ml-pick" id="mealPick"></div>
+        <div class="ml-nutin">
+          <label><span>Calories</span><input class="ml-input" id="mealKcal" type="number" inputmode="numeric" min="0" step="10" placeholder="kcal" value="${window._mealDraft.kcal ?? ''}" oninput="mealNumInput('kcal',this.value)"></label>
+          <label><span>Protein</span><div class="ml-unit"><input class="ml-input" id="mealProt" type="number" inputmode="decimal" min="0" step="1" placeholder="g" value="${window._mealDraft.protein ?? ''}" oninput="mealNumInput('protein',this.value)"><em>g</em></div></label>
+        </div>
+        <div class="ml-nut-hint" id="mealNutHint"></div>
         <div class="ml-field-l">Did you eat it?</div>
         <div class="ml-seg" id="mealStatusSeg">
           <button class="s-ok ${window._mealDraft.status === 'as_planned' ? 'on' : ''}" data-s="as_planned" onclick="mealSetStatus('as_planned')"><span class="em">✅</span>Ate it</button>
@@ -781,7 +964,7 @@ window.openMealEditor = function (date, slot) {
         </div>
         <div id="mealEatenWrap" style="display:${window._mealDraft.status === 'different' ? 'block' : 'none'}">
           <div class="ml-field-l">What did you eat instead?</div>
-          <input class="ml-input" id="mealEaten" placeholder="e.g. Toast & eggs out" value="${escapeHtml(window._mealDraft.eaten)}" oninput="window._mealDraft.eaten=this.value">
+          <input class="ml-input" id="mealEaten" placeholder="e.g. Toast & eggs out" value="${escapeHtml(window._mealDraft.eaten)}" oninput="window._mealDraft.eaten=this.value;_mealDraftAutofill()">
         </div>
         <div class="ml-actions">
           ${(mp.planned || mp.status) ? `<button class="ml-btn ghost" onclick="clearMealEntry()">Clear</button>` : ''}
@@ -790,8 +973,31 @@ window.openMealEditor = function (date, slot) {
       </div>
     </div>`);
   mealRenderPick();
+  _mealNutHint();
   setTimeout(() => { const i = document.getElementById('mealPlanned'); if (i && window._mealDraft && !window._mealDraft.planned) i.focus(); }, 60);
 };
+window.mealNumInput = function (k, v) { const d = window._mealDraft; if (!d) return; d[k] = _mNum(v); d.numsTouched = true; _mealNutHint(); };
+// The food the numbers belong to: what you ate instead, else the plan.
+function _mealDraftFood(d) { return ((d.status === 'different' ? d.eaten : d.planned) || '').trim(); }
+// Pull numbers from My foods unless the user has typed their own.
+function _mealDraftAutofill() {
+  const d = window._mealDraft; if (!d || d.numsTouched || d._tmpl) return;
+  const n = _miNums(_mealDraftFood(d));
+  d.kcal = n.kcal; d.protein = n.protein;
+  const k = document.getElementById('mealKcal'), p = document.getElementById('mealProt');
+  if (k) k.value = n.kcal ?? ''; if (p) p.value = n.protein ?? '';
+  _mealNutHint();
+}
+function _mealNutHint() {
+  const el = document.getElementById('mealNutHint'); const d = window._mealDraft; if (!el || !d) return;
+  const food = _mealDraftFood(d); const n = _miNums(food);
+  if (!food) { el.textContent = ''; return; }
+  if (n.item && (n.kcal != null || n.protein != null)) {
+    const same = _mNum(d.kcal) === n.kcal && _mNum(d.protein) === n.protein;
+    el.innerHTML = same ? `From <b>My foods</b> — change it there to update every day you eat it.` : `Just for this meal · My foods says ${_mFmtK(n.kcal)} kcal, ${_mFmtP(n.protein)} g.`;
+  } else if (n.item) el.innerHTML = `Type the numbers once — they'll be saved to <b>${escapeHtml(n.item.name)}</b> in My foods.`;
+  else el.innerHTML = `Optional. Save this food to My foods and the numbers fill in by themselves next time.`;
+}
 
 /* Picker: chips of your foods (slot-aware, favorites & most-used first) + live search
    + "recently eaten" history + save-new-to-library. */
@@ -826,20 +1032,21 @@ window.mealRenderPick = function () {
   el.innerHTML = html;
   if (window.lucide) lucide.createIcons();
 };
-window.mealOnPlanInput = function (val) { if (window._mealDraft) window._mealDraft.planned = val; mealRenderPick(); };
+window.mealOnPlanInput = function (val) { if (window._mealDraft) window._mealDraft.planned = val; mealRenderPick(); _mealDraftAutofill(); };
 window.mealPickFood = function (name) {
   const d = window._mealDraft; if (!d) return;
   d.planned = name;
   const inp = document.getElementById('mealPlanned'); if (inp) inp.value = name;
   _miBumpUse(name);
+  if (d.status !== 'different') { d.numsTouched = false; _mealDraftAutofill(); }
   mealRenderPick();
 };
 window.mealPickFoodEl = function (el) { if (el && el.dataset) mealPickFood(el.dataset.food || ''); };
 window.mealAddPlannedToLibrary = async function () {
   const d = window._mealDraft; if (!d) return;
   const name = (d.planned || '').trim(); if (!name) return;
-  await _miCreate({ name, slots: d.slot, healthy: 'ok', favorite: false });
-  mealRenderPick();
+  await _miCreate({ name, slots: d.slot, healthy: 'ok', favorite: false, kcal: _mNum(d.kcal), protein: _mNum(d.protein) });
+  mealRenderPick(); _mealNutHint();
   if (typeof showToast === 'function') showToast('Added to My foods');
 };
 
@@ -863,7 +1070,9 @@ window.mealCycleStatus = async function (date, slot) {
     await _mpSave(date, slot, { planned: text, eaten: text, status: 'as_planned' });
     _miBumpUse(text);
   } else {
-    await _mpSave(date, slot, { planned: text, eaten: '', status: next });
+    const f = { planned: text, eaten: '', status: next };
+    if (next === 'different') { f.kcal = null; f.protein = null; }
+    await _mpSave(date, slot, f);
   }
   renderMeals();
 };
@@ -873,6 +1082,7 @@ window.mealSetStatus = function (s) {
   d.status = d.status === s ? '' : s;
   document.querySelectorAll('#mealStatusSeg button').forEach(b => b.classList.toggle('on', b.dataset.s === d.status));
   const w = document.getElementById('mealEatenWrap'); if (w) w.style.display = d.status === 'different' ? 'block' : 'none';
+  d.numsTouched = false; _mealDraftAutofill();
 };
 window.saveMealEntry = async function () {
   const d = window._mealDraft; if (!d) return;
@@ -880,15 +1090,18 @@ window.saveMealEntry = async function () {
   if (d.status === 'as_planned') fields.eaten = fields.planned;
   else if (d.status === 'different') fields.eaten = (d.eaten || '').trim();
   else fields.eaten = '';
+  const food = _mealDraftFood(d);
+  const taught = _mealTeachFood(food, d.kcal, d.protein);
+  Object.assign(fields, _mealOverride(food, d.kcal, d.protein));
   _mealCloseModal();
   await _mpSave(d.date, d.slot, fields);
   renderMeals();
-  if (typeof showToast === 'function') showToast('Saved');
+  if (typeof showToast === 'function') showToast(taught ? `Saved — numbers remembered for ${food}` : 'Saved');
 };
 window.clearMealEntry = async function () {
   const d = window._mealDraft; if (!d) return;
   _mealCloseModal();
-  await _mpSave(d.date, d.slot, { planned: '', eaten: '', status: null });
+  await _mpSave(d.date, d.slot, { planned: '', eaten: '', status: null, kcal: null, protein: null });
   renderMeals();
 };
 
@@ -993,4 +1206,113 @@ window.mealRepeatLastWeek = async function () {
   }
   renderMeals();
   if (typeof showToast === 'function') showToast(n ? `Copied ${n} meal${n > 1 ? 's' : ''} from last week` : 'Nothing to copy from last week');
+};
+
+
+/* ── Day sheet: every meal's calories & protein, plus extras ─────────────── */
+window.openMealDayNutrition = function (date) {
+  const d = _mealParse(date);
+  const dateLbl = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  const md = _mdFor(date) || {};
+  const rows = MEAL_SLOTS.map(s => {
+    const n = _mealNums(date, s.key);
+    return { slot: s.key, label: s.label, food: n.food || '', state: n.state, kcal: n.kcal, protein: n.protein, k0: n.kcal, p0: n.protein };
+  });
+  window._mealDraft = { _day: true, date, rows, extraK: _mNum(md.extra_kcal), extraP: _mNum(md.extra_protein) };
+  const stLbl = { eaten: 'eaten', planned: 'planned', skipped: 'skipped', none: '' };
+  const rowHtml = (r, i) => `<div class="ml-dn-row">
+      <div class="ml-dn-l"><div class="ml-dn-slot">${r.label}${stLbl[r.state] ? `<span class="ml-dn-st ${r.state}">${stLbl[r.state]}</span>` : ''}</div>
+        <div class="ml-dn-food ${r.food ? '' : 'none'}">${r.food ? escapeHtml(r.food) : 'Nothing planned'}</div></div>
+      <input class="ml-input" type="number" inputmode="numeric" min="0" step="10" placeholder="kcal" value="${r.state === 'skipped' ? '' : (r.kcal ?? '')}" ${r.state === 'skipped' ? 'disabled' : ''} oninput="mealDayNum(${i},'kcal',this.value)">
+      <div class="ml-unit"><input class="ml-input" type="number" inputmode="decimal" min="0" step="1" placeholder="g" value="${r.state === 'skipped' ? '' : (r.protein ?? '')}" ${r.state === 'skipped' ? 'disabled' : ''} oninput="mealDayNum(${i},'protein',this.value)"><em>g</em></div>
+    </div>`;
+  _mealMountModal(`
+    <div class="ml-modal">
+      <div class="ml-modal-h">
+        <div><div class="ml-modal-title">Calories & protein</div><div class="ml-modal-sub">${dateLbl}</div></div>
+        <button class="ml-modal-x" onclick="closeMealModal()">${renderIcon('x', null, 'style="width:18px"')}</button>
+      </div>
+      <div class="ml-modal-b">
+        <div class="ml-dn-head"><span>Meal</span><span>kcal</span><span>Protein</span></div>
+        ${rows.map(rowHtml).join('')}
+        <div class="ml-dn-row">
+          <div class="ml-dn-l"><div class="ml-dn-slot">Extras</div><div class="ml-dn-food none">Snacks, drinks, anything else</div></div>
+          <input class="ml-input" type="number" inputmode="numeric" min="0" step="10" placeholder="kcal" value="${window._mealDraft.extraK ?? ''}" oninput="mealDayNum(-1,'kcal',this.value)">
+          <div class="ml-unit"><input class="ml-input" type="number" inputmode="decimal" min="0" step="1" placeholder="g" value="${window._mealDraft.extraP ?? ''}" oninput="mealDayNum(-1,'protein',this.value)"><em>g</em></div>
+        </div>
+        <div class="ml-dn-tot" id="mealDayTot"></div>
+        <div class="ml-dn-note">Meals not marked yet count as <b>planned</b>. Numbers for a food in My foods fill in by themselves; typing here changes just this day (and teaches the food if it has none yet).</div>
+        <div class="ml-actions">
+          <button class="ml-btn ghost" onclick="openMealGoals('${date}')">Goals</button>
+          <button class="ml-btn primary" onclick="saveMealDayNutrition()">Save</button>
+        </div>
+      </div>
+    </div>`);
+  _mealDayTotals();
+};
+window.mealDayNum = function (i, k, v) {
+  const d = window._mealDraft; if (!d || !d._day) return;
+  if (i < 0) d[k === 'kcal' ? 'extraK' : 'extraP'] = _mNum(v);
+  else d.rows[i][k] = _mNum(v);
+  _mealDayTotals();
+};
+function _mealDayTotals() {
+  const d = window._mealDraft, el = document.getElementById('mealDayTot'); if (!d || !el) return;
+  let k = d.extraK || 0, p = d.extraP || 0, pk = 0, pp = 0;
+  d.rows.forEach(r => { if (r.state === 'eaten') { k += r.kcal || 0; p += r.protein || 0; } else if (r.state === 'planned') { pk += r.kcal || 0; pp += r.protein || 0; } });
+  const g = _mealGoals();
+  el.innerHTML = `${_mealMeter(k + pk, g.kcal, 'kcal', 'k')}${_mealMeter(p + pp, g.protein, 'g', 'p')}
+    ${pk || pp ? `<div class="ml-nut-s" style="grid-column:1/-1">Includes ${_mFmtK(pk)} kcal · ${_mFmtP(pp)} g still planned</div>` : ''}
+    ${g.kcal || g.protein ? `<div class="ml-nut-s" style="grid-column:1/-1">${g.protein ? (p + pp >= g.protein ? 'Protein goal reached 💪' : `${_mFmtP(g.protein - p - pp)} g protein to go`) : ''}${g.kcal && g.protein ? ' · ' : ''}${g.kcal ? (k + pk > g.kcal ? `${_mFmtK(k + pk - g.kcal)} kcal over` : `${_mFmtK(g.kcal - k - pk)} kcal left`) : ''}</div>` : ''}`;
+}
+window.saveMealDayNutrition = async function () {
+  const d = window._mealDraft; if (!d || !d._day) return;
+  const date = d.date;
+  _mealCloseModal();
+  let taught = 0;
+  for (const r of d.rows) {
+    if (r.state === 'skipped') continue;
+    if (_mNum(r.kcal) === r.k0 && _mNum(r.protein) === r.p0) continue;   // untouched
+    if (!r.food && r.kcal == null && r.protein == null) continue;
+    if (_mealTeachFood(r.food, r.kcal, r.protein)) taught++;
+    const o = _mealOverride(r.food, r.kcal, r.protein);
+    const mp = _mpFor(date, r.slot);
+    const f = Object.assign({}, o);
+    if (!mp || !mp.planned) { f.planned = r.food || ''; }
+    await _mpSave(date, r.slot, f);
+  }
+  const md = _mdFor(date) || {};
+  if (_mNum(md.extra_kcal) !== d.extraK || _mNum(md.extra_protein) !== d.extraP) await _mdSave(date, { extra_kcal: d.extraK, extra_protein: d.extraP });
+  renderMeals();
+  if (typeof showToast === 'function') showToast(taught ? `Saved — numbers remembered for ${taught} food${taught > 1 ? 's' : ''}` : 'Saved');
+};
+
+/* ── Daily goals ── */
+window.openMealGoals = function (backToDate) {
+  const g = _mealGoals();
+  window._mealDraft = { _goals: true, kcal: g.kcal, protein: g.protein, back: backToDate || null };
+  _mealMountModal(`
+    <div class="ml-modal">
+      <div class="ml-modal-h">
+        <div><div class="ml-modal-title">Daily goals</div><div class="ml-modal-sub">What you aim for each day</div></div>
+        <button class="ml-modal-x" onclick="closeMealModal()">${renderIcon('x', null, 'style="width:18px"')}</button>
+      </div>
+      <div class="ml-modal-b">
+        <div class="ml-nutin">
+          <label><span>Calories</span><input class="ml-input" type="number" inputmode="numeric" min="0" step="50" placeholder="e.g. 2200" value="${g.kcal ?? ''}" oninput="window._mealDraft.kcal=_mNum(this.value)"></label>
+          <label><span>Protein</span><div class="ml-unit"><input class="ml-input" type="number" inputmode="decimal" min="0" step="5" placeholder="e.g. 120" value="${g.protein ?? ''}" oninput="window._mealDraft.protein=_mNum(this.value)"><em>g</em></div></label>
+        </div>
+        <div class="ml-dn-note">A common starting point for someone training regularly is about 1.6–2 g of protein per kg of body weight. Leave a box empty if you don't want to track it.</div>
+        <div class="ml-actions"><button class="ml-btn primary" onclick="saveMealGoals()">Save goals</button></div>
+      </div>
+    </div>`);
+};
+window.saveMealGoals = async function () {
+  const d = window._mealDraft; if (!d || !d._goals) return;
+  const back = d.back;
+  _mealCloseModal();
+  await _mealSaveGoals({ kcal: d.kcal, protein: d.protein });
+  renderMeals();
+  if (back) openMealDayNutrition(back);
+  if (typeof showToast === 'function') showToast('Goals saved');
 };
