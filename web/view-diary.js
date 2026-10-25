@@ -4649,7 +4649,7 @@ window.dbMealToggle = function (key) {
   const m = _dbMeals(_dpDate()).find(x => x.key === key);
   if (!m) return;
   if (m.skipped) return _dbMealSave(key, { status: null, eaten: '' });
-  if (!m.planned && !m.done) { dbGo('meals'); return; }
+  if (!m.planned && !m.done) { dbMealEdit(key); return; }
   return _dbMealSave(key, m.done ? { status: null, eaten: '' } : { status: 'as_planned', planned: m.planned, eaten: m.planned });
 };
 
@@ -4766,7 +4766,7 @@ function _dbRow(k, id, title, meta, done, opts = {}) {
   } else if (opts.editable === false) {
     name = `<span class="dbd-row-t">${_drpEsc(title)}</span>`;
   } else {
-    name = `<button type="button" class="dbd-row-t dbd-name" onclick="dbEdit('${k}','${_dbq(id)}')" title="Click to rename">${_drpEsc(title)}</button>`;
+    name = `<button type="button" class="dbd-row-t dbd-name" onclick="${opts.nameClick || `dbEdit('${k}','${_dbq(id)}')`}" title="${opts.nameTitle || 'Click to rename'}">${_drpEsc(title)}</button>`;
   }
   const del = editing || opts.deletable === false ? ''
     : `<button type="button" class="dbd-x" onclick="dbDelete('${k}','${_dbq(id)}')" title="${opts.delLabel || 'Delete'}" aria-label="${opts.delLabel || 'Delete'}: ${_drpEsc(title)}"><i data-lucide="trash-2"></i></button>`;
@@ -4913,7 +4913,7 @@ function _dbPlannerHTML(ds) {
     <div class="dbd-legend">${legend}</div>
     ${form ? `<div class="dbd-form">${form}</div>` : ''}
     ${ad ? `<div class="dbd-allday"><span>All day</span>${ad}</div>` : ''}
-    <div class="dbd-box-b" data-scroll="plan">${empty}<div class="dbd-tl" data-h0="${h0}" style="height:${(h1 - h0) * DB_H}px">${hours}${blocks}${nowLine}</div></div>
+    <div class="dbd-box-b" data-scroll="plan">${empty}<div class="dbd-tl" data-h0="${h0}" style="height:${(h1 - h0) * DB_H}px">${hours}${blocks}${nowLine}${_dbQaHTML(y, h0, h1)}</div></div>
     <footer class="dbd-box-f dbd-plan-f">
       ${total ? `<button type="button" class="dp-link" onclick="_dp.tab='plan'; drwPlanInsert()"><i data-lucide="file-input"></i>Insert into entry</button>` : ''}
       <button type="button" class="dp-link" onclick="drwTplMode('save')"><i data-lucide="save"></i>Save as template</button>
@@ -4952,18 +4952,168 @@ function _dbHabitsHTML(ds) {
     rows || '<p class="dbd-empty">No habits scheduled this day.</p>');
 }
 
+/* ── Food box: every meal is edited right here (what's planned, what you ate, time, kcal, protein) ── */
+function _dbFoodItem(name) {
+  const n = String(name || '').trim().toLowerCase(); if (!n) return null;
+  return (state.data.meal_items || []).find(i => String(i.name || '').trim().toLowerCase() === n) || null;
+}
+function _dbNum(v) { if (v === '' || v == null) return null; const n = Number(v); return isFinite(n) ? n : null; }
+// kcal/protein for a meal: typed on the meal, else the food's own numbers from My foods.
+function _dbMealNut(m) {
+  if (m.skipped) return { kcal: 0, protein: 0, typed: false };
+  const r = m.row || {};
+  let kcal = _dbNum(r.kcal), protein = _dbNum(r.protein); const typed = kcal != null || protein != null;
+  if (!typed) { const it = _dbFoodItem(m.name); if (it) { kcal = _dbNum(it.kcal); protein = _dbNum(it.protein); } }
+  return { kcal, protein, typed };
+}
+function _dbFmtNut(n) { return [n.kcal != null ? `${Math.round(n.kcal)} kcal` : '', n.protein != null ? `${Math.round(n.protein)}g P` : ''].filter(Boolean).join(' · '); }
+function _dbMealEditorHTML(m) {
+  const n = _dbMealNut(m), r = m.row || {};
+  const st = m.skipped ? 'skipped' : m.status === 'different' ? 'other' : m.done ? 'ate' : 'plan';
+  const pill = (v, l) => `<button type="button" class="dbf-pill${st === v ? ' on' : ''}" data-v="${v}" onclick="dbMealPill(this)">${l}</button>`;
+  return `<div class="dbf-ed" data-key="${m.key}" data-st="${st}" onkeydown="dbMealKey(event)">
+    <div class="dbf-seg" role="group" aria-label="Status">${pill('plan', 'Planned')}${pill('ate', 'Ate it')}${pill('other', 'Ate something else')}${pill('skipped', 'Skipped')}</div>
+    <label class="dbf-f dbf-f-plan"><span>Planned</span><input class="dbf-plan" list="dbfFoods" value="${_drpEsc(m.planned)}" placeholder="e.g. Oats + banana" autocomplete="off" oninput="dbMealAuto(this)"></label>
+    <label class="dbf-f dbf-f-eat"><span>Ate instead</span><input class="dbf-eat" list="dbfFoods" value="${_drpEsc(m.status === 'different' ? (r.eaten || '') : '')}" placeholder="What did you actually eat?" autocomplete="off" oninput="dbMealAuto(this)"></label>
+    <div class="dbf-nums">
+      <label class="dbf-f"><span>Time</span><input class="dbf-time" type="time" value="${_drpEsc(m.time)}"></label>
+      <label class="dbf-f"><span>kcal</span><input class="dbf-k" type="number" min="0" step="1" inputmode="numeric" value="${n.kcal != null ? Math.round(n.kcal) : ''}" placeholder="—"></label>
+      <label class="dbf-f"><span>Protein g</span><input class="dbf-p" type="number" min="0" step="0.5" inputmode="decimal" value="${n.protein != null ? +n.protein : ''}" placeholder="—"></label>
+    </div>
+    <div class="dbf-acts">
+      ${m.row ? `<button type="button" class="dp-link" onclick="dbMealReset('${m.key}')" title="Drop this day's changes and use the weekly plan"><i data-lucide="rotate-ccw"></i>Use weekly plan</button>` : ''}
+      <span style="flex:1"></span>
+      <button type="button" class="dp-cancel" onclick="dbMealEdit(null)">Cancel</button>
+      <button type="button" class="dp-ok" onclick="dbMealSaveEd(this)">Save</button>
+    </div>
+  </div>`;
+}
 function _dbFoodHTML(ds) {
   const meals = _dbMeals(ds);
   const planned = meals.filter(m => m.name);
-  void planned;
+  const ed = _db.mealEd;
   const rows = meals.map(m => {
-    if (m.skipped) return _dbRow('food', m.key, `${m.label}: skipped`, _dpFmt(m.time), false, { muted: true, editable: false, deletable: false, onclick: `dbMealToggle('${m.key}')` });
-    if (m.name) return _dbRow('food', m.key, m.name, `${m.label} · ${_dpFmt(m.time)}${m.status === 'different' ? ' · ate other' : ''}`, m.done, { delLabel: 'Remove from this day' });
-    return _dbRow('food', m.key, `${m.label}: not planned`, _dpFmt(m.time), false, { muted: true, editable: false, deletable: false, onclick: "dbGo('meals')" });
+    const open = ed === m.key;
+    const nut = _dbMealNut(m), nutTxt = m.name ? _dbFmtNut(nut) : '';
+    const o = { nameClick: `dbMealEdit('${m.key}')`, nameTitle: 'Edit this meal', delLabel: 'Skip this meal today' };
+    let row;
+    if (m.skipped) row = _dbRow('food', m.key, `${m.label}: skipped`, _dpFmt(m.time), false, { ...o, muted: true, deletable: false, onclick: `dbMealToggle('${m.key}')` });
+    else if (m.name) row = _dbRow('food', m.key, m.name, [m.label, _dpFmt(m.time), m.status === 'different' ? 'ate other' : '', nutTxt].filter(Boolean).join(' · '), m.done, o);
+    else row = _dbRow('food', m.key, `${m.label}: add a meal`, _dpFmt(m.time), false, { ...o, muted: true, deletable: false, onclick: `dbMealEdit('${m.key}')` });
+    return `<div class="dbf-item${open ? ' open' : ''}">${row}${open ? _dbMealEditorHTML(m) : ''}</div>`;
   }).join('');
+  // Day totals: eaten so far, plus what's still planned, against the goals set in the Food Planner.
+  let eK = 0, eP = 0, pK = 0, pP = 0, any = false;
+  meals.forEach(m => { if (!m.name) return; const n = _dbMealNut(m); if (n.kcal != null || n.protein != null) any = true; if (m.done) { eK += n.kcal || 0; eP += n.protein || 0; } else { pK += n.kcal || 0; pP += n.protein || 0; } });
+  let goals = {};
+  try { const st = state.data.settings && state.data.settings[0]; const g = st && st.nutrition_goals; goals = (typeof g === 'string' ? JSON.parse(g) : g) || {}; } catch (e) { }
+  const gk = _dbNum(goals.kcal), gp = _dbNum(goals.protein);
+  const bar = (v, g) => g ? `<span class="dbf-bar"><b style="width:${Math.min(100, v / g * 100)}%"></b></span>` : '';
+  const foot = any || gk || gp ? `<div class="dbf-tot">
+      <div><span class="dbf-tl">Eaten</span><strong>${Math.round(eK)}</strong>${gk ? `<em>/ ${gk}</em>` : ''} kcal ${bar(eK, gk)}</div>
+      <div><span class="dbf-tl">Protein</span><strong>${Math.round(eP)}</strong>${gp ? `<em>/ ${gp}</em>` : ''} g ${bar(eP, gp)}</div>
+      ${pK || pP ? `<div class="dbf-left">+ ${Math.round(pK)} kcal · ${Math.round(pP)}g still planned</div>` : ''}
+    </div>` : '';
+  const dl = `<datalist id="dbfFoods">${(state.data.meal_items || []).map(i => `<option value="${_drpEsc(i.name || '')}">`).join('')}</datalist>`;
   return _dbBox('food', 'Food', planned.length ? `${meals.filter(m => m.done).length}/${planned.length}` : '',
-    _dbIcon("dbGo('meals')", 'arrow-up-right', 'Open Food Planner'), rows);
+    _dbIcon("dbGo('meals')", 'arrow-up-right', 'Open Food Planner'), rows + dl, foot);
 }
+window.dbMealEdit = function (key) {
+  _db.mealEd = key; _db.edit = null;
+  dbRender();
+  if (key) setTimeout(() => { const i = document.querySelector('#dbSide .dbf-ed .dbf-plan'); if (i) { i.focus(); i.select(); } i && i.closest('.dbf-item').scrollIntoView({ block: 'nearest' }); }, 0);
+};
+window.dbMealPill = function (b) {
+  const ed = b.closest('.dbf-ed'); ed.dataset.st = b.dataset.v;
+  ed.querySelectorAll('.dbf-pill').forEach(x => x.classList.toggle('on', x === b));
+  if (b.dataset.v === 'other') { const e = ed.querySelector('.dbf-eat'); e && e.focus(); }
+};
+// Typing a food from My foods fills its kcal/protein (only if you haven't typed your own).
+window.dbMealAuto = function (inp) {
+  const ed = inp.closest('.dbf-ed'), it = _dbFoodItem(inp.value);
+  if (!it) return;
+  if (inp.classList.contains('dbf-plan') && ed.dataset.st === 'other') return;
+  const k = ed.querySelector('.dbf-k'), p = ed.querySelector('.dbf-p');
+  if (it.kcal != null && (!k.value || k.dataset.auto)) { k.value = Math.round(it.kcal); k.dataset.auto = '1'; }
+  if (it.protein != null && (!p.value || p.dataset.auto)) { p.value = +it.protein; p.dataset.auto = '1'; }
+};
+window.dbMealKey = function (e) {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); dbMealEdit(null); }
+  else if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); dbMealSaveEd(e.target); }
+};
+window.dbMealSaveEd = async function (el) {
+  const ed = el.closest('.dbf-ed'); if (!ed) return;
+  const key = ed.dataset.key, ds = _dpDate();
+  const m = _dbMeals(ds).find(x => x.key === key); if (!m) return;
+  const st = ed.dataset.st;
+  const plan = ed.querySelector('.dbf-plan').value.trim(), eat = ed.querySelector('.dbf-eat').value.trim();
+  if ((st === 'plan' || st === 'ate') && !plan) { showToast('Add what’s planned first'); ed.querySelector('.dbf-plan').focus(); return; }
+  if (st === 'other' && !eat) { showToast('Add what you ate'); ed.querySelector('.dbf-eat').focus(); return; }
+  let kcal = _dbNum(ed.querySelector('.dbf-k').value), protein = _dbNum(ed.querySelector('.dbf-p').value);
+  const food = st === 'other' ? eat : plan, it = _dbFoodItem(food);
+  // Same rule as the Food Planner: only store numbers that differ from the food's own.
+  if (it && kcal === _dbNum(it.kcal) && protein === _dbNum(it.protein)) { kcal = null; protein = null; }
+  if (st === 'skipped') { kcal = null; protein = null; }
+  const fields = {
+    planned: plan,
+    status: st === 'ate' ? 'as_planned' : st === 'other' ? 'different' : st === 'skipped' ? 'skipped' : null,
+    eaten: st === 'ate' ? plan : st === 'other' ? eat : '',
+    kcal, protein,
+  };
+  const r = m.row || {};
+  const same = (a, b) => (a == null || a === '' ? null : String(a)) === (b == null || b === '' ? null : String(b));
+  const changed = !m.row ? (plan !== m.planned || fields.status || kcal != null || protein != null)
+    : Object.keys(fields).some(k => !same(r[k], fields[k]));
+  const t = ed.querySelector('.dbf-time').value;
+  _db.mealEd = null;
+  if (changed) await _dbMealSave(key, fields); else dbRender();
+  if (t && t !== m.time) {
+    const [h, mi] = t.split(':').map(Number);
+    await _dbSetTime('food', key, h * 60 + mi, m.dur, `${m.label}`);
+  }
+};
+window.dbMealReset = async function (key) {
+  const m = _dbMeals(_dpDate()).find(x => x.key === key); if (!m || !m.row) return;
+  const row = m.row;
+  _db.mealEd = null;
+  state.data.meal_plan = (state.data.meal_plan || []).filter(x => x !== row);
+  dbRender();
+  try { const res = await apiCall('delete', 'meal_plan', {}, row.id); if (res && res.success === false) throw new Error(res.message); showToast(`${m.label} back to the weekly plan`); }
+  catch (e) { state.data.meal_plan.push(row); dbRender(); showToast('Couldn’t reset the meal'); }
+};
+(function dbFoodStyles() {
+  if (document.getElementById('dbFoodStyles')) return;
+  const st = document.createElement('style'); st.id = 'dbFoodStyles';
+  st.textContent = `
+.dbd-box.k-food .dbd-row { flex-wrap: wrap; row-gap: 0; }
+.dbd-box.k-food .dbd-row-m { flex-basis: 100%; padding-left: 30px; margin-top: -3px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dbd-box.k-food .dbd-x { top: 18px; }
+.dbd-grid > .dbd-box.k-food:has(.dbf-item.open) { grid-column: 1 / -1; height: auto; }
+.dbd-box.k-food:has(.dbf-item.open) .dbd-box-b { overflow: visible; }
+.dbf-item.open { background: color-mix(in srgb, var(--c, #ea580c) 6%, transparent); border-radius: 10px; margin: 2px -6px; padding: 0 6px 8px; }
+.dbf-ed { display: grid; gap: 8px; padding: 4px 2px 0; }
+.dbf-seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.dbf-pill { font: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border, #e5e7eb); background: var(--bg-primary, #fff); color: var(--text-secondary, #6b7280); cursor: pointer; }
+.dbf-pill.on { background: var(--c, #ea580c); border-color: var(--c, #ea580c); color: #fff; }
+.dbf-f { display: grid; gap: 3px; min-width: 0; }
+.dbf-f > span { font-size: 11px; font-weight: 600; color: var(--text-secondary, #6b7280); text-transform: uppercase; letter-spacing: .03em; }
+.dbf-f input { font: inherit; font-size: 14px; width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; background: var(--bg-primary, #fff); color: var(--text-primary, #111); }
+.dbf-f input:focus { outline: none; border-color: var(--c, #ea580c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, #ea580c) 18%, transparent); }
+.dbf-ed:not([data-st="other"]) .dbf-f-eat { display: none; }
+.dbf-ed[data-st="skipped"] .dbf-nums .dbf-f:not(:first-child) { opacity: .4; pointer-events: none; }
+.dbf-nums { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 6px; }
+.dbf-acts { display: flex; align-items: center; gap: 6px; }
+.dbf-tot { display: grid; gap: 4px; font-size: 12px; color: var(--text-secondary, #6b7280); width: 100%; }
+.dbf-tot > div { display: flex; align-items: center; gap: 5px; }
+.dbf-tot strong { color: var(--text-primary, #111); font-size: 13px; }
+.dbf-tot em { font-style: normal; }
+.dbf-tl { width: 52px; font-weight: 600; text-transform: uppercase; font-size: 10.5px; letter-spacing: .03em; }
+.dbf-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--border, #e5e7eb); overflow: hidden; margin-left: 4px; }
+.dbf-bar b { display: block; height: 100%; background: var(--c, #ea580c); border-radius: 3px; }
+.dbf-left { font-size: 11.5px; padding-left: 57px; }
+`;
+  document.head.appendChild(st);
+})();
 
 function _dbGymHTML(ds) {
   const g = _dbGym(ds);
@@ -4985,9 +5135,9 @@ window.dbRender = function () {
   side.querySelectorAll('[data-scroll]').forEach(el => { keep[el.dataset.scroll] = el.scrollTop; });
   const live = side.querySelector('.dbd-name-in');
   if (live && _db.edit) _db.editVal = live.value;
-  const nav = `<nav class="dbd-nav" aria-label="Jump to">${[['plan', 'Planner', 'event'], ['task', 'Tasks', 'task'], ['habit', 'Habits', 'habit'], ['food', 'Food', 'food'], ['gym', 'Gym', 'gym'], ['outfit', 'Outfits', 'outfit'], ['vision', 'Vision', 'vision']]
+  const nav = `<nav class="dbd-nav" aria-label="Jump to">${[['vision', 'Vision', 'vision'], ['plan', 'Planner', 'event'], ['task', 'Tasks', 'task'], ['habit', 'Habits', 'habit'], ['food', 'Food', 'food'], ['gym', 'Gym', 'gym'], ['outfit', 'Outfits', 'outfit']]
     .map(([b, l, k]) => `<button type="button" class="dbd-jump k-${k}" onclick="dbJump('${b}')"><span class="dbd-dot"></span>${l}</button>`).join('')}</nav>`;
-  side.innerHTML = nav + _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>` + _dbOutfitHTML(ds) + _dbVisionHTML();
+  side.innerHTML = nav + _dbVisionHTML() + _dbPlannerHTML(ds) + `<div class="dbd-grid">${_dbTasksHTML(ds)}${_dbHabitsHTML(ds)}${_dbFoodHTML(ds)}${_dbGymHTML(ds)}</div>` + _dbOutfitHTML(ds);
   side.scrollTop = sideTop;
   side.querySelectorAll('[data-scroll]').forEach(el => { if (keep[el.dataset.scroll] != null) el.scrollTop = keep[el.dataset.scroll]; });
   side.querySelectorAll('.dbd-name-in').forEach(inp => {
@@ -5032,7 +5182,7 @@ window.dbJump = function (b) {
 })();
 
 async function _dbEnsureData() {
-  const need = ['meal_plan', 'meal_template', 'gym_sessions', 'gym_plans', 'day_overrides', 'vision', 'vision_images'].filter(t => !Array.isArray(state.data[t]));
+  const need = ['meal_plan', 'meal_template', 'meal_items', 'gym_sessions', 'gym_plans', 'day_overrides', 'vision', 'vision_images'].filter(t => !Array.isArray(state.data[t]));
   if (!need.length || typeof apiGet !== 'function') return;
   try {
     const got = await Promise.all(need.map(t => apiGet(t).catch(() => null)));
@@ -5387,6 +5537,12 @@ if (!window._dbDragWired) {
     const rs = t.closest('.dbd-blk-rs');
     const blk = t.closest('.dbd-blk[data-k]');
     const src = t.closest('.dbd-ad[data-k], .dbd-grip[data-k]');
+    if (_db.qa && !t.closest('.dbq-pop')) _dbQaClose();
+    if (!blk && !src && !rs && t.closest('.dbd-tl') && !t.closest('.dbq-pop, .dbq-ghost')) {
+      const s0 = Math.floor(_dbMinAt(e.clientY) / 15) * 15;
+      _dbDrag.d = { mode: 'create', x0: e.clientX, y0: e.clientY, touch: e.pointerType !== 'mouse', started: false, s0, s: s0, e: s0 + 60 };
+      return;
+    }
     const el = blk || src;
     if (!el || (el.dataset.k === 'gym' && !blk && !src)) return;
     const touch = e.pointerType !== 'mouse';
@@ -5399,6 +5555,13 @@ if (!window._dbDragWired) {
   document.addEventListener('pointermove', e => {
     const d = _dbDrag.d; if (!d) return;
     const dist = Math.hypot(e.clientX - d.x0, e.clientY - d.y0);
+    if (d.mode === 'create') {
+      if (d.touch) { if (dist > 8) _dbDrag.d = null; return; }   // on phones a drag is a scroll; a tap creates
+      if (!d.started && dist < 4) return;
+      d.started = true; e.preventDefault();
+      _dbQaDragMove(d, e.clientY);
+      return;
+    }
     if (!d.started) {
       if (d.touch && !d.handle) { if (dist > 8) { clearTimeout(d.timer); _dbDrag.d = null; } return; }
       if (dist < 4) return;
@@ -5411,6 +5574,13 @@ if (!window._dbDragWired) {
     const d = _dbDrag.d; if (!d) return;
     _dbDrag.d = null;
     if (d.timer) clearTimeout(d.timer);
+    if (d.mode === 'create') {
+      document.querySelectorAll('#dbSide .dbq-ghost.live').forEach(g => g.remove());
+      document.body.classList.remove('dbd-dragging');
+      if (e.type === 'pointercancel') return;
+      _dbDrag.justDragged = Date.now();
+      return d.started ? dbQuickAdd(d.s, d.e) : dbQuickAdd(d.s0, Math.min(1440, d.s0 + 60));
+    }
     if (!d.started) return;
     if (e.type === 'pointercancel') { _dbDragCleanup(d); dbRender(); return; }
     _dbDragEnd(d);
@@ -5426,82 +5596,364 @@ if (!window._dbDragWired) {
   document.addEventListener('contextmenu', e => { if (_dbDrag.d && e.target.closest && e.target.closest('#dbSide')) e.preventDefault(); }, true);
 }
 
-/* ── Vision: story-style strip at the bottom of the right side ── */
-function _dbVisionHTML() {
-  const goals = (state.data.vision || []).filter(g => g.status !== 'achieved');
-  const loaded = typeof window.v2CoverSync === 'function' || typeof v2CoverSync === 'function';
-  if (!loaded && goals.length && !_db.visLoading && typeof window.ensureViewLoaded === 'function') {
-    _db.visLoading = true;
-    window.ensureViewLoaded('vision').then(() => { if (document.getElementById('dbSide')) dbRender(); }).catch(() => { });
+
+/* ── Click (or drag) on an empty part of the planner to add something there,
+   like Google Calendar: a block appears at that time with a small card to
+   name it and choose Event or Task. Enter saves, Esc closes. ── */
+function _dbQaHM(m) { return _dbHM(Math.max(0, Math.min(1439, m))); }
+function _dbQaDragMove(d, y) {
+  const tl = _dbTlEl(); if (!tl) return;
+  const box = tl.closest('[data-scroll="plan"]');
+  if (box) { const r = box.getBoundingClientRect(); if (y < r.top + 26) box.scrollTop -= 9; else if (y > r.bottom - 26) box.scrollTop += 9; }
+  const cur = Math.floor(_dbMinAt(y) / 15) * 15;
+  d.s = Math.max(0, Math.min(d.s0, cur)); d.e = Math.min(1440, Math.max(d.s0 + 15, cur + 15));
+  document.body.classList.add('dbd-dragging');
+  let g = tl.querySelector('.dbq-ghost.live');
+  if (!g) { g = document.createElement('div'); g.className = 'dbq-ghost live'; tl.appendChild(g); }
+  g.style.top = (_dbTopFor(d.s) + 1) + 'px'; g.style.height = Math.max(20, _dbTopFor(d.e) - _dbTopFor(d.s) - 2) + 'px';
+  g.textContent = `${_dpFmt(_dbQaHM(d.s))} – ${_dpFmt(_dbQaHM(d.e))}`;
+}
+function _dbQaHTML(y, h0, h1) {
+  const q = _db.qa; if (!q) return '';
+  const top = y(q.s) + 1, hgt = Math.max(22, y(q.e) - y(q.s)) - 2;
+  const below = q.e <= h1 * 60 - 150;                       // room for the card under the block?
+  const popTop = below ? top + hgt + 6 : Math.max(0, top - 178);
+  const kind = (k, l, ic) => `<button type="button" class="dbq-k${q.kind === k ? ' on' : ''}" onclick="dbQaKind('${k}')"><i data-lucide="${ic}"></i>${l}</button>`;
+  return `<div class="dbq-ghost k-${q.kind === 'task' ? 'task' : 'event'}" style="top:${top}px;height:${hgt}px">${_drpEsc(q.title || '(No title)')}<span>${_dpFmt(_dbQaHM(q.s))} – ${_dpFmt(_dbQaHM(q.e))}</span></div>
+  <div class="dbq-pop" style="top:${popTop}px" onkeydown="dbQaKey(event)">
+    <input class="dbq-title" type="text" placeholder="Add title" value="${_drpEsc(q.title || '')}" oninput="_db.qa && (_db.qa.title = this.value); const g=this.closest('.dbd-tl').querySelector('.dbq-ghost'); if(g&&g.firstChild) g.firstChild.nodeValue = this.value || '(No title)'" autocomplete="off" aria-label="Title">
+    <div class="dbq-kinds">${kind('event', 'Event', 'calendar')}${kind('task', 'Task', 'check-square')}</div>
+    <div class="dbq-time"><i data-lucide="clock"></i>
+      <input class="dbq-s" type="time" value="${_dbQaHM(q.s)}" onchange="dbQaTime()" aria-label="Start"><span>–</span>
+      <input class="dbq-e" type="time" value="${_dbQaHM(q.e)}" onchange="dbQaTime()" aria-label="End">
+    </div>
+    <div class="dbq-acts"><button type="button" class="dp-cancel" onclick="_dbQaClose()">Cancel</button><button type="button" class="dp-ok" onclick="dbQaSave()">Save</button></div>
+  </div>`;
+}
+window.dbQuickAdd = function (s, e) {
+  _db.qa = { s, e: Math.max(s + 15, e), kind: _db.qaKind || 'event', title: '' };
+  dbRender();
+  setTimeout(() => {
+    const pop = document.querySelector('#dbSide .dbq-pop'); if (!pop) return;
+    const box = pop.closest('[data-scroll="plan"]');
+    if (box) { const pr = pop.getBoundingClientRect(), br = box.getBoundingClientRect(); if (pr.bottom > br.bottom) box.scrollTop += pr.bottom - br.bottom + 8; else if (pr.top < br.top) box.scrollTop -= br.top - pr.top + 8; }
+    const i = pop.querySelector('.dbq-title'); i && i.focus({ preventScroll: true });
+  }, 0);
+};
+window._dbQaClose = function () {
+  if (!_db.qa) return;
+  _db.qa = null;
+  document.querySelectorAll('#dbSide .dbq-ghost, #dbSide .dbq-pop').forEach(n => n.remove());
+};
+window.dbQaKind = function (k) { if (!_db.qa) return; _db.qa.kind = k; _db.qaKind = k; dbRender(); const i = document.querySelector('#dbSide .dbq-title'); i && i.focus({ preventScroll: true }); };
+window.dbQaTime = function () {
+  const q = _db.qa, pop = document.querySelector('#dbSide .dbq-pop'); if (!q || !pop) return;
+  const toM = v => { const [h, m] = String(v || '').split(':').map(Number); return isFinite(h) ? h * 60 + (m || 0) : null; };
+  const s = toM(pop.querySelector('.dbq-s').value), e = toM(pop.querySelector('.dbq-e').value);
+  if (s != null) { const len = q.e - q.s; q.s = s; q.e = e != null && e > s ? e : Math.min(1440, s + len); }
+  dbRender();
+};
+window.dbQaKey = function (ev) {
+  if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); _dbQaClose(); }
+  else if (ev.key === 'Enter' && ev.target.classList.contains('dbq-title')) { ev.preventDefault(); dbQaSave(); }
+};
+window.dbQaSave = async function () {
+  const q = _db.qa; if (!q) return;
+  const title = (q.title || '').trim();
+  if (!title) { const i = document.querySelector('#dbSide .dbq-title'); if (i) { i.classList.add('drw-err'); i.focus(); setTimeout(() => i.classList.remove('drw-err'), 1400); } return; }
+  const ds = _dpDate(), st = _dbQaHM(q.s), en = q.e >= 1440 ? '23:59' : _dbQaHM(q.e), dur = Math.max(15, q.e - q.s);
+  _db.qa = null;
+  if (q.kind === 'task') {
+    const payload = { title, description: '', category: 'General', tags: '', subtasks: '[]', priority: 'P2', due_date: ds, due_time: st, duration: dur, recurrence: 'none', recurrence_days: '', recurrence_end: '', status: 'pending', created_at: new Date().toISOString() };
+    const temp = { id: 'temp-' + Date.now(), ...payload };
+    (state.data.tasks = state.data.tasks || []).push(temp);
+    dbRender();
+    try {
+      const res = await apiCall('create', 'tasks', payload);
+      if (!res || res.success === false) throw new Error(res && res.message);
+      const nid = (res.data && res.data.id) || res.id; if (nid) temp.id = String(nid);
+      showToast(`Task added · ${_dpFmt(st)}`);
+    } catch (e) { state.data.tasks = state.data.tasks.filter(x => x !== temp); showToast('Couldn’t add the task'); }
+    dbRender();
+    return;
   }
-  // Covers: first photo of the vision (else its first video). Photos stored on
-  // the device or in the cloud resolve asynchronously, so fetch them once and
-  // re-render when they arrive.
-  _db.visCov = _db.visCov || {};
-  const cover = g => {
-    if (!loaded) return null;
-    const key = String(g.id), hit = _db.visCov[key];
-    if (hit && hit.url != null) return hit;
-    try { const u = v2CoverSync(g); if (u) return (_db.visCov[key] = { url: u, kind: 'image' }); } catch (e) { }
-    if (!hit && typeof v2MediaOf === 'function' && typeof v2Resolve === 'function') {
-      const media = v2MediaOf(g);
-      const m = media.find(x => x.kind === 'image') || media.find(x => x.kind === 'video');
-      if (!m) { _db.visCov[key] = { url: '', kind: '' }; return null; }
-      _db.visCov[key] = { pending: true };
-      v2Resolve(m.ref).then(u => { _db.visCov[key] = { url: u || '', kind: m.kind }; _dbVisRerender(); }).catch(() => { _db.visCov[key] = { url: '', kind: '' }; });
-    }
-    return null;
-  };
-  const media = g => { try { return loaded && typeof v2StoryMediaOf === 'function' ? v2StoryMediaOf(g).length : 0; } catch (e) { return 0; } };
-  const seenAll = g => { try { return loaded && typeof v2StorySeenAll === 'function' ? v2StorySeenAll(g) : false; } catch (e) { return false; } };
-  const items = goals.map(g => {
-    const cv = cover(g), n = media(g), st = n ? (seenAll(g) ? 'seen' : 'new') : 'none';
-    const ini = String(g.title || '?').trim().charAt(0).toUpperCase();
-    const img = cv && cv.url && cv.kind === 'image' ? cv.url : '', vid = cv && cv.url && cv.kind === 'video' ? cv.url : '';
-    return `<button type="button" class="dbv-it ${st}" onclick="dbVisionOpen('${_dbq(g.id)}')" title="${_drpEsc(g.title || 'Vision')}${n ? ' — play story' : ''}">
-      <span class="dbv-ring"><span class="dbv-av"${img ? ` style="background-image:url('${_drpEsc(img)}')"` : ''}>${img ? '' : (vid ? `<video src="${_drpEsc(vid)}#t=0.5" muted playsinline preload="metadata"></video>` : _drpEsc(ini))}</span></span>
-      <span class="dbv-t">${_drpEsc(g.title || 'Vision')}</span></button>`;
+  const payload = { title, start_datetime: `${ds}T${st}:00`, end_datetime: `${ds}T${en}:00` };
+  const temp = { id: 'temp-' + Date.now(), category: 'Other', color: '', done: false, ...payload };
+  (state.data.planner = state.data.planner || []).push(temp);
+  dbRender();
+  try {
+    const res = await apiCall('create', 'planner_events', { ...payload, category: 'Other', color: '' });
+    if (!res || res.success === false) throw new Error(res && res.message);
+    const nid = (res.data && res.data.id) || res.id; if (nid) temp.id = String(nid);
+    showToast(`Added · ${_dpFmt(st)}–${_dpFmt(en)}`);
+  } catch (e) { state.data.planner = state.data.planner.filter(x => x !== temp); showToast('Couldn’t add the block'); }
+  dbRender();
+};
+(function dbQaStyles() {
+  if (document.getElementById('dbQaStyles')) return;
+  const st = document.createElement('style'); st.id = 'dbQaStyles';
+  st.textContent = `
+#dbSide .dbd-tl { cursor: cell; }
+#dbSide .dbd-tl .dbd-blk, #dbSide .dbq-pop { cursor: default; }
+.dbq-ghost { position: absolute; left: 54px; right: 6px; z-index: 6; border-radius: 8px; padding: 4px 10px; box-sizing: border-box; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; overflow: hidden; pointer-events: none;
+  background: color-mix(in srgb, var(--c, #2563eb) 22%, var(--bg-primary, #fff)); border: 1.5px solid var(--c, #2563eb); color: var(--text-primary, #111); box-shadow: 0 4px 14px rgba(15,23,42,.14); }
+.dbq-ghost.live { --c: #2563eb; border-style: dashed; justify-content: flex-start; font-weight: 600; }
+.dbq-ghost span { font-weight: 500; opacity: .75; white-space: nowrap; }
+.dbq-pop { position: absolute; left: 54px; right: 6px; max-width: 380px; z-index: 8; background: var(--bg-primary, #fff); border: 1px solid var(--border, #e5e7eb); border-radius: 14px; box-shadow: 0 14px 36px rgba(15,23,42,.18), 0 2px 6px rgba(15,23,42,.08); padding: 12px; display: grid; gap: 10px; }
+.dbq-title { font: inherit; font-size: 16px; font-weight: 600; border: 0; border-bottom: 2px solid var(--border, #e5e7eb); padding: 4px 2px 6px; background: transparent; color: var(--text-primary, #111); outline: none; width: 100%; box-sizing: border-box; }
+.dbq-title:focus { border-bottom-color: #2563eb; }
+.dbq-title.drw-err { border-bottom-color: #dc2626; }
+.dbq-kinds { display: flex; gap: 6px; }
+.dbq-k { font: inherit; font-size: 12.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border, #e5e7eb); background: transparent; color: var(--text-secondary, #6b7280); cursor: pointer; }
+.dbq-k svg { width: 14px; height: 14px; }
+.dbq-k.on { background: #2563eb; border-color: #2563eb; color: #fff; }
+.dbq-time { display: flex; align-items: center; gap: 6px; color: var(--text-secondary, #6b7280); font-size: 13px; }
+.dbq-time svg { width: 15px; height: 15px; }
+.dbq-time input { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--border, #e5e7eb); border-radius: 7px; background: var(--bg-primary, #fff); color: var(--text-primary, #111); }
+.dbq-acts { display: flex; justify-content: flex-end; gap: 6px; }
+.dbq-acts button, .dbf-acts .dp-cancel, .dbf-acts .dp-ok { font: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border, #e5e7eb); background: transparent; color: var(--text-secondary, #6b7280); }
+.dbq-acts .dp-ok, .dbf-acts .dp-ok { background: #2563eb; border-color: #2563eb; color: #fff; }
+.dbf-acts .dp-ok { background: var(--c, #ea580c); border-color: var(--c, #ea580c); }
+`;
+  document.head.appendChild(st);
+})();
+
+/* ── Vision: an inline story player at the top of the right side ───────────
+   Your visions' photos and videos play right next to what you're writing,
+   like a status: tap the left/right side (or the arrows) to move, the bars
+   show where you are, photos advance on their own and videos play through.
+   The circles below jump straight to a vision. Nothing opens full screen
+   unless you press the expand button. */
+const DBV_KEY = 'dbVis';
+_db.vs = _db.vs || (() => { try { return Object.assign({ gi: 0, ii: 0, playing: true, collapsed: false }, JSON.parse(localStorage.getItem(DBV_KEY) || '{}'), { ii: 0 }); } catch (e) { return { gi: 0, ii: 0, playing: true, collapsed: false }; } })();
+_db.vsUrl = _db.vsUrl || {};
+function _dbVisSaveState() { try { const v = _db.vs; localStorage.setItem(DBV_KEY, JSON.stringify({ gi: v.gi, playing: v.playing, collapsed: v.collapsed })); } catch (e) { } }
+function _dbVisReady() { return typeof window.v2MediaOf === 'function' || typeof v2MediaOf === 'function'; }
+function _dbVisGoals() {
+  const all = (state.data.vision || []).filter(g => g.status !== 'achieved');
+  return all.map(g => {
+    let media = [];
+    if (_dbVisReady()) { try { media = (typeof v2StoryMediaOf === 'function' ? v2StoryMediaOf(g) : []); if (!media.length) media = v2MediaOf(g); } catch (e) { media = []; } }
+    return { g, media };
+  });
+}
+function _dbVisSecs() { const s = Number((state.data.settings && state.data.settings[0] || {}).story_photo_seconds); return s >= 2 && s <= 30 ? s : 6; }
+function _dbVisResolve(ref) {
+  const c = _db.vsUrl[ref];
+  if (c && c.url != null) return Promise.resolve(c.url);
+  if (c && c.p) return c.p;
+  const p = (typeof v2Resolve === 'function' ? v2Resolve(ref) : Promise.resolve('')).then(u => { _db.vsUrl[ref] = { url: u || '' }; return u || ''; }).catch(() => { _db.vsUrl[ref] = { url: '' }; return ''; });
+  _db.vsUrl[ref] = { p };
+  return p;
+}
+function _dbVisSig(list) { return list.map(x => x.g.id + ':' + x.media.length).join('|') + (_dbVisReady() ? '' : '~'); }
+
+function _dbVisionHTML() {
+  const ready = _dbVisReady();
+  if (!ready && !_db.visLoading && typeof window.ensureViewLoaded === 'function') {
+    _db.visLoading = true;
+    window.ensureViewLoaded('vision').then(() => { if (typeof v2InjectCSS === 'function') { /* styles only needed for full screen */ } if (document.getElementById('dbSide')) dbRender(); }).catch(() => { });
+  }
+  const list = _dbVisGoals(), vs = _db.vs;
+  if (!list.length) return `<section class="dbd-box dbd-vision k-vision" data-sig="empty"><header class="dbd-box-h"><span class="dbd-box-t">Vision</span><span class="dbd-box-n"></span>${_dbIcon("dbGo('vision')", 'arrow-up-right', 'Open Vision')}</header><p class="dbd-empty">No visions yet — add one in Vision.</p></section>`;
+  if (vs.gi >= list.length) vs.gi = 0;
+  const circles = list.map((x, i) => {
+    const g = x.g, ini = String(g.title || '?').trim().charAt(0).toUpperCase();
+    return `<button type="button" class="dbv-it${x.media.length ? ' new' : ' none'}${i === vs.gi ? ' cur' : ''}" data-gi="${i}" onclick="dbVisGo(${i})" title="${_drpEsc(g.title || 'Vision')}">
+      <span class="dbv-ring"><span class="dbv-av" data-av="${i}">${_drpEsc(ini)}</span></span><span class="dbv-t">${_drpEsc(g.title || 'Vision')}</span></button>`;
   }).join('');
-  const body = goals.length
-    ? `<div class="dbv-wrap"><button type="button" class="dbv-nav l" onclick="dbVisionScroll(-1)" aria-label="Scroll left"><i data-lucide="chevron-left"></i></button>
-        <div class="dbv-strip" data-scroll="vision">${items}</div>
-        <button type="button" class="dbv-nav r" onclick="dbVisionScroll(1)" aria-label="Scroll right"><i data-lucide="chevron-right"></i></button></div>`
-    : '<p class="dbd-empty">No visions yet — add one in Vision.</p>';
-  return `<section class="dbd-box dbd-vision k-vision">
-    <header class="dbd-box-h"><span class="dbd-box-t">Vision</span><span class="dbd-box-n">${goals.length || ''}</span>${_dbIcon("dbGo('vision')", 'arrow-up-right', 'Open Vision')}</header>
-    ${body}
+  const ic = (n, d) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  return `<section class="dbd-box dbd-vision k-vision${vs.collapsed ? ' collapsed' : ''}" data-sig="${_drpEsc(_dbVisSig(list))}">
+    <header class="dbd-box-h"><span class="dbd-box-t">Vision</span><span class="dbd-box-n" data-dbv="count">${vs.gi + 1}/${list.length}</span>
+      <button type="button" class="dbd-ib" onclick="dbVisPlay()" data-dbv="play" title="${vs.playing ? 'Pause' : 'Play'}" aria-label="${vs.playing ? 'Pause' : 'Play'}">${vs.playing ? ic('', '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>') : ic('', '<path d="M7 5v14l11-7z"/>')}</button>
+      <button type="button" class="dbd-ib" onclick="dbVisCollapse()" title="${vs.collapsed ? 'Show the viewer' : 'Hide the viewer'}" aria-label="Toggle viewer">${vs.collapsed ? ic('', '<path d="m6 9 6 6 6-6"/>') : ic('', '<path d="m18 15-6-6-6 6"/>')}</button>
+      ${_dbIcon("dbGo('vision')", 'arrow-up-right', 'Open Vision')}</header>
+    ${vs.collapsed ? '' : `<div class="dbv-stage" id="dbvStage">
+      <div class="dbv-bg" data-dbv="bg"></div>
+      <div class="dbv-media" data-dbv="media"></div>
+      <div class="dbv-bars" data-dbv="bars"></div>
+      <button type="button" class="dbv-zone l" onclick="dbVisStep(-1)" aria-label="Previous">${ic('', '<path d="m15 18-6-6 6-6"/>')}</button>
+      <button type="button" class="dbv-zone r" onclick="dbVisStep(1)" aria-label="Next">${ic('', '<path d="m9 18 6-6-6-6"/>')}</button>
+      <button type="button" class="dbv-full" onclick="dbVisFull()" title="Full screen" aria-label="Full screen">${ic('', '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>')}</button>
+      <div class="dbv-cap" data-dbv="cap"></div>
+    </div>`}
+    <div class="dbv-wrap"><div class="dbv-strip" data-scroll="vision">${circles}</div></div>
   </section>`;
 }
-let _dbVisT = null;
-function _dbVisRerender() {
-  clearTimeout(_dbVisT);
-  _dbVisT = setTimeout(() => {
-    const box = document.querySelector('#dbSide .dbd-vision');
-    if (!box) return;
-    const strip = box.querySelector('.dbv-strip'), sl = strip ? strip.scrollLeft : 0;
-    const tmp = document.createElement('div'); tmp.innerHTML = _dbVisionHTML();
-    box.replaceWith(tmp.firstElementChild);
-    const ns = document.querySelector('#dbSide .dbv-strip'); if (ns) ns.scrollLeft = sl;
-    if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
-  }, 120);
+
+// Fill the stage for the current vision/item (also called after every re-render).
+let _dbVisTok = 0;
+function _dbVisMount() {
+  const box = document.querySelector('#dbSide .dbd-vision'); if (!box) return;
+  const list = _dbVisGoals(), vs = _db.vs;
+  if (!list.length) return;
+  if (vs.gi >= list.length) vs.gi = 0;
+  const cur = list[vs.gi];
+  if (vs.ii >= cur.media.length) vs.ii = 0;
+  // circles: covers + current
+  box.querySelectorAll('.dbv-it').forEach(b => b.classList.toggle('cur', +b.dataset.gi === vs.gi));
+  list.forEach((x, i) => {
+    const av = box.querySelector(`[data-av="${i}"]`); if (!av || av.dataset.done) return;
+    const m = x.media.find(y => y.kind === 'image') || x.media[0]; if (!m) return;
+    _dbVisResolve(m.ref).then(u => {
+      if (!u || !document.contains(av)) return;
+      av.dataset.done = '1';
+      av.textContent = '';
+      if (m.kind === 'video') av.innerHTML = `<video src="${_drpEsc(u)}#t=0.5" muted playsinline preload="metadata"></video>`;
+      else av.style.backgroundImage = `url('${u.replace(/'/g, '%27')}')`;
+    });
+  });
+  const cnt = box.querySelector('[data-dbv="count"]'); if (cnt) cnt.textContent = `${vs.gi + 1}/${list.length}`;
+  const cb = box.querySelector(`.dbv-it[data-gi="${vs.gi}"]`), strip = box.querySelector('.dbv-strip');
+  if (cb && strip) { const l = cb.offsetLeft - strip.clientWidth / 2 + cb.clientWidth / 2; strip.scrollTo({ left: Math.max(0, l), behavior: 'smooth' }); }
+  const stage = box.querySelector('#dbvStage'); if (!stage) return;
+  const tok = ++_dbVisTok;
+  const g = cur.g, n = Math.max(1, cur.media.length);
+  // bars
+  const bars = stage.querySelector('[data-dbv="bars"]');
+  bars.innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < vs.ii ? 'done' : ''}"><b></b></i>`).join('');
+  // caption
+  const desc = String(g.description || '').trim();
+  stage.querySelector('[data-dbv="cap"]').innerHTML = `<b>${_drpEsc(g.title || 'Vision')}</b>${g.category ? `<span>${_drpEsc(g.category)}</span>` : ''}${!cur.media.length && desc ? `<p>${_drpEsc(desc.slice(0, 220))}</p>` : ''}`;
+  const host = stage.querySelector('[data-dbv="media"]'), bg = stage.querySelector('[data-dbv="bg"]');
+  const fill = bars.children[vs.ii] && bars.children[vs.ii].firstElementChild;
+  const startFill = secs => {
+    if (!fill || tok !== _dbVisTok) return;
+    fill.style.animationDuration = secs + 's';
+    fill.classList.add('run');
+    stage.classList.toggle('paused', !vs.playing);
+    fill.onanimationend = () => { if (tok === _dbVisTok) dbVisStep(1, true); };
+  };
+  if (!cur.media.length) {
+    host.innerHTML = `<div class="dbv-card">${_drpEsc(String(g.title || '?').trim().charAt(0).toUpperCase())}</div>`;
+    bg.style.backgroundImage = '';
+    stage.classList.add('text');
+    startFill(_dbVisSecs());
+    return;
+  }
+  stage.classList.remove('text');
+  const m = cur.media[vs.ii];
+  host.innerHTML = '<div class="dbv-spin"></div>';
+  _dbVisResolve(m.ref).then(u => {
+    if (tok !== _dbVisTok) return;
+    if (!u) { host.innerHTML = '<div class="dbv-miss">This photo isn’t on this device yet</div>'; startFill(2.5); return; }
+    if (m.kind === 'video') {
+      host.innerHTML = `<video src="${_drpEsc(u)}" muted playsinline autoplay preload="auto"></video>`;
+      bg.style.backgroundImage = '';
+      const v = host.querySelector('video');
+      v.onloadedmetadata = () => { startFill(Math.min(30, Math.max(3, v.duration || 8))); if (!vs.playing) v.pause(); };
+      v.onerror = () => startFill(2.5);
+    } else {
+      const safe = u.replace(/'/g, '%27');
+      host.innerHTML = `<img src="${_drpEsc(u)}" alt="${_drpEsc(g.title || '')}" draggable="false">`;
+      bg.style.backgroundImage = `url('${safe}')`;
+      const img = host.querySelector('img');
+      const go = () => startFill(_dbVisSecs());
+      if (img.complete) go(); else { img.onload = go; img.onerror = go; }
+    }
+    // warm the next item
+    const nx = cur.media[vs.ii + 1] || (list[(vs.gi + 1) % list.length].media[0]);
+    if (nx) _dbVisResolve(nx.ref);
+  });
 }
-window.dbVisionScroll = function (dir) {
-  const s = document.querySelector('#dbSide .dbv-strip'); if (!s) return;
-  s.scrollBy({ left: dir * Math.max(160, s.clientWidth * 0.8), behavior: 'smooth' });
+window.dbVisStep = function (dir, auto) {
+  const list = _dbVisGoals(), vs = _db.vs; if (!list.length) return;
+  const n = list[vs.gi].media.length || 1;
+  if (dir > 0) { if (vs.ii < n - 1) vs.ii++; else { vs.gi = (vs.gi + 1) % list.length; vs.ii = 0; } }
+  else { if (vs.ii > 0) vs.ii--; else { vs.gi = (vs.gi - 1 + list.length) % list.length; vs.ii = Math.max(0, (list[vs.gi].media.length || 1) - 1); } }
+  if (!auto) _dbVisSaveState();
+  _dbVisMount();
+};
+window.dbVisGo = function (i) { _db.vs.gi = i; _db.vs.ii = 0; _dbVisSaveState(); if (_db.vs.collapsed) { _db.vs.collapsed = false; dbRender(); } else _dbVisMount(); };
+window.dbVisPlay = function () {
+  const vs = _db.vs; vs.playing = !vs.playing; _dbVisSaveState();
+  const stage = document.getElementById('dbvStage');
+  if (stage) { stage.classList.toggle('paused', !vs.playing); const v = stage.querySelector('video'); if (v) { if (vs.playing) v.play().catch(() => { }); else v.pause(); } }
+  const btn = document.querySelector('#dbSide [data-dbv="play"]');
+  if (btn) { btn.title = vs.playing ? 'Pause' : 'Play'; btn.innerHTML = vs.playing ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>' : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M7 5v14l11-7z"/></svg>'; }
+};
+window.dbVisCollapse = function () { _db.vs.collapsed = !_db.vs.collapsed; _dbVisSaveState(); dbRender(); };
+window.dbVisFull = function () {
+  const list = _dbVisGoals(), x = list[_db.vs.gi]; if (!x) return;
+  if (_db.vs.playing) dbVisPlay();
+  dbVisionOpen(x.g.id);
 };
 window.dbVisionOpen = async function (id) {
   try {
     if (typeof window.v2StoryOpen !== 'function' && typeof window.ensureViewLoaded === 'function') await window.ensureViewLoaded('vision');
     const g = (state.data.vision || []).find(v => String(v.id) === String(id));
-    const hasMedia = typeof v2StoryMediaOf === 'function' && g ? v2StoryMediaOf(g).length > 0 : false;
+    const hasMedia = typeof v2MediaOf === 'function' && g ? v2MediaOf(g).length > 0 : false;
     if (typeof window.v2StoryOpen !== 'function' || !hasMedia) { dbGo('vision'); return; }
     if (typeof v2InjectCSS === 'function') v2InjectCSS();
     await window.v2StoryOpen(id);
     const el = document.getElementById('v2Story'); if (el) el.style.zIndex = '100005';
-    // When the story closes, refresh the rings (seen / unseen).
-    const watch = setInterval(() => { const st = document.getElementById('v2Story'); if (!st || getComputedStyle(st).display === 'none') { clearInterval(watch); if (document.getElementById('dbSide')) dbRender(); } }, 700);
   } catch (e) { console.error(e); dbGo('vision'); }
 };
+// Keep the player running across re-renders: the box is moved into the new
+// layout as-is (so the photo and its progress bar don't restart) unless the
+// list of visions changed.
+(function () {
+  const prev = window.dbRender;
+  window.dbRender = function () {
+    const old = document.querySelector('#dbSide .dbd-vision');
+    const r = prev.apply(this, arguments);
+    const nu = document.querySelector('#dbSide .dbd-vision');
+    if (old && nu && old !== nu && old.dataset.sig === nu.dataset.sig && old.classList.contains('collapsed') === nu.classList.contains('collapsed')) nu.replaceWith(old);
+    else _dbVisMount();
+    return r;
+  };
+})();
+// Pause videos when the journal is hidden; resume when it's back.
+document.addEventListener('visibilitychange', () => {
+  const v = document.querySelector('#dbvStage video'); if (!v) return;
+  if (document.hidden) v.pause(); else if (_db.vs.playing) v.play().catch(() => { });
+});
+(function () {
+  if (document.getElementById('dbVisStyles')) return;
+  const st = document.createElement('style'); st.id = 'dbVisStyles';
+  st.textContent = `
+.dbd-vision { height:auto !important; margin:0 0 12px; }
+.dbv-stage { position:relative; height:clamp(240px, 38vh, 420px); margin:10px 10px 0; border-radius:14px; overflow:hidden; background:#0b1220; isolation:isolate; }
+.dbv-bg { position:absolute; inset:-30px; background:center/cover no-repeat; filter:blur(26px) brightness(.55) saturate(1.2); transform:scale(1.08); z-index:0; }
+.dbv-media { position:absolute; inset:0; z-index:1; display:flex; align-items:center; justify-content:center; }
+.dbv-media img, .dbv-media video { max-width:100%; max-height:100%; width:auto; height:100%; object-fit:contain; display:block; user-select:none; -webkit-user-drag:none; }
+.dbv-media video { width:100%; object-fit:contain; }
+.dbv-card { width:96px; height:96px; border-radius:28px; background:color-mix(in srgb, #0EA5E9 80%, #6366f1); color:#fff; font-size:44px; font-weight:850; display:flex; align-items:center; justify-content:center; box-shadow:0 12px 30px rgba(0,0,0,.35); }
+.dbv-stage.text { background:linear-gradient(135deg, #0f172a, #1e3a8a 55%, #0e7490); }
+.dbv-spin { width:28px; height:28px; border-radius:50%; border:3px solid rgba(255,255,255,.25); border-top-color:#fff; animation:dbvSpin .8s linear infinite; }
+@keyframes dbvSpin { to { transform:rotate(360deg); } }
+.dbv-miss { color:rgba(255,255,255,.8); font-size:12.5px; font-weight:600; }
+.dbv-bars { position:absolute; left:10px; right:10px; top:9px; z-index:3; display:flex; gap:4px; }
+.dbv-bars i { flex:1; height:3px; border-radius:3px; background:rgba(255,255,255,.35); overflow:hidden; }
+.dbv-bars i.done b { width:100%; }
+.dbv-bars b { display:block; height:100%; width:0; background:#fff; border-radius:3px; }
+.dbv-bars b.run { animation:dbvFill linear forwards; }
+.dbv-stage.paused .dbv-bars b.run { animation-play-state:paused; }
+@keyframes dbvFill { from { width:0; } to { width:100%; } }
+.dbv-zone { position:absolute; top:0; bottom:0; width:34%; z-index:2; border:none; background:transparent; cursor:pointer; color:#fff; display:flex; align-items:center; padding:0 10px; opacity:0; transition:opacity .15s; }
+.dbv-zone.l { left:0; justify-content:flex-start; background:linear-gradient(90deg, rgba(0,0,0,.28), transparent); }
+.dbv-zone.r { right:0; justify-content:flex-end; background:linear-gradient(270deg, rgba(0,0,0,.28), transparent); }
+.dbv-zone svg { width:26px; height:26px; filter:drop-shadow(0 1px 3px rgba(0,0,0,.5)); }
+.dbv-stage:hover .dbv-zone { opacity:1; }
+@media (hover:none) { .dbv-zone { opacity:.85; background:none; } }
+.dbv-full { position:absolute; right:10px; top:20px; z-index:3; width:30px; height:30px; border-radius:9px; border:none; background:rgba(0,0,0,.35); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0; transition:opacity .15s; }
+.dbv-stage:hover .dbv-full { opacity:1; }
+.dbv-cap { position:absolute; left:0; right:0; bottom:0; z-index:2; padding:28px 14px 12px; background:linear-gradient(0deg, rgba(0,0,0,.62), transparent); color:#fff; pointer-events:none; }
+.dbv-cap b { display:block; font-size:15px; font-weight:800; text-shadow:0 1px 3px rgba(0,0,0,.4); }
+.dbv-cap span { font-size:11px; font-weight:700; opacity:.85; text-transform:uppercase; letter-spacing:.05em; }
+.dbv-cap p { margin:6px 0 0; font-size:12.5px; line-height:1.45; opacity:.92; }
+.dbd-vision .dbv-strip { padding:10px 12px 10px; gap:10px; }
+.dbd-vision .dbv-it { width:62px; }
+.dbd-vision .dbv-ring { width:56px; height:56px; }
+.dbd-vision .dbv-av { font-size:18px; }
+.dbd-vision .dbv-t { font-size:10.5px; }
+.dbv-it.none .dbv-ring { background:var(--border-color); }
+.dbv-it.cur .dbv-ring { background:conic-gradient(from 210deg, #f59e0b, #ef4444, #d946ef, #6366f1, #0ea5e9, #f59e0b); box-shadow:0 0 0 2px color-mix(in srgb, #0EA5E9 30%, transparent); }
+.dbv-it.cur .dbv-t { color:#0369a1; font-weight:800; }
+.dbv-it:not(.cur) .dbv-ring { opacity:.85; }
+`;
+  document.head.appendChild(st);
+})();
 
 (function () {
   if (document.getElementById('dbDragStyles')) return;
@@ -5527,7 +5979,6 @@ body.dbd-dragging, body.dbd-dragging * { cursor:grabbing !important; -webkit-use
 .dbd-ghost.ok { opacity:1; }
 .dbd-drop { position:absolute; left:54px; right:4px; border-radius:8px; background:color-mix(in srgb, var(--c) 18%, transparent); border:1.5px dashed var(--c); z-index:15; pointer-events:none; box-sizing:border-box; }
 .dbd-drop::after { content:attr(data-t); position:absolute; left:8px; top:3px; font-size:11px; font-weight:800; color:color-mix(in srgb, var(--c) 80%, var(--text-1)); }
-.dbd-vision { height:auto !important; margin-top:12px; }
 .dbv-wrap { position:relative; }
 .dbv-strip { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x proximity; padding:12px 14px 10px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
 .dbv-strip::-webkit-scrollbar { display:none; }
