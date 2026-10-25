@@ -19,6 +19,34 @@ window.state = {
 // Keep a reference for convenience
 const state = window.state;
 
+// Someday: tasks parked with status 'someday' live in state.data.someday_tasks,
+// so every list, widget, reminder and count that reads state.data.tasks skips
+// them automatically. Whatever array is assigned to state.data.tasks is split.
+(function () {
+    const isSomeday = t => t && String(t.status || '').toLowerCase() === 'someday';
+    let active = [], someday = [];
+    Object.defineProperty(state.data, 'tasks', {
+        enumerable: true, configurable: true,
+        get() { return active; },
+        set(v) {
+            v = Array.isArray(v) ? v : [];
+            if (!v.some(isSomeday)) {
+                // A partial list (e.g. after deleting rows) — keep the parked
+                // ones, minus any that now show up as active.
+                if (someday.length) { const ids = new Set(v.map(t => String(t.id))); someday = someday.filter(t => !ids.has(String(t.id))); }
+                active = v; return;
+            }
+            someday = v.filter(isSomeday);
+            active = v.filter(t => !isSomeday(t));
+        }
+    });
+    Object.defineProperty(state.data, 'someday_tasks', {
+        enumerable: false, configurable: true,
+        get() { return someday; },
+        set(v) { someday = Array.isArray(v) ? v : []; }
+    });
+})();
+
 // --- TOAST NOTIFICATION ---
 function toast(msg, duration = 3000) {
     const t = document.getElementById('toast');
@@ -487,7 +515,7 @@ window.appStrayCategories = function appStrayCategories() {
 const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js?v=20261006a', render: 'renderDashboard' },
     calendar:      { src: 'view-calendar.js?v=20261020b', render: 'renderCalendar' },
-    tasks:         { src: 'view-tasks.js?v=20260930a', render: 'renderTasks' },
+    tasks:         { src: 'view-tasks.js?v=20261025a', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20261019b', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20261021b', render: 'renderDiary' },
@@ -1569,8 +1597,7 @@ function checkWeeklyReview() {
     }
 }
 
-// Still call it immediately for new sessions (if it's Sunday)
-checkWeeklyReview();
+// Weekly Review pop-up turned off — it no longer opens on Sundays.
 
 
 

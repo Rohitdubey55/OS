@@ -234,6 +234,8 @@ function renderTasks(filter = '') {
     .tk-icon-btn { display:flex; align-items:center; justify-content:center; width:36px; height:36px; border:none; background:transparent; border-radius:10px; cursor:pointer; color:var(--text-3); transition:all .15s; }
     .tk-icon-btn:hover,.tk-icon-btn:active { background:var(--surface-2); color:var(--text-1); }
     .tk-icon-btn.active { color:var(--primary); background:var(--primary-soft,rgba(79,70,229,.08)); }
+    .tk-sd-btn { position:relative; }
+    .tk-sd-badge { position:absolute; top:2px; right:1px; min-width:16px; height:16px; padding:0 4px; border-radius:999px; background:var(--text-2); color:var(--surface-1); font-size:9.5px; font-weight:800; line-height:16px; text-align:center; }
 
     /* ══ THIS WEEK PROGRESS BAR ══ */
     .tk-weekbar { margin:0 16px 12px; padding:11px 14px; background:var(--surface-1); border:1px solid var(--border-color); border-radius:14px; box-shadow:var(--shadow-xs); }
@@ -401,7 +403,7 @@ function renderTasks(filter = '') {
     .tk-sheet-sub-add-input::placeholder { color:var(--text-3); }
 
     /* Action bar */
-    .tk-sheet-actions { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; padding:14px 20px; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px)); border-top:1px solid var(--border-color); flex-shrink:0; background:var(--surface-1); }
+    .tk-sheet-actions { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; padding:14px 20px; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px)); border-top:1px solid var(--border-color); flex-shrink:0; background:var(--surface-1); }
     .tk-sheet-act { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:12px 6px; border-radius:14px; border:1.5px solid var(--border-color); background:var(--surface-2); cursor:pointer; font-size:11.5px; font-weight:600; color:var(--text-2); transition:all .18s; }
     .tk-sheet-act:active { transform:scale(.94); }
     .tk-sheet-act i { pointer-events:none; }
@@ -558,6 +560,9 @@ function renderTasks(filter = '') {
         <button class="tk-icon-btn ${_itemSelectionMode ? 'active' : ''}" onclick="toggleTaskSelectionMode()" title="Select mode">
           <i data-lucide="list-checks" style="width:18px;height:18px"></i>
         </button>
+        <button class="tk-icon-btn tk-sd-btn" onclick="tkOpenSomeday()" title="Someday — tasks you've parked for later">
+          <i data-lucide="archive" style="width:18px;height:18px"></i>${(state.data.someday_tasks || []).length ? `<span class="tk-sd-badge">${(state.data.someday_tasks || []).length}</span>` : ''}
+        </button>
         <button class="tk-icon-btn" onclick="openCategoryManager()" title="Categories">
           <i data-lucide="tag" style="width:18px;height:18px"></i>
         </button>
@@ -580,6 +585,9 @@ function renderTasks(filter = '') {
     ${_itemSelectionMode ? `
     <div style="display:flex;align-items:center;gap:8px;padding:0 16px 10px;flex-shrink:0;background:rgba(79,70,229,.04);border-bottom:1px solid var(--border-color);padding-top:10px;">
       <span style="font-size:13px;font-weight:600;color:var(--primary);flex:1;">${_selectedTaskIds.size} selected</span>
+      <button class="tk-action-btn" onclick="tkSelectedToSomeday()" ${_selectedTaskIds.size ? '' : 'disabled'}>
+        <i data-lucide="archive" style="width:13px;height:13px"></i> Someday
+      </button>
       <button class="tk-action-btn danger" onclick="deleteSelectedTasks()">
         <i data-lucide="trash-2" style="width:13px;height:13px"></i> Delete
       </button>
@@ -900,6 +908,10 @@ function _tkSheetHTML(t) {
     <button class="tk-sheet-act" onclick="closeTaskSheet();addReminderToTask('${t.id}')">
       <i data-lucide="bell" style="width:18px;height:18px"></i>
       Remind
+    </button>
+    <button class="tk-sheet-act" onclick="closeTaskSheet();tkToSomeday('${t.id}')">
+      <i data-lucide="archive" style="width:18px;height:18px"></i>
+      Someday
     </button>
     <button class="tk-sheet-act danger" onclick="closeTaskSheet();deleteTask('${t.id}')">
       <i data-lucide="trash-2" style="width:18px;height:18px"></i>
@@ -1265,6 +1277,7 @@ function tkDetailPaneHTML(t) {
     <div class="tkp-dfoot">
       <button class="tkp-done" onclick="tkPaneComplete('${t.id}')">${isDone ? '✓ Completed' : '✓ Mark complete'}</button>
       <button class="tkp-edit" onclick="tkPaneEditFull('${t.id}')" title="Full editor"><i data-lucide="settings-2" style="width:15px;height:15px"></i></button>
+      <button class="tkp-edit" onclick="_detailTaskId=null;tkToSomeday('${t.id}')" title="Move to Someday — hide it until you bring it back"><i data-lucide="archive" style="width:15px;height:15px"></i></button>
       <button class="tkp-del" onclick="tkPaneDelete('${t.id}')" title="Delete"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
     </div>
   </div>`;
@@ -2027,3 +2040,228 @@ window.confirmDeleteCategory = async function (categoryName) {
   await deleteTaskCategory(categoryName);
   document.getElementById('universalModal').classList.add('hidden');
 };
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SOMEDAY — park a task out of every list until you have time for it.
+   A parked task keeps all its details; its status is just 'someday'.
+   main.js keeps those rows in state.data.someday_tasks, so the Tasks page,
+   dashboard, calendar, reminders and widgets never see them.
+   ══════════════════════════════════════════════════════════════════════════ */
+let _sdQuery = '';
+const _sdToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+function _sdList() { if (!Array.isArray(state.data.someday_tasks)) state.data.someday_tasks = []; return state.data.someday_tasks; }
+function _sdRefreshViews() {
+  if (state.view === 'tasks' && typeof renderTasks === 'function') renderTasks(_getSearchValue());
+  if (document.getElementById('sdRoot')) _sdRender();
+}
+function _sdToast(msg, undo) { if (typeof showToast === 'function') showToast(msg, 'default', undo || null); }
+
+// Move one task to Someday (optimistic; reverts if the save fails)
+window.tkToSomeday = async function (id, silent) {
+  const i = (state.data.tasks || []).findIndex(x => String(x.id) === String(id));
+  if (i < 0) return false;
+  const t = state.data.tasks[i];
+  const prev = t.status;
+  state.data.tasks.splice(i, 1);
+  t.status = 'someday';
+  _sdList().unshift(t);
+  if (!silent) { _sdRefreshViews(); _sdToast('Moved to Someday', () => tkFromSomeday(id, true, prev)); }
+  try { await apiCall('update', 'tasks', { status: 'someday' }, id); return true; }
+  catch (e) {
+    console.error(e);
+    _sdList().splice(_sdList().indexOf(t), 1); t.status = prev; state.data.tasks.push(t);
+    _sdRefreshViews(); _sdToast('Could not move it — try again');
+    return false;
+  }
+};
+
+// Bring a task back into the main lists. Overdue dates move to today.
+window.tkFromSomeday = async function (id, isUndo, restoreStatus) {
+  const list = _sdList();
+  const i = list.findIndex(x => String(x.id) === String(id));
+  if (i < 0) return;
+  const t = list[i];
+  const fields = { status: restoreStatus && restoreStatus !== 'someday' ? restoreStatus : 'pending' };
+  if (!isUndo && t.due_date && String(t.due_date).slice(0, 10) < _sdToday()) fields.due_date = _sdToday();
+  list.splice(i, 1);
+  Object.assign(t, fields);
+  state.data.tasks.push(t);
+  _sdRefreshViews();
+  if (!isUndo) _sdToast(fields.due_date ? 'Back in Tasks — due today' : 'Back in Tasks', () => tkToSomeday(id, false));
+  try { await apiCall('update', 'tasks', fields, id); }
+  catch (e) {
+    console.error(e);
+    state.data.tasks.splice(state.data.tasks.indexOf(t), 1); t.status = 'someday'; list.unshift(t);
+    _sdRefreshViews(); _sdToast('Could not bring it back — try again');
+  }
+};
+
+window.tkSelectedToSomeday = async function () {
+  const ids = [..._selectedTaskIds];
+  if (!ids.length) return;
+  _itemSelectionMode = false; _selectedTaskIds.clear();
+  let ok = 0;
+  for (const id of ids) if (await tkToSomeday(id, true)) ok++;
+  _sdRefreshViews();
+  _sdToast(`${ok} task${ok === 1 ? '' : 's'} moved to Someday`);
+};
+
+window.tkSomedayAdd = async function (e) {
+  if (e && e.key && e.key !== 'Enter') return;
+  const inp = document.getElementById('sdAddInput');
+  const title = (inp?.value || '').trim();
+  if (!title) return;
+  inp.value = '';
+  const category = document.getElementById('sdAddCat')?.value || '';
+  const payload = { title, priority: 'P3', status: 'someday', category, created_at: new Date().toISOString(), subtasks: '[]' };
+  const temp = Object.assign({ id: 'tmp-' + Date.now() }, payload);
+  _sdList().unshift(temp); _sdRender();
+  document.getElementById('sdAddInput')?.focus();
+  try {
+    const r = await apiCall('create', 'tasks', payload);
+    const row = (r && (r.data || r)) || {};
+    temp.id = row.id || r?.id || temp.id;
+    _sdRender();
+  } catch (err) {
+    console.error(err);
+    _sdList().splice(_sdList().indexOf(temp), 1); _sdRender();
+    _sdToast('Could not save it');
+  }
+};
+
+window.tkSomedayDelete = async function (id) {
+  const list = _sdList();
+  const t = list.find(x => String(x.id) === String(id));
+  if (!t || !confirm(`Delete "${t.title}" for good?`)) return;
+  list.splice(list.indexOf(t), 1); _sdRefreshViews();
+  try { await apiCall('delete', 'tasks', {}, id); }
+  catch (e) { list.unshift(t); _sdRefreshViews(); _sdToast('Could not delete it'); }
+};
+
+window.tkSomedaySearch = function (v) {
+  _sdQuery = v;
+  _sdRender();
+  const el = document.getElementById('sdSearch');
+  if (el) { el.focus(); el.setSelectionRange(v.length, v.length); }
+};
+
+window.tkOpenSomeday = function () {
+  let root = document.getElementById('sdRoot');
+  if (!root) {
+    root = document.createElement('div'); root.id = 'sdRoot';
+    document.body.appendChild(root);
+    document.addEventListener('keydown', _sdEsc);
+  }
+  _sdQuery = '';
+  _sdRender();
+  requestAnimationFrame(() => root.classList.add('open'));
+  setTimeout(() => document.getElementById('sdAddInput')?.focus(), 250);
+};
+window.tkCloseSomeday = function () {
+  const root = document.getElementById('sdRoot');
+  if (!root) return;
+  root.classList.remove('open');
+  document.removeEventListener('keydown', _sdEsc);
+  setTimeout(() => root.remove(), 220);
+};
+function _sdEsc(e) { if (e.key === 'Escape') tkCloseSomeday(); }
+
+function _sdRender() {
+  const root = document.getElementById('sdRoot');
+  if (!root) return;
+  const esc = s => (typeof escapeHtml === 'function' ? escapeHtml(String(s == null ? '' : s)) : String(s == null ? '' : s));
+  const all = _sdList();
+  const q = _sdQuery.trim().toLowerCase();
+  const rows = q ? all.filter(t => [t.title, t.category, t.description].some(v => v && String(v).toLowerCase().includes(q))) : all;
+  const groups = {};
+  rows.forEach(t => { const c = t.category || 'No category'; (groups[c] = groups[c] || []).push(t); });
+  const cats = (typeof getAllTaskCategories === 'function' ? getAllTaskCategories() : []);
+  const pr = { P1: 'High', P2: 'Medium', P3: 'Low' };
+  const rowHTML = t => {
+    const subs = (() => { try { return typeof t.subtasks === 'string' ? JSON.parse(t.subtasks || '[]') : (t.subtasks || []); } catch (e) { return []; } })();
+    const meta = [
+      t.priority && pr[t.priority] && t.priority !== 'P3' ? `<span class="sd-chip p-${t.priority}">${pr[t.priority]}</span>` : '',
+      t.recurrence && t.recurrence !== 'none' ? `<span class="sd-chip">Repeats</span>` : '',
+      subs.length ? `<span class="sd-chip">${subs.length} subtask${subs.length === 1 ? '' : 's'}</span>` : '',
+      t.description ? `<span class="sd-note">${esc(String(t.description).slice(0, 90))}</span>` : ''
+    ].join('');
+    return `<div class="sd-row">
+      <div class="sd-row-main"><div class="sd-title">${esc(t.title || 'Untitled')}</div>${meta ? `<div class="sd-meta">${meta}</div>` : ''}</div>
+      <button class="sd-back" onclick="tkFromSomeday('${t.id}')" title="Move back into your task list"><i data-lucide="corner-up-left" style="width:14px;height:14px"></i><span>Bring back</span></button>
+      <button class="sd-del" onclick="tkSomedayDelete('${t.id}')" title="Delete for good"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
+    </div>`;
+  };
+  const body = !all.length
+    ? `<div class="sd-empty"><div class="sd-empty-ic"><i data-lucide="archive" style="width:26px;height:26px"></i></div>
+         <b>Nothing parked yet</b>
+         <span>Open a task and tap <em>Someday</em> to park it here. It disappears from your lists until you bring it back.</span></div>`
+    : (!rows.length ? `<div class="sd-empty"><span>Nothing matches “${esc(_sdQuery)}”.</span></div>`
+      : Object.keys(groups).sort((a, b) => a === 'No category' ? 1 : b === 'No category' ? -1 : a.localeCompare(b)).map(c =>
+        `<div class="sd-group"><div class="sd-group-h"><span>${esc(c)}</span><em>${groups[c].length}</em></div>${groups[c].map(rowHTML).join('')}</div>`).join(''));
+  root.innerHTML = `<style>${SD_CSS}</style>
+    <div class="sd-backdrop" onclick="tkCloseSomeday()"></div>
+    <aside class="sd-panel" role="dialog" aria-label="Someday">
+      <header class="sd-head">
+        <div><div class="sd-h1">Someday <span class="sd-count">${all.length}</span></div>
+          <div class="sd-sub">Parked tasks. They stay out of your lists until you bring them back.</div></div>
+        <button class="sd-x" onclick="tkCloseSomeday()" aria-label="Close"><i data-lucide="x" style="width:18px;height:18px"></i></button>
+      </header>
+      <div class="sd-add">
+        <i data-lucide="plus" style="width:16px;height:16px"></i>
+        <input id="sdAddInput" placeholder="Park an idea for later… press Enter" onkeydown="tkSomedayAdd(event)">
+        ${cats.length ? `<select id="sdAddCat" title="Category"><option value="">Category</option>${cats.map(c => `<option>${esc(c)}</option>`).join('')}</select>` : ''}
+      </div>
+      ${all.length > 6 ? `<div class="sd-search"><i data-lucide="search" style="width:14px;height:14px"></i><input id="sdSearch" type="search" placeholder="Search parked tasks" value="${esc(_sdQuery)}" oninput="tkSomedaySearch(this.value)"></div>` : ''}
+      <div class="sd-body">${body}</div>
+    </aside>`;
+  if (window.lucide?.createIcons) lucide.createIcons();
+}
+
+const SD_CSS = `
+#sdRoot { position:fixed; inset:0; z-index:9500; pointer-events:none; }
+#sdRoot.open { pointer-events:auto; }
+.sd-backdrop { position:absolute; inset:0; background:rgba(15,23,42,.38); opacity:0; transition:opacity .2s ease; }
+#sdRoot.open .sd-backdrop { opacity:1; }
+.sd-panel { position:absolute; top:0; right:0; bottom:0; width:min(460px,100vw); background:var(--surface-1,#fff); border-left:1px solid var(--border-color,#e5e7eb); box-shadow:-18px 0 48px rgba(15,23,42,.18); display:flex; flex-direction:column; transform:translateX(100%); transition:transform .22s cubic-bezier(.2,.8,.2,1); }
+#sdRoot.open .sd-panel { transform:none; }
+.sd-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:20px 20px 14px; padding-top:max(20px, env(safe-area-inset-top)); }
+.sd-h1 { font-size:20px; font-weight:800; letter-spacing:-.4px; color:var(--text-1,#111827); display:flex; align-items:center; gap:8px; }
+.sd-count { font-size:11.5px; font-weight:700; background:var(--surface-2,#f3f4f6); color:var(--text-2,#374151); border:1px solid var(--border-color,#e5e7eb); border-radius:999px; padding:2px 9px; }
+.sd-sub { font-size:12.5px; color:var(--text-3,#6b7280); margin-top:4px; line-height:1.45; }
+.sd-x { width:34px; height:34px; flex-shrink:0; border-radius:10px; border:1px solid var(--border-color,#e5e7eb); background:var(--surface-1,#fff); color:var(--text-2,#374151); display:grid; place-items:center; cursor:pointer; }
+.sd-x:hover { background:var(--surface-2,#f3f4f6); }
+.sd-add { display:flex; align-items:center; gap:8px; margin:0 20px 10px; padding:0 6px 0 12px; border:1.5px solid var(--border-color,#e5e7eb); border-radius:12px; background:var(--surface-1,#fff); color:var(--text-3,#6b7280); transition:border-color .15s, box-shadow .15s; }
+.sd-add:focus-within { border-color:var(--primary,#4f46e5); box-shadow:0 0 0 3px rgba(79,70,229,.12); }
+.sd-add input { flex:1; min-width:0; border:none !important; outline:none; background:transparent !important; box-shadow:none !important; padding:11px 0 !important; margin:0; font:inherit; font-size:14px; color:var(--text-1,#111827); }
+.sd-add select { -webkit-appearance:none; appearance:none; border:none !important; box-shadow:none !important; background:var(--surface-2,#f3f4f6) !important; border-radius:8px !important; padding:5px 10px !important; height:auto !important; min-height:0 !important; font:inherit; font-size:12px !important; font-weight:600; color:var(--text-2,#374151); width:auto !important; max-width:110px; outline:none; margin:0 !important; cursor:pointer; text-overflow:ellipsis; }
+.sd-search { display:flex; align-items:center; gap:7px; margin:0 20px 8px; padding:0 10px; border:1px solid var(--border-color,#e5e7eb); border-radius:10px; color:var(--text-3,#6b7280); }
+.sd-search input { flex:1; border:none !important; outline:none; background:transparent !important; box-shadow:none !important; padding:8px 0 !important; margin:0; font:inherit; font-size:13px; color:var(--text-1,#111827); }
+.sd-body { flex:1; overflow-y:auto; padding:4px 12px calc(24px + env(safe-area-inset-bottom,0px)); }
+.sd-group { margin:8px 0 12px; }
+.sd-group-h { display:flex; align-items:center; gap:7px; padding:6px 8px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3,#6b7280); }
+.sd-group-h em { font-style:normal; font-weight:700; background:var(--surface-2,#f3f4f6); border-radius:999px; padding:0 7px; }
+.sd-row { display:flex; align-items:center; gap:8px; padding:10px 8px; border-radius:11px; }
+.sd-row + .sd-row { border-top:1px solid var(--border-color,#eef0f3); }
+.sd-row:hover { background:var(--surface-2,#f8fafc); }
+.sd-row-main { flex:1; min-width:0; }
+.sd-title { font-size:14px; font-weight:550; color:var(--text-1,#111827); line-height:1.35; word-break:break-word; }
+.sd-meta { display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin-top:4px; }
+.sd-chip { font-size:10.5px; font-weight:600; padding:1px 7px; border-radius:999px; background:var(--surface-2,#f3f4f6); color:var(--text-3,#6b7280); border:1px solid var(--border-color,#e5e7eb); }
+.sd-chip.p-P1 { color:#B42318; background:rgba(220,38,38,.06); border-color:rgba(220,38,38,.18); }
+.sd-chip.p-P2 { color:#B54708; background:rgba(247,144,9,.07); border-color:rgba(247,144,9,.2); }
+.sd-note { font-size:11.5px; color:var(--text-3,#6b7280); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.sd-back { display:inline-flex; align-items:center; gap:5px; flex-shrink:0; border:1px solid rgba(79,70,229,.25); background:rgba(79,70,229,.06); color:var(--primary,#4f46e5); font:inherit; font-size:12px; font-weight:650; padding:6px 10px; border-radius:9px; cursor:pointer; }
+.sd-back:hover { background:rgba(79,70,229,.12); }
+.sd-del { width:30px; height:30px; flex-shrink:0; border:1px solid transparent; background:transparent; color:var(--text-3,#9ca3af); border-radius:8px; display:grid; place-items:center; cursor:pointer; opacity:.6; }
+.sd-row:hover .sd-del { opacity:1; }
+.sd-del:hover { color:#B42318; background:rgba(220,38,38,.06); border-color:rgba(220,38,38,.18); }
+.sd-empty { display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; padding:48px 28px; color:var(--text-3,#6b7280); font-size:13px; line-height:1.5; }
+.sd-empty b { color:var(--text-1,#111827); font-size:15px; }
+.sd-empty-ic { width:56px; height:56px; border-radius:16px; display:grid; place-items:center; background:var(--surface-2,#f3f4f6); color:var(--text-3,#6b7280); margin-bottom:4px; }
+@media (max-width:640px) {
+  .sd-panel { top:auto; left:0; width:100%; height:88vh; border-left:none; border-top-left-radius:20px; border-top-right-radius:20px; transform:translateY(100%); box-shadow:0 -12px 40px rgba(15,23,42,.2); }
+  .sd-head { padding-top:20px; }
+  .sd-back { padding:6px 9px; font-size:11.5px; }
+  .sd-del { opacity:1; }
+}
+`;
