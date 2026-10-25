@@ -6000,39 +6000,94 @@ body.dbd-dragging, body.dbd-dragging * { cursor:grabbing !important; -webkit-use
 })();
 
 
-/* ── Outfits: pick clothes from the Wardrobe for each event of the day ── */
+/* ── Outfits: today's look on a mannequin, saved outfits one tap away, and
+   separate outfits only for the events you choose (no wall of empty rows). ── */
+function _dbOutIds(log) { try { return log ? (typeof log.item_ids === 'string' ? JSON.parse(log.item_ids || '[]') : (log.item_ids || [])) : []; } catch (e) { return []; } }
+function _dbOutItem(id) { return (state.data.wardrobe_items || []).find(x => String(x.id) === String(id)) || null; }
+function _dbOutFit(ids) {
+  const f = { top: null, bottom: null, shoes: null, layer: null, acc: [] };
+  ids.map(_dbOutItem).filter(Boolean).forEach(it => { if (it.type === 'accessory') f.acc.push(it.id); else f[['top', 'bottom', 'shoes', 'layer'].includes(it.type) ? it.type : 'top'] = it.id; });
+  return f;
+}
+function _dbOutThumbs(its, size) {
+  return its.map(i => `<span class="dbo-tile" style="--s:${size}px" title="${_drpEsc(i.name || '')}">${i.image ? `<img src="${i.image}" alt="">` : `<i style="background:${_drpEsc(i.color || '#94a3b8')}"></i>`}${String(i.status || '').toLowerCase() === 'dirty' ? '<em title="In the laundry">!</em>' : ''}</span>`).join('');
+}
 function _dbOutfitHTML(ds) {
   const ready = typeof window.wdPickOutfit === 'function' && Array.isArray(state.data.wardrobe_log);
   if (!ready && !_db.wdLoading && typeof window.ensureViewLoaded === 'function') {
     _db.wdLoading = true;
     window.ensureViewLoaded('wardrobe').then(ok => ok && window._wdLoad ? window._wdLoad() : null).then(() => { if (document.getElementById('dbSide')) dbRender(); }).catch(() => { });
   }
-  const { items, allDay } = _dbTimeline(ds);
-  const evs = [{ id: '', title: 'The day', label: 'Everyday look' }]
-    .concat(items.concat(allDay).filter(i => i.k === 'event' || i.k === 'gym').map(i => ({ id: i.k === 'gym' ? 'gym' : String(i.id), title: i.title, label: i.label || 'All day' })));
+  const head = n => `<header class="dbd-box-h"><span class="dbd-box-t">Outfits</span><span class="dbd-box-n">${n}</span>${_dbIcon("dbGo('wardrobe')", 'arrow-up-right', 'Open Wardrobe')}</header>`;
+  if (!ready) return `<section class="dbd-box dbd-outfit k-outfit">${head('')}<div class="dbd-box-b"><p class="dbd-empty">Loading your wardrobe…</p></div></section>`;
+  const items = state.data.wardrobe_items || [];
+  if (!items.length) return `<section class="dbd-box dbd-outfit k-outfit">${head('')}<div class="dbd-box-b"><div class="dbo-empty"><b>Your wardrobe is empty</b><span>Add a few clothes with photos and you can plan what to wear for the day and for each event right here.</span><button type="button" class="dbo-btn pri" onclick="dbGo('wardrobe')">Add clothes</button></div></div></section>`;
+
   const logs = (state.data.wardrobe_log || []).filter(l => String(l.date || '').slice(0, 10) === ds);
-  const item = id => (state.data.wardrobe_items || []).find(x => String(x.id) === String(id));
-  const rows = evs.map(e => {
-    const log = logs.find(l => String(l.event_id || '') === e.id);
-    let ids = []; try { ids = log ? (typeof log.item_ids === 'string' ? JSON.parse(log.item_ids || '[]') : (log.item_ids || [])) : []; } catch (er) { }
-    const its = ids.map(item).filter(Boolean);
-    const worn = log && (log.worn === true || log.worn === 'true');
-    const thumbs = its.length ? `<span class="dbo-th">${its.slice(0, 5).map(i => i.image ? `<img src="${i.image}" alt="" title="${_drpEsc(i.name || '')}">` : `<i style="background:${_drpEsc(i.color || '#94a3b8')}" title="${_drpEsc(i.name || '')}"></i>`).join('')}</span>` : '';
-    return `<div class="dbo-row${worn ? ' worn' : ''}">
-      <div class="dbo-ev"><b>${_drpEsc(e.title)}</b><span>${_drpEsc(e.label)}</span></div>
-      ${thumbs || '<span class="dbo-none">No outfit yet</span>'}
-      <div class="dbo-a">
-        ${log && its.length ? `<button type="button" class="dbo-w${worn ? ' on' : ''}" onclick="wdMarkWorn('${_dbq(log.id)}')" title="${worn ? 'Worn — clothes are in the laundry' : 'Mark as worn (moves clothes to the laundry)'}">${worn ? '✓ Worn' : 'Wore it'}</button>` : ''}
-        <button type="button" class="dbo-p" onclick="dbOutfitPick('${_dbq(e.id)}','${_dbq(e.title)}')" ${ready ? '' : 'disabled'}>${its.length ? 'Change' : 'Pick'}</button>
+  const { items: tl, allDay } = _dbTimeline(ds);
+  const evs = tl.concat(allDay).filter(i => i.k === 'event' || i.k === 'gym')
+    .map(i => ({ id: i.k === 'gym' ? 'gym' : String(i.id), title: i.k === 'gym' ? 'Gym' : i.title, label: i.label || 'All day' }));
+  const dayLog = logs.find(l => !String(l.event_id || ''));
+  const dayIds = _dbOutIds(dayLog), dayIts = dayIds.map(_dbOutItem).filter(Boolean);
+  const worn = l => l && (l.worn === true || l.worn === 'true');
+
+  // hero: today's look
+  const fig = typeof _wdFigureSVG === 'function' ? (() => { try { return _wdFigureSVG(_dbOutFit(dayIds), {}); } catch (e) { return ''; } })() : '';
+  const hero = `<div class="dbo-hero${worn(dayLog) ? ' worn' : ''}">
+      <button type="button" class="dbo-fig" onclick="dbOutfitPick('','The day')" title="${dayIts.length ? 'Change today’s look' : 'Pick today’s look'}">${fig || '<i data-lucide="shirt"></i>'}</button>
+      <div class="dbo-hero-b">
+        <div class="dbo-hero-t"><b>Today’s look</b>${worn(dayLog) ? '<span class="dbo-tag on">✓ Worn</span>' : dayIts.length ? '<span class="dbo-tag">Planned</span>' : ''}</div>
+        ${dayIts.length ? `<div class="dbo-tiles">${_dbOutThumbs(dayIts, 46)}</div><div class="dbo-names">${dayIts.map(i => _drpEsc(i.name || i.type || '')).join(' · ')}</div>`
+          : `<p class="dbo-hint">Nothing picked yet. Choose clothes, or tap a saved outfit below.</p>`}
+        <div class="dbo-acts">
+          <button type="button" class="dbo-btn pri" onclick="dbOutfitPick('','The day')">${dayIts.length ? 'Change' : 'Pick outfit'}</button>
+          ${dayLog && dayIts.length ? `<button type="button" class="dbo-btn${worn(dayLog) ? ' on' : ''}" onclick="wdMarkWorn('${_dbq(dayLog.id)}')" title="${worn(dayLog) ? 'Undo' : 'Moves these clothes to the laundry'}">${worn(dayLog) ? '✓ Worn' : 'Wore it'}</button>
+          <button type="button" class="dbo-ic" onclick="wdClearPlan('${_dbq(dayLog.id)}')" title="Clear today’s look" aria-label="Clear today’s look"><i data-lucide="x"></i></button>` : ''}
+        </div>
       </div>
     </div>`;
+
+  // saved outfits — one tap puts them on today
+  const saved = (state.data.wardrobe_outfits || []).map(o => ({ o, its: _dbOutIds(o).map(_dbOutItem).filter(Boolean) })).filter(x => x.its.length);
+  const savedHTML = saved.length ? `<div class="dbo-sec"><div class="dbo-sec-t">Saved outfits <span>tap to wear today</span></div>
+      <div class="dbo-saved" data-scroll="outfit-saved">${saved.map(x => {
+        const on = dayIds.length && dayIds.length === x.its.length && x.its.every(i => dayIds.map(String).includes(String(i.id)));
+        return `<button type="button" class="dbo-card${on ? ' on' : ''}" onclick="dbOutfitApply('${_dbq(x.o.id)}')" title="Wear “${_drpEsc(x.o.name || 'Outfit')}” today"><span class="dbo-card-th">${_dbOutThumbs(x.its.slice(0, 4), 30)}</span><b>${_drpEsc(x.o.name || 'Outfit')}</b></button>`;
+      }).join('')}</div></div>` : '';
+
+  // events: only the ones you've given an outfit, plus a picker for the rest
+  const evLogs = evs.map(e => ({ e, log: logs.find(l => String(l.event_id || '') === e.id) })).filter(x => x.log && _dbOutIds(x.log).length);
+  const rest = evs.filter(e => !evLogs.some(x => x.e.id === e.id));
+  const evRows = evLogs.map(({ e, log }) => {
+    const its = _dbOutIds(log).map(_dbOutItem).filter(Boolean);
+    return `<div class="dbo-ev-row${worn(log) ? ' worn' : ''}">
+      <div class="dbo-ev"><b>${_drpEsc(e.title)}</b><span>${_drpEsc(e.label)}</span></div>
+      <div class="dbo-tiles sm">${_dbOutThumbs(its.slice(0, 5), 32)}</div>
+      <button type="button" class="dbo-btn sm" onclick="dbOutfitPick('${_dbq(e.id)}','${_dbq(e.title)}')">Change</button>
+      <button type="button" class="dbo-btn sm${worn(log) ? ' on' : ''}" onclick="wdMarkWorn('${_dbq(log.id)}')">${worn(log) ? '✓ Worn' : 'Wore it'}</button>
+      <button type="button" class="dbo-ic" onclick="wdClearPlan('${_dbq(log.id)}')" title="Remove" aria-label="Remove outfit for ${_drpEsc(e.title)}"><i data-lucide="x"></i></button>
+    </div>`;
   }).join('');
-  const n = logs.filter(l => { try { return JSON.parse(l.item_ids || '[]').length; } catch (er) { return 0; } }).length;
-  return `<section class="dbd-box dbd-outfit k-outfit">
-    <header class="dbd-box-h"><span class="dbd-box-t">Outfits</span><span class="dbd-box-n">${n ? `${n} planned` : ''}</span>${_dbIcon("dbGo('wardrobe')", 'arrow-up-right', 'Open Wardrobe')}</header>
-    <div class="dbd-box-b" data-scroll="outfit">${ready ? rows : '<p class="dbd-empty">Loading your wardrobe…</p>'}</div>
-  </section>`;
+  const add = rest.length ? `<div class="dbo-add"><i data-lucide="plus"></i><select onchange="if(this.value){const o=this.selectedOptions[0];dbOutfitPick(this.value,o.dataset.t);this.value='';}" aria-label="Plan an outfit for an event">
+      <option value="">Different outfit for an event…</option>${rest.map(e => `<option value="${_drpEsc(e.id)}" data-t="${_drpEsc(e.title)}">${_drpEsc(e.title)} · ${_drpEsc(e.label)}</option>`).join('')}</select></div>` : '';
+  const evHTML = evRows || add ? `<div class="dbo-sec"><div class="dbo-sec-t">For events</div>${evRows}${add}</div>` : '';
+
+  const n = (dayIts.length ? 1 : 0) + evLogs.length;
+  return `<section class="dbd-box dbd-outfit k-outfit">${head(n ? `${n} planned` : '')}
+    <div class="dbd-box-b">${hero}${savedHTML}${evHTML}</div></section>`;
 }
+// Put a saved outfit on today in one tap (no picker needed).
+window.dbOutfitApply = async function (outfitId) {
+  const o = (state.data.wardrobe_outfits || []).find(x => String(x.id) === String(outfitId)); if (!o) return;
+  const ids = _dbOutIds(o).map(String), ds = _dpDate();
+  const log = (state.data.wardrobe_log || []).find(l => String(l.date || '').slice(0, 10) === ds && !String(l.event_id || ''));
+  try {
+    if (log) await _wdUpdate('wardrobe_log', log.id, { item_ids: JSON.stringify(ids), event_title: 'The day', worn: false });
+    else await _wdCreate('wardrobe_log', { id: _wdId('wl'), date: ds, event_id: '', event_title: 'The day', item_ids: JSON.stringify(ids), worn: false });
+    showToast(`Today: ${o.name || 'outfit'}`);
+  } catch (e) { showToast('Couldn’t save the outfit'); }
+  dbRender();
+};
 window.dbOutfitPick = function (eventId, title) {
   if (typeof window.wdPickOutfit !== 'function') return;
   window.wdPickOutfit({ date: _dpDate(), eventId, eventTitle: title });
@@ -6042,21 +6097,56 @@ window.dbOutfitPick = function (eventId, title) {
   const st = document.createElement('style'); st.id = 'dbOutfitStyles';
   st.textContent = `
 .dbd-outfit { height:auto !important; margin-top:12px; }
-.dbd-outfit .dbd-box-b { max-height:260px; }
-.dbo-row { display:flex; align-items:center; gap:10px; padding:8px 8px; border-radius:10px; }
-.dbo-row + .dbo-row { border-top:1px solid var(--border-color); border-radius:0; }
-.dbo-ev { min-width:0; flex:0 1 38%; display:flex; flex-direction:column; }
+.dbd-outfit .dbd-box-b { padding:12px; display:grid; gap:14px; overflow:visible; }
+.dbo-hero { display:flex; gap:14px; align-items:stretch; }
+.dbo-fig { flex:none; width:104px; height:150px; border-radius:12px; border:1px solid var(--border-color); background:linear-gradient(180deg, color-mix(in srgb, var(--c) 8%, var(--surface-1)), var(--surface-2)); padding:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--text-3); transition:border-color .15s, box-shadow .15s; }
+.dbo-fig:hover { border-color:var(--c); box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 15%, transparent); }
+.dbo-fig svg { width:100%; height:100%; }
+.dbo-fig > svg.lucide, .dbo-fig > i { width:30px; height:30px; }
+.dbo-hero-b { flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; }
+.dbo-hero-t { display:flex; align-items:center; gap:8px; }
+.dbo-hero-t b { font-size:15px; font-weight:750; color:var(--text-1); }
+.dbo-tag { font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--surface-2); color:var(--text-2); }
+.dbo-tag.on { background:color-mix(in srgb, var(--c) 16%, var(--surface-1)); color:color-mix(in srgb, var(--c) 80%, var(--text-1)); }
+.dbo-hint { margin:0; font-size:12.5px; color:var(--text-3); line-height:1.45; }
+.dbo-tiles { display:flex; gap:6px; flex-wrap:wrap; }
+.dbo-tiles.sm { flex:1; min-width:0; flex-wrap:nowrap; overflow:hidden; gap:4px; }
+.dbo-tile { position:relative; width:var(--s); height:var(--s); flex:none; border-radius:9px; background:var(--surface-2); border:1px solid var(--border-color); overflow:hidden; display:block; box-sizing:border-box; }
+.dbo-tile img { width:100%; height:100%; object-fit:contain; display:block; }
+.dbo-tile i { position:absolute; inset:22%; border-radius:4px; display:block; }
+.dbo-tile em { position:absolute; right:2px; top:2px; width:13px; height:13px; border-radius:50%; background:#f59e0b; color:#fff; font-size:9px; font-style:normal; font-weight:800; display:flex; align-items:center; justify-content:center; }
+.dbo-names { font-size:12px; color:var(--text-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dbo-acts { display:flex; gap:6px; align-items:center; margin-top:auto; }
+.dbo-btn { border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-1); font:inherit; font-size:12.5px; font-weight:700; padding:6px 12px; border-radius:9px; cursor:pointer; white-space:nowrap; }
+.dbo-btn:hover { border-color:color-mix(in srgb, var(--c) 45%, var(--border-color)); }
+.dbo-btn.pri { background:var(--c); border-color:var(--c); color:#fff; }
+.dbo-btn.on { background:color-mix(in srgb, var(--c) 14%, var(--surface-1)); color:color-mix(in srgb, var(--c) 80%, var(--text-1)); border-color:color-mix(in srgb, var(--c) 40%, var(--border-color)); }
+.dbo-btn.sm { font-size:11.5px; padding:4px 9px; }
+.dbo-ic { width:28px; height:28px; flex:none; border:none; background:transparent; color:var(--text-3); border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+.dbo-ic:hover { background:var(--surface-2); color:var(--text-1); }
+.dbo-ic svg { width:15px; height:15px; }
+.dbo-sec { display:grid; gap:8px; }
+.dbo-sec-t { font-size:11px; font-weight:750; letter-spacing:.04em; text-transform:uppercase; color:var(--text-3); }
+.dbo-sec-t span { text-transform:none; letter-spacing:0; font-weight:600; margin-left:4px; opacity:.8; }
+.dbo-saved { display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+.dbo-saved::-webkit-scrollbar { display:none; }
+.dbo-card { flex:none; display:flex; flex-direction:column; gap:6px; align-items:flex-start; padding:8px; border-radius:11px; border:1px solid var(--border-color); background:var(--surface-1); cursor:pointer; font:inherit; max-width:150px; }
+.dbo-card:hover { border-color:color-mix(in srgb, var(--c) 50%, var(--border-color)); }
+.dbo-card.on { border-color:var(--c); box-shadow:0 0 0 2px color-mix(in srgb, var(--c) 22%, transparent); }
+.dbo-card-th { display:flex; gap:3px; }
+.dbo-card b { font-size:12px; font-weight:700; color:var(--text-1); max-width:134px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dbo-ev-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--border-color); }
+.dbo-ev-row:first-of-type { border-top:none; }
+.dbo-ev { min-width:0; flex:0 1 34%; display:flex; flex-direction:column; }
 .dbo-ev b { font-size:13px; font-weight:700; color:var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .dbo-ev span { font-size:11px; color:var(--text-3); font-weight:600; }
-.dbo-th { flex:1; min-width:0; display:flex; gap:4px; overflow:hidden; }
-.dbo-th img, .dbo-th i { width:34px; height:34px; flex:none; object-fit:contain; border-radius:8px; background:var(--surface-2); display:block; }
-.dbo-none { flex:1; font-size:12px; color:var(--text-3); }
-.dbo-a { display:flex; gap:6px; flex:none; }
-.dbo-p, .dbo-w { border:1px solid var(--border-color); background:var(--surface-1); color:var(--text-1); font:inherit; font-size:12px; font-weight:700; padding:5px 10px; border-radius:8px; cursor:pointer; }
-.dbo-p { color:var(--c); border-color:color-mix(in srgb, var(--c) 40%, var(--border-color)); }
-.dbo-p:disabled { opacity:.5; cursor:default; }
-.dbo-w.on { background:color-mix(in srgb, var(--c) 14%, var(--surface-1)); color:color-mix(in srgb, var(--c) 80%, var(--text-1)); }
-.dbo-row.worn .dbo-th { opacity:.7; }
+.dbo-ev-row.worn .dbo-tiles { opacity:.7; }
+.dbo-add { position:relative; display:flex; align-items:center; gap:6px; border:1px dashed color-mix(in srgb, var(--c) 45%, var(--border-color)); border-radius:10px; padding:0 10px; color:color-mix(in srgb, var(--c) 80%, var(--text-1)); }
+.dbo-add svg { width:15px; height:15px; flex:none; }
+.dbo-add select { flex:1; min-width:0; font:inherit; font-size:12.5px; font-weight:650; color:inherit; background:transparent; border:none; padding:8px 0; cursor:pointer; outline:none; }
+.dbo-empty { display:grid; gap:6px; justify-items:start; padding:4px 2px; }
+.dbo-empty b { font-size:14px; color:var(--text-1); }
+.dbo-empty span { font-size:12.5px; color:var(--text-3); line-height:1.45; }
 `;
   document.head.appendChild(st);
 })();
