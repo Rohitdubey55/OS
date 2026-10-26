@@ -1,8 +1,7 @@
-/* view-calendar.js — the Planner.
-   One readable list of your day: plan blocks (planner_events), habits and tasks
-   in time order. Habits/tasks that fall inside a plan block sit inside it,
-   finished early items fold away, gaps show as free time, and a side panel
-   shows what you should be doing now. Week and Month show how each day went. */
+/* view-calendar.js — the Planner, laid out like Google Calendar.
+   Day and Week are a 24-hour time grid with plan blocks (planner_events),
+   habits and tasks sized to their duration; click or drag to create, drag to
+   move or resize, click for details. Month shows each day's blocks. */
 
 let calState = {
   view: 'day', // 'day', 'week', 'month'
@@ -81,14 +80,17 @@ function _plItems(ds) {
   });
   (state.data.habits || []).forEach(h => {
     if (!_plHabitOn(h, ds)) return;
-    const s = _plHabitTime(h), d = parseInt(h.duration, 10) || 30;
+    const ov = _plOv(ds, 'habit', h.id);
+    const s = ov && ov.time ? _plMin(ov.time) : _plHabitTime(h), d = (ov && Number(ov.duration)) || parseInt(h.duration, 10) || 30;
     out.push({ k: 'habit', id: String(h.id), t: h.habit_name || 'Habit', s, e: s == null ? null : Math.min(1440, s + d), done: !!_plHabitLog(h.id, ds), ref: h });
   });
   (state.data.tasks || []).forEach(t => {
     if (!_plTaskOn(t, ds)) return;
-    const tm = String(t.due_time || '').slice(0, 5);
+    const ov = _plOv(ds, 'task', t.id);
+    const tm = ov && ov.time ? String(ov.time).slice(0, 5) : String(t.due_time || '').slice(0, 5);
     const s = /^\d{1,2}:\d{2}$/.test(tm) ? _plMin(tm) : null;
-    out.push({ k: 'task', id: String(t.id), t: t.title || 'Task', s, e: s == null ? null : Math.min(1440, s + (parseInt(t.duration, 10) || 30)), done: _plTaskDone(t, ds), ref: t });
+    const dur = (ov && Number(ov.duration)) || parseInt(t.duration, 10) || 30;
+    out.push({ k: 'task', id: String(t.id), t: t.title || 'Task', s, e: s == null ? null : Math.min(1440, s + dur), done: _plTaskDone(t, ds), ref: t });
   });
   return out;
 }
@@ -341,7 +343,6 @@ function _plSideHTML(ds) {
   const done = pd + hd + td, all = pt + ht + tt, frac = all ? done / all : 0, C = 2 * Math.PI * 15.5;
   h += `<div class="pl-box"><div class="pl-ring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--pl-line2)" stroke-width="4"/>${frac > 0 ? `<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--pl-habit)" stroke-width="4" stroke-linecap="round" stroke-dasharray="${(frac * C).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 18 18)"/>` : ''}</svg>
     <div><p class="pl-h">${today ? 'Today' : ds < _plToday() ? 'This day' : 'Planned'}</p><p class="big">${done} of ${all} done</p><p class="split">Plan ${pd}/${pt} · Habits ${hd}/${ht}${tt ? ` · Tasks ${td}/${tt}` : ''}</p></div></div></div>`;
-  h += `<div class="pl-box pl-any-desk">${_plAnytimeHTML(list.filter(x => x.s == null && !_pl.off.has(x.k)))}<p class="pl-note">Give an item a time to put it on the timeline.</p></div>`;
   return h;
 }
 
@@ -372,6 +373,407 @@ function _plMonthHTML() {
 }
 window.plOpenDay = function (k) { calState.cursor = _plDate(k); calState.view = 'day'; renderCalendar(); };
 
+/* ── Google Calendar-style grid ────────────────────────────────────
+   Day and Week are one time grid: the full 24 hours on the left (each hour
+   labelled once), blocks sized to how long they take, overlaps side by side,
+   a red line for now. Click or drag on empty space to create, drag a block to
+   move it, drag its bottom edge to change how long it takes, click it for
+   details. Things without a time sit in the all-day row at the top. Habits and
+   repeating tasks move for that day only (same day overrides the journal uses). */
+const GC_H = 48;                       // px per hour
+const GC_COL = { plan: '#4F46E5', habit: '#33B679', task: '#F4511E' };
+const _gc = { d: null, justDragged: 0, pop: null, scrollKey: '', scrollTop: null };
+
+function _gc12(m, withAp = true) {
+  m = Math.max(0, Math.min(1440, Math.round(m)));
+  const h24 = Math.floor(m / 60) % 24, mi = m % 60, h = h24 % 12 || 12, ap = h24 < 12 || m === 1440 ? 'am' : 'pm';
+  return `${h}${mi ? ':' + String(mi).padStart(2, '0') : ''}${withAp ? ap : ''}`;
+}
+function _gcRange(s, e) {
+  const ap = m => (Math.floor(m / 60) % 24) < 12 ? 'am' : 'pm';
+  return ap(s) === ap(e) ? `${_gc12(s, false)} – ${_gc12(e)}` : `${_gc12(s)} – ${_gc12(e)}`;
+}
+function _gcHourLbl(h) { return h === 0 ? '' : `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`; }
+function _gcWeekDays() { return window.innerWidth < 720 ? 3 : 7; }
+function _gcDays() {
+  const c = calState.cursor;
+  if (calState.view === 'day') return [_plIso(c)];
+  if (_gcWeekDays() === 3) return [0, 1, 2].map(i => _plIso(_plAdd(c, i)));
+  const st = _plAdd(c, -((c.getDay() + 6) % 7));
+  return [0, 1, 2, 3, 4, 5, 6].map(i => _plIso(_plAdd(st, i)));
+}
+function _gcColor(x) { return x.k === 'plan' ? eventColor(x.ref) : GC_COL[x.k]; }
+function _gcMovable(x) { return x.k === 'plan' || x.k === 'habit' || x.k === 'task'; }
+function _gcPerDay(x) { return x.k === 'habit' || (x.k === 'task' && _plTaskRecurring(x.ref)); }
+
+/* day overrides — the same per-day times the journal planner writes */
+function _plOv(ds, kind, id) {
+  const a = state.data.day_overrides;
+  return Array.isArray(a) ? a.find(o => String(o.date || '').slice(0, 10) === ds && o.kind === kind && String(o.ref_id) === String(id)) || null : null;
+}
+async function _plOvSave(ds, kind, id, fields) {
+  if (!Array.isArray(state.data.day_overrides)) state.data.day_overrides = [];
+  const o = _plOv(ds, kind, id);
+  try {
+    if (o) { Object.assign(o, fields); renderCalendar(); const r = await apiCall('update', 'day_overrides', fields, o.id); if (r && r.success === false) throw new Error(r.message); }
+    else {
+      const row = { id: 'dov_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), date: ds, kind, ref_id: String(id), ...fields };
+      state.data.day_overrides.push(row); renderCalendar();
+      const r = await apiCall('create', 'day_overrides', { ...row }); if (!r || r.success === false) throw new Error(r && r.message);
+    }
+  } catch (e) { console.error('day_overrides', e); showToast('Moved here, but it won’t be saved until the day-overrides migration is run'); }
+}
+function _gcEnsureOverrides() {
+  if (Array.isArray(state.data.day_overrides) || _gc.ovLoading || typeof apiGet !== 'function') return;
+  _gc.ovLoading = true;
+  apiGet('day_overrides').then(r => { state.data.day_overrides = Array.isArray(r) ? r : []; if (state.view === 'calendar') renderCalendar(); })
+    .catch(() => { state.data.day_overrides = []; });
+}
+
+/* overlap layout: side-by-side lanes inside each cluster */
+function _gcLayout(list) {
+  const xs = list.slice().sort((a, b) => a.s - b.s || (b.e - b.s) - (a.e - a.s));
+  let cluster = [], end = -1;
+  const flush = () => {
+    const lanes = [];
+    cluster.forEach(x => { let i = lanes.findIndex(le => le <= x.s); if (i === -1) { i = lanes.length; lanes.push(0); } lanes[i] = Math.max(x.e, x.s + 20); x.lane = i; });
+    cluster.forEach(x => x.lanes = lanes.length);
+    cluster = [];
+  };
+  xs.forEach(x => { if (x.s >= end) { flush(); end = -1; } cluster.push(x); end = Math.max(end, Math.max(x.e, x.s + 20)); });
+  flush();
+  return xs;
+}
+
+function _gcEvHTML(x, ds) {
+  const top = x.s / 60 * GC_H, hgt = Math.max(18, (x.e - x.s) / 60 * GC_H - 2);
+  const w = `(100% - 8px) / ${x.lanes}`;
+  const short = hgt < 38;
+  const kind = x.k === 'habit' ? 'Habit' : x.k === 'task' ? 'Task' : '';
+  return `<div class="gc-ev k-${x.k}${x.done ? ' done' : ''}${short ? ' short' : ''}" style="--c:${_plEsc(_gcColor(x))};top:${top + 1}px;height:${hgt}px;left:calc(${w} * ${x.lane});width:calc(${w} - 2px)"
+      data-k="${x.k}" data-id="${_plEsc(x.id)}" data-ds="${ds}" data-s="${x.s}" data-e="${x.e}" data-t="${_plEsc(x.t)}" title="${_plEsc(x.t)} · ${_gcRange(x.s, x.e)}${kind ? ' · ' + kind : ''}">
+    <button type="button" class="gc-tick${x.k === 'habit' ? ' round' : ''}" onclick="event.stopPropagation(); plToggle('${x.k}','${_plEsc(x.id)}')" aria-label="${x.done ? 'Mark not done' : 'Mark done'}: ${_plEsc(x.t)}" aria-pressed="${x.done}">${x.done ? PL_CHECK : ''}</button>
+    <div class="gc-ev-b">${short ? `<span class="gc-ev-t">${_plEsc(x.t)}<span class="gc-ev-m">, ${_gc12(x.s)}</span></span>`
+      : `<span class="gc-ev-t">${_plEsc(x.t)}</span><span class="gc-ev-m">${_gcRange(x.s, x.e)}</span>`}</div>
+    ${_gcMovable(x) ? '<span class="gc-rs" aria-hidden="true"></span>' : ''}
+  </div>`;
+}
+
+function _gcGridHTML(days) {
+  const today = _plToday(), now = _plNowMin();
+  const one = days.length === 1;
+  const head = days.map(ds => {
+    const d = _plDate(ds), isT = ds === today;
+    return `<button type="button" class="gc-dh${isT ? ' today' : ''}${ds < today ? ' past' : ''}" onclick="plOpenDay('${ds}')" ${one ? 'tabindex="-1"' : ''}>
+      <span class="gc-dw">${d.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</span><span class="gc-dn">${d.getDate()}</span></button>`;
+  }).join('');
+  const lists = days.map(ds => _plItems(ds).filter(x => !_pl.off.has(x.k)));
+  const allDay = lists.map((l, i) => `<div class="gc-ad-col">${l.filter(x => x.s == null).map(x => `<button type="button" class="gc-chip k-${x.k}${x.done ? ' done' : ''}" style="--c:${_plEsc(_gcColor(x))}" onclick="gcDetail(this,'${x.k}','${_plEsc(x.id)}','${days[i]}')" title="${_plEsc(x.t)}">${x.done ? '✓ ' : ''}${_plEsc(x.t)}</button>`).join('')}</div>`).join('');
+  const hasAllDay = lists.some(l => l.some(x => x.s == null));
+  let gutter = '';
+  for (let h = 1; h < 24; h++) gutter += `<span class="gc-hl" style="top:${h * GC_H}px">${_gcHourLbl(h)}</span>`;
+  const cols = days.map((ds, i) => {
+    const timed = _gcLayout(lists[i].filter(x => x.s != null));
+    const nl = ds === today ? `<div class="gc-now" style="top:${now / 60 * GC_H}px"><i></i></div>` : '';
+    return `<div class="gc-col${ds === today ? ' today' : ''}" data-ds="${ds}">${timed.map(x => _gcEvHTML(x, ds)).join('')}${nl}</div>`;
+  }).join('');
+  return `<div class="gc${one ? ' one' : ''}" style="--n:${days.length}">
+    <div class="gc-head"><div class="gc-gut gc-tz"></div><div class="gc-heads">${head}</div></div>
+    <div class="gc-ad${hasAllDay ? '' : ' empty'}"><div class="gc-gut"><span>${hasAllDay ? 'All day' : ''}</span></div><div class="gc-ad-cols">${allDay}</div></div>
+    <div class="gc-scroll" id="gcScroll" onscroll="_gc.scrollTop=this.scrollTop">
+      <div class="gc-grid" style="height:${24 * GC_H}px"><div class="gc-gut">${gutter}</div><div class="gc-cols">${cols}</div></div>
+    </div>
+  </div>`;
+}
+
+/* ── mini month (left/right rail, like Google's) ── */
+function _gcMiniHTML() {
+  const c = calState.cursor, mo = _gc.miniMonth || new Date(c.getFullYear(), c.getMonth(), 1);
+  const st = _plAdd(mo, -((mo.getDay() + 6) % 7)), td = _plToday(), sel = new Set(_gcDays());
+  let cells = '';
+  for (let i = 0; i < 42; i++) {
+    const d = _plAdd(st, i), k = _plIso(d);
+    const has = (state.data.planner || []).some(e => extractDatetime(e.start_datetime).date === k);
+    cells += `<button type="button" class="gc-mc${d.getMonth() !== mo.getMonth() ? ' out' : ''}${k === td ? ' today' : ''}${sel.has(k) ? ' sel' : ''}" onclick="plOpenDayKeep('${k}')">${d.getDate()}${has ? '<i></i>' : ''}</button>`;
+  }
+  return `<div class="pl-box gc-mini"><div class="gc-mini-h"><b>${mo.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b>
+      <button type="button" onclick="gcMini(-1)" aria-label="Previous month">‹</button><button type="button" onclick="gcMini(1)" aria-label="Next month">›</button></div>
+    <div class="gc-mini-g">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(x => `<span>${x}</span>`).join('')}${cells}</div></div>`;
+}
+window.gcMini = function (dir) { const c = calState.cursor, mo = _gc.miniMonth || new Date(c.getFullYear(), c.getMonth(), 1); _gc.miniMonth = new Date(mo.getFullYear(), mo.getMonth() + dir, 1); renderCalendar(); };
+window.plOpenDayKeep = function (k) { calState.cursor = _plDate(k); if (calState.view === 'month') calState.view = 'day'; renderCalendar(); };
+
+/* ── month: Google-style cells with the day's blocks ── */
+function _gcMonthHTML() {
+  const c = calState.cursor, f = new Date(c.getFullYear(), c.getMonth(), 1), st = _plAdd(f, -((f.getDay() + 6) % 7)), td = _plToday();
+  let h = '<div class="gc-month">' + ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `<span class="gc-mdn">${d}</span>`).join('');
+  for (let i = 0; i < 42; i++) {
+    const d = _plAdd(st, i), k = _plIso(d), out = d.getMonth() !== f.getMonth();
+    const l = _plItems(k).filter(x => !_pl.off.has(x.k) && (x.k === 'plan' || x.k === 'task')).sort((a, b) => (a.s ?? -1) - (b.s ?? -1));
+    const shown = l.slice(0, 3);
+    h += `<div class="gc-mcell${out ? ' out' : ''}${k === td ? ' today' : ''}" onclick="if(event.target===this||event.target.classList.contains('gc-mnum'))plOpenDay('${k}')">
+      <button type="button" class="gc-mnum" onclick="plOpenDay('${k}')">${d.getDate() === 1 ? d.toLocaleDateString(undefined, { month: 'short' }) + ' ' : ''}${d.getDate()}</button>
+      ${shown.map(x => `<button type="button" class="gc-mev${x.done ? ' done' : ''}${x.s == null ? ' ad' : ''}" style="--c:${_plEsc(_gcColor(x))}" onclick="gcDetail(this,'${x.k}','${_plEsc(x.id)}','${k}')"><i></i>${x.s != null ? `<span class="tm">${_gc12(x.s)}</span>` : ''}${_plEsc(x.t)}</button>`).join('')}
+      ${l.length > 3 ? `<button type="button" class="gc-more" onclick="plOpenDay('${k}')">${l.length - 3} more</button>` : ''}
+    </div>`;
+  }
+  return h + '</div>';
+}
+
+/* ── popovers: create + details ── */
+function _gcPopEl() { let p = document.getElementById('gcPop'); if (!p) { p = document.createElement('div'); p.id = 'gcPop'; p.className = 'gc-pop'; p.setAttribute('role', 'dialog'); document.body.appendChild(p); } return p; }
+function _gcPlace(p, r) {
+  p.style.visibility = 'hidden'; p.style.display = 'block';
+  const w = p.offsetWidth, h = p.offsetHeight, vw = window.innerWidth, vh = window.innerHeight, m = 10;
+  let left = r.right + 10; if (left + w > vw - m) left = r.left - w - 10; if (left < m) left = Math.max(m, Math.min(vw - w - m, r.left + r.width / 2 - w / 2));
+  let top = r.top; if (top + h > vh - m) top = vh - h - m; if (top < m) top = m;
+  if (vw < 600) { left = m; top = Math.max(m, vh - h - m); }
+  p.style.left = left + 'px'; p.style.top = top + 'px'; p.style.visibility = '';
+}
+window.gcClosePop = function (keepGhost) {
+  const p = document.getElementById('gcPop'); if (p) { p.style.display = 'none'; p.innerHTML = ''; }
+  if (!keepGhost) document.querySelectorAll('.gc-ghost').forEach(g => g.remove());
+  _gc.pop = null;
+};
+function _gcGhost(ds, s, e) {
+  document.querySelectorAll('.gc-ghost').forEach(g => g.remove());
+  const col = document.querySelector(`.gc-col[data-ds="${ds}"]`); if (!col) return null;
+  const g = document.createElement('div'); g.className = 'gc-ghost';
+  col.appendChild(g); _gcGhostSize(g, s, e, _gc.pop && _gc.pop.title);
+  return g;
+}
+function _gcGhostSize(g, s, e, title) {
+  g.style.top = (s / 60 * GC_H + 1) + 'px'; g.style.height = Math.max(18, (e - s) / 60 * GC_H - 2) + 'px';
+  g.innerHTML = `<b>${_plEsc(title || '(No title)')}</b><span>${_gcRange(s, e)}</span>`;
+}
+window.gcCreate = function (ds, s, e, anchor) {
+  _gc.pop = { mode: 'create', ds, s, e, kind: _gc.kind || 'plan', title: '' };
+  const g = _gcGhost(ds, s, e);
+  _gcCreateRender(g || anchor);
+};
+function _gcCreateRender(anchorEl) {
+  const q = _gc.pop, p = _gcPopEl();
+  const d = _plDate(q.ds).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  const k = (v, l) => `<button type="button" class="gc-kind${q.kind === v ? ' on' : ''}" onclick="gcKind('${v}')">${l}</button>`;
+  p.innerHTML = `<div class="gc-pop-x"><button type="button" onclick="gcClosePop()" aria-label="Close">✕</button></div>
+    <input class="gc-in-t" type="text" placeholder="Add title" value="${_plEsc(q.title)}" autocomplete="off" oninput="_gc.pop.title=this.value; const g=document.querySelector('.gc-ghost'); g && _gcGhostSize(g,_gc.pop.s,_gc.pop.e,this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();gcSave()}">
+    <div class="gc-kinds">${k('plan', 'Event')}${k('task', 'Task')}</div>
+    <div class="gc-when"><span class="ic">🕒</span><div><div class="gc-when-d">${d}</div>
+      <div class="gc-when-t"><input type="time" class="gc-in-s" value="${_plHM(q.s)}" onchange="gcTimes()"><span>–</span><input type="time" class="gc-in-e" value="${_plHM(Math.min(1439, q.e))}" onchange="gcTimes()"></div></div></div>
+    <div class="gc-pop-f">${q.kind === 'plan' ? '<button type="button" class="gc-link" onclick="gcMore()">More options</button>' : '<span></span>'}<button type="button" class="gc-save" onclick="gcSave()">Save</button></div>`;
+  p.onkeydown = ev => { if (ev.key === 'Escape') { ev.preventDefault(); gcClosePop(); } };
+  _gcPlace(p, (anchorEl || document.body).getBoundingClientRect());
+  setTimeout(() => { const i = p.querySelector('.gc-in-t'); i && i.focus({ preventScroll: true }); }, 0);
+}
+window.gcKind = function (v) { if (!_gc.pop) return; _gc.pop.kind = v; _gc.kind = v; _gcCreateRender(document.querySelector('.gc-ghost')); };
+window.gcTimes = function () {
+  const q = _gc.pop, p = document.getElementById('gcPop'); if (!q || !p) return;
+  const s = _plMin(p.querySelector('.gc-in-s').value), e = _plMin(p.querySelector('.gc-in-e').value);
+  q.s = s; q.e = e > s ? e : Math.min(1440, s + 60);
+  const g = document.querySelector('.gc-ghost'); if (g) _gcGhostSize(g, q.s, q.e, q.title);
+  p.querySelector('.gc-in-e').value = _plHM(Math.min(1439, q.e));
+};
+window.gcMore = function () {
+  const q = _gc.pop; if (!q) return;
+  gcClosePop();
+  openEventModal(q.ds, _plHM(q.s));
+  setTimeout(() => { const t = document.getElementById('evtTitle'), en = document.getElementById('evtEnd'); if (t) t.value = q.title || ''; if (en) en.value = _plHM(Math.min(1439, q.e)); }, 0);
+};
+window.gcSave = async function () {
+  const q = _gc.pop; if (!q) return;
+  const title = (q.title || '').trim();
+  if (!title) { const i = document.querySelector('#gcPop .gc-in-t'); if (i) { i.classList.add('err'); i.focus(); setTimeout(() => i.classList.remove('err'), 1300); } return; }
+  const st = _plHM(q.s), en = q.e >= 1440 ? '23:59' : _plHM(q.e), dur = Math.max(15, q.e - q.s);
+  gcClosePop();
+  if (q.kind === 'task') {
+    const payload = { title, description: '', category: 'General', tags: '', subtasks: '[]', priority: 'P2', due_date: q.ds, due_time: st, duration: dur, recurrence: 'none', recurrence_days: '', recurrence_end: '', status: 'pending', created_at: new Date().toISOString() };
+    const temp = { id: 'temp-' + Date.now(), ...payload };
+    (state.data.tasks = state.data.tasks || []).push(temp); renderCalendar();
+    try { const r = await apiCall('create', 'tasks', payload); if (!r || r.success === false) throw new Error(r && r.message); const nid = (r.data && r.data.id) || r.id; if (nid) temp.id = String(nid); showToast('Task added'); }
+    catch (e) { state.data.tasks = state.data.tasks.filter(x => x !== temp); showToast('Couldn’t add the task'); }
+  } else {
+    const payload = { title, start_datetime: `${q.ds}T${st}:00`, end_datetime: `${q.ds}T${en}:00`, category: 'Other', color: '' };
+    const temp = { id: 'temp-' + Date.now(), done: false, ...payload };
+    (state.data.planner = state.data.planner || []).push(temp); renderCalendar();
+    try { const r = await apiCall('create', 'planner_events', payload); if (!r || r.success === false) throw new Error(r && r.message); const nid = (r.data && r.data.id) || r.id; if (nid) temp.id = String(nid); showToast('Event added'); }
+    catch (e) { state.data.planner = state.data.planner.filter(x => x !== temp); showToast('Couldn’t add the event'); }
+  }
+  renderCalendar();
+};
+window.gcDetail = function (el, k, id, ds) {
+  const x = _plItems(ds).find(i => i.k === k && i.id === String(id)); if (!x) return;
+  _gc.pop = { mode: 'detail', k, id, ds };
+  const p = _gcPopEl();
+  const d = _plDate(ds).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  let sub = '';
+  if (k === 'habit') { const s = _plStreak(x.ref, ds); sub = 'Habit' + (s > 1 ? ` · ${s}-day streak` : '') + (_plOv(ds, 'habit', id) ? ' · moved this day' : ''); }
+  else if (k === 'task') sub = 'Task' + (x.ref.priority === 'P1' ? ' · High priority' : '') + (_plTaskRecurring(x.ref) ? ' · repeats' : '');
+  else sub = (x.ref.category || 'Event') + (x.s != null ? ' · ' + _plDur(x.e - x.s) : '');
+  const isNow = ds === _plToday() && k === 'plan' && x.s <= _plNowMin() && _plNowMin() < x.e;
+  p.innerHTML = `<div class="gc-pop-x">
+      <button type="button" onclick="gcClosePop(); plEdit('${k}','${_plEsc(id)}')" title="Edit" aria-label="Edit">✎</button>
+      ${k === 'plan' ? `<button type="button" onclick="gcDelete('${_plEsc(id)}')" title="Delete" aria-label="Delete">🗑</button>` : ''}
+      ${_plOv(ds, k, id) ? `<button type="button" onclick="gcResetDay('${k}','${_plEsc(id)}','${ds}')" title="Back to its usual time" aria-label="Back to its usual time">↺</button>` : ''}
+      <button type="button" onclick="gcClosePop()" aria-label="Close">✕</button></div>
+    <div class="gc-det"><i class="sw" style="background:${_plEsc(_gcColor(x))}"></i><div><h3 class="${x.done ? 'done' : ''}">${_plEsc(x.t)}</h3>
+      <p>${d}${x.s != null ? ` · ${_gcRange(x.s, x.e)}` : ''}</p><p class="sub">${_plEsc(sub)}</p></div></div>
+    <div class="gc-pop-f"><span>${isNow ? `<button type="button" class="gc-link" onclick="gcClosePop(); plFocus('${_plEsc(id)}')">▶ Focus</button>` : ''}</span>
+      <button type="button" class="gc-save${x.done ? ' ghost' : ''}" onclick="gcClosePop(); plToggle('${k}','${_plEsc(id)}')">${x.done ? 'Mark not done' : '✓ Mark done'}</button></div>`;
+  p.onkeydown = ev => { if (ev.key === 'Escape') { ev.preventDefault(); gcClosePop(); } };
+  _gcPlace(p, el.getBoundingClientRect());
+};
+window.gcDelete = async function (id) {
+  gcClosePop();
+  const arr = state.data.planner || [], i = arr.findIndex(e => String(e.id) === String(id)); if (i === -1) return;
+  const ev = arr[i]; arr.splice(i, 1); renderCalendar();
+  let undone = false;
+  showToast('Event deleted', 'default', () => { undone = true; arr.splice(Math.min(i, arr.length), 0, ev); renderCalendar(); });
+  setTimeout(async () => { if (undone) return; try { await apiCall('delete', 'planner_events', {}, id); } catch (e) { } }, 5000);
+};
+window.gcResetDay = async function (k, id, ds) {
+  gcClosePop();
+  const o = _plOv(ds, k, id); if (!o) return;
+  state.data.day_overrides = state.data.day_overrides.filter(x => x !== o); renderCalendar();
+  try { await apiCall('delete', 'day_overrides', {}, o.id); showToast('Back to its usual time'); } catch (e) { }
+};
+
+/* ── saving a move / resize ── */
+async function _gcMoveTo(k, id, fromDs, ds, s, e) {
+  s = Math.max(0, Math.min(1425, s)); e = Math.max(s + 15, Math.min(1440, e));
+  const st = _plHM(s), en = e >= 1440 ? '23:59' : _plHM(e);
+  const x = _plItems(fromDs).find(i => i.k === k && i.id === String(id)); if (!x) return;
+  if (k === 'plan') {
+    const ev = x.ref, before = { start_datetime: ev.start_datetime, end_datetime: ev.end_datetime };
+    const payload = { start_datetime: `${ds}T${st}:00`, end_datetime: `${ds}T${en}:00` };
+    Object.assign(ev, payload); renderCalendar();
+    try { const r = await apiCall('update', 'planner_events', payload, id); if (r && r.success === false) throw new Error(r.message); }
+    catch (err) { Object.assign(ev, before); renderCalendar(); return showToast('Couldn’t move the event'); }
+    showToast(`${x.t} → ${_gcRange(s, e)}`, 'default', async () => { Object.assign(ev, before); renderCalendar(); try { await apiCall('update', 'planner_events', before, id); } catch (er) { } });
+  } else if (_gcPerDay(x)) {
+    const prev = _plOv(fromDs, k, id), prevCopy = prev ? { time: prev.time, duration: prev.duration } : null;
+    await _plOvSave(fromDs, k, id, { time: st, duration: e - s });
+    showToast(`${x.t} → ${_gcRange(s, e)} · this day only`, 'default', async () => {
+      if (prevCopy) await _plOvSave(fromDs, k, id, prevCopy);
+      else { const o = _plOv(fromDs, k, id); if (o) { state.data.day_overrides = state.data.day_overrides.filter(z => z !== o); renderCalendar(); try { await apiCall('delete', 'day_overrides', {}, o.id); } catch (er) { } } }
+    });
+  } else {
+    const t = x.ref, before = { due_date: t.due_date, due_time: t.due_time, duration: t.duration };
+    const payload = { due_date: ds, due_time: st, duration: e - s };
+    Object.assign(t, payload); renderCalendar();
+    try { const r = await apiCall('update', 'tasks', payload, id); if (r && r.success === false) throw new Error(r.message); }
+    catch (err) { Object.assign(t, before); renderCalendar(); return showToast('Couldn’t move the task'); }
+    showToast(`${x.t} → ${_gcRange(s, e)}`, 'default', async () => { Object.assign(t, before); renderCalendar(); try { await apiCall('update', 'tasks', before, id); } catch (er) { } });
+  }
+}
+
+/* ── pointer engine ── */
+function _gcMinAt(col, y) { const r = col.getBoundingClientRect(); return Math.max(0, Math.min(1439, (y - r.top) / GC_H * 60)); }
+function _gcColAt(x, y) {
+  const cols = [...document.querySelectorAll('.gc-col')];
+  return cols.find(c => { const r = c.getBoundingClientRect(); return x >= r.left && x < r.right; }) || null;
+}
+function _gcAutoScroll(y) {
+  const sc = document.getElementById('gcScroll'); if (!sc) return;
+  const r = sc.getBoundingClientRect();
+  if (y < r.top + 30) sc.scrollTop -= 12; else if (y > r.bottom - 30) sc.scrollTop += 12;
+}
+if (!window._gcWired) {
+  window._gcWired = true;
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const t = e.target; if (!t.closest) return;
+    if (_gc.pop && !t.closest('#gcPop')) {
+      // a click outside closes the card; on the grid it also starts a fresh pick
+      gcClosePop();
+      if (!t.closest('.gc-col')) return;
+    }
+    const col = t.closest('.gc-col'); if (!col || t.closest('.gc-tick')) return;
+    const ev = t.closest('.gc-ev');
+    const touch = e.pointerType !== 'mouse';
+    if (ev) {
+      const k = ev.dataset.k, s = +ev.dataset.s, en = +ev.dataset.e;
+      const d = { mode: t.closest('.gc-rs') ? 'resize' : 'move', el: ev, k, id: ev.dataset.id, ds: ev.dataset.ds, s0: s, e0: en, s, e: en, ds1: ev.dataset.ds,
+        grab: _gcMinAt(col, e.clientY) - s, x0: e.clientX, y0: e.clientY, touch, started: false };
+      if (touch && d.mode === 'move') d.timer = setTimeout(() => { if (_gc.d === d) { d.started = true; ev.classList.add('drag'); navigator.vibrate && navigator.vibrate(8); } }, 350);
+      _gc.d = d; return;
+    }
+    const m = _gcMinAt(col, e.clientY);
+    _gc.d = { mode: 'create', ds: col.dataset.ds, a: Math.floor(m / 15) * 15, s: 0, e: 0, x0: e.clientX, y0: e.clientY, touch, started: false, click: Math.floor(m / 30) * 30 };
+  }, true);
+  document.addEventListener('pointermove', e => {
+    const d = _gc.d; if (!d) return;
+    const dist = Math.hypot(e.clientX - d.x0, e.clientY - d.y0);
+    if (!d.started) {
+      if (d.touch && d.mode !== 'resize') { if (dist > 8) { clearTimeout(d.timer); _gc.d = null; } return; }
+      if (dist < 4) return;
+      d.started = true; if (d.el) d.el.classList.add('drag');
+    }
+    e.preventDefault();
+    document.body.classList.add('gc-dragging');
+    _gcAutoScroll(e.clientY);
+    if (d.mode === 'create') {
+      const col = document.querySelector(`.gc-col[data-ds="${d.ds}"]`); if (!col) return;
+      const cur = Math.floor(_gcMinAt(col, e.clientY) / 15) * 15;
+      d.s = Math.min(d.a, cur); d.e = Math.max(d.a, cur) + 15;
+      let g = col.querySelector('.gc-ghost'); if (!g) { g = document.createElement('div'); g.className = 'gc-ghost'; col.appendChild(g); }
+      _gcGhostSize(g, d.s, d.e, '');
+    } else if (d.mode === 'move') {
+      const x = _plItems(d.ds).find(i => i.k === d.k && i.id === d.id);
+      const col = (x && !_gcPerDay(x) ? _gcColAt(e.clientX, e.clientY) : null) || d.el.parentElement;
+      const len = d.e0 - d.s0;
+      d.s = Math.max(0, Math.min(1440 - len, Math.round((_gcMinAt(col, e.clientY) - d.grab) / 15) * 15)); d.e = d.s + len;
+      if (col !== d.el.parentElement) { col.appendChild(d.el); d.el.style.left = '0'; d.el.style.width = 'calc(100% - 10px)'; }
+      d.ds1 = col.dataset.ds;
+      d.el.style.top = (d.s / 60 * GC_H + 1) + 'px';
+      const m = d.el.querySelector('.gc-ev-m'); if (m) m.textContent = (d.el.classList.contains('short') ? ', ' + _gc12(d.s) : _gcRange(d.s, d.e));
+    } else {
+      const col = d.el.parentElement;
+      d.e = Math.max(d.s0 + 15, Math.min(1440, Math.round(_gcMinAt(col, e.clientY) / 15) * 15));
+      d.el.style.height = Math.max(18, (d.e - d.s0) / 60 * GC_H - 2) + 'px';
+      const m = d.el.querySelector('.gc-ev-m'); if (m && !d.el.classList.contains('short')) m.textContent = _gcRange(d.s0, d.e);
+    }
+  }, { passive: false });
+  const up = e => {
+    const d = _gc.d; if (!d) return;
+    _gc.d = null; clearTimeout(d.timer);
+    document.body.classList.remove('gc-dragging');
+    if (e.type === 'pointercancel') { if (d.started) renderCalendar(); return; }
+    if (d.mode === 'create') {
+      _gc.justDragged = Date.now();
+      if (d.started) { const g = document.querySelector('.gc-ghost'); return gcCreate(d.ds, d.s, d.e, g); }
+      return gcCreate(d.ds, d.click, Math.min(1440, d.click + 60));
+    }
+    if (!d.started) { if (!e.target.closest('.gc-tick')) gcDetail(d.el, d.k, d.id, d.ds); return; }
+    _gc.justDragged = Date.now();
+    if (d.mode === 'move' && d.s === d.s0 && d.ds1 === d.ds) return renderCalendar();
+    if (d.mode === 'resize' && d.e === d.e0) return renderCalendar();
+    _gcMoveTo(d.k, d.id, d.ds, d.mode === 'move' ? d.ds1 : d.ds, d.mode === 'move' ? d.s : d.s0, d.e);
+  };
+  document.addEventListener('pointerup', up, true);
+  document.addEventListener('pointercancel', up, true);
+  document.addEventListener('touchmove', e => { if (_gc.d && _gc.d.started) e.preventDefault(); }, { passive: false });
+  document.addEventListener('click', e => { if (Date.now() - _gc.justDragged < 400 && e.target.closest && e.target.closest('.gc')) { e.stopPropagation(); e.preventDefault(); } }, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && _gc.pop) gcClosePop(); });
+  window.addEventListener('resize', () => { if (state.view === 'calendar' && calState.view === 'week') { const n = _gcWeekDays(); if (n !== _gc.wdN) { _gc.wdN = n; renderCalendar(); } } });
+}
+
+function _gcScrollInit() {
+  const sc = document.getElementById('gcScroll'); if (!sc) return;
+  const key = calState.view + '|' + _gcDays()[0];
+  if (_gc.scrollKey === key && _gc.scrollTop != null) { sc.scrollTop = _gc.scrollTop; return; }
+  _gc.scrollKey = key;
+  const days = _gcDays(), today = _plToday();
+  let first = 1440;
+  days.forEach(ds => _plItems(ds).forEach(x => { if (x.s != null && !_pl.off.has(x.k)) first = Math.min(first, x.s); }));
+  const target = days.includes(today) ? _plNowMin() - 120 : (first < 1440 ? first - 30 : 7 * 60);
+  sc.scrollTop = Math.max(0, target / 60 * GC_H);
+  _gc.scrollTop = sc.scrollTop;
+}
+function _gcTick() {
+  const n = _plNowMin();
+  document.querySelectorAll('.gc-now').forEach(el => { el.style.top = (n / 60 * GC_H) + 'px'; });
+}
+
 /* ── shell ─────────────────────────────────────────────────────── */
 function renderCalendar() {
   if (window._plannerJumpTo) {
@@ -380,31 +782,188 @@ function renderCalendar() {
     window._plannerJumpTo = null;
   }
   if (!['day', 'week', 'month'].includes(calState.view)) calState.view = 'day';
-  _plStyles();
+  _plStyles(); _gcStyles(); _gcEnsureOverrides();
+  gcClosePop();
+  _gc.wdN = _gcWeekDays();
   const main = document.getElementById('main');
-  const c = calState.cursor, ds = _plIso(c), v = calState.view;
+  const c = calState.cursor, ds = _plIso(c), v = calState.view, days = _gcDays();
+  const a = _plDate(days[0]), b = _plDate(days[days.length - 1]);
   const title = v === 'month' ? c.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-    : v === 'week' ? 'Week of ' + _plAdd(c, -((c.getDay() + 6) % 7)).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })
-      : c.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    : v === 'week' ? (a.getMonth() === b.getMonth() ? a.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+      : `${a.toLocaleDateString(undefined, { month: 'short' })} – ${b.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`)
+      : c.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const isToday = ds === _plToday();
-  main.innerHTML = `<div class="pl">
+  const legend = `<div class="gc-legend">${['plan', 'habit', 'task'].map(k => `<button type="button" class="gc-fchip${_pl.off.has(k) ? ' off' : ''}" style="--c:${GC_COL[k]}" onclick="plFilter('${k}')" aria-pressed="${!_pl.off.has(k)}"><i></i>${k === 'plan' ? 'Events' : k === 'habit' ? 'Habits' : 'Tasks'}</button>`).join('')}</div>`;
+  let banner = '';
+  if (v === 'day' && isToday) {
+    const list = _plItems(ds), n = _plNowMin();
+    const late = list.filter(x => x.k === 'plan' && !x.done && x.e <= n && n - x.e <= 90 && !_pl.dismissed[x.id]).sort((p, q) => q.e - p.e)[0];
+    if (late) {
+      const over = n - late.e, by = Math.max(15, Math.ceil(over / 15) * 15);
+      banner = `<div class="pl-banner" role="status"><span>⏱ <b>${_plEsc(late.t)}</b> ended ${_plDur(over)} ago and isn't ticked.</span><span class="acts">
+        <button type="button" onclick="plannerToggleEventDone('${_plEsc(late.id)}')">It's done</button>
+        <button type="button" onclick="plShiftDay('${_plEsc(late.id)}')">Shift rest of day +${by} min</button>
+        <button type="button" onclick="plDismissLate('${_plEsc(late.id)}')" aria-label="Dismiss">✕</button></span></div>`;
+    }
+    if (n >= 1200) { const openN = list.filter(x => !x.done && x.k !== 'habit').length; banner += `<div class="pl-wrap"><span>🌙 <b>Wrap up the day</b> · ${openN} still open</span><button type="button" onclick="plWrapUp()">Wrap up</button></div>`; }
+  }
+  const side = v !== 'month' ? `<aside class="pl-side">${_gcMiniHTML()}${v === 'day' ? _plSideHTML(ds) : ''}</aside>` : '';
+  main.innerHTML = `<div class="pl gcw">
     <header class="pl-top">
-      <div class="pl-title"><h2>${_plEsc(title)}</h2>${v === 'day' && isToday ? '<p>Today</p>' : ''}</div>
+      <button type="button" class="pl-btn" onclick="navCal(0)">Today</button>
+      <div class="pl-nav"><button type="button" class="gc-arr" onclick="navCal(-1)" aria-label="Previous">‹</button><button type="button" class="gc-arr" onclick="navCal(1)" aria-label="Next">›</button></div>
+      <div class="pl-title"><h2>${_plEsc(title)}</h2></div>
+      ${legend}
       <div class="pl-seg" role="group" aria-label="View">${['day', 'week', 'month'].map(x => `<button type="button" class="${x === v ? 'on' : ''}" onclick="switchCalView('${x}')">${x[0].toUpperCase() + x.slice(1)}</button>`).join('')}</div>
-      <div class="pl-nav"><button type="button" class="pl-ib" onclick="navCal(-1)" aria-label="Previous">‹</button><button type="button" class="pl-btn" onclick="navCal(0)">Today</button><button type="button" class="pl-ib" onclick="navCal(1)" aria-label="Next">›</button></div>
+      <button type="button" class="pl-btn primary gc-new" onclick="gcNewNow()">+ Create</button>
     </header>
-    <div class="pl-body${v === 'day' ? '' : ' wide'}">
-      <section class="pl-main">${v === 'day' ? _plDayHTML(ds) : v === 'week' ? _plWeekHTML() : _plMonthHTML()}</section>
-      ${v === 'day' ? `<aside class="pl-side">${_plSideHTML(ds)}</aside>` : ''}
+    <div class="pl-body${side ? '' : ' wide'}">
+      <section class="pl-main gc-main">${banner}${v === 'month' ? _gcMonthHTML() : _gcGridHTML(days)}</section>
+      ${side}
     </div>
   </div>`;
-  // Keep "now" fresh while today's day view is open.
+  if (v !== 'month') _gcScrollInit();
   if (_pl.timer) clearInterval(_pl.timer);
-  if (v === 'day' && isToday) _pl.timer = setInterval(() => {
-    if (state.view !== 'calendar' || document.getElementById('plLayer')?.innerHTML) return;
-    if (document.querySelector('#eventModal:not(.hidden)')) return;
-    renderCalendar();
-  }, 60000);
+  _pl.timer = setInterval(() => { if (state.view !== 'calendar') return clearInterval(_pl.timer); _gcTick(); }, 30000);
+}
+window.gcNewNow = function () {
+  const days = _gcDays(), td = _plToday(), ds = days.includes(td) ? td : days[0];
+  const s = ds === td ? Math.min(1380, Math.ceil(_plNowMin() / 30) * 30) : 540;
+  if (calState.view === 'month') { calState.cursor = _plDate(ds); calState.view = 'day'; renderCalendar(); }
+  const sc = document.getElementById('gcScroll'); if (sc) sc.scrollTop = Math.max(0, (s - 120) / 60 * GC_H);
+  gcCreate(ds, s, Math.min(1440, s + 60));
+};
+
+function _gcStyles() {
+  if (document.getElementById('gcStyles')) return;
+  const st = document.createElement('style'); st.id = 'gcStyles';
+  st.textContent = `
+.gcw{max-width:1440px}
+.gcw .pl-top{gap:8px;padding:12px 16px}
+.gcw .pl-title{margin-right:auto;order:0}
+.gcw .pl-title h2{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.gc-arr{width:34px;height:34px;border-radius:50%;border:0;background:transparent;font-size:22px;line-height:1;color:var(--text-2);cursor:pointer}
+.gc-arr:hover{background:var(--surface-2)}
+.gc-new{border-radius:999px!important;padding:0 16px!important}
+.gc-legend{display:flex;gap:6px}
+.gc-fchip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:999px;border:1px solid var(--pl-line);background:var(--surface-1);font-size:12.5px;font-weight:600;color:var(--text-2);cursor:pointer}
+.gc-fchip i{width:9px;height:9px;border-radius:3px;background:var(--c)}
+.gc-fchip.off{opacity:.5}.gc-fchip.off i{background:transparent;border:1.5px solid var(--c)}
+.gcw .pl-body{grid-template-columns:minmax(0,1fr) 300px}
+.gcw .pl-body.wide{grid-template-columns:minmax(0,1fr)}
+.gc-main{padding:0!important;display:flex;flex-direction:column}
+.gc-main .pl-banner,.gc-main .pl-wrap{margin:10px 14px 0}
+.gc{--gut:58px;display:flex;flex-direction:column;min-height:0}
+.gc-head,.gc-ad{display:flex;border-bottom:1px solid var(--pl-line)}
+.gc-gut{flex:none;width:var(--gut);position:relative}
+.gc-heads,.gc-ad-cols,.gc-cols{flex:1;display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));min-width:0}
+.gc-head{border-bottom:0}
+.gc-dh{border:0;background:transparent;padding:10px 0 6px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;color:var(--text-2)}
+.gc.one .gc-dh{align-items:flex-start;padding-left:12px;cursor:default}
+.gc-dw{font-size:11px;font-weight:600;letter-spacing:.06em}
+.gc-dn{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:500;color:var(--text-1)}
+.gc-dh:hover .gc-dn{background:var(--surface-2)}
+.gc-dh.today .gc-dw{color:#1a73e8}
+.gc-dh.today .gc-dn{background:#1a73e8;color:#fff}
+.gc-dh.past .gc-dn{color:var(--text-2)}
+.gc-ad .gc-gut span{position:absolute;right:8px;top:6px;font-size:10.5px;color:var(--text-3)}
+.gc-ad-col{border-left:1px solid var(--pl-line);padding:3px 4px;display:flex;flex-direction:column;gap:2px;min-width:0;min-height:8px}
+.gc-ad.empty .gc-ad-col{padding:0;min-height:8px}
+.gc-chip{border:0;text-align:left;font-size:12px;font-weight:600;padding:3px 8px;border-radius:5px;background:var(--c);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.gc-chip.done{opacity:.55;text-decoration:line-through}
+.gc-scroll{overflow-y:auto;height:calc(100vh - 290px);min-height:460px;position:relative;scrollbar-width:thin}
+.gc-grid{display:flex;position:relative}
+.gc-hl{position:absolute;right:8px;transform:translateY(-50%);font-size:10.5px;color:var(--text-3);white-space:nowrap}
+.gc-cols{position:relative}
+.gc-col{position:relative;border-left:1px solid var(--pl-line);background-image:linear-gradient(to bottom,var(--pl-line) 1px,transparent 1px);background-size:100% ${GC_H}px;cursor:default}
+.gc-col::before{content:'';position:absolute;left:-9px;width:8px;top:0;bottom:0;background-image:linear-gradient(to bottom,var(--pl-line) 1px,transparent 1px);background-size:100% ${GC_H}px}
+.gc-ev{position:absolute;box-sizing:border-box;margin-left:1px;border-radius:6px;background:var(--c);color:#fff;padding:3px 6px 3px 7px;font-size:12px;line-height:1.25;overflow:hidden;cursor:pointer;box-shadow:0 0 0 1px var(--surface-1);display:flex;gap:5px;align-items:flex-start;touch-action:pan-y;user-select:none;-webkit-user-select:none;z-index:1}
+.gc-ev.k-habit,.gc-ev.k-task{background:color-mix(in srgb,var(--c) 16%,var(--surface-1));color:color-mix(in srgb,var(--c) 70%,var(--text-1));border-left:3px solid var(--c)}
+.gc-ev:hover{z-index:3;box-shadow:0 0 0 1px var(--surface-1),0 4px 12px rgba(15,23,42,.22)}
+.gc-ev.done{opacity:.55}
+.gc-ev.done .gc-ev-t{text-decoration:line-through}
+.gc-ev.drag{z-index:10;opacity:.92;box-shadow:0 8px 22px rgba(15,23,42,.3);cursor:grabbing}
+.gc-ev-b{min-width:0;flex:1;display:flex;flex-direction:column}
+.gc-ev-t{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.gc-ev:not(.short) .gc-ev-t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal}
+.gc-ev.short .gc-ev-t{white-space:nowrap}
+.gc-ev-m{font-size:11px;opacity:.9;white-space:nowrap}
+.gc-ev.short .gc-ev-m{font-weight:500}
+.gc-tick{flex:none;width:14px;height:14px;margin-top:1px;border-radius:4px;border:1.5px solid currentColor;background:transparent;color:inherit;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.85}
+.gc-tick.round{border-radius:50%}
+.gc-tick svg{width:10px;height:10px}
+.gc-ev.done .gc-tick{background:currentColor}.gc-ev.done .gc-tick svg{color:var(--surface-1)}
+.gc-ev.k-plan.done .gc-tick svg{color:var(--c)}
+.gc-rs{position:absolute;left:0;right:0;bottom:0;height:7px;cursor:ns-resize;touch-action:none}
+.gc-ev:hover .gc-rs::after{content:'';position:absolute;left:50%;bottom:2px;width:18px;height:3px;margin-left:-9px;border-radius:2px;background:currentColor;opacity:.6}
+.gc-now{position:absolute;left:-1px;right:0;height:2px;background:#ea4335;z-index:5;pointer-events:none}
+.gc-now i{position:absolute;left:-6px;top:-5px;width:12px;height:12px;border-radius:50%;background:#ea4335}
+.gc-ghost{position:absolute;left:1px;right:8px;z-index:6;border-radius:6px;background:#1a73e8;color:#fff;padding:3px 7px;font-size:12px;box-shadow:0 6px 18px rgba(26,115,232,.35);pointer-events:none;overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box}
+.gc-ghost b{font-weight:600}.gc-ghost span{font-size:11px;opacity:.9}
+body.gc-dragging,body.gc-dragging *{cursor:grabbing!important;user-select:none!important}
+.gc-pop{position:fixed;z-index:100020;width:340px;max-width:calc(100vw - 20px);background:var(--surface-1,#fff);color:var(--text-1);border-radius:14px;box-shadow:0 24px 48px rgba(15,23,42,.22),0 4px 12px rgba(15,23,42,.12);padding:8px 16px 14px;display:none;box-sizing:border-box;border:1px solid var(--border-color,#e5e7eb)}
+.gc-pop-x{display:flex;justify-content:flex-end;gap:2px;margin:0 -8px 2px}
+.gc-pop-x button{width:34px;height:34px;border-radius:50%;border:0;background:transparent;color:var(--text-2);font-size:15px;cursor:pointer}
+.gc-pop-x button:hover{background:var(--surface-2)}
+.gc-in-t{width:100%;box-sizing:border-box;font:inherit;font-size:20px;border:0;border-bottom:2px solid var(--border-color);padding:4px 2px 8px;background:transparent;color:var(--text-1);outline:none}
+.gc-in-t:focus{border-bottom-color:#1a73e8}.gc-in-t.err{border-bottom-color:#ea4335}
+.gc-kinds{display:flex;gap:6px;margin:12px 0 10px}
+.gc-kind{font:inherit;font-size:13px;font-weight:600;padding:6px 14px;border-radius:8px;border:0;background:transparent;color:var(--text-2);cursor:pointer}
+.gc-kind.on{background:color-mix(in srgb,#1a73e8 14%,var(--surface-1));color:#1a73e8}
+.gc-when{display:flex;gap:12px;align-items:flex-start;font-size:13.5px}
+.gc-when .ic{width:20px;text-align:center;opacity:.7}
+.gc-when-d{font-weight:600;margin-bottom:6px}
+.gc-when-t{display:flex;align-items:center;gap:6px}
+.gc-when-t input{font:inherit;font-size:13px;padding:5px 6px;border:1px solid var(--border-color);border-radius:7px;background:var(--surface-1);color:var(--text-1)}
+.gc-pop-f{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+.gc-link{border:0;background:transparent;color:#1a73e8;font:inherit;font-size:13px;font-weight:600;padding:8px 6px;border-radius:6px;cursor:pointer}
+.gc-link:hover{background:color-mix(in srgb,#1a73e8 8%,transparent)}
+.gc-save{border:0;background:#1a73e8;color:#fff;font:inherit;font-size:13.5px;font-weight:600;padding:9px 22px;border-radius:999px;cursor:pointer}
+.gc-save.ghost{background:transparent;color:#1a73e8;border:1px solid var(--border-color)}
+.gc-det{display:flex;gap:14px;align-items:flex-start}
+.gc-det .sw{flex:none;width:14px;height:14px;border-radius:4px;margin-top:6px}
+.gc-det h3{margin:0 0 4px;font-size:19px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.gc-det h3.done{text-decoration:line-through;opacity:.7}
+.gc-det p{margin:0;font-size:13px;color:var(--text-2)}
+.gc-det p.sub{margin-top:4px;color:var(--text-3)}
+.gc-mini{padding:12px!important}
+.gc-mini-h{display:flex;align-items:center;gap:2px;margin-bottom:6px}
+.gc-mini-h b{flex:1;font-size:13.5px;font-weight:600;padding-left:4px}
+.gc-mini-h button{width:28px;height:28px;border-radius:50%;border:0;background:transparent;font-size:17px;color:var(--text-2);cursor:pointer}
+.gc-mini-h button:hover{background:var(--surface-2)}
+.gc-mini-g{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;row-gap:2px}
+.gc-mini-g span{font-size:10.5px;font-weight:600;color:var(--text-3);padding:4px 0}
+.gc-mc{position:relative;aspect-ratio:1;max-width:32px;margin:0 auto;width:100%;border:0;border-radius:50%;background:transparent;font-size:11.5px;color:var(--text-1);cursor:pointer;padding:0}
+.gc-mc:hover{background:var(--surface-2)}
+.gc-mc.out{color:var(--text-3)}
+.gc-mc.sel{background:color-mix(in srgb,#1a73e8 14%,var(--surface-1));color:#1a73e8;font-weight:700}
+.gc-mc.today{background:#1a73e8;color:#fff;font-weight:700}
+.gc-mc i{position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:currentColor;opacity:.5}
+.gc-month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(112px,1fr)}
+.gc-mdn{font-size:11px;font-weight:600;color:var(--text-3);text-align:center;padding:8px 0 4px;letter-spacing:.06em;text-transform:uppercase;border-left:1px solid var(--pl-line);height:auto}
+.gc-month{grid-template-rows:auto}
+.gc-mcell{border-left:1px solid var(--pl-line);border-top:1px solid var(--pl-line);padding:4px 4px 6px;display:flex;flex-direction:column;gap:2px;min-width:0;cursor:pointer}
+.gc-mcell.out{background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
+.gc-mnum{align-self:center;border:0;background:transparent;min-width:26px;height:26px;border-radius:13px;font-size:12px;font-weight:600;color:var(--text-1);cursor:pointer;padding:0 6px;margin-bottom:2px}
+.gc-mcell.out .gc-mnum{color:var(--text-3)}
+.gc-mnum:hover{background:var(--surface-2)}
+.gc-mcell.today .gc-mnum{background:#1a73e8;color:#fff}
+.gc-mev{display:flex;align-items:center;gap:5px;border:0;background:transparent;font-size:11.5px;color:var(--text-1);padding:2px 4px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-align:left;min-width:0}
+.gc-mev:hover{background:var(--surface-2)}
+.gc-mev i{flex:none;width:8px;height:8px;border-radius:50%;background:var(--c)}
+.gc-mev .tm{color:var(--text-3);flex:none}
+.gc-mev.ad{background:var(--c);color:#fff}.gc-mev.ad i{display:none}
+.gc-mev.done{opacity:.55;text-decoration:line-through}
+.gc-more{border:0;background:transparent;font-size:11.5px;font-weight:600;color:var(--text-2);text-align:left;padding:2px 4px;cursor:pointer}
+@media (max-width:1100px){.gcw .pl-body{grid-template-columns:minmax(0,1fr)}.gcw .pl-side{display:none}}
+@media (max-width:720px){
+  .gcw .pl-top{padding:10px}.gcw .pl-title{order:-1;width:100%}.gc-legend{display:none}
+  .gc{--gut:44px}.gc-dn{width:36px;height:36px;font-size:19px}
+  .gc-scroll{height:calc(100vh - 230px)}
+  .gc-month{grid-auto-rows:minmax(74px,1fr)}.gc-mev .tm{display:none}
+}
+`;
+  document.head.appendChild(st);
 }
 
 function _plStyles() {
@@ -604,11 +1163,12 @@ function switchCalView(v) { calState.view = v; renderCalendar(); }
 
 function navCal(dir) {
   const d = new Date(calState.cursor);
+  _gc.miniMonth = null;
   if (dir === 0) {
     calState.cursor = new Date();
   } else {
     if (calState.view === 'month') { d.setDate(1); d.setMonth(d.getMonth() + dir); }
-    else if (calState.view === 'week') d.setDate(d.getDate() + (dir * 7));
+    else if (calState.view === 'week') d.setDate(d.getDate() + (dir * _gcWeekDays()));
     else d.setDate(d.getDate() + dir);
     calState.cursor = d;
   }

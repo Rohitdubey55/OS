@@ -514,7 +514,7 @@ window.appStrayCategories = function appStrayCategories() {
 
 const VIEW_MAP = {
     dashboard:     { src: 'view-dashboard.js?v=20261006a', render: 'renderDashboard' },
-    calendar:      { src: 'view-calendar.js?v=20261020b', render: 'renderCalendar' },
+    calendar:      { src: 'view-calendar.js?v=20261027a', render: 'renderCalendar' },
     tasks:         { src: 'view-tasks.js?v=20261025a', render: 'renderTasks' },
     finance:       { src: 'view-finance.js?v=20261019b', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
