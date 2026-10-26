@@ -7967,7 +7967,7 @@ function v2MediaHTML(g, big) {
   }).join('');
   const inStory = media.filter(m => !skip.has(v2MediaId(m))).length;
   return `
-  <section class="v2-sec" id="v2Media">
+  <section class="v2-sec" id="v2Media" ondragover="v2DragOver(event)" ondragleave="v2DragLeave(event)" ondrop="v2Drop(event)">
     <div class="v2-sec-head">
       <h4>Photos &amp; video</h4>
       ${inStory ? `<button class="v2-link" onclick="v2StoryOpen('${v2Js(g.id)}', 0)">Play as story</button>` : ''}
@@ -7977,7 +7977,7 @@ function v2MediaHTML(g, big) {
       ${tiles}
       <label class="v2-tile v2-tile-add">
         <input type="file" accept="image/*,video/*" multiple hidden onchange="v2AddMedia(this.files)">
-        <span>+</span><em>${media.length ? 'Add' : 'Add photos or video'}</em>
+        <span>+</span><em>${media.length ? 'Add' : 'Add photos or video'}</em>${v2Phone() ? '' : `<small>or paste ${/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘V' : 'Ctrl+V'} · drop here</small>`}
       </label>
     </div>
   </section>`;
@@ -8039,6 +8039,64 @@ window.v2AddMedia = async function (files) {
   // Back up to the cloud in the background so the other devices see them too.
   if (typeof _syncVisionMediaToCloud === 'function') _syncVisionMediaToCloud(g.id).catch(() => { });
   for (const u of galleryUploads) v2BackupGalleryPhoto(u).catch(() => { });
+};
+
+/* ── Paste (⌘V / Ctrl+V) and drag & drop straight into a vision ──
+   Copy an image anywhere (a screenshot, a picture from a web page, a file in
+   Finder) and paste it while a vision is open: it's added to Photos & video.
+   With the "New vision" sheet open, the pasted image becomes the cover. Pasting
+   into a text box still pastes text as usual. */
+function v2ClipFiles(dt) {
+  if (!dt) return [];
+  const out = [];
+  const items = dt.items ? [...dt.items] : [];
+  items.forEach(it => { if (it.kind === 'file' && /^(image|video)\//.test(it.type)) { const f = it.getAsFile(); if (f) out.push(f); } });
+  if (!out.length && dt.files) [...dt.files].forEach(f => { if (/^(image|video)\//.test(f.type)) out.push(f); });
+  // Screenshots arrive as "image.png" — give them a readable, unique name.
+  const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '.');
+  return out.map((f, i) => (!f.name || /^image\.\w+$/i.test(f.name))
+    ? new File([f], `Pasted ${stamp}${out.length > 1 ? ' ' + (i + 1) : ''}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })
+    : f);
+}
+function v2PasteFlash() {
+  const el = document.querySelector('#v2Media .v2-tile-add') || document.getElementById('v2Media');
+  if (!el) return;
+  el.classList.remove('v2-flash'); void el.offsetWidth; el.classList.add('v2-flash');
+}
+if (!window._v2PasteWired) {
+  window._v2PasteWired = true;
+  document.addEventListener('paste', e => {
+    if (state.view !== 'vision') return;
+    const files = v2ClipFiles(e.clipboardData);
+    if (!files.length) return;
+    const t = e.target, editable = t && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName));
+    const hasText = e.clipboardData && [...(e.clipboardData.types || [])].includes('text/plain') && e.clipboardData.getData('text/plain').trim();
+    if (editable && hasText) return;                       // normal text paste
+    const newBox = document.getElementById('v2NewPhoto');
+    if (newBox && newBox.offsetParent !== null) { e.preventDefault(); v2NewPickPhoto(files.filter(f => f.type.startsWith('image'))); return; }
+    if (!v2.page || !v2Goal(v2.page)) { showToast('Open a vision first, then paste the photo into it'); return; }
+    e.preventDefault();
+    const sec = document.getElementById('v2Media');
+    if (sec && !v2Phone()) sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    v2PasteFlash();
+    v2AddMedia(files);
+  });
+}
+window.v2DragOver = function (e) {
+  if (!e.dataTransfer || ![...(e.dataTransfer.types || [])].includes('Files')) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'copy';
+  document.getElementById('v2Media')?.classList.add('v2-drop');
+};
+window.v2DragLeave = function (e) {
+  const sec = document.getElementById('v2Media');
+  if (sec && !sec.contains(e.relatedTarget)) sec.classList.remove('v2-drop');
+};
+window.v2Drop = function (e) {
+  const sec = document.getElementById('v2Media'); if (sec) sec.classList.remove('v2-drop');
+  const files = v2ClipFiles(e.dataTransfer);
+  if (!files.length) return;
+  e.preventDefault();
+  v2AddMedia(files);
 };
 
 // Gallery photos sync with the rest of the vision's media.
@@ -9337,6 +9395,11 @@ function v2InjectCSS() {
   .v2-tile-add span { font-size: 22px; font-weight: 300; line-height: 1; }
   .v2-tile-add em { font-style: normal; font-size: 11px; font-weight: 700; text-align: center; padding: 0 4px; }
   .v2-tile-add:hover { border-color: var(--primary); color: var(--primary); }
+  .v2-tile-add small { font-size: 10.5px; font-weight: 600; opacity: .7; margin-top: 2px; text-align: center; padding: 0 6px; }
+  #v2Media.v2-drop { outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: 16px; }
+  #v2Media.v2-drop .v2-tile-add { border-color: var(--primary); color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+  .v2-tile-add.v2-flash { animation: v2Flash .7s ease; }
+  @keyframes v2Flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
 
   .v2-page-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 

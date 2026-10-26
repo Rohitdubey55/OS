@@ -519,7 +519,7 @@ const VIEW_MAP = {
     finance:       { src: 'view-finance.js?v=20261019b', render: 'renderFinance' },
     habits:        { src: 'view-habits.js?v=20260930a', render: 'renderHabits' },
     diary:         { src: 'view-diary.js?v=20261027b', render: 'renderDiary' },
-    vision:        { src: 'view-vision.js?v=20261003d', render: 'renderVision' },
+    vision:        { src: 'view-vision.js?v=20261027a', render: 'renderVision' },
     settings:      { src: 'view-settings.js?v=20261026a', render: 'renderSettings' },
     people:        { src: 'view-people.js',        render: 'renderPeople' },
     gym:           { src: 'view-gym.js?v=20261019a', render: 'renderGym' },
