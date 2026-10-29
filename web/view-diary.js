@@ -3563,7 +3563,7 @@ const DRX_SENTINEL = '#010203';            // used to strip a colour back to def
 const DRX_SENTINEL_RGB = 'rgb(1, 2, 3)';
 
 /* ── Sanitiser ── */
-const DRX_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'SPAN', 'MARK', 'H2', 'H3', 'H4', 'P', 'DIV', 'BR', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'HR']);
+const DRX_TAGS = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'DEL', 'SPAN', 'MARK', 'H2', 'H3', 'H4', 'P', 'DIV', 'BR', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'HR', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD']);
 const DRX_DROP = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'SVG', 'MATH', 'TEMPLATE', 'NOSCRIPT', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'IMG', 'VIDEO', 'AUDIO', 'CANVAS', 'FORM', 'HEAD', 'TITLE']);
 const DRX_COLOR = /^(#[0-9a-f]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*[\d.]+\s*)?\)|[a-z]{3,20})$/i;
 
@@ -3594,7 +3594,15 @@ function drSanitize(html) {
       const td = ((st.textDecorationLine || st.textDecoration || '') + '').trim();
       const isCheck = tag === 'UL' && n.classList.contains('dr-check');
       const checked = tag === 'LI' && n.hasAttribute('data-checked');
+      const span = (tag === 'TD' || tag === 'TH') ? [+n.getAttribute('colspan') || 1, +n.getAttribute('rowspan') || 1] : null;
       [...n.attributes].forEach(a => n.removeAttribute(a.name));
+      if (span) { if (span[0] > 1 && span[0] < 50) n.setAttribute('colspan', span[0]); if (span[1] > 1 && span[1] < 200) n.setAttribute('rowspan', span[1]); }
+      if (tag === 'TABLE' || tag === 'THEAD' || tag === 'TBODY' || tag === 'TFOOT' || tag === 'TR') {
+        // only rows/cells belong here — stray text and spacing nodes break the table
+        [...n.childNodes].forEach(c => { if (c.nodeType === 3 && !c.textContent.trim()) c.remove(); });
+        if (tag === 'TR') n.removeAttribute('style');
+        return;
+      }
       const noop = v => /^(transparent|inherit|initial|unset|currentcolor|rgba\(0,\s*0,\s*0,\s*0\))$/i.test(v);
       if (color && DRX_COLOR.test(color) && color !== DRX_SENTINEL_RGB && !noop(color)) n.style.color = color;
       if (bg && DRX_COLOR.test(bg) && bg !== DRX_SENTINEL_RGB && !noop(bg) && !/^rgba\([^)]*,\s*0\s*\)$/.test(bg)) n.style.backgroundColor = bg;
@@ -3609,11 +3617,17 @@ function drSanitize(html) {
     });
   };
   clean(doc.body);
+  // Tables: drop empty ones, give each a body, and keep a line after so you can keep writing.
+  doc.body.querySelectorAll('table').forEach(t => {
+    if (!t.querySelector('td,th')) { t.remove(); return; }
+    [...t.children].forEach(c => { if (c.tagName === 'TR') { let b = t.querySelector(':scope > tbody'); if (!b) { b = doc.createElement('tbody'); t.appendChild(b); } b.appendChild(c); } });
+    t.querySelectorAll('td,th').forEach(c => { if (!c.innerHTML.trim()) c.innerHTML = '<br>'; });
+  });
   return doc.body.innerHTML;
 }
 
 function drIsHTML(s) {
-  return /<(b|strong|i|em|u|s|strike|del|span|mark|font|h[1-6]|p|div|br|hr|ul|ol|li|blockquote)(\s[^>]*)?\/?>/i.test(String(s || ''));
+  return /<(b|strong|i|em|u|s|strike|del|span|mark|font|h[1-6]|p|div|br|hr|ul|ol|li|blockquote|table|tr|td|th)(\s[^>]*)?\/?>/i.test(String(s || ''));
 }
 
 /* Plain text / light markdown → editor HTML */
@@ -3654,7 +3668,7 @@ function drRichValue(el) {
   if (!el) return '';
   const html = drSanitize(el.innerHTML).trim();
   const probe = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html').body;
-  const formatted = probe.querySelector('b,strong,i,em,u,s,strike,del,span,mark,h2,h3,h4,ul,ol,li,blockquote,hr');
+  const formatted = probe.querySelector('b,strong,i,em,u,s,strike,del,span,mark,h2,h3,h4,ul,ol,li,blockquote,hr,table');
   if (!formatted) return String(el.innerText || el.textContent || '').replace(/ /g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   return html;
 }
@@ -3792,6 +3806,47 @@ function _drxRestoreCaret(ed, pos) {
   const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
 }
 
+/* ── tables ── */
+function _drxCellHTML(t) { return String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').trim() || '<br>'; }
+function _drxTableHTML(rows, head) {
+  const n = Math.max(...rows.map(r => r.length));
+  const row = (r, tag) => `<tr>${Array.from({ length: n }, (_, i) => `<${tag}>${_drxCellHTML(r[i])}</${tag}>`).join('')}</tr>`;
+  return `<table>${head && rows.length > 1 ? `<thead>${row(rows[0], 'th')}</thead><tbody>${rows.slice(1).map(r => row(r, 'td')).join('')}</tbody>` : `<tbody>${rows.map(r => row(r, 'td')).join('')}</tbody>`}</table><div><br></div>`;
+}
+// Text that is really a table: markdown pipes (| a | b |) or tab-separated lines (spreadsheets).
+function _drxTextTable(text) {
+  const lines = String(text).replace(/\r\n?/g, '\n').split('\n').map(l => l.trimEnd()).filter(l => l.trim());
+  if (lines.length < 2) return null;
+  if (lines.filter(l => /^\s*\|.*\|\s*$/.test(l)).length >= Math.max(2, lines.length - 1)) {
+    const rows = lines.filter(l => /^\s*\|/.test(l) && !/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l))
+      .map(l => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim()));
+    return rows.length >= 1 && rows[0].length >= 2 ? rows : null;
+  }
+  const tabs = lines.map(l => l.split('\t'));
+  if (tabs.every(r => r.length >= 2) && new Set(tabs.map(r => r.length)).size <= 2) return tabs.map(r => r.map(c => c.trim()));
+  return null;
+}
+// Pasted page HTML: header cells written as bold <td>s become real headers.
+function _drxPasteHTML(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('table').forEach(t => {
+    const first = t.querySelector('tr');
+    if (first && !t.querySelector('th') && [...first.children].every(c => /^(b|strong)$/i.test((c.firstElementChild || {}).tagName || '') && c.textContent.trim() === c.firstElementChild.textContent.trim())) {
+      [...first.children].forEach(c => { const th = doc.createElement('th'); th.innerHTML = c.firstElementChild.innerHTML; c.replaceWith(th); });
+    }
+  });
+  return doc.body.innerHTML;
+}
+function _drxInsertHTML(ed, html) {
+  ed.focus();
+  if (!document.execCommand('insertHTML', false, html)) {
+    const sel = window.getSelection();
+    if (sel.rangeCount) { const r = sel.getRangeAt(0); r.deleteContents(); r.insertNode(r.createContextualFragment(html)); }
+    else ed.insertAdjacentHTML('beforeend', html);
+  }
+  ed.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 function drxRun(cmd, val, srcEl) {
   const ed = _drxEditorFor(srcEl);
   if (!ed) return;
@@ -3820,6 +3875,9 @@ function drxRun(cmd, val, srcEl) {
     }
     case 'divider':
       _drxInsertDivider(ed);
+      break;
+    case 'table':
+      _drxInsertHTML(ed, _drxTableHTML([['', '', ''], ['', '', ''], ['', '', '']], true));
       break;
     case 'quote': {
       const inQ = _drxBlock(ed, 'BLOCKQUOTE');
@@ -3976,6 +4034,51 @@ function _drxPlaceBubble() {
       const li = _drxBlock(e.target, 'LI');
       if (li && li.hasAttribute('data-checked') && !li.textContent.trim()) li.removeAttribute('data-checked');
     }
+  });
+
+  // Paste: keep tables, headings, lists and bold from the source, drop its fonts and
+  // colours-of-the-page; a table copied as text (tabs, or markdown | pipes) becomes a real table.
+  document.addEventListener('paste', e => {
+    const ed = e.target.closest && e.target.closest('.drx-editor');
+    if (!ed || !e.clipboardData) return;
+    const html = e.clipboardData.getData('text/html'), text = e.clipboardData.getData('text/plain');
+    let out = '';
+    if (html && /<(table|h[1-6]|ul|ol|li|b|strong|blockquote|p|div|br)\b/i.test(html)) out = drSanitize(_drxPasteHTML(html));
+    else if (text) { const rows = _drxTextTable(text); if (rows) out = _drxTableHTML(rows, true); }
+    if (!out) return;                                    // ordinary text: the browser pastes it
+    e.preventDefault();
+    const hasTable = /<table/i.test(out);
+    if (hasTable) out = out.replace(/<table/gi, '<table data-drx-new="1"');
+    _drxInsertHTML(ed, out);
+    if (hasTable) {
+      // Put the cursor on a fresh line under the pasted table so you keep writing below it.
+      const ts = ed.querySelectorAll('table[data-drx-new]'), last = ts[ts.length - 1];
+      ts.forEach(t => t.removeAttribute('data-drx-new'));
+      if (last) {
+        let nx = last.nextElementSibling;
+        if (!nx || nx.tagName === 'TABLE') { nx = document.createElement('div'); nx.innerHTML = '<br>'; last.after(nx); }
+        const r = document.createRange(); r.selectNodeContents(nx); r.collapse(true);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      }
+      ed.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
+  // In a table: Tab / Shift+Tab move between cells; Tab in the last cell adds a row.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Tab' || !e.target.classList || !e.target.classList.contains('drx-editor')) return;
+    const cell = _drxBlock(e.target, 'TD') || _drxBlock(e.target, 'TH');
+    if (!cell) return;
+    e.preventDefault();
+    const table = cell.closest('table'), cells = [...table.querySelectorAll('td,th')], i = cells.indexOf(cell);
+    let next = cells[i + (e.shiftKey ? -1 : 1)];
+    if (!next && !e.shiftKey) {
+      const tr = cell.closest('tr'), nr = document.createElement('tr');
+      [...tr.children].forEach(c => { const td = document.createElement('td'); if (c.colSpan > 1) td.colSpan = c.colSpan; td.innerHTML = '<br>'; nr.appendChild(td); });
+      (table.tBodies[0] || table).appendChild(nr); next = nr.firstElementChild;
+      e.target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (next) { const r = document.createRange(); r.selectNodeContents(next); r.collapse(false); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }
   });
 
   // Keyboard shortcuts for underline / strike (bold & italic are native).
@@ -4178,6 +4281,7 @@ const DRX_SLASH = [
   { cmd: 'check', label: 'Checklist', hint: 'Tick things off', icon: 'list-checks', keys: 'checklist todo task check' },
   { cmd: 'quote', label: 'Quote', hint: 'Set a line apart', icon: 'quote', keys: 'quote blockquote' },
   { cmd: 'divider', label: 'Divider', hint: 'A line between sections', icon: 'minus', keys: 'divider line separator hr rule' },
+  { cmd: 'table', label: 'Table', hint: 'Rows and columns', icon: 'table', keys: 'table grid rows columns' },
 ];
 function _drxSlashClose() { if (_drxSlash && _drxSlash.el) _drxSlash.el.remove(); _drxSlash = null; }
 function _drxSlashQuery() {
@@ -4385,6 +4489,12 @@ const DRW_CSS = `
 .drw .drw-editor ul.dr-check { padding-left:2px; }
 .drw .drw-editor blockquote { margin:.6em 0; padding:.1em 0 .1em 1em; border-left:3px solid var(--primary); color:var(--text-2); font-style:normal; }
 .drw .drw-editor b, .drw .drw-editor strong { font-weight:700; }
+.drx-editor table { width:100%; border-collapse:collapse; margin:.6em 0 .8em; font-size:.95em; table-layout:auto; }
+.drx-editor th, .drx-editor td { border-bottom:1px solid var(--border-color); padding:8px 12px; text-align:left; vertical-align:top; min-width:48px; }
+.drx-editor th { font-size:.78em; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--text-3); background:var(--surface-2); }
+.drx-editor tbody tr:last-child td { border-bottom:0; }
+.drx-editor table:has(tbody tr:last-child td b:first-child) tbody tr:last-child td { border-top:1px solid var(--border-color); }
+.drx-editor td:focus-within, .drx-editor th:focus-within { background:color-mix(in srgb, var(--primary) 6%, transparent); }
 
 /* details rail */
 .drw-side { min-width:0; min-height:0; overflow-y:auto; border-left:1px solid var(--border-color); background:color-mix(in srgb, var(--surface-2) 60%, var(--surface-1)); padding:22px 20px 28px; display:flex; flex-direction:column; gap:24px; }
