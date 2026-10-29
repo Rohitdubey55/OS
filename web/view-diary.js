@@ -5292,7 +5292,7 @@ window.dbJump = function (b) {
 })();
 
 async function _dbEnsureData() {
-  const need = ['meal_plan', 'meal_template', 'meal_items', 'gym_sessions', 'gym_plans', 'day_overrides', 'vision', 'vision_images'].filter(t => !Array.isArray(state.data[t]));
+  const need = ['meal_plan', 'meal_template', 'meal_items', 'gym_exercises', 'gym_sessions', 'gym_plans', 'day_overrides', 'vision', 'vision_images'].filter(t => !Array.isArray(state.data[t]));
   if (!need.length || typeof apiGet !== 'function') return;
   try {
     const got = await Promise.all(need.map(t => apiGet(t).catch(() => null)));
@@ -5349,7 +5349,10 @@ function _dbShell(o) {
           ${o.del || ''}
         </footer>
       </main>
-      <aside class="dbd-side" id="dbSide" aria-label="Your day"></aside>
+      <div class="dbd-rcol">
+        <aside class="dbd-side" id="dbSide" aria-label="Your day"></aside>
+        ${_dbqBarHTML()}
+      </div>
     </div>
   </div>`;
 }
@@ -6109,6 +6112,214 @@ body.dbd-dragging, body.dbd-dragging * { cursor:grabbing !important; -webkit-use
   document.head.appendChild(st);
 })();
 
+
+
+/* ── Quick add: one line at the bottom of the right side ─────────────────
+   Type anything, pick where it goes (it guesses for you), press Enter:
+     Food  → that meal of the day (by the time you choose, or the next meal)
+     Gym   → today's workout (starts one from your next plan if there isn't one)
+     Task  → a task for this day ("call bank 5pm" gets a time)
+     Habit → ticks an existing habit today, or adds a new daily habit
+     Event → a block on the planner ("standup 10:30" for a time) */
+const DBQ_KINDS = [['food', 'Food'], ['gym', 'Gym'], ['task', 'Task'], ['habit', 'Habit'], ['event', 'Event']];
+function _dbqBarHTML() {
+  const k = _db.qk || 'task';
+  return `<form class="dbq-bar k-${k}" id="dbqBar" onsubmit="event.preventDefault(); dbqAdd()" autocomplete="off">
+    <span class="dbq-plus" aria-hidden="true">+</span>
+    <input id="dbqIn" type="text" placeholder="Add to your day… bread, hammer curls, call bank 5pm" list="dbqList" oninput="dbqGuess(this.value)" onkeydown="dbqKey(event)" aria-label="What to add">
+    <datalist id="dbqList"></datalist>
+    <select id="dbqMeal" class="dbq-meal" aria-label="Which meal" ${k === 'food' ? '' : 'hidden'}>${DB_SLOTS.map(([key, l]) => `<option value="${key}">${l}</option>`).join('')}</select>
+    <select id="dbqKind" class="dbq-kind" onchange="dbqSetKind(this.value, true)" aria-label="Where it goes">${DBQ_KINDS.map(([v, l]) => `<option value="${v}" ${v === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+    <button type="submit" class="dbq-go" aria-label="Add">Add</button>
+  </form>`;
+}
+function _dbqNorm(t) { return String(t || '').trim().toLowerCase(); }
+function _dbqSources() {
+  const uniq = a => [...new Set(a.map(x => String(x || '').trim()).filter(Boolean))];
+  const gym = uniq([...(state.data.gym_exercises || []).map(e => e.name),
+    ...(state.data.gym_plans || []).flatMap(p => (_dbJSON(p.exercises_json, []) || []).map(e => e.name)),
+    ...(state.data.gym_sessions || []).flatMap(x => ((_dbJSON(x.workout_json, {}) || {}).exercises || []).map(e => e.name))]);
+  return {
+    food: uniq([...(state.data.meal_items || []).map(i => i.name), ...(state.data.meal_template || []).map(m => m.planned)]),
+    gym, habit: uniq((state.data.habits || []).map(h => h.habit_name)),
+  };
+}
+function _dbqMealFor(mins) {
+  const slots = DB_SLOTS.map(([key, , t]) => ({ key, m: _dpMin(t) }));
+  if (mins == null) { const n = new Date(); mins = _dpDate() === diaryLocalDate() ? n.getHours() * 60 + n.getMinutes() : 8 * 60; }
+  if (mins < 11 * 60) return 'breakfast'; if (mins < 16 * 60) return 'lunch'; if (mins < 19 * 60) return 'snacks'; return 'dinner';
+}
+// "call bank 5pm" / "standup at 10:30" / "gym 18:00" → { text, time }
+function _dbqTime(raw) {
+  const m = String(raw).match(/\s+(?:at\s+|@\s*)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*$/i);
+  if (!m || (!m[2] && !m[3])) return { text: String(raw).trim(), time: '' };
+  let h = +m[1]; const mi = +(m[2] || 0), ap = (m[3] || '').toLowerCase();
+  if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0;
+  if (h > 23 || mi > 59) return { text: String(raw).trim(), time: '' };
+  return { text: String(raw).slice(0, m.index).trim(), time: `${_dbPad(h)}:${_dbPad(mi)}` };
+}
+window.dbqSetKind = function (v, manual) {
+  _db.qk = v; if (manual) _db.qkManual = true;
+  const bar = document.getElementById('dbqBar'); if (!bar) return;
+  bar.className = `dbq-bar k-${v}`;
+  const sel = document.getElementById('dbqKind'); if (sel && sel.value !== v) sel.value = v;
+  const meal = document.getElementById('dbqMeal');
+  if (meal) { meal.hidden = v !== 'food'; if (v === 'food' && !_db.qMealManual) meal.value = _dbqMealFor(); }
+  if (manual) document.getElementById('dbqIn')?.focus();
+};
+// Guess where it goes from what you've typed before (your foods, exercises, habits).
+window.dbqGuess = function (val) {
+  const src = _dbqSources(), q = _dbqNorm(_dbqTime(val).text);
+  const dl = document.getElementById('dbqList');
+  if (dl) {
+    const all = [...src.food.map(n => [n, 'Food']), ...src.gym.map(n => [n, 'Gym']), ...src.habit.map(n => [n, 'Habit'])];
+    dl.innerHTML = q.length < 2 ? '' : all.filter(([n]) => _dbqNorm(n).includes(q)).slice(0, 12).map(([n, l]) => `<option value="${_drpEsc(n)}" label="${l}">`).join('');
+  }
+  if (_db.qkManual) return;
+  if (q.length < 2) { if (!q) dbqSetKind('task'); return; }
+  const hit = k => src[k].some(n => _dbqNorm(n) === q) ? 2 : src[k].some(n => _dbqNorm(n).startsWith(q) || (q.length >= 4 && q.startsWith(_dbqNorm(n)))) ? 1 : 0;
+  const best = ['habit', 'gym', 'food'].map(k => [k, hit(k)]).sort((a, b) => b[1] - a[1])[0];
+  dbqSetKind(best[1] ? best[0] : (_dbqTime(val).time && _db.qk === 'event' ? 'event' : 'task'));
+};
+window.dbqKey = function (e) {
+  if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
+  // ⌘/Ctrl + 1…5 switches where it goes without leaving the box
+  if ((e.metaKey || e.ctrlKey) && /^[1-5]$/.test(e.key)) { e.preventDefault(); dbqSetKind(DBQ_KINDS[+e.key - 1][0], true); }
+};
+window.dbqAdd = async function () {
+  const inp = document.getElementById('dbqIn'); if (!inp) return;
+  const raw = inp.value.trim(); if (!raw) { inp.focus(); return; }
+  const kind = document.getElementById('dbqKind').value, ds = _dpDate();
+  const { text, time } = _dbqTime(raw);
+  const name = text || raw;
+  inp.value = ''; _db.qkManual = false; dbqSetKind('task');
+  const dl = document.getElementById('dbqList'); if (dl) dl.innerHTML = '';
+  try {
+    if (kind === 'food') await _dbqFood(name, document.getElementById('dbqMeal').value || _dbqMealFor());
+    else if (kind === 'gym') await _dbqGym(name);
+    else if (kind === 'task') await _dbqTask(name, time, ds);
+    else if (kind === 'habit') await _dbqHabit(name, time, ds);
+    else await _dbqEvent(name, time, ds);
+  } catch (e) { console.error('quick add', e); showToast('Couldn’t add that'); }
+  _db.qMealManual = false;
+  inp.focus();
+};
+function _dbqFlash(k) {
+  setTimeout(() => {
+    const el = document.querySelector(`#dbSide .dbd-box.k-${k}`); if (!el) return;
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    el.classList.remove('dbq-hit'); void el.offsetWidth; el.classList.add('dbq-hit');
+  }, 60);
+}
+async function _dbqFood(name, slot) {
+  const it = (state.data.meal_items || []).find(i => _dbqNorm(i.name) === _dbqNorm(name)); if (it) name = it.name;
+  const m = _dbMeals(_dpDate()).find(x => x.key === slot); if (!m) return;
+  const cur = m.skipped ? '' : (m.status === 'different' ? (m.row && m.row.eaten) || '' : m.planned);
+  const next = cur ? `${cur} + ${name}` : name;
+  const fields = m.status === 'different' ? { eaten: next } : { planned: next, ...(m.done ? { eaten: next } : {}), ...(m.skipped ? { status: null } : {}) };
+  await _dbMealSave(slot, fields);
+  showToast(`${name} → ${m.label}`);
+  _dbqFlash('food');
+}
+async function _dbqGym(name) {
+  const ds = _dpDate(), g = _dbGym(ds);
+  const ex0 = (state.data.gym_exercises || []).find(e => _dbqNorm(e.name) === _dbqNorm(name));
+  const ex = { name: ex0 ? ex0.name : name, muscle_group: (ex0 && ex0.muscle_group) || '', category: 'strength', mode: 'reps', sets: [0, 1, 2].map(() => ({ reps: 10, weight: 0, done: false })) };
+  if (g && g.kind === 'session') {
+    await _dbGymEdit(list => { ex.order = list.length; list.push(ex); });
+  } else {
+    // No workout logged yet: start today's from the plan that's up next, plus this exercise.
+    const plan = g && g.plan;
+    const base = plan ? (_dbJSON(plan.exercises_json, []) || []).map((e, i) => ({ ...e, order: i, sets: (Array.isArray(e.sets) ? e.sets : Array.from({ length: Number(e.sets) || 3 }, () => ({ reps: Number(e.reps) || 10 }))).map(x => ({ ...x, done: false })) })) : [];
+    ex.order = base.length;
+    const w = { exercises: base.concat(ex) };
+    const row = { id: 'gs_' + Date.now().toString(36), date: ds, plan_id: plan ? String(plan.id) : '', plan_name: plan ? (plan.name || 'Workout') : 'Workout', workout_json: JSON.stringify(w), completed: false };
+    if (!Array.isArray(state.data.gym_sessions)) state.data.gym_sessions = [];
+    state.data.gym_sessions.push(row); dbRender();
+    try {
+      const { id, ...payload } = row;
+      const res = await apiCall('create', 'gym_sessions', payload);
+      if (!res || res.success === false) throw new Error(res && res.message);
+      const nid = (res.data && res.data.id) || res.id; if (nid) row.id = String(nid);
+    } catch (e) { state.data.gym_sessions = state.data.gym_sessions.filter(x => x !== row); dbRender(); throw e; }
+  }
+  showToast(`${ex.name} → today’s workout`);
+  _dbqFlash('gym');
+}
+async function _dbqTask(title, time, ds) {
+  const payload = { title, description: '', category: 'General', tags: '', subtasks: '[]', priority: 'P2', due_date: ds, due_time: time, duration: 30, recurrence: 'none', recurrence_days: '', recurrence_end: '', status: 'pending', created_at: new Date().toISOString() };
+  const temp = { id: 'temp-' + Date.now(), ...payload };
+  (state.data.tasks = state.data.tasks || []).push(temp); dbRender();
+  try {
+    const res = await apiCall('create', 'tasks', payload);
+    if (!res || res.success === false) throw new Error(res && res.message);
+    const nid = (res.data && res.data.id) || res.id; if (nid) temp.id = String(nid);
+  } catch (e) { state.data.tasks = state.data.tasks.filter(x => x !== temp); dbRender(); throw e; }
+  showToast(`Task added${time ? ' · ' + _dpFmt(time) : ''}`);
+  _dbqFlash('task');
+}
+async function _dbqHabit(name, time, ds) {
+  const h = (state.data.habits || []).find(x => _dbqNorm(x.habit_name) === _dbqNorm(name));
+  if (h) {
+    if (_dhLog(h, ds)) { showToast(`${h.habit_name} is already done today`); return _dbqFlash('habit'); }
+    await drwHabitToggle(h.id);
+    showToast(`${h.habit_name} ✓ done today`);
+    return _dbqFlash('habit');
+  }
+  const payload = { habit_name: name, frequency: 'daily', reminder_time: time || '', duration: 15 };
+  const temp = { id: 'temp-' + Date.now(), ...payload };
+  (state.data.habits = state.data.habits || []).push(temp); dbRender();
+  try {
+    const res = await apiCall('create', 'habits', payload);
+    if (!res || res.success === false) throw new Error(res && res.message);
+    const nid = (res.data && res.data.id) || res.id; if (nid) temp.id = String(nid);
+  } catch (e) { state.data.habits = state.data.habits.filter(x => x !== temp); dbRender(); throw e; }
+  showToast(`New daily habit: ${name}`, 'default', () => { _dbSoftDelete('habits', 'habits', temp.id, 'Habit'); });
+  _dbqFlash('habit');
+}
+async function _dbqEvent(title, time, ds) {
+  let st = time;
+  if (!st) { const n = new Date(); st = ds === diaryLocalDate() ? `${_dbPad(Math.min(23, n.getHours() + 1))}:00` : '09:00'; }
+  const end = _dbHM(Math.min(1439, _dpMin(st) + 60));
+  const payload = { title, start_datetime: `${ds}T${st}:00`, end_datetime: `${ds}T${end}:00` };
+  const temp = { id: 'temp-' + Date.now(), category: 'Other', color: '', done: false, ...payload };
+  (state.data.planner = state.data.planner || []).push(temp); dbRender();
+  try {
+    const res = await apiCall('create', 'planner_events', { ...payload, category: 'Other', color: '' });
+    if (!res || res.success === false) throw new Error(res && res.message);
+    const nid = (res.data && res.data.id) || res.id; if (nid) temp.id = String(nid);
+  } catch (e) { state.data.planner = state.data.planner.filter(x => x !== temp); dbRender(); throw e; }
+  showToast(`${title} · ${_dpFmt(st)}–${_dpFmt(end)}`);
+  _dbqFlash('event');
+}
+document.addEventListener('change', e => { if (e.target && e.target.id === 'dbqMeal') _db.qMealManual = true; });
+(function dbqStyles() {
+  if (document.getElementById('dbqStyles')) return;
+  const st = document.createElement('style'); st.id = 'dbqStyles';
+  st.textContent = `
+.dbd-rcol { min-width:0; min-height:0; display:flex; flex-direction:column; gap:10px; }
+.dbd-rcol > .dbd-side { flex:1; }
+.dbq-bar { --qc:#0d9488; flex:none; display:flex; align-items:center; gap:8px; padding:6px 6px 6px 12px; background:var(--surface-1); border:1.5px solid var(--border-color); border-radius:14px; box-shadow:0 4px 16px rgba(15,23,42,.08); transition:border-color .15s, box-shadow .15s; }
+.dbq-bar:focus-within { border-color:var(--qc); box-shadow:0 0 0 3px color-mix(in srgb, var(--qc) 16%, transparent), 0 4px 16px rgba(15,23,42,.08); }
+.dbq-bar.k-food { --qc:#ea580c; } .dbq-bar.k-gym { --qc:#db2777; } .dbq-bar.k-task { --qc:#059669; } .dbq-bar.k-habit { --qc:#7c3aed; } .dbq-bar.k-event { --qc:#2563eb; }
+.dbq-plus { flex:none; width:22px; height:22px; border-radius:7px; display:flex; align-items:center; justify-content:center; background:color-mix(in srgb, var(--qc) 14%, transparent); color:var(--qc); font-weight:800; font-size:16px; }
+.dbq-bar input { flex:1; min-width:0; border:0; outline:none; background:transparent; font:inherit; font-size:14px; color:var(--text-1); padding:7px 0; }
+.dbq-bar select { flex:none; font:inherit; font-size:13px; font-weight:650; border-radius:9px; padding:7px 26px 7px 10px; cursor:pointer; appearance:none; -webkit-appearance:none;
+  background:var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 9px center; border:1px solid var(--border-color); color:var(--text-1); }
+.dbq-bar .dbq-kind { background-color:color-mix(in srgb, var(--qc) 12%, var(--surface-1)); border-color:color-mix(in srgb, var(--qc) 35%, var(--border-color)); color:color-mix(in srgb, var(--qc) 85%, var(--text-1)); }
+.dbq-bar select[hidden] { display:none !important; }
+#dbqBar input#dbqIn { flex:1 1 auto !important; width:auto !important; min-width:0 !important; height:auto !important; margin:0 !important; border:0 !important; box-shadow:none !important; background:transparent !important; padding:7px 0 !important; border-radius:0 !important; }
+#dbqBar select { width:auto !important; min-width:0 !important; max-width:130px; height:34px !important; margin:0 !important; box-shadow:none !important; line-height:1.2 !important; padding:0 26px 0 10px !important; }
+#dbqBar .dbq-go { height:34px; padding:0 14px; margin:0; width:auto; }
+#dbqIn::-webkit-calendar-picker-indicator { display:none !important; opacity:0; }
+#dbqBar select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748b' stroke-width='1.6'/%3E%3C/svg%3E") !important; background-repeat:no-repeat !important; background-position:right 9px center !important; }
+.dbq-go { flex:none; border:0; border-radius:10px; background:var(--qc); color:#fff; font:inherit; font-size:13px; font-weight:700; padding:8px 14px; cursor:pointer; }
+.dbq-go:hover { filter:brightness(1.06); }
+.dbd-box.dbq-hit { animation:dbqHit 1s ease; }
+@keyframes dbqHit { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--c) 55%, transparent); } 100% { box-shadow:0 0 0 12px transparent; } }
+`;
+  document.head.appendChild(st);
+})();
 
 /* ── Outfits: today's look on a mannequin, saved outfits one tap away, and
    separate outfits only for the events you choose (no wall of empty rows). ── */
